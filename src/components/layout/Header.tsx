@@ -37,12 +37,10 @@ export function Header() {
   return (
     <header className="sticky top-0 z-20 bg-primary-900 dark:bg-primary-950 text-primary-50 border-b border-primary-800">
       <div className="px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="text-xl">📊</div>
-          <div>
-            <p className="font-bold text-[15px] leading-none">CockPit F&amp;A</p>
-            <p className="text-[10px] opacity-80 mt-0.5">Reporting &amp; Analyse Financière — SYSCOHADA</p>
-          </div>
+        <div className="text-sm font-medium text-primary-400 tracking-wide">
+          {currentOrg?.name ?? '---'}
+          <span className="text-primary-600 mx-2">|</span>
+          <span className="num">{currentYear}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -66,7 +64,7 @@ export function Header() {
             className="px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
             <option value="">YTD — Cumul année</option>
-            {periods.map((p) => (<option key={p.id} value={p.id}>{p.label} {p.closed ? '🔒' : ''}</option>))}
+            {periods.map((p) => (<option key={p.id} value={p.id}>{p.label} {p.closed ? '*' : ''}</option>))}
           </select>
 
           <div ref={notifRef} className="relative">
@@ -74,7 +72,7 @@ export function Header() {
               onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); }}>
               <Bell className="w-4 h-4" />
               {alertCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-error text-white rounded-full text-[10px] font-bold flex items-center justify-center num border-2 border-brand-800">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-primary-100 text-primary-900 rounded-full text-[10px] font-bold flex items-center justify-center num">
                   {alertCount > 99 ? '99+' : alertCount}
                 </span>
               )}

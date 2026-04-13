@@ -140,7 +140,7 @@ export default function COA() {
         {activeClass !== 'all' && (
           <button className="btn-outline !py-1.5" onClick={() => setActiveClass('all')}>Classe {activeClass} ✕</button>
         )}
-        <p className="text-xs text-primary-500 ml-auto">💡 Cliquez sur un compte pour voir son détail</p>
+        <p className="text-xs text-primary-500 ml-auto">Cliquez sur un compte pour voir son détail</p>
       </div>
 
       {view === 'sysco' && (

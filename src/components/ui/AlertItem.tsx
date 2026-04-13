@@ -2,8 +2,8 @@ import { C } from '../../lib/colors';
 
 type Props = { severity: 'low' | 'medium' | 'high' | 'critical'; type: string; message: string };
 
-const icon = { low: '🔵', medium: '🟠', high: '🔴', critical: '⬛' };
-const color = { low: C.info, medium: C.warning, high: C.danger, critical: '#7f1d1d' };
+const icon = { low: '-', medium: '-', high: '!', critical: '!!' };
+const color = { low: C.info, medium: C.warning, high: C.danger, critical: '#171717' };
 
 export function AlertItem({ severity, type, message }: Props) {
   return (

@@ -2,12 +2,12 @@ import { ReactNode } from 'react';
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="flex items-end justify-between mb-6">
+    <div className="flex items-center justify-between mb-6 pb-4 border-b border-primary-200/60 dark:border-primary-800">
       <div>
-        <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-100">{title}</h1>
-        {subtitle && <p className="text-sm text-primary-500 mt-1">{subtitle}</p>}
+        <h1 className="text-lg font-bold text-primary-900 dark:text-primary-100 tracking-tight">{title}</h1>
+        {subtitle && <p className="text-xs text-primary-400 mt-0.5">{subtitle}</p>}
       </div>
-      {action}
+      {action && <div className="flex items-center gap-2">{action}</div>}
     </div>
   );
 }

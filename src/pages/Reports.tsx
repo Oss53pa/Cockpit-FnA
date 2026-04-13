@@ -85,95 +85,104 @@ const computeKPIs = (data: any) => {
 };
 
 const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
+  weekly: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Synthèse hebdomadaire', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Flash de la semaine : indicateurs clés, position de trésorerie, alertes et suivi des créances." },
+      { id: uid(), type: 'kpi', items: [
+        { label: "Chiffre d'affaires", value: k.ca, subValue: 'Cumul YTD' },
+        { label: 'Résultat net', value: k.rn, subValue: `Marge ${k.margePct}` },
+        { label: 'Trésorerie nette', value: k.treso },
+        { label: 'BFR', value: k.bfr },
+      ]},
+      { id: uid(), type: 'kpi', items: [
+        { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+        { label: 'DSO', value: k.dso, subValue: 'Délai clients' },
+        { label: 'Total Actif', value: k.actif },
+        { label: 'Capitaux propres', value: k.capPropres },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Ratios et alertes', inToc: true },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Position de trésorerie', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow Statement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Suivi des créances et dettes', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'receivables', title: 'Receivables & Payables' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Stocks', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Stocks — valorisation et rotation' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Points d\'attention', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Synthèse des alertes et actions de la semaine. À compléter par le contrôle de gestion." },
+    ];
+  },
+
   monthly: (data) => {
     const k = computeKPIs(data);
     return [
-      // ─── 1. SYNTHÈSE EXÉCUTIVE ───────────────────────────
       { id: uid(), type: 'h1', text: '1. Synthèse exécutive', inToc: true },
       { id: uid(), type: 'paragraph', text: "Le présent rapport présente la performance financière de la société sur la période. Il analyse les principaux indicateurs de gestion, l'évolution de la trésorerie et les écarts par rapport au budget." },
-      { id: uid(), type: 'h2', text: '1.1 Indicateurs clés', inToc: true },
       { id: uid(), type: 'kpi', items: [
         { label: "Chiffre d'affaires", value: k.ca, subValue: 'Cumul de la période' },
         { label: 'Résultat net', value: k.rn, subValue: `Marge ${k.margePct}` },
         { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
-        { label: 'Trésorerie nette', value: k.treso, subValue: 'Position fin de période' },
-      ]},
-      { id: uid(), type: 'h2', text: '1.2 Faits marquants', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Cette section recense les éléments significatifs de la période : variations notables, événements exceptionnels, décisions structurantes. À compléter par la Direction Financière." },
-      { id: uid(), type: 'pageBreak' },
-
-      // ─── 2. PERFORMANCE — COMPTE DE RÉSULTAT ─────────────
-      { id: uid(), type: 'h1', text: '2. Performance — Compte de résultat', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Analyse de la formation du résultat depuis le chiffre d'affaires jusqu'au résultat net, en passant par les soldes intermédiaires de gestion." },
-      { id: uid(), type: 'h2', text: '2.1 Compte de résultat', inToc: true },
-      { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat — par nature' },
-      { id: uid(), type: 'h2', text: '2.2 Soldes intermédiaires de gestion', inToc: true },
-      { id: uid(), type: 'table', source: 'sig', title: 'SIG — formation du résultat' },
-      { id: uid(), type: 'pageBreak' },
-
-      // ─── 3. POSITION FINANCIÈRE — BILAN ───────────────────
-      { id: uid(), type: 'h1', text: '3. Position financière — Bilan', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Photographie du patrimoine de l'entreprise à la date de clôture : actif (emplois) et passif (ressources)." },
-      { id: uid(), type: 'h2', text: '3.1 Actif', inToc: true },
-      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
-      { id: uid(), type: 'h2', text: '3.2 Passif', inToc: true },
-      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
-      { id: uid(), type: 'kpi', items: [
-        { label: 'Total Actif', value: k.actif },
-        { label: 'Capitaux propres', value: k.capPropres },
-        { label: 'BFR', value: k.bfr, subValue: "d'exploitation" },
         { label: 'Trésorerie nette', value: k.treso },
       ]},
+      { id: uid(), type: 'h2', text: '1.1 Faits marquants', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Éléments significatifs de la période : variations notables, événements exceptionnels, décisions structurantes. À compléter." },
       { id: uid(), type: 'pageBreak' },
-
-      // ─── 4. BUDGET vs RÉALISÉ ─────────────────────────────
-      { id: uid(), type: 'h1', text: '4. Analyse Budget vs Réalisé', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Comparaison du réalisé sur la période avec le budget prévisionnel. Les écarts favorables sont marqués en vert, les défavorables en rouge." },
+      { id: uid(), type: 'h1', text: '2. Compte de résultat', inToc: true },
+      { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat — par nature' },
+      { id: uid(), type: 'table', source: 'sig', title: 'SIG — formation du résultat' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Analyse du CR par bloc', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition du compte de résultat par section : produits d'exploitation, charges d'exploitation, résultat financier, résultat HAO, impôts. Chaque section présente les KPIs, l'évolution mensuelle et les top 10 comptes." },
+      { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Position financière — Bilan', inToc: true },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
+      { id: uid(), type: 'kpi', items: [
+        { label: 'Total Actif', value: k.actif }, { label: 'Capitaux propres', value: k.capPropres },
+        { label: 'BFR', value: k.bfr, subValue: "d'exploitation" }, { label: 'Trésorerie nette', value: k.treso },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Budget vs Réalisé', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Income Statement — Budget vs Actual' },
+      { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail Budget vs Réalisé par compte' },
       { id: uid(), type: 'pageBreak' },
-
-      // ─── 5. TRÉSORERIE ────────────────────────────────────
-      { id: uid(), type: 'h1', text: '5. Pilotage de la trésorerie', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Position et flux de trésorerie : encaissements, décaissements, solde mensuel et indicateurs clés." },
+      { id: uid(), type: 'h1', text: '6. Trésorerie', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow Statement' },
       { id: uid(), type: 'pageBreak' },
-
-      // ─── 6. CYCLE D'EXPLOITATION ──────────────────────────
-      { id: uid(), type: 'h1', text: "6. Cycle d'exploitation", inToc: true },
-      { id: uid(), type: 'paragraph', text: "Suivi des créances clients et des dettes fournisseurs. Analyse du DSO, DPO et de la concentration des tiers." },
-      { id: uid(), type: 'dashboard', dashboardId: 'receivables', title: 'Receivables & Payables Review' },
+      { id: uid(), type: 'h1', text: '7. Cycle clients', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Suivi des créances clients : DSO, balance âgée, concentration, top débiteurs." },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Cycle Client' },
       { id: uid(), type: 'pageBreak' },
-
-      // ─── 7. RATIOS ────────────────────────────────────────
-      { id: uid(), type: 'h1', text: '7. Ratios financiers', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Indicateurs de rentabilité, liquidité, structure financière et activité. Le statut indique le positionnement par rapport aux cibles internes." },
+      { id: uid(), type: 'h1', text: '8. Cycle fournisseurs', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Suivi des dettes fournisseurs : DPO, échéances, concentration." },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Cycle Fournisseur' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. BFR et fonds de roulement', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'BFR — Fonds de roulement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Stocks', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Stocks — valorisation et rotation' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Masse salariale', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Masse salariale' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '12. Ratios financiers', inToc: true },
       { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers' },
       { id: uid(), type: 'pageBreak' },
-
-      // ─── 8. RECOMMANDATIONS ───────────────────────────────
-      { id: uid(), type: 'h1', text: "8. Conclusions et recommandations", inToc: true },
-      { id: uid(), type: 'paragraph', text: "Synthèse des points d'attention identifiés et des actions correctives recommandées par la Direction Financière." },
-      { id: uid(), type: 'h2', text: "8.1 Points d'attention", inToc: true },
-      { id: uid(), type: 'paragraph', text: "À compléter : ratios hors seuil, écarts significatifs, alertes opérationnelles." },
-      { id: uid(), type: 'h2', text: '8.2 Plan d\'action', inToc: true },
-      { id: uid(), type: 'paragraph', text: "À compléter : actions à mettre en œuvre, responsables, échéances, indicateurs de suivi." },
-    ];
-  },
-
-  flash: (data) => {
-    const k = computeKPIs(data);
-    return [
-      { id: uid(), type: 'h1', text: 'Flash report — synthèse', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Note de synthèse rapide pour suivi opérationnel." },
-      { id: uid(), type: 'kpi', items: [
-        { label: "CA", value: k.ca },
-        { label: 'Résultat net', value: k.rn },
-        { label: 'Trésorerie', value: k.treso },
-        { label: 'BFR', value: k.bfr },
-      ]},
+      { id: uid(), type: 'h1', text: '13. Recommandations', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Synthèse des points d'attention identifiés et des actions correctives recommandées." },
       { id: uid(), type: 'h2', text: "Points d'attention", inToc: true },
-      { id: uid(), type: 'paragraph', text: "Écarts et alertes de la période." },
-      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios clés' },
+      { id: uid(), type: 'paragraph', text: "À compléter : ratios hors seuil, écarts significatifs, alertes opérationnelles." },
+      { id: uid(), type: 'h2', text: "Plan d'action", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : actions, responsables, échéances, KPIs de suivi." },
     ];
   },
 
@@ -181,32 +190,69 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
     const k = computeKPIs(data);
     return [
       { id: uid(), type: 'h1', text: '1. Synthèse trimestrielle', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Rapport de gestion trimestriel présenté au comité de direction. Analyse de la performance, de la structure financière, des cycles d'exploitation et des perspectives." },
       { id: uid(), type: 'kpi', items: [
-        { label: 'CA', value: k.ca }, { label: 'Marge nette', value: k.margePct },
+        { label: 'CA', value: k.ca, subValue: 'Cumul YTD' }, { label: 'Marge nette', value: k.margePct },
         { label: 'RN', value: k.rn }, { label: 'TN', value: k.treso },
       ]},
+      { id: uid(), type: 'kpi', items: [
+        { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` }, { label: 'BFR', value: k.bfr },
+        { label: 'Total Actif', value: k.actif }, { label: 'DSO', value: k.dso },
+      ]},
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '2. États financiers', inToc: true },
-      { id: uid(), type: 'h2', text: '2.1 Bilan', inToc: true },
-      { id: uid(), type: 'table', source: 'bilan_actif' }, { id: uid(), type: 'table', source: 'bilan_passif' },
-      { id: uid(), type: 'h2', text: '2.2 Compte de résultat', inToc: true },
-      { id: uid(), type: 'table', source: 'cr' },
+      { id: uid(), type: 'h1', text: '2. Bilan', inToc: true },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '3. Budget vs Réalisé', inToc: true },
-      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa' },
+      { id: uid(), type: 'h1', text: '3. Compte de résultat', inToc: true },
+      { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat' },
+      { id: uid(), type: 'table', source: 'sig', title: 'SIG' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '4. Trésorerie & flux', inToc: true },
-      { id: uid(), type: 'dashboard', dashboardId: 'cashflow' },
-      { id: uid(), type: 'table', source: 'tft', title: 'TFT — méthode indirecte' },
+      { id: uid(), type: 'h1', text: '4. Analyse du CR par section', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc (7 sections)' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '5. Cycle d\'exploitation', inToc: true },
-      { id: uid(), type: 'dashboard', dashboardId: 'receivables' },
+      { id: uid(), type: 'h1', text: '5. Budget vs Réalisé', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual' },
+      { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail par compte' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '6. Capitaux propres', inToc: true },
-      { id: uid(), type: 'table', source: 'capital' },
+      { id: uid(), type: 'h1', text: '6. Tableau des flux de trésorerie', inToc: true },
+      { id: uid(), type: 'table', source: 'tft', title: 'TFT — méthode indirecte SYSCOHADA' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '7. Ratios financiers', inToc: true },
-      { id: uid(), type: 'table', source: 'ratios' },
+      { id: uid(), type: 'h1', text: '7. Trésorerie', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Position et flux de trésorerie' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Cycle clients', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Créances, recouvrement, concentration' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Cycle fournisseurs', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Dettes, échéances, concentration' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. BFR', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'Fonds de roulement, BFR, trésorerie' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Masse salariale', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Charges de personnel' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '12. Fiscalité', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'fis', title: 'TVA, IS, pression fiscale' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '13. Stocks', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Valorisation, dépréciations, rotation' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '14. Immobilisations', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'immo', title: 'VNC, amortissements, vétusté' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '15. Variation des capitaux propres', inToc: true },
+      { id: uid(), type: 'table', source: 'capital', title: 'Variation des capitaux propres' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '16. Ratios financiers', inToc: true },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '17. Balance générale', inToc: true },
+      { id: uid(), type: 'table', source: 'balance', title: 'Balance générale' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '18. Recommandations et plan d\'action', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Synthèse des points d'attention, actions correctives, responsables et échéances. À compléter par la Direction Financière." },
     ];
   },
 
@@ -214,37 +260,85 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
     const k = computeKPIs(data);
     return [
       { id: uid(), type: 'h1', text: '1. Message de la Direction', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Présentation de l'exercice écoulé, des principales réalisations et des perspectives." },
+      { id: uid(), type: 'paragraph', text: "Présentation de l'exercice écoulé, des principales réalisations, des défis rencontrés et des perspectives pour le prochain exercice. À compléter par la Direction Générale." },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '2. Indicateurs clés', inToc: true },
+      { id: uid(), type: 'h1', text: '2. Indicateurs clés de l\'exercice', inToc: true },
       { id: uid(), type: 'kpi', items: [
-        { label: 'CA', value: k.ca }, { label: 'EBE', value: k.ebe },
-        { label: 'RN', value: k.rn }, { label: 'Capitaux propres', value: k.capPropres },
+        { label: 'CA', value: k.ca, subValue: 'Exercice complet' }, { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+        { label: 'RN', value: k.rn, subValue: `Marge ${k.margePct}` }, { label: 'Capitaux propres', value: k.capPropres },
       ]},
       { id: uid(), type: 'kpi', items: [
         { label: 'Total Actif', value: k.actif }, { label: 'BFR', value: k.bfr },
-        { label: 'Trésorerie', value: k.treso }, { label: 'DSO', value: k.dso },
+        { label: 'Trésorerie', value: k.treso }, { label: 'DSO', value: k.dso, subValue: 'Délai clients' },
       ]},
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '3. Bilan', inToc: true },
-      { id: uid(), type: 'table', source: 'bilan_actif' }, { id: uid(), type: 'table', source: 'bilan_passif' },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '4. Compte de résultat', inToc: true },
-      { id: uid(), type: 'table', source: 'cr' },
-      { id: uid(), type: 'h2', text: 'SIG', inToc: true },
-      { id: uid(), type: 'table', source: 'sig' },
+      { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat par nature' },
+      { id: uid(), type: 'table', source: 'sig', title: 'Soldes intermédiaires de gestion' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '5. Tableau des flux de trésorerie', inToc: true },
-      { id: uid(), type: 'table', source: 'tft' },
+      { id: uid(), type: 'h1', text: '5. Analyse du CR par section', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition détaillée du compte de résultat en 7 sections : produits et charges d'exploitation, financiers, HAO et impôts." },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_produits_expl', title: "Produits d'exploitation (70-75)" },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_charges_expl', title: "Charges d'exploitation (60-66)" },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_produits_fin', title: 'Produits financiers (77)' },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_charges_fin', title: 'Charges financières (67)' },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_produits_hao', title: 'Produits exceptionnels (HAO)' },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_charges_hao', title: 'Charges exceptionnelles (HAO)' },
+      { id: uid(), type: 'dashboard', dashboardId: 'crsec_impots', title: 'Impôts sur les bénéfices (87, 89)' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '6. Variation des capitaux propres', inToc: true },
-      { id: uid(), type: 'table', source: 'capital' },
+      { id: uid(), type: 'h1', text: '6. Budget vs Réalisé', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual' },
+      { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail par compte' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '7. Analyse par ratios', inToc: true },
-      { id: uid(), type: 'table', source: 'ratios' },
+      { id: uid(), type: 'h1', text: '7. Tableau des flux de trésorerie', inToc: true },
+      { id: uid(), type: 'table', source: 'tft', title: 'TFT — méthode indirecte SYSCOHADA' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '8. Balance générale', inToc: true },
-      { id: uid(), type: 'table', source: 'balance' },
+      { id: uid(), type: 'h1', text: '8. Variation des capitaux propres', inToc: true },
+      { id: uid(), type: 'table', source: 'capital', title: 'Tableau de variation des capitaux propres' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Trésorerie', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Position et flux de trésorerie' },
+      { id: uid(), type: 'dashboard', dashboardId: 'tre', title: 'Trésorerie — position et volatilité' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. BFR et cycle d\'exploitation', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'FR, BFR, Trésorerie nette' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Cycle clients', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Créances, recouvrement, balance âgée' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '12. Cycle fournisseurs', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Dettes fournisseurs, échéances' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '13. Masse salariale et charges sociales', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Charges de personnel' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '14. Immobilisations', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'immo', title: 'VNC, amortissements, taux de vétusté' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '15. Fiscalité', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'fis', title: 'TVA, IS, pression fiscale' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '16. Stocks', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Valorisation, dépréciations, rotation' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '17. Ratios financiers', inToc: true },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '18. Balance générale', inToc: true },
+      { id: uid(), type: 'table', source: 'balance', title: 'Balance générale' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '19. Conclusions et recommandations', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Synthèse de l'exercice, points d'attention, risques identifiés et plan d'action pour le prochain exercice." },
+      { id: uid(), type: 'h2', text: "Principaux risques", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : risques identifiés (liquidité, concentration tiers, fiscalité, opérationnel)." },
+      { id: uid(), type: 'h2', text: "Plan d'action", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : actions correctives, responsables, échéances, indicateurs de suivi." },
+      { id: uid(), type: 'h2', text: "Perspectives", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : objectifs du prochain exercice, investissements prévus, évolution du CA et de la rentabilité." },
     ];
   },
 };
@@ -267,6 +361,9 @@ export default function Reports() {
   const [openCatalog, setOpenCatalog] = useState<'tables' | 'dashboards' | null>(null);
   const [insertAtIndex, setInsertAtIndex] = useState<number | null>(null);
   const [tocLabel, setTocLabel] = useState('');
+  const [journal, setJournal] = useState<Array<{ date: number; title: string; format: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem('report-journal') ?? '[]'); } catch { return []; }
+  });
 
   const templates = useLiveQuery(() => db.templates.where('orgId').equals(currentOrgId).toArray(), [currentOrgId]) ?? [];
 
@@ -318,8 +415,17 @@ export default function Reports() {
     setConfig((c) => ({ ...c, blocks: QUICK_TEMPLATES.monthly(data) }));
   }, [sig, data]);
 
+  const logReport = (title: string, format: string) => {
+    const entry = { date: Date.now(), title, format };
+    const updated = [entry, ...journal].slice(0, 50);
+    setJournal(updated);
+    localStorage.setItem('report-journal', JSON.stringify(updated));
+  };
+
   const generate = (download: boolean = true) => {
     if (!sig) return;
+    const fmt = config.format === 'pptx' ? 'PPTX' : config.format === 'A4_landscape' ? 'PDF Paysage' : 'PDF Portrait';
+    logReport(config.identity.title, fmt);
     if (config.format === 'pptx') {
       buildPPTXFromBlocks(config, data, org?.name ?? '—').then((blob) => {
         if (download) saveAs(blob, `${config.identity.title.replace(/\s+/g, '_')}.pptx`);
@@ -458,11 +564,11 @@ export default function Reports() {
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={config.options.includePageNumbers} onChange={(e) => setOption('includePageNumbers', e.target.checked)} /> Numérotation</label>
           </Collapsible>
 
-          <Collapsible title="Modèles rapides" defaultOpen={false}>
+          <Collapsible title="Modèles rapides" defaultOpen>
             <div className="space-y-1">
               {Object.entries(QUICK_TEMPLATES).map(([k]) => (
                 <button key={k} onClick={() => applyTemplate(k as any)} className="w-full text-left px-2.5 py-2 rounded hover:bg-primary-200 dark:hover:bg-primary-800 text-xs font-medium">
-                  {k === 'monthly' ? 'Rapport mensuel' : k === 'flash' ? 'Flash report' : 'Comité trimestriel'}
+                  {k === 'weekly' ? 'Flash hebdomadaire' : k === 'monthly' ? 'Rapport mensuel' : k === 'quarterly' ? 'Comité trimestriel' : 'Rapport annuel'}
                 </button>
               ))}
             </div>
@@ -470,7 +576,7 @@ export default function Reports() {
         </aside>
 
         {/* ════════════════ CENTRE — VISUALISEUR ════════════════ */}
-        <main className="space-y-4">
+        <main className="space-y-3">
           {renderPages(config, data, palette, {
             updateBlock, removeBlock, moveBlock, insertBlockAt,
             openTablesCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('tables'); },
@@ -507,8 +613,26 @@ export default function Reports() {
           <div className="card p-4">
             <button className="btn-primary w-full mb-2" onClick={() => setOpenSend(true)}><Send className="w-4 h-4" /> Envoyer pour validation/diffusion</button>
             <button className="btn-outline w-full mb-2" onClick={() => setOpenSave(true)}><Save className="w-4 h-4" /> Enregistrer comme modèle</button>
-            <p className="text-[10px] text-primary-500 mt-3 leading-tight">💡 Cliquez sur un bloc au centre pour l'éditer ou le supprimer. Les ↑↓ permettent de réordonner.</p>
           </div>
+
+          {journal.length > 0 && (
+            <div className="card p-4">
+              <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold mb-3">Journal des rapports</p>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {journal.slice(0, 10).map((j, i) => (
+                  <div key={i} className="flex items-start justify-between text-xs border-b border-primary-100 dark:border-primary-800 pb-1.5 last:border-0">
+                    <div>
+                      <p className="font-medium text-primary-800 dark:text-primary-200 truncate max-w-[180px]">{j.title}</p>
+                      <p className="text-[10px] text-primary-400">{new Date(j.date).toLocaleDateString('fr-FR')} {new Date(j.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-200 dark:bg-primary-800 text-primary-600 dark:text-primary-400 shrink-0">{j.format}</span>
+                  </div>
+                ))}
+              </div>
+              {journal.length > 10 && <p className="text-[10px] text-primary-400 mt-2">+ {journal.length - 10} autres</p>}
+              <button className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 mt-2 transition" onClick={() => { setJournal([]); localStorage.removeItem('report-journal'); }}>Effacer l'historique</button>
+            </div>
+          )}
         </aside>
       </div>
 
@@ -578,11 +702,11 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
           )}
           {pageBlocks.map(({ block, index }, i) => (
             <div key={block.id}>
-              {i === 0 && <InsertHere index={index} ops={ops} />}
+              <InsertHere index={index} ops={ops} />
               <BlockEditor block={block} data={data} palette={palette} ops={ops} />
-              <InsertHere index={index + 1} ops={ops} />
             </div>
           ))}
+          {pageBlocks.length > 0 && <InsertHere index={pageBlocks[pageBlocks.length - 1].index + 1} ops={ops} />}
         </PageA4>
       ))}
     </>
@@ -598,12 +722,11 @@ function InsertHere({ index, ops, alwaysOpen }: { index: number; ops: any; alway
 
   return (
     <div
-      className="relative my-1"
+      className="relative"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {/* Trait fin + bouton + apparaît au hover */}
-      <div className={clsx('flex items-center transition-all', open || hover ? 'h-7' : 'h-2')}>
+      <div className={clsx('flex items-center transition-all', open || hover ? 'h-6' : 'h-0.5')}>
         <div className={clsx('flex-1 h-px transition-colors', hover || open ? 'bg-primary-300 dark:bg-primary-700' : 'bg-transparent')} />
         <button
           onClick={() => setOpen(!open)}
@@ -636,9 +759,9 @@ function InsertHere({ index, ops, alwaysOpen }: { index: number; ops: any; alway
           <div className="border-t border-primary-200 dark:border-primary-800 mt-2 pt-2">
             <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold px-2 mb-1">Depuis le catalogue</p>
             <div className="grid grid-cols-2 gap-1">
-              <PopBtn label="📊 Tables" sub="9 sources comptables" icon={<TableIcon className="w-3.5 h-3.5" />}
+              <PopBtn label="Tables" sub="9 sources comptables" icon={<TableIcon className="w-3.5 h-3.5" />}
                 onClick={() => { setOpen(false); ops.openTablesCatalog(index); }} highlight />
-              <PopBtn label="📈 Dashboards" sub="25 dashboards prêts" icon={<BarChart3 className="w-3.5 h-3.5" />}
+              <PopBtn label="Dashboards" sub="25 dashboards prêts" icon={<BarChart3 className="w-3.5 h-3.5" />}
                 onClick={() => { setOpen(false); ops.openDashCatalog(index); }} highlight />
             </div>
           </div>
@@ -669,7 +792,7 @@ function PopBtn({ icon, label, sub, onClick, highlight }: { icon: React.ReactNod
 
 function PageA4({ children, style }: { children: React.ReactNode; style: React.CSSProperties }) {
   return (
-    <div className="bg-white dark:bg-primary-900 border border-primary-300 dark:border-primary-700 rounded p-10 mx-auto overflow-hidden" style={style}>
+    <div className="bg-white dark:bg-primary-900 border border-primary-300 dark:border-primary-700 rounded p-6 mx-auto overflow-hidden" style={style}>
       <div className="overflow-hidden break-words">{children}</div>
     </div>
   );
@@ -726,7 +849,7 @@ function BlockEditor({ block, data, palette, ops }: any) {
   );
 
   const wrapper = (children: React.ReactNode) => (
-    <div className="group relative my-2 hover:bg-primary-100/30 dark:hover:bg-primary-800/20 rounded p-1">
+    <div className="group relative hover:bg-primary-100/30 dark:hover:bg-primary-800/20 rounded px-1 py-0.5">
       {Controls}{children}
     </div>
   );
@@ -835,7 +958,7 @@ function TablePreview({ source, data, palette, title }: any) {
     case 'cr': head.push('Code', 'Poste', 'Montant'); body = data.cr.slice(0, 14).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
     case 'sig': head.push('Solde', 'Valeur'); body = [['Marge brute', fmtFull(data.sig?.margeBrute ?? 0)], ['VA', fmtFull(data.sig?.valeurAjoutee ?? 0)], ['EBE', fmtFull(data.sig?.ebe ?? 0)], ['Résultat exploitation', fmtFull(data.sig?.re ?? 0)], ['Résultat net', fmtFull(data.sig?.resultat ?? 0)]]; break;
     case 'balance': head.push('Compte', 'Libellé', 'Solde D', 'Solde C'); body = data.balance.slice(0, 10).map((r: any) => [r.account, r.label, r.soldeD ? fmtFull(r.soldeD) : '', r.soldeC ? fmtFull(r.soldeC) : '']); break;
-    case 'ratios': head.push('Ratio', 'Valeur', 'Cible', 'Statut'); body = data.ratios.slice(0, 10).map((r: any) => [r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}`, `${r.target}`, r.status === 'good' ? '🟢' : r.status === 'warn' ? '🟠' : '🔴']); break;
+    case 'ratios': head.push('Ratio', 'Valeur', 'Cible', 'Statut'); body = data.ratios.slice(0, 10).map((r: any) => [r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}`, `${r.target}`, r.status === 'good' ? 'OK' : r.status === 'warn' ? '--' : '!!']); break;
     case 'budget_actual': head.push('Compte', 'Réalisé', 'Budget', 'Écart'); body = (data.budgetActual ?? []).slice(0, 10).map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart)]); break;
     case 'capital': head.push('Rubrique', 'Ouverture', 'Augm.', 'Clôture'); body = (data.capital ?? []).map((m: any) => [m.rubrique, fmtFull(m.ouverture), m.augmentation ? '+' + fmtFull(m.augmentation) : '—', fmtFull(m.cloture)]); break;
     case 'tft': head.push('Code', 'Poste', 'Montant'); body = (data.tft ?? []).slice(0, 12).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
@@ -910,7 +1033,7 @@ function DashboardSnippet({ id, data, palette }: any) {
   })();
   return (
     <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
-      <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>📊 {dash?.name ?? id}</p>
+      <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
       <div className="grid grid-cols-4 gap-2">
         {kpis.map((k: any, i: number) => (
           <div key={i} className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
@@ -959,7 +1082,7 @@ function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
     <Modal open={open} onClose={onClose} title="Envoyer le rapport" subtitle="Validation interne ou diffusion finale"
       footer={<>
         <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={() => { onValidate(); onClose(); alert(`Rapport généré et "envoyé" en ${destination === 'validation' ? 'validation' : 'diffusion finale'} à ${config.recipients.length} destinataire(s).\n\n💡 L'envoi réel par email sera fonctionnel au Sprint 5 (Supabase Edge Functions + Resend).`); }}>
+        <button className="btn-primary" onClick={() => { onValidate(); onClose(); alert(`Rapport généré et "envoyé" en ${destination === 'validation' ? 'validation' : 'diffusion finale'} à ${config.recipients.length} destinataire(s).\n\nL'envoi réel par email sera fonctionnel au Sprint 5 (Supabase Edge Functions + Resend).`); }}>
           <Send className="w-4 h-4" /> Envoyer
         </button>
       </>}>

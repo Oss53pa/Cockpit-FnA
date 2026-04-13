@@ -110,7 +110,7 @@ export default function Ratios() {
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-500 mb-3">{fam}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {list.map((r) => {
-                    const dot = r.status === 'good' ? '🟢' : r.status === 'warn' ? '🟠' : '🔴';
+                    const dot = r.status === 'good' ? 'OK' : r.status === 'warn' ? '--' : '!!';
                     return (
                       <Card key={r.code}>
                         <div className="p-5">
@@ -174,7 +174,7 @@ export default function Ratios() {
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <Badge variant={r.status === 'good' ? 'success' : r.status === 'warn' ? 'warning' : 'error'}>
-                          {r.status === 'good' ? '🟢 OK' : r.status === 'warn' ? '🟠 Vigilance' : '🔴 Alerte'}
+                          {r.status === 'good' ? 'OK' : r.status === 'warn' ? 'Vigilance' : 'Alerte'}
                         </Badge>
                       </td>
                       <td className="py-2.5 px-3 text-xs font-mono text-primary-500">{r.formula}</td>

@@ -11,13 +11,13 @@ const ROWS = [
   { key: 'margeBrute',    label: 'Marge brute',              color: C.primary },
   { key: 'valeurAjoutee', label: 'Valeur ajoutée',           color: C.secondary },
   { key: 'ebe',           label: 'EBE',                      color: C.accent3 },
-  { key: 're',            label: "Résultat d'exploitation",  color: C.info },
-  { key: 'rf',            label: 'Résultat financier',       color: C.danger },
-  { key: 'rhao',          label: 'Résultat HAO',             color: C.accent1 },
-  { key: 'resultat',      label: 'Résultat net',             color: C.success },
+  { key: 're',            label: "Résultat d'exploitation",  color: C.accent1 },
+  { key: 'rf',            label: 'Résultat financier',       color: C.accent2 },
+  { key: 'rhao',          label: 'Résultat HAO',             color: C.neutral },
+  { key: 'resultat',      label: 'Résultat net',             color: C.dark },
 ] as const;
 
-export function SIGList({ sig, ca, title = '📋 Soldes Intermédiaires de Gestion (SIG)' }: { sig: SIG; ca: number; title?: string }) {
+export function SIGList({ sig, ca, title = 'Soldes Intermédiaires de Gestion (SIG)' }: { sig: SIG; ca: number; title?: string }) {
   return (
     <ChartCard title={title}>
       <div className="text-xs space-y-0">
@@ -30,7 +30,7 @@ export function SIGList({ sig, ca, title = '📋 Soldes Intermédiaires de Gesti
                 <span className="text-primary-700 dark:text-primary-300">{it.label}</span>
               </div>
               <div className="text-right">
-                <span className="num font-semibold" style={{ color: value < 0 ? C.danger : undefined }}>{fmtK(value)}</span>
+                <span className={`num font-semibold ${value < 0 ? 'text-primary-500' : ''}`}>{fmtK(value)}</span>
                 <span className="text-[10px] text-primary-400 ml-2 num">{ca ? `${((value / ca) * 100).toFixed(1)} %` : '—'}</span>
               </div>
             </div>

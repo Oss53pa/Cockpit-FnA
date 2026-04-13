@@ -44,14 +44,9 @@ const sections = [
 export function Sidebar() {
   return (
     <aside className="w-60 shrink-0 h-screen sticky top-0 border-r border-primary-200 dark:border-primary-800 bg-white dark:bg-primary-900 flex flex-col">
-      <div className="px-5 py-4 border-b border-primary-200 dark:border-primary-800">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 flex items-center justify-center text-lg">📊</div>
-          <div>
-            <p className="font-bold text-[14px] leading-none text-primary-900 dark:text-primary-50">CockPit F&amp;A</p>
-            <p className="text-[10px] uppercase tracking-widest text-primary-500 mt-1">SYSCOHADA 2017</p>
-          </div>
-        </div>
+      <div className="px-5 py-5 border-b border-primary-200 dark:border-primary-800">
+        <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50">CockPit F&amp;A</p>
+        <p className="text-[10px] uppercase tracking-[0.15em] text-primary-400 mt-1.5">SYSCOHADA 2017</p>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
         {sections.map((sec) => (

@@ -54,7 +54,7 @@ export default function AI() {
     if (low.includes('ratio')) {
       const alertes = ratios.filter((r) => r.status !== 'good');
       if (alertes.length === 0) return `Tous les ratios sont dans les normes.\n\n${ratios.slice(0, 5).map((r) => `- ${r.label} : ${r.value.toFixed(2)} ${r.unit}`).join('\n')}`;
-      return `${alertes.length} ratio(s) hors seuil :\n\n${alertes.map((r) => `${r.status === 'alert' ? '🔴' : '🟠'} ${r.label} : ${r.value.toFixed(2)} ${r.unit} (cible ${r.target})`).join('\n')}`;
+      return `${alertes.length} ratio(s) hors seuil :\n\n${alertes.map((r) => `${r.status === 'alert' ? '!!' : '--'} ${r.label} : ${r.value.toFixed(2)} ${r.unit} (cible ${r.target})`).join('\n')}`;
     }
     if (low.includes('résum') || low.includes('synthèse') || low.includes('situation')) {
       return `Synthèse financière :\n\n• Chiffre d'affaires : ${fmtMoney(sig.ca)}\n• Marge brute : ${fmtMoney(sig.margeBrute)} (${sig.ca ? ((sig.margeBrute/sig.ca)*100).toFixed(1) : 0}%)\n• EBE : ${fmtMoney(sig.ebe)}\n• Résultat net : ${fmtMoney(sig.resultat)}\n\n${ratios.filter((r) => r.status === 'alert').length} alerte(s) critique(s) sur les ratios.\n\nConsultez la page États financiers pour le détail.`;

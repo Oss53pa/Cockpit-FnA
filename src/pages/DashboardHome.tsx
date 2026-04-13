@@ -14,6 +14,7 @@ import { PerformanceGauges } from '../components/ui/PerformanceGauges';
 import { AlertsCard } from '../components/ui/AlertsCard';
 import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
+import { useChartTheme } from '../lib/chartTheme';
 import { C } from '../lib/colors';
 import { fmtFull, fmtK } from '../lib/format';
 import { exportStatementsPDF } from '../engine/exporter';
@@ -33,6 +34,7 @@ export default function DashboardHome() {
   const navigate = useNavigate();
   const [fr, setFR] = useState<FRBFRRow[]>([]);
   const [tab, setTab] = useState<'perf' | 'risk'>('perf');
+  const ct = useChartTheme();
 
   useEffect(() => {
     if (!currentOrgId) return;
@@ -92,10 +94,10 @@ export default function DashboardHome() {
               const depenses = balance.filter((r) => r.account.startsWith('6')).reduce((s, r) => s + r.debit - r.credit, 0);
               const soldeNet = recettes - depenses;
               return <>
-                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} variation={0} vsLabel="" icon="💵" color={C.success} />
-                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} variation={0} vsLabel="" icon="💸" color={C.danger} />
-                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} variation={0} vsLabel="" icon="📊" color={soldeNet >= 0 ? C.success : C.danger} />
-                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} variation={0} vsLabel="" icon="🏦" color={C.info} />
+                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} variation={0} vsLabel="" icon="R" color={C.primary} />
+                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} variation={0} vsLabel="" icon="D" color={C.secondary} />
+                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} variation={0} vsLabel="" icon="S" color={C.accent1} />
+                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} variation={0} vsLabel="" icon="T" color={C.accent2} />
               </>;
             })()}
           </div>
@@ -105,8 +107,8 @@ export default function DashboardHome() {
       {system !== 'SMT' && (
         <TabSwitch
           tabs={[
-            { key: 'perf', label: '📈 Performance' },
-            { key: 'risk', label: '🛡️ Structure & Risques' },
+            { key: 'perf', label: 'Performance' },
+            { key: 'risk', label: 'Structure & Risques' },
           ]}
           value={tab}
           onChange={setTab}
@@ -115,15 +117,15 @@ export default function DashboardHome() {
 
       {system !== 'SMT' && tab === 'perf' && <>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-5">
-          <KPICard title="Chiffre d'Affaires" value={fmtK(ca)} unit={currency} variation={variationCA} vsLabel="vs N-1" icon="💰" color={C.primary} subValue={`Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} %)`} />
-          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} variation={0} vsLabel="vs N-1" icon="📈" color={C.success} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
+          <KPICard title="Chiffre d'Affaires" value={fmtK(ca)} unit={currency} variation={variationCA} vsLabel="vs N-1" icon="CA" color={C.primary} subValue={`Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} %)`} />
+          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} variation={0} vsLabel="vs N-1" icon="RN" color={C.secondary} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
           <KPICard title="EBE" value={fmtK(sig.ebe)} unit={currency} variation={0} vsLabel="vs Budget" icon="⚡" color={C.warning} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
-          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} variation={0} vsLabel="vs M-1" icon="🏦" color={C.info} subValue={`FR : ${fmtK(frV)} · BFR : ${fmtK(bfrV)}`} />
-          <KPICard title="BFR" value={fmtK(bfrV)} unit={currency} variation={0} vsLabel="vs N-1" icon="🔄" color={C.accent4} subValue={`${jCA.toFixed(1)} jours de CA`} inverse />
+          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} variation={0} vsLabel="vs M-1" icon="TN" color={C.accent1} subValue={`FR : ${fmtK(frV)} · BFR : ${fmtK(bfrV)}`} />
+          <KPICard title="BFR" value={fmtK(bfrV)} unit={currency} variation={0} vsLabel="vs N-1" icon="BF" color={C.accent4} subValue={`${jCA.toFixed(1)} jours de CA`} inverse />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-          <ChartCard title="📈 Chiffre d'Affaires — Réalisé vs Budget vs N-1 (mensuel)" className="lg:col-span-2">
+          <ChartCard title="Chiffre d'Affaires — Réalisé vs Budget vs N-1 (mensuel)" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={caData} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -131,9 +133,9 @@ export default function DashboardHome() {
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="realise" name="Réalisé" fill={C.primary} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="budget" name="Budget" fill={C.warning} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="n1" name="N-1" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="realise" name="Réalisé" fill={ct.at(0)} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="budget" name="Budget" fill={ct.at(1)} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="n1" name="N-1" fill={ct.at(2)} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -143,7 +145,7 @@ export default function DashboardHome() {
               <PieChart>
                 <Pie data={chargesData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
                   label={(p: any) => `${p.name} ${p.pct}%`} labelLine={false} fontSize={10}>
-                  {chargesData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  {chargesData.map((_, i) => <Cell key={i} fill={ct.at(i)} />)}
                 </Pie>
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
               </PieChart>
@@ -156,25 +158,25 @@ export default function DashboardHome() {
 
       {system !== 'SMT' && tab === 'risk' && <>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <ChartCard title="🏦 Évolution de la Trésorerie Nette">
+          <ChartCard title="Évolution de la Trésorerie Nette">
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={treso}>
                 <defs>
                   <linearGradient id="colorTreso" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={C.accent3} stopOpacity={0.5} />
-                    <stop offset="100%" stopColor={C.accent3} stopOpacity={0} />
+                    <stop offset="0%" stopColor={ct.at(0)} stopOpacity={0.5} />
+                    <stop offset="100%" stopColor={ct.at(0)} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Area type="monotone" dataKey="solde" stroke={C.accent3} strokeWidth={2.5} fill="url(#colorTreso)" />
+                <Area type="monotone" dataKey="solde" stroke={ct.at(0)} strokeWidth={2.5} fill="url(#colorTreso)" />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="📊 FR / BFR / Trésorerie Nette">
+          <ChartCard title="FR / BFR / Trésorerie Nette">
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={fr}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -182,9 +184,9 @@ export default function DashboardHome() {
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="fr" name="FR" stroke={C.primary} strokeWidth={2.5} dot={false} />
-                <Line type="monotone" dataKey="bfr" name="BFR" stroke={C.warning} strokeWidth={2.5} dot={false} />
-                <Line type="monotone" dataKey="tn" name="TN" stroke={C.success} strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey="fr" name="FR" stroke={ct.at(0)} strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey="bfr" name="BFR" stroke={ct.at(1)} strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey="tn" name="TN" stroke={ct.at(2)} strokeWidth={2.5} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>

@@ -15,13 +15,13 @@ import Imports from './Imports';
 type Tab = 'import' | 'gl' | 'bg' | 'baC' | 'baF' | 'ageeC' | 'ageeF';
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'import', label: '📥 Import' },
-  { key: 'gl',     label: '📒 Grand Livre' },
-  { key: 'bg',     label: '⚖️ Balance générale' },
-  { key: 'baC',    label: '👥 Bal. aux. Clients' },
-  { key: 'baF',    label: '🏭 Bal. aux. Fournisseurs' },
-  { key: 'ageeC',  label: '⏰ Bal. âgée Clients' },
-  { key: 'ageeF',  label: '⏰ Bal. âgée Fournisseurs' },
+  { key: 'import', label: 'Import' },
+  { key: 'gl',     label: 'Grand Livre' },
+  { key: 'bg',     label: 'Balance générale' },
+  { key: 'baC',    label: 'Bal. aux. Clients' },
+  { key: 'baF',    label: 'Bal. aux. Fournisseurs' },
+  { key: 'ageeC',  label: 'Bal. âgée Clients' },
+  { key: 'ageeF',  label: 'Bal. âgée Fournisseurs' },
 ];
 
 // ─── Page racine ──────────────────────────────────────────────────
@@ -146,7 +146,7 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
     <div className="space-y-4">
       <Card>
         <div className="flex flex-wrap gap-2 items-end">
-          <input className="input !py-1.5 max-w-sm" placeholder="🔍 Rechercher libellé / compte / pièce / tiers…"
+          <input className="input !py-1.5 max-w-sm" placeholder="Rechercher libellé / compte / pièce / tiers…"
             value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="input !w-auto !py-1.5" value={journal} onChange={(e) => setJournal(e.target.value)}>
             <option value="all">Tous journaux</option>
@@ -221,7 +221,7 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
     <div className="space-y-4">
       <Card>
         <div className="flex gap-2 items-center flex-wrap">
-          <input className="input !py-1.5 max-w-xs" placeholder="🔍 Compte / libellé…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className="input !py-1.5 max-w-xs" placeholder="Compte / libellé…" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="input !w-auto !py-1.5" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
             <option value="all">Toutes classes</option>
             {['1','2','3','4','5','6','7','8'].map((c) => <option key={c} value={c}>Classe {c}</option>)}
@@ -326,7 +326,7 @@ function AuxView({ orgId, year, importId, kind }: { orgId: string; year: number;
     <div className="space-y-4">
       <Card>
         <div className="flex gap-2 items-center">
-          <input className="input !py-1.5 max-w-xs" placeholder={`🔍 Tiers / libellé ${kind === 'client' ? 'client' : 'fournisseur'}…`}
+          <input className="input !py-1.5 max-w-xs" placeholder={`Tiers / libellé ${kind === 'client' ? 'client' : 'fournisseur'}…`}
             value={search} onChange={(e) => setSearch(e.target.value)} />
           <span className="ml-auto text-xs text-primary-500">
             <span className="num font-semibold">{filtered.length}</span> tiers sur <span className="num">{rows.length}</span>

@@ -21,23 +21,29 @@ import { agedBalance, fiscalite, immobilisationsDetail, masseSalariale, monthlyB
 const fmtK = (v: number) => v >= 1e9 ? `${(v/1e9).toFixed(1)}Md` : v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : String(Math.round(v));
 
 const gradients: Record<string, string> = {
-  cp: 'linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%)',
-  client: 'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
-  fr: 'linear-gradient(135deg, #7c2d12 0%, #f97316 100%)',
-  tre: 'linear-gradient(135deg, #1e3a5f 0%, #6366f1 100%)',
-  bfr: 'linear-gradient(135deg, #312e81 0%, #8b5cf6 100%)',
-  sal: 'linear-gradient(135deg, #065f46 0%, #14b8a6 100%)',
-  fis: 'linear-gradient(135deg, #78350f 0%, #f59e0b 100%)',
-  stk: 'linear-gradient(135deg, #0c4a6e 0%, #0ea5e9 100%)',
-  immo: 'linear-gradient(135deg, #44403c 0%, #78716c 100%)',
-  ind: 'linear-gradient(135deg, #334155 0%, #64748b 100%)',
-  btp: 'linear-gradient(135deg, #92400e 0%, #f97316 100%)',
-  com: 'linear-gradient(135deg, #064e3b 0%, #10b981 100%)',
-  mfi: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+  cp:     'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
+  client: 'linear-gradient(135deg, #171717 0%, #525252 100%)',
+  fr:     'linear-gradient(135deg, #262626 0%, #737373 100%)',
+  tre:    'linear-gradient(135deg, #0a0a0a 0%, #525252 100%)',
+  bfr:    'linear-gradient(135deg, #171717 0%, #737373 100%)',
+  sal:    'linear-gradient(135deg, #262626 0%, #a3a3a3 100%)',
+  fis:    'linear-gradient(135deg, #404040 0%, #a3a3a3 100%)',
+  stk:    'linear-gradient(135deg, #0a0a0a 0%, #737373 100%)',
+  immo:   'linear-gradient(135deg, #404040 0%, #737373 100%)',
+  ind:    'linear-gradient(135deg, #262626 0%, #525252 100%)',
+  btp:    'linear-gradient(135deg, #171717 0%, #404040 100%)',
+  com:    'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
+  mfi:    'linear-gradient(135deg, #262626 0%, #737373 100%)',
+  imco:   'linear-gradient(135deg, #171717 0%, #525252 100%)',
+  hot:    'linear-gradient(135deg, #262626 0%, #737373 100%)',
+  agri:   'linear-gradient(135deg, #0a0a0a 0%, #525252 100%)',
+  sante:  'linear-gradient(135deg, #171717 0%, #737373 100%)',
+  transp: 'linear-gradient(135deg, #262626 0%, #404040 100%)',
+  serv:   'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
 };
 
 const catalog: Record<string, { title: string; icon: string; subtitle: string }> = {
-  cp:    { title: 'Charges & Produits', icon: '📊', subtitle: 'Analyse détaillée des charges et produits' },
+  cp:    { title: 'Charges & Produits', icon: 'CP', subtitle: 'Analyse détaillée des charges et produits' },
   crblock:{ title: 'CR par bloc',         icon: '◫', subtitle: 'Analyse de chaque section du CR avec détail des comptes' },
   crsec_produits_expl: { title: "Produits d'exploitation",  icon: '▲', subtitle: 'Comptes 70-75 · ventes, production, subventions' },
   crsec_charges_expl:  { title: "Charges d'exploitation",   icon: '▼', subtitle: 'Comptes 60-66 · achats, services, personnel' },
@@ -56,18 +62,24 @@ const catalog: Record<string, { title: string; icon: string; subtitle: string }>
   is_bvsa:    { title: 'Income Statement — Budget vs Actual', icon: '▤', subtitle: 'Current period / Versus N-1 / Year-to-date' },
   cashflow:   { title: 'Cashflow Statement', icon: '◐', subtitle: 'Position trésorerie : encaissements, décaissements, solde' },
   receivables:{ title: 'Receivables & Payables Review', icon: '◓', subtitle: 'Suivi des créances et dettes : KPIs et évolution mensuelle' },
-  client:{ title: 'Cycle Client', icon: '👥', subtitle: 'Suivi des créances, recouvrement et risque client' },
-  fr:    { title: 'Cycle Fournisseur', icon: '🏭', subtitle: 'Suivi des dettes, échéances et relations fournisseurs' },
-  tre:   { title: 'Trésorerie', icon: '🏦', subtitle: 'Position, flux et volatilité de la trésorerie' },
-  bfr:   { title: 'BFR', icon: '🔄', subtitle: 'Fonds de roulement, BFR, trésorerie nette' },
-  sal:   { title: 'Masse Salariale', icon: '👥', subtitle: 'Suivi des charges de personnel' },
-  fis:   { title: 'Fiscalité', icon: '📑', subtitle: 'TVA, IS, taxes, pression fiscale' },
-  stk:   { title: 'Stocks', icon: '📦', subtitle: 'Valorisation, dépréciations, rotation' },
-  immo:  { title: 'Immobilisations', icon: '🏗️', subtitle: 'VNC, amortissements, taux de vétusté' },
-  ind:   { title: 'Industrie', icon: '🏭', subtitle: 'Production, coût MP, marge industrielle' },
-  btp:   { title: 'BTP', icon: '⚒️', subtitle: 'Travaux facturés, sous-traitance, marge' },
-  com:   { title: 'Commerce', icon: '🛒', subtitle: 'Ventes, marge commerciale, taux de marque' },
-  mfi:   { title: 'Microfinance', icon: '🏛️', subtitle: 'PNB, coût du risque, encours clients' },
+  client:{ title: 'Cycle Client', icon: 'CL', subtitle: 'Suivi des créances, recouvrement et risque client' },
+  fr:    { title: 'Cycle Fournisseur', icon: 'FO', subtitle: 'Suivi des dettes, échéances et relations fournisseurs' },
+  tre:   { title: 'Trésorerie', icon: 'TR', subtitle: 'Position, flux et volatilité de la trésorerie' },
+  bfr:   { title: 'BFR', icon: 'BF', subtitle: 'Fonds de roulement, BFR, trésorerie nette' },
+  sal:   { title: 'Masse Salariale', icon: 'MS', subtitle: 'Suivi des charges de personnel' },
+  fis:   { title: 'Fiscalité', icon: 'FI', subtitle: 'TVA, IS, taxes, pression fiscale' },
+  stk:   { title: 'Stocks', icon: 'ST', subtitle: 'Valorisation, dépréciations, rotation' },
+  immo:  { title: 'Immobilisations', icon: 'IM', subtitle: 'VNC, amortissements, taux de vétusté' },
+  ind:    { title: 'Industrie', icon: 'IN', subtitle: 'Production, coût MP, marge industrielle' },
+  btp:    { title: 'BTP', icon: 'BT', subtitle: 'Travaux facturés, sous-traitance, marge' },
+  com:    { title: 'Commerce', icon: 'CO', subtitle: 'Ventes, marge commerciale, taux de marque' },
+  mfi:    { title: 'Microfinance', icon: 'MF', subtitle: 'PNB, coût du risque, encours clients' },
+  imco:   { title: 'Immobilier commercial', icon: 'IC', subtitle: 'Loyers, taux occupation, charges locatives' },
+  hot:    { title: 'Hôtellerie', icon: 'HO', subtitle: 'RevPAR, taux occupation, ADR, GOP' },
+  agri:   { title: 'Agriculture', icon: 'AG', subtitle: 'Récoltes, intrants, rendement, subventions' },
+  sante:  { title: 'Santé', icon: 'SA', subtitle: 'Actes, recettes, personnel soignant, équipements' },
+  transp: { title: 'Transport', icon: 'TP', subtitle: 'CA/km, flotte, carburant, maintenance' },
+  serv:   { title: 'Services', icon: 'SV', subtitle: 'Honoraires, taux facturable, marge sur projets' },
 };
 
 export default function Dashboard() {
@@ -202,19 +214,19 @@ function ChargesProduits() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" variation={6.8} color={C.danger} icon="📉" inverse />
-        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" variation={12.3} color={C.success} icon="📈" />
+        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" variation={6.8} color={C.secondary} icon="CH" inverse />
+        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" variation={12.3} color={C.primary} icon="PR" />
         <KPICard title="Résultat" value={fmtK(resultat)} unit="XOF" variation={28.5} color={C.primary} icon="💎" />
-        <KPICard title="Ratio Charges/CA" value={`${ratioCA.toFixed(1)} %`} variation={-4.8} color={C.warning} icon="📊" inverse />
-        <KPICard title="Marge brute" value={fmtK(sig?.margeBrute ?? 0)} unit="XOF" color={C.info} icon="💰" />
+        <KPICard title="Ratio Charges/CA" value={`${ratioCA.toFixed(1)} %`} variation={-4.8} color={C.accent1} icon="RA" inverse />
+        <KPICard title="Marge brute" value={fmtK(sig?.margeBrute ?? 0)} unit="XOF" color={C.accent2} icon="MB" />
       </div>
 
       <TabSwitch value={view} onChange={setView} activeColor={C.primary}
-        tabs={[{ key: 'charges', label: '📉 Charges' }, { key: 'produits', label: '📈 Produits' }, { key: 'comparatif', label: '⚖️ Comparatif Budget' }]} />
+        tabs={[{ key: 'charges', label: 'Charges' }, { key: 'produits', label: 'Produits' }, { key: 'comparatif', label: 'Comparatif Budget' }]} />
 
       {view === 'charges' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="📉 Évolution mensuelle des charges par nature" className="lg:col-span-2">
+          <ChartCard title="Évolution mensuelle des charges par nature" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chargesEvol}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -298,7 +310,7 @@ function ChargesProduits() {
 
       {view === 'produits' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="📈 Évolution mensuelle des produits par nature" className="lg:col-span-2">
+          <ChartCard title="Évolution mensuelle des produits par nature" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={produitsEvol}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -337,7 +349,7 @@ function ChargesProduits() {
 
       {view === 'comparatif' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title="⚖️ Budget vs Réalisé par poste" className="lg:col-span-2">
+          <ChartCard title="Budget vs Réalisé par poste" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={budgetVsRealise} layout="vertical" barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -351,7 +363,7 @@ function ChargesProduits() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="📊 Écarts Budget vs Réalisé">
+          <ChartCard title="Écarts Budget vs Réalisé">
             <div className="text-xs">
               {budgetVsRealise.map((item, i) => {
                 const ecart = item.realise - item.budget;
@@ -375,7 +387,7 @@ function ChargesProduits() {
             </div>
           </ChartCard>
 
-          <ChartCard title="📋 Synthèse budgétaire">
+          <ChartCard title="Synthèse budgétaire">
             <div className="p-2">
               {[
                 { label: 'Total Budget Charges', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.budget, 0)), color: C.warning },
@@ -500,7 +512,7 @@ function CRBlock() {
         <KPICard title="Sections" value={String(sections.length)} icon="◫" />
       </div>
 
-      <p className="text-xs text-primary-500 mb-3">💡 Chaque bloc ci-dessous représente une section du CR. Cliquez « Analyser → » pour zoomer sur le détail des comptes.</p>
+      <p className="text-xs text-primary-500 mb-3">Chaque bloc ci-dessous représente une section du CR. Cliquez « Analyser → » pour zoomer sur le détail des comptes.</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {sections.map((sec) => {
@@ -563,7 +575,7 @@ function CRBlock() {
       </div>
 
       <div className="mt-6 card p-4 bg-primary-200/40 dark:bg-primary-800/30 text-xs text-primary-600 dark:text-primary-400">
-        💡 <strong>Astuce :</strong> Pour personnaliser les libellés et l'ordre des sections, allez dans <strong>États financiers → Compte de résultat → Synthèse</strong>.
+        <strong>Astuce :</strong> Pour personnaliser les libellés et l'ordre des sections, allez dans <strong>États financiers → Compte de résultat → Synthèse</strong>.
       </div>
     </>
   );
@@ -593,9 +605,9 @@ function ISBudgetVsActual() {
   const dot = (pct: number, isCharge: boolean) => {
     // pour charges, dépassement = défavorable (rouge) ; pour produits, dépassement = favorable (vert)
     const fav = isCharge ? pct <= 100 : pct >= 95;
-    if (fav && (isCharge ? pct >= 80 : pct >= 95)) return '🟢';
-    if (Math.abs(pct - 100) < 30) return '🟠';
-    return '🔴';
+    if (fav && (isCharge ? pct >= 80 : pct >= 95)) return 'OK';
+    if (Math.abs(pct - 100) < 30) return '--';
+    return '!!';
   };
 
   return (
@@ -764,9 +776,9 @@ function CashflowStatement() {
             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v.toLocaleString('fr-FR')} />
             <Tooltip formatter={(v: any) => fmtFull(v)} />
             <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="bottom" />
-            <Bar dataKey="cashIn" name="Cash in" fill="#dc2626" />
-            <Bar dataKey="cashOut" name="Cash out" fill="#525252" />
-            <Line type="linear" dataKey="solde" name="Solde" stroke="#1e40af" strokeWidth={2.5} dot={{ r: 4, fill: '#1e40af' }} />
+            <Bar dataKey="cashIn" name="Cash in" fill={ct.at(0)} />
+            <Bar dataKey="cashOut" name="Cash out" fill={ct.at(1)} />
+            <Line type="linear" dataKey="solde" name="Solde" stroke={ct.at(2)} strokeWidth={2.5} dot={{ r: 4, fill: ct.at(2) }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -818,8 +830,8 @@ function ReceivablesReview() {
   const arData = monthlyAR.labels.slice(0, 3).map((m, i) => ({ mois: m, value: monthlyAR.values[i] || 0 }));
   const apData = monthlyAP.labels.slice(0, 3).map((m, i) => ({ mois: m, value: monthlyAP.values[i] || 0 }));
 
-  const teal = '#3a7a8a'; // teinte teal sombre style screenshot
-  const red = '#dc2626';
+  const teal = ct.at(0);
+  const red = ct.at(1);
 
   return (
     <div className="card overflow-hidden">
@@ -846,7 +858,7 @@ function ReceivablesReview() {
             <PieChart>
               <Pie data={[{ name: 'AR', value: pctReceivable }, { name: 'Reste', value: Math.max(100 - pctReceivable, 0) }]}
                 cx="50%" cy="50%" innerRadius={60} outerRadius={85} dataKey="value" startAngle={90} endAngle={-270}>
-                <Cell fill={teal} /><Cell fill="#262626" />
+                <Cell fill={teal} /><Cell fill={ct.at(5)} />
               </Pie>
               <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="num" style={{ fontSize: 24, fontWeight: 700 }}>
                 {pctReceivable}%
@@ -860,7 +872,7 @@ function ReceivablesReview() {
             <PieChart>
               <Pie data={[{ name: 'AP', value: pctPayable }, { name: 'Reste', value: Math.max(100 - pctPayable, 0) }]}
                 cx="50%" cy="50%" innerRadius={60} outerRadius={85} dataKey="value" startAngle={90} endAngle={-270}>
-                <Cell fill={red} /><Cell fill="#262626" />
+                <Cell fill={red} /><Cell fill={ct.at(5)} />
               </Pie>
               <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="num" style={{ fontSize: 24, fontWeight: 700 }}>
                 {pctPayable}%
@@ -1002,7 +1014,7 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
       </ChartCard>
 
       <div className="mt-4 card p-3 text-xs text-primary-500">
-        💡 Pour la version avec graphiques (KPIs + évolution + concentration + top 10), allez dans le <strong>Catalogue → CR — Dashboards</strong>.
+        Pour la version avec graphiques (KPIs + évolution + concentration + top 10), allez dans le <strong>Catalogue → CR — Dashboards</strong>.
       </div>
     </>
   );
@@ -1119,7 +1131,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
       </div>
 
       <div className="card p-4 text-xs text-primary-500">
-        💡 Pour le <strong>tableau détaillé</strong> avec collapsibles, ouvrez la version <strong>Table</strong> dans le Catalogue → CR — Tables.
+        Pour le <strong>tableau détaillé</strong> avec collapsibles, ouvrez la version <strong>Table</strong> dans le Catalogue → CR — Tables.
       </div>
     </>
   );
@@ -1170,13 +1182,13 @@ function CycleClient() {
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
         <KPICard title="Créances totales" value={fmtK(creances)} unit="XOF" variation={8.2} color={C.primary} icon="💳" />
         <KPICard title="DSO" value={`${Math.round(dso)} j`} variation={5} color={dso > 60 ? C.warning : C.success} icon="⏱️" inverse subValue="Objectif : 60 jours" />
-        <KPICard title="Taux recouvrement" value="87 %" variation={-2.1} color={C.success} icon="✅" subValue="Objectif : 90 %" />
-        <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" variation={12} color={C.danger} icon="⚠️" inverse />
-        <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" variation={15} color={C.danger} icon="🔴" inverse />
+        <KPICard title="Taux recouvrement" value="87 %" variation={-2.1} color={C.primary} icon="✅" subValue="Objectif : 90 %" />
+        <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" variation={12} color={C.secondary} icon="CD" inverse />
+        <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" variation={15} color={C.secondary} icon="90" inverse />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <ChartCard title="📊 Balance âgée clients">
+        <ChartCard title="Balance âgée clients">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bucketTotals}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1204,7 +1216,7 @@ function CycleClient() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="📈 Évolution des créances">
+        <ChartCard title="Évolution des créances">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={creancesEvol}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1263,7 +1275,7 @@ function CycleClient() {
                       </td>
                       <td className="py-1.5 px-1 text-center">
                         <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: bg, color: fg }}>
-                          {risque === 'high' ? '🔴 Élevé' : risque === 'medium' ? '🟠 Moyen' : '🟢 Faible'}
+                          {risque === 'high' ? '!! Élevé' : risque === 'medium' ? 'Moyen' : 'Faible'}
                         </span>
                       </td>
                     </tr>
@@ -1274,7 +1286,7 @@ function CycleClient() {
           </div>
         </ChartCard>
 
-        <ChartCard title="🎯 Concentration clients">
+        <ChartCard title="Concentration clients">
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie data={concentration} cx="50%" cy="50%" innerRadius={40} outerRadius={65} dataKey="value"
@@ -1294,7 +1306,7 @@ function CycleClient() {
           </div>
           {concentration[0].value > 50 && (
             <div className="mt-2 p-2.5 rounded-lg text-[10px]" style={{ background: '#fef3c7', color: '#92400e' }}>
-              ⚠️ <strong>Concentration :</strong> Top 3 clients &gt; 50 % du CA. Risque de dépendance.
+              !! <strong>Concentration :</strong> Top 3 clients &gt; 50 % du CA. Risque de dépendance.
             </div>
           )}
         </ChartCard>
@@ -1357,15 +1369,15 @@ function CycleFournisseur() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" variation={-3.5} color={C.primary} icon="🏭" subValue="Total encours" />
-        <KPICard title="DPO" value={`${Math.round(dpo)} j`} variation={-2} color={C.success} icon="⏱️" subValue="Objectif : 60 jours" />
-        <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" variation={8} color={C.danger} icon="🔴" inverse />
-        <KPICard title="Nb fournisseurs" value={String(aged.rows.length)} color={C.warning} icon="📅" subValue="Actifs" />
-        <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} variation={3} color={C.info} icon="🔄" subValue="DSO + Stocks − DPO" inverse />
+        <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" variation={-3.5} color={C.primary} icon="FO" subValue="Total encours" />
+        <KPICard title="DPO" value={`${Math.round(dpo)} j`} variation={-2} color={C.primary} icon="⏱️" subValue="Objectif : 60 jours" />
+        <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" variation={8} color={C.secondary} icon="90" inverse />
+        <KPICard title="Nb fournisseurs" value={String(aged.rows.length)} color={C.accent1} icon="📅" subValue="Actifs" />
+        <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} variation={3} color={C.accent2} icon="CY" subValue="DSO + Stocks − DPO" inverse />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <ChartCard title="📊 Balance âgée fournisseurs">
+        <ChartCard title="Balance âgée fournisseurs">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bucketTotals}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1394,7 +1406,7 @@ function CycleFournisseur() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="📈 Évolution des dettes fournisseurs">
+        <ChartCard title="Évolution des dettes fournisseurs">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={dettesEvol}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1450,7 +1462,7 @@ function CycleFournisseur() {
                       </td>
                       <td className="py-1.5 px-1 text-center">
                         <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: bg, color: fg }}>
-                          {statut === 'retard' ? '🔴 Retard' : statut === 'urgent' ? '🟠 Urgent' : '🟢 Normal'}
+                          {statut === 'retard' ? '!! Retard' : statut === 'urgent' ? '-- Urgent' : 'OK Normal'}
                         </span>
                       </td>
                     </tr>
@@ -1461,7 +1473,7 @@ function CycleFournisseur() {
           </div>
         </ChartCard>
 
-        <ChartCard title="🎯 Concentration fournisseurs">
+        <ChartCard title="Concentration fournisseurs">
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie data={concentration} cx="50%" cy="50%" innerRadius={40} outerRadius={65} dataKey="value"
@@ -1481,7 +1493,7 @@ function CycleFournisseur() {
           </div>
           {concentration[0].value > 50 && (
             <div className="mt-2 p-2.5 rounded-lg text-[10px]" style={{ background: '#fee2e2', color: '#991b1b' }}>
-              🔴 <strong>Alerte :</strong> Top 3 = {concentration[0].value}% des achats. Diversifier les sources.
+              !! <strong>Alerte :</strong> Top 3 = {concentration[0].value}% des achats. Diversifier les sources.
             </div>
           )}
         </ChartCard>
@@ -1569,19 +1581,19 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Trésorerie nette" value={fmtK(tn)} unit="XOF" variation={-5.1} color={C.info} icon="🏦" subValue="FR − BFR" />
-        <KPICard title="Fonds de roulement" value={fmtK(fr)} unit="XOF" variation={2.3} color={C.success} icon="🏗️" subValue="Ressources − Emplois stables" />
-        <KPICard title="BFR" value={fmtK(bfr)} unit="XOF" variation={15.2} color={C.warning} icon="🔄" inverse />
+        <KPICard title="Trésorerie nette" value={fmtK(tn)} unit="XOF" variation={-5.1} color={C.accent2} icon="TN" subValue="FR − BFR" />
+        <KPICard title="Fonds de roulement" value={fmtK(fr)} unit="XOF" variation={2.3} color={C.primary} icon="FR" subValue="Ressources − Emplois stables" />
+        <KPICard title="BFR" value={fmtK(bfr)} unit="XOF" variation={15.2} color={C.accent1} icon="CY" inverse />
         <KPICard title="Cycle Conversion" value={`${Math.round(cycleConv)} j`} variation={3} color={C.accent4} icon="⏱️" inverse />
         <KPICard title="CAF" value={fmtK(sig.resultat + bilan.actif.filter((l) => l.code === 'AE' || l.code === 'AF').reduce((s, l) => s + l.value * 0.1, 0))} unit="XOF" variation={8.5} color={C.primary} icon="💎" />
       </div>
 
       <TabSwitch value={tab} onChange={setTab} activeColor={C.info}
-        tabs={[{ key: 'tresorerie', label: '🏦 Trésorerie' }, { key: 'bfr', label: '🔄 BFR' }, { key: 'previsionnel', label: '🔮 Prévisionnel' }]} />
+        tabs={[{ key: 'tresorerie', label: 'Trésorerie' }, { key: 'bfr', label: 'BFR' }, { key: 'previsionnel', label: 'Prévisionnel' }]} />
 
       {tab === 'tresorerie' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title="💰 Encaissements vs Décaissements" className="lg:col-span-2">
+          <ChartCard title="Encaissements vs Décaissements" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <ComposedChart data={tresorerieEvol}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1596,7 +1608,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="📊 Flux par catégorie">
+          <ChartCard title="Flux par catégorie">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={fluxData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1629,7 +1641,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
                 </div>
               ))}
               <div className="mt-4 p-3 rounded-lg text-[11px]" style={{ background: '#eff6ff', color: '#1e40af' }}>
-                💡 <strong>Interprétation :</strong> {Math.round(cycleConv)} jours entre le décaissement fournisseur et l'encaissement client. Objectif : réduire le DSO pour améliorer la trésorerie.
+                <strong>Interprétation :</strong> {Math.round(cycleConv)} jours entre le décaissement fournisseur et l'encaissement client. Objectif : réduire le DSO pour améliorer la trésorerie.
               </div>
             </div>
           </ChartCard>
@@ -1638,7 +1650,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
 
       {tab === 'bfr' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title="📊 FR / BFR / Trésorerie nette — évolution" className="lg:col-span-2">
+          <ChartCard title="FR / BFR / Trésorerie nette — évolution" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={frBfrTn}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1653,7 +1665,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="🔍 Décomposition du BFR">
+          <ChartCard title="Décomposition du BFR">
             <div className="p-2">
               <div className="text-xs font-semibold mb-2">Actif circulant d'exploitation</div>
               {decomposition.filter(d => d.value > 0).map((item, i) => (
@@ -1676,7 +1688,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
             </div>
           </ChartCard>
 
-          <ChartCard title="📈 BFR en jours de CA">
+          <ChartCard title="BFR en jours de CA">
             <div className="p-2">
               {tre.labels.map((m, i) => {
                 const jours = sig.ca ? Math.round((bfr / sig.ca) * 360 * (0.8 + Math.sin(i) * 0.2)) : 0;
@@ -1698,7 +1710,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
 
       {tab === 'previsionnel' && (
         <div className="grid grid-cols-1 gap-4">
-          <ChartCard title="🔮 Prévisionnel de trésorerie — 6 mois (3 scénarios)">
+          <ChartCard title="Prévisionnel de trésorerie — 6 mois (3 scénarios)">
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={previsionnel}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1714,7 +1726,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           </ChartCard>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title="📋 Hypothèses du prévisionnel">
+            <ChartCard title="Hypothèses du prévisionnel">
               <div className="text-xs">
                 {[
                   { scenario: 'Optimiste', hyp: 'DSO réduit à 45j, CA +10%, charges stables', color: C.success },
@@ -1737,7 +1749,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
                 <p className="font-bold mb-2">🧠 Synthèse IA :</p>
                 <p>La trésorerie nette est en <strong>{tn >= 0 ? 'position positive' : 'position négative'}</strong> de {fmtK(Math.abs(tn))} XOF.</p>
                 <p className="mt-2">Le DSO ({Math.round(dso)}j) est un levier d'amélioration. Une réduction de 10 jours libérerait environ <strong>{fmtK(creances / Math.max(dso, 1) * 10)}</strong> de trésorerie.</p>
-                <p className="mt-2">⚠️ <strong>Recommandation :</strong> Mettre en place des relances automatiques à J+30 et négocier des escomptes pour paiement anticipé.</p>
+                <p className="mt-2">!! <strong>Recommandation :</strong> Mettre en place des relances automatiques à J+30 et négocier des escomptes pour paiement anticipé.</p>
               </div>
             </ChartCard>
           </div>
@@ -1812,20 +1824,20 @@ function MasseSalariale() {
   return (
     <>
       <TabSwitch value={tab} onChange={setTab} activeColor={C.accent3}
-        tabs={[{ key: 'masse', label: '👥 Masse salariale' }, { key: 'provisions', label: '🛡️ Provisions' }]} />
+        tabs={[{ key: 'masse', label: 'Masse salariale' }, { key: 'provisions', label: 'Provisions' }]} />
 
       {tab === 'masse' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-            <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" variation={5.1} color={C.primary} icon="👥" inverse />
-            <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} variation={-1.2} color={ratio < 25 ? C.success : C.warning} icon="📊" inverse subValue="Objectif : < 22%" />
+            <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" variation={5.1} color={C.primary} icon="MS" inverse />
+            <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} variation={-1.2} color={ratio < 25 ? C.success : C.warning} icon="RA" inverse subValue="Objectif : < 22%" />
             <KPICard title="Salaires directs" value={fmtK(salaires)} unit="XOF" color={C.secondary} icon="💼" />
-            <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" variation={4.8} color={C.warning} icon="🏛️" inverse />
-            <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={C.info} icon="📅" />
+            <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" variation={4.8} color={C.accent1} icon="CS" inverse />
+            <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={C.accent2} icon="📅" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            <ChartCard title="📈 Évolution mensuelle de la masse salariale" className="lg:col-span-2">
+            <ChartCard title="Évolution mensuelle de la masse salariale" className="lg:col-span-2">
               <ResponsiveContainer width="100%" height={240}>
                 <ComposedChart data={msEvol}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1878,7 +1890,7 @@ function MasseSalariale() {
               </div>
             </ChartCard>
 
-            <ChartCard title="📊 Ratio Masse salariale / CA (%)">
+            <ChartCard title="Ratio Masse salariale / CA (%)">
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={ratioMs}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1898,14 +1910,14 @@ function MasseSalariale() {
       {tab === 'provisions' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <KPICard title="Total provisions" value={fmtK(provStock.reduce((s, p) => s + p.solde, 0))} unit="XOF" variation={8.5} color={C.warning} icon="🛡️" />
-            <KPICard title="Dotations N" value={fmtK(provStock.reduce((s, p) => s + p.dotation, 0))} unit="XOF" variation={12} color={C.danger} icon="📉" inverse />
-            <KPICard title="Reprises N" value={fmtK(provStock.reduce((s, p) => s + p.reprise, 0))} unit="XOF" color={C.success} icon="📈" />
-            <KPICard title="Impact net" value={fmtK(-(provStock.reduce((s, p) => s + p.dotation - p.reprise, 0)))} unit="XOF" color={C.danger} icon="💥" subValue="Dotations − Reprises" />
+            <KPICard title="Total provisions" value={fmtK(provStock.reduce((s, p) => s + p.solde, 0))} unit="XOF" variation={8.5} color={C.accent1} icon="PV" />
+            <KPICard title="Dotations N" value={fmtK(provStock.reduce((s, p) => s + p.dotation, 0))} unit="XOF" variation={12} color={C.secondary} icon="CH" inverse />
+            <KPICard title="Reprises N" value={fmtK(provStock.reduce((s, p) => s + p.reprise, 0))} unit="XOF" color={C.primary} icon="PR" />
+            <KPICard title="Impact net" value={fmtK(-(provStock.reduce((s, p) => s + p.dotation - p.reprise, 0)))} unit="XOF" color={C.secondary} icon="💥" subValue="Dotations − Reprises" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title="📊 Dotations vs Reprises — évolution mensuelle">
+            <ChartCard title="Dotations vs Reprises — évolution mensuelle">
               <ResponsiveContainer width="100%" height={230}>
                 <ComposedChart data={provEvol}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1921,7 +1933,7 @@ function MasseSalariale() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="🛡️ Détail des provisions par type">
+            <ChartCard title="Détail des provisions par type">
               <div className="text-xs">
                 <table className="w-full">
                   <thead>
@@ -1985,13 +1997,13 @@ function Fiscalite() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="TVA collectée" value={fmtK(data.tvaCollectee)} unit="XOF" color={C.info} icon="💰" />
-        <KPICard title="TVA déductible" value={fmtK(data.tvaDeductible)} unit="XOF" color={C.success} icon="📥" />
-        <KPICard title="TVA nette à payer" value={fmtK(Math.max(data.tvaAPayer, 0))} unit="XOF" color={data.tvaAPayer > 0 ? C.warning : C.success} icon="💸" />
-        <KPICard title="IS estimé" value={fmtK(data.is)} unit="XOF" color={C.danger} icon="🏛️" />
+        <KPICard title="TVA collectée" value={fmtK(data.tvaCollectee)} unit="XOF" color={C.accent2} icon="MB" />
+        <KPICard title="TVA déductible" value={fmtK(data.tvaDeductible)} unit="XOF" color={C.primary} icon="TD" />
+        <KPICard title="TVA nette à payer" value={fmtK(Math.max(data.tvaAPayer, 0))} unit="XOF" color={data.tvaAPayer > 0 ? C.warning : C.success} icon="TV" />
+        <KPICard title="IS estimé" value={fmtK(data.is)} unit="XOF" color={C.secondary} icon="CS" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="📊 Décomposition fiscale">
+        <ChartCard title="Décomposition fiscale">
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={pie} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value"
@@ -2002,7 +2014,7 @@ function Fiscalite() {
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="📋 Indicateurs fiscaux">
+        <ChartCard title="Indicateurs fiscaux">
           <div className="space-y-2.5 text-sm">
             {[
               { label: 'Pression fiscale globale', value: `${pression.toFixed(1)} %`, strong: true },
@@ -2018,7 +2030,7 @@ function Fiscalite() {
             ))}
           </div>
           <div className="mt-4 p-3 rounded-lg text-[11px]" style={{ background: '#fef3c7', color: '#92400e' }}>
-            ⚠️ L'IS est une estimation depuis les écritures 441. Le montant définitif est déterminé à la clôture après retraitements fiscaux.
+            !! L'IS est une estimation depuis les écritures 441. Le montant définitif est déterminé à la clôture après retraitements fiscaux.
           </div>
         </ChartCard>
       </div>
@@ -2048,10 +2060,10 @@ function Stocks() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Stock brut" value={fmtK(total)} unit="XOF" color={C.primary} icon="📦" />
-        <KPICard title="Dépréciations" value={fmtK(deprec)} unit="XOF" color={deprec > 0 ? C.warning : C.success} icon="📉" inverse />
-        <KPICard title="Stock net" value={fmtK(total - deprec)} unit="XOF" color={C.success} icon="✅" />
-        <KPICard title="Catégories" value={String(stocks.length)} color={C.info} icon="📂" />
+        <KPICard title="Stock brut" value={fmtK(total)} unit="XOF" color={C.primary} icon="ST" />
+        <KPICard title="Dépréciations" value={fmtK(deprec)} unit="XOF" color={deprec > 0 ? C.warning : C.success} icon="CH" inverse />
+        <KPICard title="Stock net" value={fmtK(total - deprec)} unit="XOF" color={C.primary} icon="✅" />
+        <KPICard title="Catégories" value={String(stocks.length)} color={C.accent2} icon="📂" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="🍩 Répartition des stocks par nature">
@@ -2065,7 +2077,7 @@ function Stocks() {
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="📊 Valorisation par catégorie">
+        <ChartCard title="Valorisation par catégorie">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={stocks} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -2103,12 +2115,12 @@ function Immobilisations() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Valeur brute" value={fmtK(totBrute)} unit="XOF" color={C.info} icon="🏗️" />
-        <KPICard title="Amortissements" value={fmtK(totAmort)} unit="XOF" color={C.warning} icon="📉" />
-        <KPICard title="Valeur nette" value={fmtK(totVNC)} unit="XOF" color={C.success} icon="💎" />
+        <KPICard title="Valeur brute" value={fmtK(totBrute)} unit="XOF" color={C.accent2} icon="FR" />
+        <KPICard title="Amortissements" value={fmtK(totAmort)} unit="XOF" color={C.accent1} icon="CH" />
+        <KPICard title="Valeur nette" value={fmtK(totVNC)} unit="XOF" color={C.primary} icon="💎" />
         <KPICard title="Taux de vétusté" value={`${vetuste.toFixed(1)} %`} color={vetuste < 50 ? C.success : vetuste < 75 ? C.warning : C.danger} icon="⏳" inverse />
       </div>
-      <ChartCard title="📊 Décomposition par catégorie">
+      <ChartCard title="Décomposition par catégorie">
         <ResponsiveContainer width="100%" height={340}>
           <BarChart data={data} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -2141,6 +2153,7 @@ function Sectoral({ id }: { id: string }) {
 function SecIndustrie() {
   const { sig, balance } = useStatements();
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const [monthly, setMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
   useEffect(() => {
     if (currentOrgId) monthlyByPrefix(currentOrgId, currentYear, ['70']).then(setMonthly);
@@ -2169,7 +2182,7 @@ function SecIndustrie() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Production vendue" value={fmtK(production)} unit="XOF" icon="🏭" />
+        <KPICard title="Production vendue" value={fmtK(production)} unit="XOF" icon="FO" />
         <KPICard title="Coût MP consommées" value={fmtK(matieres)} unit="XOF" icon="⚙️" />
         <KPICard title="Marge industrielle" value={fmtK(sig.margeBrute)} unit="XOF" icon="◆" />
         <KPICard title="Taux de marge" value={`${tauxMarge.toFixed(1)} %`} icon="%" />
@@ -2187,7 +2200,7 @@ function SecIndustrie() {
             <PieChart>
               <Pie data={structureCout} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
                 label={(p: any) => `${p.name} ${((p.value/structureCout.reduce((s,d) => s+d.value,0))*100).toFixed(0)}%`}>
-                {structureCout.map((_, i) => <Cell key={i} fill={['#171717','#404040','#737373','#a3a3a3'][i]} />)}
+                {structureCout.map((_, i) => <Cell key={i} fill={ct.at(i)} />)}
               </Pie>
               <Tooltip formatter={(v: any) => fmtFull(v)} />
             </PieChart>
@@ -2202,8 +2215,8 @@ function SecIndustrie() {
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="production" name="Production" fill="#262626" radius={[3,3,0,0]} />
-              <Line type="monotone" dataKey="objectif" name="Objectif moyen" stroke="#737373" strokeDasharray="5 5" dot={false} strokeWidth={2} />
+              <Bar dataKey="production" name="Production" fill={ct.bar} radius={[3,3,0,0]} />
+              <Line type="monotone" dataKey="objectif" name="Objectif moyen" stroke={ct.at(3)} strokeDasharray="5 5" dot={false} strokeWidth={2} />
             </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2234,6 +2247,7 @@ function SecIndustrie() {
 function SecBTP() {
   const { sig, balance } = useStatements();
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const [monthly, setMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
   useEffect(() => {
     if (currentOrgId) monthlyByPrefix(currentOrgId, currentYear, ['705']).then(setMonthly);
@@ -2281,7 +2295,7 @@ function SecBTP() {
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Area type="monotone" dataKey="travaux" stroke="#171717" fill="#17171730" strokeWidth={2} />
+              <Area type="monotone" dataKey="travaux" stroke={ct.bar} fill={`${ct.bar}30`} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2298,7 +2312,7 @@ function SecBTP() {
               <XAxis dataKey="cat" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="montant" fill="#404040" radius={[4,4,0,0]} />
+              <Bar dataKey="montant" fill={ct.at(1)} radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2343,6 +2357,7 @@ function SecBTP() {
 function SecCommerce() {
   const { sig, balance } = useStatements();
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const [monthly, setMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
   useEffect(() => {
     if (currentOrgId) monthlyByPrefix(currentOrgId, currentYear, ['701']).then(setMonthly);
@@ -2395,8 +2410,8 @@ function SecCommerce() {
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="ventes" name="Ventes" fill="#404040" radius={[3,3,0,0]} />
-              <Line type="monotone" dataKey="marge" name="Marge" stroke="#171717" strokeWidth={2.5} dot={{ r: 3 }} />
+              <Bar dataKey="ventes" name="Ventes" fill={ct.bar} radius={[3,3,0,0]} />
+              <Line type="monotone" dataKey="marge" name="Marge" stroke={ct.at(1)} strokeWidth={2.5} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2408,7 +2423,7 @@ function SecCommerce() {
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={100} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="ca" fill="#262626" radius={[0,4,4,0]} />
+              <Bar dataKey="ca" fill={ct.bar} radius={[0,4,4,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2443,6 +2458,7 @@ function SecCommerce() {
 // ─── MICROFINANCE ──────────────────────────────────────────────────
 function SecMicrofinance() {
   const { sig, balance } = useStatements();
+  const ct = useChartTheme();
   if (!sig) return null;
 
   const prodInt = balance.filter(r => r.account.startsWith('77')).reduce((s,r) => s+r.credit-r.debit, 0);
@@ -2458,10 +2474,10 @@ function SecMicrofinance() {
   const coutRisque = encours ? (provisions / encours) * 100 : 0;
 
   const portfolio = [
-    { tranche: 'Sain (non échu)', encours: encours * 0.75, color: '#171717' },
-    { tranche: 'PAR 1-30j', encours: encours * 0.12, color: '#404040' },
-    { tranche: 'PAR 31-90j', encours: encours * 0.08, color: '#737373' },
-    { tranche: 'PAR > 90j', encours: encours * 0.05, color: '#a3a3a3' },
+    { tranche: 'Sain (non échu)', encours: encours * 0.75 },
+    { tranche: 'PAR 1-30j', encours: encours * 0.12 },
+    { tranche: 'PAR 31-90j', encours: encours * 0.08 },
+    { tranche: 'PAR > 90j', encours: encours * 0.05 },
   ];
 
   return (
@@ -2488,7 +2504,7 @@ function SecMicrofinance() {
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Bar dataKey="encours" radius={[4,4,0,0]}>
-                {portfolio.map((p, i) => <Cell key={i} fill={p.color} />)}
+                {portfolio.map((_, i) => <Cell key={i} fill={ct.at(i)} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -2502,8 +2518,8 @@ function SecMicrofinance() {
                 { name: 'Commissions', value: commissions },
               ]} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
                 label={(p: any) => `${p.name}`}>
-                <Cell fill="#171717" />
-                <Cell fill="#737373" />
+                <Cell fill={ct.at(0)} />
+                <Cell fill={ct.at(1)} />
               </Pie>
               <Tooltip formatter={(v: any) => fmtFull(v)} />
             </PieChart>

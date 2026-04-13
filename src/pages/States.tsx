@@ -7,6 +7,7 @@ import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyBilan, u
 import { bySection, computeIntermediates, CR_FLOW, CRSection, CustomSection, INTERMEDIATE_LABELS, loadCustomSections, loadLabels, loadOrder, saveCustomSections, saveLabels, saveOrder } from '../engine/budgetActual';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { useApp } from '../store/app';
+import { useChartTheme } from '../lib/chartTheme';
 // Line type utilisé via CollapsibleTable
 import type { BalanceRow } from '../engine/balance';
 import { fmtFull } from '../lib/format';
@@ -639,6 +640,7 @@ function CapitalVarCard({ rows, hideCodes }: { rows: any[]; hideCodes?: boolean 
 // ─── BUDGET vs ACTUAL ──────────────────────────────────────────────
 function BudgetActualView() {
   const rows = useBudgetActual();
+  const ct = useChartTheme();
   const [view, setView] = useState<'table' | 'dashboard'>('table');
   const sections = bySection(rows);
   const totalRealise = rows.reduce((s, r) => s + r.realise, 0);
@@ -751,8 +753,8 @@ function BudgetActualView() {
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : `${(v/1e3).toFixed(0)}K`} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Réalisé" fill="#171717" radius={[3,3,0,0]} />
-                  <Bar dataKey="Budget" fill="#a3a3a3" radius={[3,3,0,0]} />
+                  <Bar dataKey="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
+                  <Bar dataKey="Budget" fill={ct.barAlt} radius={[3,3,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -768,13 +770,13 @@ function BudgetActualView() {
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Bar dataKey="ecart" radius={[4,4,0,0]}>
                     {sections.map((s, i) => {
-                      const fav = s.totalEcart > 0 ? (s.isCharge ? '#ef4444' : '#22c55e') : (s.isCharge ? '#22c55e' : '#ef4444');
+                      const fav = s.totalEcart > 0 ? (s.isCharge ? '#a3a3a3' : '#171717') : (s.isCharge ? '#171717' : '#a3a3a3');
                       return <Cell key={i} fill={Math.abs(s.totalEcart) < 1 ? '#a3a3a3' : fav} />;
                     })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <p className="text-xs text-primary-500 mt-3">🟢 favorable : charges &lt; budget ou produits &gt; budget · 🔴 défavorable : inverse</p>
+              <p className="text-xs text-primary-500 mt-3">Favorable : charges &lt; budget ou produits &gt; budget. Defavorable : inverse.</p>
             </div>
           </Card>
 
@@ -1010,7 +1012,7 @@ function SMTView({ balance, currency }: { balance: BalanceRow[]; currency: strin
       </div>
 
       <p className="text-xs text-primary-500 italic">
-        💡 SMT — Système Minimal de Trésorerie : vue simplifiée des flux encaissés/décaissés.
+        SMT — Système Minimal de Trésorerie : vue simplifiée des flux encaissés/décaissés.
         Pour un pilotage plus riche, passez en système Allégé ou Normal dans les paramètres de la société.
       </p>
     </div>

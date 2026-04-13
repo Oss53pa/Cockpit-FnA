@@ -78,7 +78,7 @@ export default function Imports() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-xs text-primary-500 italic">
-          💡 Importez le <strong>Grand Livre</strong> ; toutes les balances (générale, auxiliaire, âgée) sont calculées automatiquement.
+          Importez le <strong>Grand Livre</strong> ; toutes les balances (générale, auxiliaire, âgée) sont calculées automatiquement.
         </p>
         <button className="btn-outline" onClick={() => downloadGLTemplate(org?.name, currentYear)}>
           <Download className="w-4 h-4" /> Télécharger le modèle Excel

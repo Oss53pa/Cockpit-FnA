@@ -48,7 +48,7 @@ export function FloatingAI() {
           title="Assistant Proph3t"
         >
           <Bot className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-error rounded-full border-2 border-white animate-pulse" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full border-2 border-white" />
         </button>
       )}
 

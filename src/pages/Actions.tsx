@@ -54,7 +54,7 @@ export default function Actions() {
             <StatCard icon={<AlertTriangle className="w-5 h-5 text-primary-500" />} label="Ouverts" value={pCount.open} />
             <StatCard icon={<Clock className="w-5 h-5 text-primary-500" />} label="En traitement" value={pCount.in_progress} />
             <StatCard icon={<CheckCircle2 className="w-5 h-5 text-primary-500" />} label="Résolus" value={pCount.resolved} />
-            <StatCard icon={<Zap className="w-5 h-5" style={{ color: '#7f1d1d' }} />} label="Critiques actifs" value={pCount.critical} />
+            <StatCard icon={<Zap className="w-5 h-5" />} label="Critiques actifs" value={pCount.critical} />
           </>
         ) : (
           <>
@@ -175,9 +175,9 @@ function PointCard({ point: p, linkedCount, onEdit, onDelete, onStatusChange }: 
             {p.source && <div>📍 <strong>Source</strong> : {p.source}</div>}
             {p.owner && <div>👤 <strong>Responsable</strong> : {p.owner}</div>}
             <div>🕐 <strong>Détecté</strong> : {new Date(p.detectedAt).toLocaleDateString('fr-FR')}</div>
-            {p.targetResolutionDate && <div>🎯 <strong>Cible</strong> : {new Date(p.targetResolutionDate).toLocaleDateString('fr-FR')}</div>}
+            {p.targetResolutionDate && <div><strong>Cible</strong> : {new Date(p.targetResolutionDate).toLocaleDateString('fr-FR')}</div>}
             {p.estimatedFinancialImpact !== undefined && p.estimatedFinancialImpact > 0 && (
-              <div>💰 <strong>Impact</strong> : {fmtMoney(p.estimatedFinancialImpact)}</div>
+              <div><strong>Impact</strong> : {fmtMoney(p.estimatedFinancialImpact)}</div>
             )}
             {linkedCount > 0 && <div className="text-info col-span-2">🔗 <strong>{linkedCount} action(s) liée(s)</strong></div>}
           </div>
@@ -301,13 +301,13 @@ function PlanCard({ plan: p, point, late, onEdit, onDelete, onStatusChange, onPr
       {/* Infos */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] text-primary-500 mt-3 pt-3 border-t border-primary-200 dark:border-primary-800">
         <div>👤 <strong>Responsable</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.owner}</span></div>
-        {p.team && <div>👥 <strong>Équipe</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.team}</span></div>}
-        {p.sponsor && <div>🎯 <strong>Sponsor</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.sponsor}</span></div>}
+        {p.team && <div><strong>Équipe</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.team}</span></div>}
+        {p.sponsor && <div><strong>Sponsor</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.sponsor}</span></div>}
         {p.startDate && <div>▶ <strong>Début</strong><br/><span className="text-primary-900 dark:text-primary-100">{new Date(p.startDate).toLocaleDateString('fr-FR')}</span></div>}
-        {p.dueDate && <div>🏁 <strong>Échéance</strong><br/><span className={clsx(late ? 'text-error font-semibold' : 'text-primary-900 dark:text-primary-100')}>{new Date(p.dueDate).toLocaleDateString('fr-FR')}</span></div>}
-        {p.reviewDate && <div>🔍 <strong>Revue</strong><br/><span className="text-primary-900 dark:text-primary-100">{new Date(p.reviewDate).toLocaleDateString('fr-FR')}</span></div>}
-        {p.budgetAllocated !== undefined && p.budgetAllocated > 0 && <div>💰 <strong>Budget</strong><br/><span className="text-primary-900 dark:text-primary-100 num">{fmtMoney(p.budgetAllocated)}</span></div>}
-        {p.estimatedImpact && <div>✨ <strong>Impact</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.estimatedImpact}</span></div>}
+        {p.dueDate && <div><strong>Échéance</strong><br/><span className={clsx(late ? 'text-error font-semibold' : 'text-primary-900 dark:text-primary-100')}>{new Date(p.dueDate).toLocaleDateString('fr-FR')}</span></div>}
+        {p.reviewDate && <div><strong>Revue</strong><br/><span className="text-primary-900 dark:text-primary-100">{new Date(p.reviewDate).toLocaleDateString('fr-FR')}</span></div>}
+        {p.budgetAllocated !== undefined && p.budgetAllocated > 0 && <div><strong>Budget</strong><br/><span className="text-primary-900 dark:text-primary-100 num">{fmtMoney(p.budgetAllocated)}</span></div>}
+        {p.estimatedImpact && <div><strong>Impact</strong><br/><span className="text-primary-900 dark:text-primary-100">{p.estimatedImpact}</span></div>}
       </div>
 
       {(p.deliverables || p.successCriteria || p.resourcesNeeded || p.dependencies || p.blockers) && (
