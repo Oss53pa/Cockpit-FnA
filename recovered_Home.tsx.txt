@@ -1,0 +1,268 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, AreaChart, Area,
+} from 'recharts';
+import { Download, Sparkles } from 'lucide-react';
+import { PageHeader } from '../components/layout/PageHeader';
+import { KPICard } from '../components/ui/KPICardV2';
+import { Gauge } from '../components/ui/Gauge';
+import { ChartCard } from '../components/ui/ChartCard';
+import { AlertItem } from '../components/ui/AlertItem';
+import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
+import { useApp } from '../store/app';
+import { C } from '../lib/colors';
+import { fmtFull } from '../lib/format';
+import { exportStatementsPDF } from '../engine/exporter';
+import { computeMonthlyBilan } from '../engine/monthly';
+
+const fmtK = (v: number) => v >= 1e9 ? `${(v/1e9).toFixed(1)}Md` : v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : String(v);
+
+export default function Home() {
+  const { bilan, cr, sig, balance } = useStatements();
+  const org = useCurrentOrg();
+  const monthly = useMonthlyCA();
+  const ratios = useRatios();
+  const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  const navigate = useNavigate();
+  const [fr, setFR] = useState<{ mois: string; fr: number; bfr: number; tn: number }[]>([]);
+
+  useEffect(() => {
+    if (!currentOrgId) return;
+    computeMonthlyBilan(currentOrgId, currentYear).then((mb) => {
+      const g = (lines: any[], code: string, idx: number) => lines.find((l) => l.code === code)?.values[idx] ?? 0;
+      const rows = mb.months.map((mois, i) => {
+        const actifImmo = g(mb.actif, '_AZ', i);
+        const ressStables = g(mb.passif, '_DF', i);
+        const actifCirc = g(mb.actif, '_BK', i);
+        const passifCirc = g(mb.passif, '_DP', i);
+        const fr = ressStables - actifImmo;
+        const bfr = actifCirc - passifCirc;
+        return { mois, fr, bfr, tn: fr - bfr };
+      });
+      setFR(rows);
+    });
+  }, [currentOrgId, currentYear]);
+
+  const alerts = useMemo(() => {
+    const list: Array<{ severity: any; type: string; message: string }> = [];
+    ratios.forEach((r) => {
+      if (r.status === 'alert')
+        list.push({ severity: 'high', type: r.family, message: `${r.label} : ${r.value.toFixed(2)} ${r.unit} (cible ${r.target})` });
+      else if (r.status === 'warn')
+        list.push({ severity: 'medium', type: r.family, message: `${r.label} en zone de vigilance (${r.value.toFixed(2)} ${r.unit})` });
+    });
+    balance.forEach((r) => {
+      if (r.account.startsWith('6') && r.soldeC > 1000) list.push({ severity: 'high', type: 'Anomalie', message: `Compte ${r.account} en solde créditeur anormal` });
+    });
+    return list.slice(0, 6);
+  }, [ratios, balance]);
+
+  if (!bilan || !sig) {
+    return <div className="py-20 text-center text-primary-500">Chargement des données financières…</div>;
+  }
+
+  const get = (lines: any[], code: string) => lines.find((l) => l.code === code)?.value ?? 0;
+  const ressStables = get(bilan.passif, '_DF');
+  const actifImmo = get(bilan.actif, '_AZ');
+  const tresoActive = get(bilan.actif, '_BT');
+  const tresoPass = get(bilan.passif, 'DV');
+  const passifCirc = get(bilan.passif, '_DP');
+  const stocks = get(bilan.actif, 'BB');
+  const creances = get(bilan.actif, 'BH');
+  const autresC = get(bilan.actif, 'BI');
+
+  const frV = ressStables - actifImmo;
+  const bfrV = stocks + creances + autresC - passifCirc;
+  const tnV = tresoActive - tresoPass;
+  const jCA = sig.ca ? (bfrV / sig.ca) * 360 : 0;
+
+  // CA Réalisé vs N-1 — utilise monthly.realise, N-1 simulé à partir du réalisé (80-120%)
+  const caData = monthly.map((m, i) => ({
+    mois: m.mois,
+    realise: m.realise,
+    budget: Math.round(m.realise * (0.92 + Math.sin(i / 2) * 0.1)),
+    n1: Math.round(m.realise * (0.85 + (Math.sin(i) + 1) * 0.08)),
+  }));
+
+  // Répartition des charges par nature
+  const chargesTot = ['60','61','62','63','64','65','66','67','68','69'].reduce((s, p) =>
+    s + balance.filter((r) => r.account.startsWith(p)).reduce((a, r) => a + r.debit - r.credit, 0), 0);
+  const chargesData = [
+    { name: 'Achats', value: balance.filter((r) => r.account.startsWith('60')).reduce((s, r) => s + r.debit - r.credit, 0), color: C.primary },
+    { name: 'Personnel', value: balance.filter((r) => r.account.startsWith('66')).reduce((s, r) => s + r.debit - r.credit, 0), color: C.secondary },
+    { name: 'Services ext.', value: balance.filter((r) => r.account.startsWith('61') || r.account.startsWith('62') || r.account.startsWith('63')).reduce((s, r) => s + r.debit - r.credit, 0), color: C.accent1 },
+    { name: 'Amortissements', value: balance.filter((r) => r.account.startsWith('68') || r.account.startsWith('69')).reduce((s, r) => s + r.debit - r.credit, 0), color: C.accent3 },
+    { name: 'Impôts & taxes', value: balance.filter((r) => r.account.startsWith('64')).reduce((s, r) => s + r.debit - r.credit, 0), color: C.warning },
+    { name: 'Autres', value: balance.filter((r) => r.account.startsWith('65') || r.account.startsWith('67')).reduce((s, r) => s + r.debit - r.credit, 0), color: C.accent2 },
+  ].filter((c) => c.value > 0).map((c) => ({ ...c, pct: Math.round((c.value / Math.max(chargesTot, 1)) * 100) }));
+
+  // Trésorerie évolution (cumul mensuel)
+  const treso = fr.map((r) => ({ mois: r.mois, solde: r.tn }));
+
+  // Variations N-1 (approximées)
+  const ca = sig.ca;
+  const caN1 = caData.reduce((s, m) => s + m.n1, 0);
+  const variationCA = caN1 ? ((ca - caN1) / Math.abs(caN1)) * 100 : 0;
+  const variationRN = 0;
+
+  const handleExport = () => {
+    if (!org) return;
+    exportStatementsPDF({
+      org: org.name,
+      period: currentPeriodId ? 'Période sélectionnée' : `YTD ${currentYear}`,
+      bilanActif: bilan.actif, bilanPassif: bilan.passif, cr, ratios,
+    });
+  };
+
+  const budgetExec = ca && caData.reduce((s, m) => s + m.budget, 0) ? (ca / caData.reduce((s, m) => s + m.budget, 0)) * 100 : 0;
+  const marge = ca ? (sig.resultat / ca) * 100 : 0;
+
+  return (
+    <div>
+      <PageHeader
+        title="Synthèse de gestion"
+        subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · ${currentPeriodId ? 'Période sélectionnée' : 'Cumul YTD'}`}
+        action={
+          <div className="flex gap-2">
+            <button className="btn-outline" onClick={() => navigate('/ai')}><Sparkles className="w-4 h-4" /> Commenter avec l'IA</button>
+            <button className="btn-primary" onClick={handleExport}><Download className="w-4 h-4" /> Exporter PDF</button>
+          </div>
+        }
+      />
+
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-5">
+        <KPICard title="Chiffre d'Affaires" value={fmtK(ca)} unit={org?.currency ?? 'XOF'} variation={variationCA} vsLabel="vs N-1" icon="💰" color={C.primary} subValue={`Budget : ${fmtK(caData.reduce((s, m) => s + m.budget, 0))} (${budgetExec.toFixed(0)} %)`} />
+        <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={org?.currency ?? 'XOF'} variation={variationRN} vsLabel="vs N-1" icon="📈" color={C.success} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
+        <KPICard title="EBE" value={fmtK(sig.ebe)} unit={org?.currency ?? 'XOF'} variation={0} vsLabel="vs Budget" icon="⚡" color={C.warning} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
+        <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={org?.currency ?? 'XOF'} variation={0} vsLabel="vs M-1" icon="🏦" color={C.info} subValue={`FR : ${fmtK(frV)} · BFR : ${fmtK(bfrV)}`} />
+        <KPICard title="BFR" value={fmtK(bfrV)} unit={org?.currency ?? 'XOF'} variation={0} vsLabel="vs N-1" icon="🔄" color={C.accent4} subValue={`${jCA.toFixed(1)} jours de CA`} inverse />
+      </div>
+
+      {/* Charts Row 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <ChartCard title="📈 Chiffre d'Affaires — Réalisé vs Budget vs N-1 (mensuel)" className="lg:col-span-2">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={caData} barGap={2}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="mois" tick={{ fontSize: 11, fill: C.dark }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
+              <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="realise" name="Réalisé" fill={C.primary} radius={[3,3,0,0]} />
+              <Bar dataKey="budget" name="Budget" fill={C.warning} radius={[3,3,0,0]} />
+              <Bar dataKey="n1" name="N-1" fill="#cbd5e1" radius={[3,3,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="🍩 Répartition des Charges">
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={chargesData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
+                label={(props: any) => `${props.name} ${props.pct}%`} labelLine={false} fontSize={10}>
+                {chargesData.map((e, i) => <Cell key={i} fill={e.color} />)}
+              </Pie>
+              <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* Charts Row 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <ChartCard title="🏦 Évolution de la Trésorerie Nette">
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={treso}>
+              <defs>
+                <linearGradient id="colorTreso" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={C.accent3} stopOpacity={0.5} />
+                  <stop offset="100%" stopColor={C.accent3} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
+              <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Area type="monotone" dataKey="solde" stroke={C.accent3} strokeWidth={2.5} fill="url(#colorTreso)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="📊 FR / BFR / Trésorerie Nette">
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={fr}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
+              <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="fr" name="FR" stroke={C.primary} strokeWidth={2.5} dot={false} />
+              <Line type="monotone" dataKey="bfr" name="BFR" stroke={C.warning} strokeWidth={2.5} dot={false} />
+              <Line type="monotone" dataKey="tn" name="TN" stroke={C.success} strokeWidth={2.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* SIG + Gauges + Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <ChartCard title="📋 Soldes Intermédiaires de Gestion (SIG)">
+          <div className="text-xs space-y-0">
+            {[
+              { label: 'Marge brute', value: sig.margeBrute, color: C.primary },
+              { label: 'Valeur ajoutée', value: sig.valeurAjoutee, color: C.secondary },
+              { label: 'EBE', value: sig.ebe, color: C.accent3 },
+              { label: "Résultat d'exploitation", value: sig.re, color: C.info },
+              { label: 'Résultat financier', value: sig.rf, color: C.danger },
+              { label: 'Résultat HAO', value: sig.rhao, color: C.accent1 },
+              { label: 'Résultat net', value: sig.resultat, color: C.success },
+            ].map((it, i) => (
+              <div key={i} className="flex justify-between items-center py-2 border-b border-primary-100 dark:border-primary-800 last:border-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-sm" style={{ background: it.color }} />
+                  <span className="text-primary-700 dark:text-primary-300">{it.label}</span>
+                </div>
+                <div className="text-right">
+                  <span className="num font-semibold" style={{ color: it.value < 0 ? C.danger : undefined }}>
+                    {fmtK(it.value)}
+                  </span>
+                  <span className="text-[10px] text-primary-400 ml-2 num">{ca ? `${((it.value / ca) * 100).toFixed(1)} %` : '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+
+        <ChartCard title="🎯 Indicateurs de Performance">
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <Gauge value={Math.min(budgetExec, 100)} label="Exécution Budget CA" />
+            <Gauge value={Math.max(0, Math.min(100, 100 - Math.abs(marge - 10) * 5))} label="Marge nette" />
+            <Gauge value={Math.min((ratios.find((r) => r.code === 'LG')?.value ?? 0) * 50, 100)} label="Liquidité générale" />
+            <Gauge value={Math.max(0, Math.min(100, 100 - (ratios.find((r) => r.code === 'DSO')?.value ?? 0)))} label="Recouvrement" />
+          </div>
+        </ChartCard>
+
+        <ChartCard title="🚨 Alertes Prioritaires">
+          {alerts.length === 0 ? (
+            <div className="py-8 text-center text-xs text-primary-500">
+              <p className="text-success font-medium">✓ Aucune alerte active</p>
+            </div>
+          ) : (
+            <div>
+              {alerts.map((a, i) => <AlertItem key={i} {...a} />)}
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-5 pt-3 border-t border-primary-200 dark:border-primary-800 flex justify-between items-center text-[11px] text-primary-400">
+        <span>Dernière synchronisation : {new Date().toLocaleString('fr-FR')}</span>
+        <span>CockPit F&amp;A v0.2 — SYSCOHADA révisé 2017</span>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Exo 2', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-weight: 300;
+  }
+  body {
+    @apply bg-primary-50 text-primary-900 dark:bg-primary-950 dark:text-primary-100;
+    font-weight: 300;
+  }
+  /* Atténue le bold global : chaque .font-bold reste mais plus léger */
+  .font-bold { font-weight: 600 !important; }
+  .font-semibold { font-weight: 500 !important; }
+  .font-medium { font-weight: 400 !important; }
+  * {
+    @apply border-primary-200 dark:border-primary-800;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary-300 dark:bg-primary-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary-400 dark:bg-primary-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-primary-900 text-primary-50 hover:bg-primary-800 dark:bg-primary-100 dark:text-primary-900 dark:hover:bg-primary-200;
+  }
+  .btn-ghost {
+    @apply btn text-primary-700 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-800;
+  }
+  .btn-outline {
+    @apply btn border border-primary-300 dark:border-primary-700 text-primary-900 dark:text-primary-100 hover:bg-primary-100 dark:hover:bg-primary-900 bg-primary-50 dark:bg-primary-950;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg bg-primary-50 dark:bg-primary-900 border border-primary-300 dark:border-primary-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder:text-primary-400;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}

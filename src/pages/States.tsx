@@ -1,0 +1,910 @@
+import { useEffect, useState } from 'react';
+import { Download, FileSpreadsheet, Printer } from 'lucide-react';
+import clsx from 'clsx';
+import { PageHeader } from '../components/layout/PageHeader';
+import { Card } from '../components/ui/Card';
+import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyBilan, useMonthlyCR, useMonthlyTFT, useRatios, useStatements, useTAFIRE, useTFT } from '../hooks/useFinancials';
+import { bySection, computeIntermediates, CR_FLOW, CRSection, INTERMEDIATE_LABELS, loadLabels, loadOrder, saveLabels, saveOrder } from '../engine/budgetActual';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
+import { useApp } from '../store/app';
+// Line type utilisé via CollapsibleTable
+import { BalanceRow, computeBalance } from '../engine/balance';
+import { fmtFull } from '../lib/format';
+import { CollapsibleTable } from '../components/ui/CollapsibleTable';
+import { VirtualTable, type Column } from '../components/ui/VirtualTable';
+import { exportStatementsPDF, exportStatementsXLSX } from '../engine/exporter';
+import { availableTabs, resolveSystem, simplifyBilanActif, simplifyBilanPassif, simplifyCR, SYSTEM_META, type StatementTab } from '../syscohada/systems';
+
+const ALL_TABS: Record<StatementTab, string> = {
+  bilan: 'Bilan',
+  cr: 'Compte de résultat',
+  balance: 'Balance générale',
+  tft: 'TFT',
+  tafire: 'TAFIRE',
+  cp: 'Variation capitaux propres',
+  smt: 'Recettes / Dépenses',
+};
+
+type ViewMode = 'synthetic' | 'monthly';
+
+function MonthlyTable({ months, lines }: { months: string[]; lines: any[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="border-b-2 border-primary-300 dark:border-primary-700 sticky top-0 bg-primary-100 dark:bg-primary-900">
+          <tr>
+            <th className="text-left py-2 px-2 w-14 text-primary-500 uppercase tracking-wider text-[10px]">Code</th>
+            <th className="text-left py-2 px-2 sticky left-0 bg-primary-100 dark:bg-primary-900 z-10 min-w-[220px] text-primary-500 uppercase tracking-wider text-[10px]">Poste</th>
+            {months.map((m) => (
+              <th key={m} className="text-right py-2 px-2 min-w-[90px] text-primary-500 uppercase tracking-wider text-[10px]">{m}</th>
+            ))}
+            <th className="text-right py-2 px-2 min-w-[110px] font-bold text-primary-900 dark:text-primary-100 uppercase tracking-wider text-[10px]">YTD</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l, i) => (
+            <tr key={i} className={clsx(
+              'border-b border-primary-200 dark:border-primary-800',
+              l.total && !l.grand && 'bg-primary-200/40 dark:bg-primary-800/30 font-semibold',
+              l.grand && 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold',
+            )}>
+              <td className="py-1.5 px-2 text-[10px] num text-primary-500">
+                {l.code.startsWith('_') ? '' : l.code}
+              </td>
+              <td className="py-1.5 px-2 sticky left-0 bg-inherit" style={{ paddingLeft: `${8 + (l.indent ?? 0) * 10}px` }}>
+                {l.label}
+              </td>
+              {l.values.map((v: number, idx: number) => (
+                <td key={idx} className="py-1.5 px-2 text-right num">
+                  {v !== 0 ? fmtFull(v) : <span className="text-primary-400">—</span>}
+                </td>
+              ))}
+              <td className="py-1.5 px-2 text-right num font-bold">{fmtFull(l.ytd)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const MONTH_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+const balanceColumns: Column<BalanceRow>[] = [
+  { header: 'Compte',         width: '140px', align: 'left',  cell: (r) => <span className="num font-mono">{r.account}</span> },
+  { header: 'Libellé',        width: '1fr',   align: 'left',  cell: (r) => <span className="text-xs">{r.label}</span> },
+  { header: 'Débit période',  width: '160px', align: 'right', cell: (r) => <span className="num">{r.debit > 0 ? fmtFull(r.debit) : <span className="text-primary-400">—</span>}</span> },
+  { header: 'Crédit période', width: '160px', align: 'right', cell: (r) => <span className="num">{r.credit > 0 ? fmtFull(r.credit) : <span className="text-primary-400">—</span>}</span> },
+  { header: 'Solde D',        width: '140px', align: 'right', cell: (r) => <span className="num">{r.soldeD > 0 ? fmtFull(r.soldeD) : ''}</span> },
+  { header: 'Solde C',        width: '140px', align: 'right', cell: (r) => <span className="num">{r.soldeC > 0 ? fmtFull(r.soldeC) : ''}</span> },
+];
+
+function BalanceTab() {
+  const { currentOrgId, currentYear } = useApp();
+  const [fromMonth, setFromMonth] = useState(1);
+  const [uptoMonth, setUptoMonth] = useState(12);
+  const [includeOpening, setIncludeOpening] = useState(true);
+  const [rows, setRows] = useState<BalanceRow[]>([]);
+  const [filter, setFilter] = useState<'all' | 'D' | 'C' | 'moved'>('all');
+  const [search, setSearch] = useState('');
+  const [classFilter, setClassFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (!currentOrgId) return;
+    computeBalance({
+      orgId: currentOrgId,
+      year: currentYear,
+      fromMonth, uptoMonth,
+      includeOpening,
+    }).then(setRows);
+  }, [currentOrgId, currentYear, fromMonth, uptoMonth, includeOpening]);
+
+  const filtered = rows.filter((r) => {
+    if (classFilter !== 'all' && r.account[0] !== classFilter) return false;
+    if (filter === 'D' && r.soldeD === 0) return false;
+    if (filter === 'C' && r.soldeC === 0) return false;
+    if (filter === 'moved' && r.debit === 0 && r.credit === 0) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!r.account.includes(search) && !r.label.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const totD = filtered.reduce((s, r) => s + r.debit, 0);
+  const totC = filtered.reduce((s, r) => s + r.credit, 0);
+  const totSD = filtered.reduce((s, r) => s + r.soldeD, 0);
+  const totSC = filtered.reduce((s, r) => s + r.soldeC, 0);
+  const balanced = Math.abs(totD - totC) < 1;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Du mois</label>
+            <select className="input !w-auto !py-1.5" value={fromMonth} onChange={(e) => setFromMonth(Number(e.target.value))}>
+              {MONTH_LABELS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Au mois</label>
+            <select className="input !w-auto !py-1.5" value={uptoMonth} onChange={(e) => setUptoMonth(Number(e.target.value))}>
+              {MONTH_LABELS.map((m, i) => <option key={i} value={i + 1} disabled={i + 1 < fromMonth}>{m}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 pb-1.5">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={includeOpening} onChange={(e) => setIncludeOpening(e.target.checked)} className="rounded" />
+              <span>Inclure les à-nouveaux (ouverture)</span>
+            </label>
+          </div>
+          <div className="flex gap-1 ml-auto">
+            {[
+              { id: '1mois', label: 'Mois courant', fm: new Date().getMonth() + 1, um: new Date().getMonth() + 1 },
+              { id: 'T1', label: 'T1', fm: 1, um: 3 },
+              { id: 'T2', label: 'T2', fm: 4, um: 6 },
+              { id: 'T3', label: 'T3', fm: 7, um: 9 },
+              { id: 'T4', label: 'T4', fm: 10, um: 12 },
+              { id: 'YTD', label: 'Année complète', fm: 1, um: 12 },
+            ].map((p) => (
+              <button key={p.id} onClick={() => { setFromMonth(p.fm); setUptoMonth(p.um); }}
+                className={clsx('btn !py-1 text-xs',
+                  fromMonth === p.fm && uptoMonth === p.um ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-primary-200 dark:border-primary-800">
+          <input className="input !py-1.5 max-w-xs" placeholder="🔍 Rechercher compte / libellé…"
+            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="input !w-auto !py-1.5" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+            <option value="all">Toutes classes</option>
+            {['1','2','3','4','5','6','7','8'].map((c) => <option key={c} value={c}>Classe {c}</option>)}
+          </select>
+          <div className="flex gap-1">
+            {([
+              { id: 'all', label: 'Tous' },
+              { id: 'moved', label: 'Mouvementés' },
+              { id: 'D', label: 'Soldes débiteurs' },
+              { id: 'C', label: 'Soldes créditeurs' },
+            ] as const).map((f) => (
+              <button key={f.id} onClick={() => setFilter(f.id)}
+                className={clsx('btn !py-1 text-xs',
+                  filter === f.id ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-primary-200 dark:border-primary-800 flex items-center justify-between text-xs">
+          <span className="text-primary-500">
+            Période : {MONTH_LABELS[fromMonth - 1]} → {MONTH_LABELS[uptoMonth - 1]} {currentYear}
+            {includeOpening && ' · inclut à-nouveaux'}
+          </span>
+          <span className="text-primary-500">
+            <span className="num font-semibold">{filtered.length}</span> compte(s) affiché(s) sur <span className="num">{rows.length}</span>
+            {balanced
+              ? <span className="text-success ml-3">✓ Équilibré</span>
+              : <span className="text-error ml-3">⚠ Écart D−C : {fmtFull(totD - totC)}</span>}
+          </span>
+        </div>
+      </Card>
+
+      <Card padded={false}>
+        <VirtualTable
+          rows={filtered}
+          rowKey={(r) => r.account}
+          rowHeight={30}
+          height={560}
+          empty="Aucun compte ne correspond aux filtres"
+          columns={balanceColumns}
+          footer={<>
+            <div className="py-2 px-3 col-span-2">TOTAUX</div>
+            <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
+            <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
+            <div className="py-2 px-3 text-right num">{fmtFull(totSD)}</div>
+            <div className="py-2 px-3 text-right num">{fmtFull(totSC)}</div>
+          </>}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── CR TAB AVEC SUB-TABS ──────────────────────────────────────────
+function CRTab({ monthlyCR, cr, simplified }: { monthlyCR: any; cr: any[]; simplified?: boolean }) {
+  void simplified; // consumer may use it to disable sub-tabs if needed
+  const [sub, setSub] = useState<'synthese' | 'mensuel' | 'budget'>('synthese');
+  return (
+    <div>
+      <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg mb-4 w-fit">
+        {[
+          { k: 'synthese', label: 'Synthèse' },
+          { k: 'mensuel', label: 'Mensuel (Jan→Déc)' },
+          { k: 'budget', label: 'Budget vs Réalisé' },
+        ].map((t) => (
+          <button key={t.k} onClick={() => setSub(t.k as any)}
+            className={clsx('px-4 py-1.5 text-xs rounded-md font-medium transition',
+              sub === t.k ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'synthese' && <CRSynthese cr={cr} />}
+      {sub === 'mensuel' && (
+        <Card title="Compte de résultat mensuel" subtitle="Valeurs du mois — non cumulées" padded={false}>
+          <MonthlyTable months={monthlyCR.months} lines={monthlyCR.lines} />
+        </Card>
+      )}
+      {sub === 'budget' && <BudgetActualView />}
+    </div>
+  );
+}
+
+// ─── CR SYNTHÈSE — DRAG & DROP + COLLAPSE + LABELS ÉDITABLES ─────
+function CRSynthese({ cr }: { cr: any[] }) {
+  const { currentOrgId } = useApp();
+  const rows = useBudgetActual();
+  const [order, setOrder] = useState<CRSection[]>(() => loadOrder(currentOrgId));
+  const [labels, setLabels] = useState<Record<CRSection, string>>(() => loadLabels(currentOrgId));
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<CRSection | null>(null);
+  const [drag, setDrag] = useState<CRSection | null>(null);
+
+  useEffect(() => { setOrder(loadOrder(currentOrgId)); setLabels(loadLabels(currentOrgId)); }, [currentOrgId]);
+
+  const sectionsAll = bySection(rows, currentOrgId);
+  // map pour accès rapide
+  const secMap = new Map(sectionsAll.map((s) => [s.section, s]));
+  const inters = computeIntermediates(sectionsAll);
+
+  // Construire le flux : on respecte CR_FLOW pour l'ordre canonique mais l'utilisateur peut réordonner les sections.
+  // L'ordre custom est appliqué uniquement aux sections — les intermédiaires gardent leur position relative.
+  const flow = CR_FLOW.map((item) => {
+    if (item.kind === 'section') {
+      const sec = order.includes(item.key) ? secMap.get(item.key) : secMap.get(item.key);
+      return { kind: 'section' as const, key: item.key, sec };
+    }
+    return { kind: 'inter' as const, key: item.key, data: inters[item.key] };
+  });
+
+  const toggle = (k: string) => setExpanded((e) => ({ ...e, [k]: !e[k] }));
+  const expandAll = () => setExpanded(Object.fromEntries(sectionsAll.map((s) => [s.section, true])));
+  const collapseAll = () => setExpanded({});
+
+  const updateLabel = (key: CRSection, v: string) => {
+    const next = { ...labels, [key]: v };
+    setLabels(next); saveLabels(currentOrgId, next);
+  };
+  const reset = () => {
+    if (!confirm('Restaurer les libellés et l\'ordre par défaut ?')) return;
+    localStorage.removeItem(`cr-section-labels:${currentOrgId}`);
+    localStorage.removeItem(`cr-section-order:${currentOrgId}`);
+    setOrder(loadOrder(currentOrgId));
+    setLabels(loadLabels(currentOrgId));
+  };
+
+  // Drag-and-drop
+  const onDragStart = (k: CRSection) => setDrag(k);
+  const onDragOver = (e: React.DragEvent, target: CRSection) => {
+    e.preventDefault();
+    if (!drag || drag === target) return;
+  };
+  const onDrop = (target: CRSection) => {
+    if (!drag || drag === target) return;
+    const newOrder = [...order];
+    const from = newOrder.indexOf(drag);
+    const to = newOrder.indexOf(target);
+    if (from < 0 || to < 0) return;
+    newOrder.splice(from, 1);
+    newOrder.splice(to, 0, drag);
+    setOrder(newOrder); saveOrder(currentOrgId, newOrder);
+    setDrag(null);
+  };
+
+  if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2">
+          <button className="btn-outline !py-1.5 text-xs" onClick={expandAll}>Tout déplier</button>
+          <button className="btn-outline !py-1.5 text-xs" onClick={collapseAll}>Tout replier</button>
+          <button className="btn-outline !py-1.5 text-xs" onClick={reset}>Réinitialiser libellés/ordre</button>
+        </div>
+        <p className="text-[11px] text-primary-500">💡 Glissez-déposez les sections pour les réordonner · cliquez sur le crayon pour renommer · cliquez +/− pour déplier</p>
+      </div>
+
+      <Card padded={false}>
+        <table className="w-full text-sm">
+          <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
+            <tr>
+              <th className="text-left py-2 px-3 w-8"></th>
+              <th className="text-left py-2 px-3 w-8"></th>
+              <th className="text-left py-2 px-3">Section / compte</th>
+              <th className="text-right py-2 px-3 w-32">Réalisé</th>
+              <th className="text-right py-2 px-3 w-32">Budget</th>
+              <th className="text-right py-2 px-3 w-28">Écart</th>
+              <th className="text-right py-2 px-3 w-20">% activité</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+            {flow.map((item, idx) => {
+              if (item.kind === 'inter') {
+                const isFinal = item.key === 'res_net';
+                const ecart = item.data.realise - item.data.budget;
+                return (
+                  <tr key={`i-${item.key}`}
+                    className={clsx('font-bold',
+                      isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
+                    <td colSpan={3} className="py-2.5 px-3 uppercase text-xs tracking-wider">
+                      = {INTERMEDIATE_LABELS[item.key]}
+                    </td>
+                    <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.realise)}</td>
+                    <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.budget)}</td>
+                    <td className="py-2.5 px-3 text-right num">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                    <td></td>
+                  </tr>
+                );
+              }
+              const s = item.sec;
+              if (!s) return null;
+              const open = expanded[s.section];
+              const isOver = drag && drag !== s.section;
+              const operator = s.isCharge ? '−' : '+';
+              return (
+                <>
+                  <tr
+                    key={`s-${s.section}-${idx}`}
+                    draggable
+                    onDragStart={() => onDragStart(s.section)}
+                    onDragOver={(e) => onDragOver(e, s.section)}
+                    onDrop={() => onDrop(s.section)}
+                    className={clsx('cursor-move font-semibold',
+                      drag === s.section && 'opacity-50',
+                      isOver && 'border-t-2 border-primary-900 dark:border-primary-100',
+                      s.isCharge ? 'bg-primary-100 dark:bg-primary-900' : 'bg-primary-200/60 dark:bg-primary-800/60')}
+                  >
+                    <td className="py-2 px-3 text-center text-primary-400 cursor-grab"><GripIcon /></td>
+                    <td className="py-2 px-2">
+                      <button onClick={() => toggle(s.section)} className="btn-ghost !p-1 text-sm font-bold">
+                        {open ? '−' : '+'}
+                      </button>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        <span className={clsx('font-bold w-3 text-center', s.isCharge ? 'text-error' : 'text-success')}>{operator}</span>
+                        {editing === s.section ? (
+                          <input
+                            autoFocus
+                            className="input !py-1 text-sm font-semibold flex-1"
+                            value={labels[s.section]}
+                            onChange={(e) => updateLabel(s.section, e.target.value)}
+                            onBlur={() => setEditing(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setEditing(null)}
+                          />
+                        ) : (
+                          <>
+                            <span>{labels[s.section]}</span>
+                            <button onClick={() => setEditing(s.section)} className="btn-ghost !p-1 text-xs opacity-50 hover:opacity-100" title="Renommer">✎</button>
+                          </>
+                        )}
+                        <span className="text-[10px] text-primary-400 font-normal">({s.rows.length} comptes)</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(s.totalRealise)}</td>
+                    <td className="py-2 px-3 text-right num text-primary-500 font-normal">{fmtFull(s.totalBudget)}</td>
+                    <td className={clsx('py-2 px-3 text-right num',
+                      s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
+                      {s.totalEcart >= 0 ? '+' : ''}{fmtFull(s.totalEcart)}
+                    </td>
+                    <td className="py-2 px-3 text-right num text-xs text-primary-500 font-normal">—</td>
+                  </tr>
+                  {open && s.rows.map((r) => (
+                    <tr key={r.code} className="bg-primary-50 dark:bg-primary-950">
+                      <td colSpan={2}></td>
+                      <td className="py-1.5 px-3 pl-12 text-xs">
+                        <span className="font-mono text-primary-500 mr-2">{r.code}</span>
+                        {r.label}
+                      </td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.realise)}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs text-primary-500">{fmtFull(r.budget)}</td>
+                      <td className={clsx('py-1.5 px-3 text-right num text-xs',
+                        r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
+                        {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
+                      </td>
+                      <td className="py-1.5 px-3 text-right num text-[10px] text-primary-400">
+                        {s.totalRealise ? ((r.realise / s.totalRealise) * 100).toFixed(1) : 0} %
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* CR officiel SYSCOHADA en référence */}
+      <details className="card p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-primary-700 dark:text-primary-300">
+          Voir le compte de résultat officiel SYSCOHADA (référence)
+        </summary>
+        <div className="mt-4">
+          <CollapsibleTable lines={cr} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg width="10" height="14" viewBox="0 0 10 14" className="inline-block fill-current">
+      <circle cx="2" cy="2" r="1" /><circle cx="8" cy="2" r="1" />
+      <circle cx="2" cy="7" r="1" /><circle cx="8" cy="7" r="1" />
+      <circle cx="2" cy="12" r="1" /><circle cx="8" cy="12" r="1" />
+    </svg>
+  );
+}
+
+// ─── VARIATION CAPITAUX PROPRES — collapsible ──────────────────────
+function CapitalVarCard({ rows }: { rows: any[] }) {
+  const [open, setOpen] = useState(true);
+  const detail = rows.filter((r) => !r.rubrique.startsWith('TOTAL'));
+  const total = rows.find((r) => r.rubrique.startsWith('TOTAL'));
+
+  return (
+    <Card title="Variation des capitaux propres" subtitle="Évolution par rubrique entre ouverture et clôture" padded={false}
+      action={
+        <div className="flex gap-1">
+          <button onClick={() => setOpen(true)} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout déplier</button>
+          <span className="text-primary-300">·</span>
+          <button onClick={() => setOpen(false)} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout replier</button>
+        </div>
+      }>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
+            <tr>
+              <th className="text-left py-2 w-8"></th>
+              <th className="text-left py-2 px-3">Rubrique</th>
+              <th className="text-right py-2 px-3">Solde ouverture</th>
+              <th className="text-right py-2 px-3">Augmentation</th>
+              <th className="text-right py-2 px-3">Diminution</th>
+              <th className="text-right py-2 px-3">Affect. résultat N-1</th>
+              <th className="text-right py-2 px-3">Résultat exercice</th>
+              <th className="text-right py-2 px-3">Solde clôture</th>
+            </tr>
+          </thead>
+          <tbody>
+            {open && detail.map((m, i) => (
+              <tr key={i} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30">
+                <td className="py-1.5"></td>
+                <td className="py-1.5 px-3 text-xs">{m.rubrique}</td>
+                <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(m.ouverture)}</td>
+                <td className="py-1.5 px-3 text-right num text-xs text-success">{m.augmentation ? '+ ' + fmtFull(m.augmentation) : '—'}</td>
+                <td className="py-1.5 px-3 text-right num text-xs text-error">{m.diminution ? '− ' + fmtFull(m.diminution) : '—'}</td>
+                <td className="py-1.5 px-3 text-right num text-xs">{m.affectationResN1 ? fmtFull(m.affectationResN1) : '—'}</td>
+                <td className="py-1.5 px-3 text-right num text-xs">{m.resultatExercice ? fmtFull(m.resultatExercice) : '—'}</td>
+                <td className="py-1.5 px-3 text-right num text-xs font-semibold">{fmtFull(m.cloture)}</td>
+              </tr>
+            ))}
+            {total && (
+              <tr className="bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold">
+                <td className="py-2 pl-2 w-8 text-center">
+                  <button onClick={() => setOpen(!open)} className="w-5 h-5 rounded hover:bg-primary-700 dark:hover:bg-primary-300 text-xs font-bold" title={open ? 'Replier' : 'Déplier'}>
+                    {open ? '−' : '+'}
+                  </button>
+                </td>
+                <td className="py-2 px-3">{total.rubrique}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(total.ouverture)}</td>
+                <td className="py-2 px-3 text-right num">+ {fmtFull(total.augmentation)}</td>
+                <td className="py-2 px-3 text-right num">− {fmtFull(total.diminution)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(total.affectationResN1)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(total.resultatExercice)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(total.cloture)}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ─── BUDGET vs ACTUAL ──────────────────────────────────────────────
+function BudgetActualView() {
+  const rows = useBudgetActual();
+  const [view, setView] = useState<'table' | 'dashboard'>('table');
+  const sections = bySection(rows);
+  const totalRealise = rows.reduce((s, r) => s + r.realise, 0);
+  const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
+
+  if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 mr-4">
+          <StatBox label="Total Réalisé" value={totalRealise} />
+          <StatBox label="Total Budget" value={totalBudget} />
+          <StatBox label="Écart total" value={totalRealise - totalBudget} highlight />
+          <StatBox label="Comptes analysés" value={rows.length} />
+        </div>
+        <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg">
+          <button onClick={() => setView('table')}
+            className={clsx('px-3 py-1.5 text-xs rounded-md font-medium',
+              view === 'table' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>Table</button>
+          <button onClick={() => setView('dashboard')}
+            className={clsx('px-3 py-1.5 text-xs rounded-md font-medium',
+              view === 'dashboard' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>Tableau de bord</button>
+        </div>
+      </div>
+
+      {view === 'table' && (
+        <Card padded={false}>
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700 sticky top-0 bg-primary-100 dark:bg-primary-900">
+              <tr>
+                <th className="text-left py-2 px-3">Section</th>
+                <th className="text-left py-2 px-3">Compte</th>
+                <th className="text-left py-2 px-3">Libellé</th>
+                <th className="text-right py-2 px-3">Réalisé</th>
+                <th className="text-right py-2 px-3">Budget</th>
+                <th className="text-right py-2 px-3">Écart</th>
+                <th className="text-right py-2 px-3">Écart %</th>
+                <th className="text-center py-2 px-3">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sections.map((sec) => (
+                <>
+                  <tr key={`s-${sec.section}`} className="bg-primary-200 dark:bg-primary-800 font-semibold">
+                    <td className="py-2 px-3" colSpan={3}>{sec.label}</td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
+                    <td className={clsx('py-2 px-3 text-right num',
+                      sec.totalEcart > 0 ? (sec.isCharge ? 'text-error' : 'text-success') : (sec.isCharge ? 'text-success' : 'text-error'))}>
+                      {sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}
+                    </td>
+                    <td className="py-2 px-3 text-right num text-xs">{sec.ecartPct >= 0 ? '+' : ''}{sec.ecartPct.toFixed(1)} %</td>
+                    <td></td>
+                  </tr>
+                  {sec.rows.map((r) => (
+                    <tr key={r.code} className="border-b border-primary-200 dark:border-primary-800 hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                      <td></td>
+                      <td className="py-1.5 px-3 num font-mono text-xs">{r.code}</td>
+                      <td className="py-1.5 px-3 text-xs">{r.label}</td>
+                      <td className="py-1.5 px-3 text-right num">{fmtFull(r.realise)}</td>
+                      <td className="py-1.5 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
+                      <td className={clsx('py-1.5 px-3 text-right num',
+                        r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
+                        {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
+                      </td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{r.ecartPct >= 0 ? '+' : ''}{r.ecartPct.toFixed(1)} %</td>
+                      <td className="py-1.5 px-3 text-center">
+                        <span className={clsx('text-xs font-semibold',
+                          r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : 'text-primary-400')}>
+                          {r.status === 'favorable' ? '✓' : r.status === 'defavorable' ? '⚠' : '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {view === 'dashboard' && (
+        <div className="space-y-6">
+          <Card title="Réalisé vs Budget par section" padded={false}>
+            <div className="p-5">
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={sections.map((s) => ({ name: s.label, Réalisé: s.totalRealise, Budget: s.totalBudget }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : `${(v/1e3).toFixed(0)}K`} />
+                  <Tooltip formatter={(v: any) => fmtFull(v)} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Réalisé" fill="#171717" radius={[3,3,0,0]} />
+                  <Bar dataKey="Budget" fill="#a3a3a3" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card title="Écarts par section (en valeur absolue)" padded={false}>
+            <div className="p-5">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={sections.map((s) => ({ name: s.label, ecart: s.totalEcart, isCharge: s.isCharge }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 0 ? `+${(v/1e6).toFixed(0)}M` : `${(v/1e6).toFixed(0)}M`} />
+                  <Tooltip formatter={(v: any) => fmtFull(v)} />
+                  <Bar dataKey="ecart" radius={[4,4,0,0]}>
+                    {sections.map((s, i) => {
+                      const fav = s.totalEcart > 0 ? (s.isCharge ? '#ef4444' : '#22c55e') : (s.isCharge ? '#22c55e' : '#ef4444');
+                      return <Cell key={i} fill={Math.abs(s.totalEcart) < 1 ? '#a3a3a3' : fav} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-primary-500 mt-3">🟢 favorable : charges &lt; budget ou produits &gt; budget · 🔴 défavorable : inverse</p>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card title="Top 5 dépassements">
+              <div className="space-y-2">
+                {rows.filter((r) => r.status === 'defavorable').sort((a, b) => Math.abs(b.ecart) - Math.abs(a.ecart)).slice(0, 5).map((r) => (
+                  <div key={r.code} className="flex justify-between border-b border-primary-200 dark:border-primary-800 py-2">
+                    <span className="text-xs"><span className="font-mono mr-2 text-primary-500">{r.code}</span>{r.label}</span>
+                    <span className="text-xs num text-error font-semibold">{r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card title="Top 5 économies">
+              <div className="space-y-2">
+                {rows.filter((r) => r.status === 'favorable').sort((a, b) => Math.abs(b.ecart) - Math.abs(a.ecart)).slice(0, 5).map((r) => (
+                  <div key={r.code} className="flex justify-between border-b border-primary-200 dark:border-primary-800 py-2">
+                    <span className="text-xs"><span className="font-mono mr-2 text-primary-500">{r.code}</span>{r.label}</span>
+                    <span className="text-xs num text-success font-semibold">{r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function StatBox({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className={clsx('card p-3', highlight && 'border-primary-400 dark:border-primary-600')}>
+      <p className="text-xs text-primary-500">{label}</p>
+      <p className={clsx('num text-lg font-bold mt-1', value < 0 ? 'text-error' : value > 0 ? 'text-success' : '')}>
+        {fmtFull(value)}
+      </p>
+    </div>
+  );
+}
+
+
+export default function States() {
+  const [tab, setTab] = useState<StatementTab>('bilan');
+  const [view, setView] = useState<ViewMode>('monthly');
+  const [hideCodes, setHideCodes] = useState(false);
+  const { bilan, cr, balance } = useStatements();
+  const monthlyCR = useMonthlyCR();
+  const monthlyBilan = useMonthlyBilan();
+  const ratios = useRatios();
+  const tft = useTFT();
+  const monthlyTFT = useMonthlyTFT();
+  const tafire = useTAFIRE();
+  const capitalVar = useCapitalVariation();
+  const org = useCurrentOrg();
+  const { currentPeriodId, currentYear } = useApp();
+
+  if (!bilan) return <div className="py-20 text-center text-primary-500">Chargement…</div>;
+
+  const system = resolveSystem(org?.accountingSystem);
+  const tabsForSystem = availableTabs(system);
+  void SYSTEM_META;
+  if (!tabsForSystem.includes(tab)) setTab(tabsForSystem[0]);
+
+  const periodLabel = currentPeriodId ? 'Période sélectionnée' : `Cumul YTD ${currentYear}`;
+
+  const handleXLSX = () => {
+    if (!org) return;
+    exportStatementsXLSX({ org: org.name, period: periodLabel, balance, bilanActif: bilan.actif, bilanPassif: bilan.passif, cr, ratios });
+  };
+  const handlePDF = () => {
+    if (!org) return;
+    exportStatementsPDF({ org: org.name, period: periodLabel, bilanActif: bilan.actif, bilanPassif: bilan.passif, cr, ratios });
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="États financiers de gestion"
+        subtitle={`SYSCOHADA révisé 2017 · ${SYSTEM_META[system].label} · ${org?.name} · Exercice ${currentYear}`}
+        action={
+          <div className="flex gap-2 items-center">
+            <label className="flex items-center gap-1.5 text-xs text-primary-500 cursor-pointer mr-2">
+              <input type="checkbox" checked={hideCodes} onChange={(e) => setHideCodes(e.target.checked)} />
+              Masquer les codes
+            </label>
+            <button className="btn-outline" onClick={() => window.print()}><Printer className="w-4 h-4" /> Imprimer</button>
+            <button className="btn-outline" onClick={handlePDF}><Download className="w-4 h-4" /> PDF</button>
+            <button className="btn-primary" onClick={handleXLSX}><FileSpreadsheet className="w-4 h-4" /> Excel</button>
+          </div>
+        }
+      />
+
+      <div className="flex items-center justify-between border-b border-primary-200 dark:border-primary-800 mb-6">
+        <div className="flex gap-1 overflow-x-auto">
+          {tabsForSystem.map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition whitespace-nowrap',
+                tab === t
+                  ? 'border-primary-900 dark:border-primary-100 text-primary-900 dark:text-primary-100'
+                  : 'border-transparent text-primary-500 hover:text-primary-900 dark:hover:text-primary-100',
+              )}>
+              {ALL_TABS[t]}
+            </button>
+          ))}
+        </div>
+        {(tab === 'bilan' || tab === 'tft') && (
+          <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg mb-2">
+            <button onClick={() => setView('monthly')}
+              className={clsx('px-3 py-1 text-xs rounded-md font-medium transition',
+                view === 'monthly' ? 'bg-primary-50 dark:bg-primary-900 shadow' : 'text-primary-600 dark:text-primary-400')}>
+              Mensuel (Jan → Déc)
+            </button>
+            <button onClick={() => setView('synthetic')}
+              className={clsx('px-3 py-1 text-xs rounded-md font-medium transition',
+                view === 'synthetic' ? 'bg-primary-50 dark:bg-primary-900 shadow' : 'text-primary-600 dark:text-primary-400')}>
+              Synthétique
+            </button>
+          </div>
+        )}
+      </div>
+
+      {tab === 'bilan' && view === 'monthly' && (
+        <>
+          <Card title="BILAN — ACTIF" subtitle="Soldes à la fin de chaque mois" padded={false}>
+            <MonthlyTable months={monthlyBilan.months} lines={monthlyBilan.actif} />
+          </Card>
+          <div className="mt-6">
+            <Card title="BILAN — PASSIF" subtitle="Soldes à la fin de chaque mois" padded={false}>
+              <MonthlyTable months={monthlyBilan.months} lines={monthlyBilan.passif} />
+            </Card>
+          </div>
+        </>
+      )}
+
+      {tab === 'bilan' && view === 'synthetic' && (
+        <Card>
+          {system === 'Allégé' && (
+            <p className="mb-3 text-[11px] text-primary-500 italic">Vue Allégée — seuls les grands totaux sont affichés.</p>
+          )}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            <CollapsibleTable title="ACTIF"  lines={system === 'Allégé' ? simplifyBilanActif(bilan.actif)   : bilan.actif}  hideCodes={hideCodes} />
+            <CollapsibleTable title="PASSIF" lines={system === 'Allégé' ? simplifyBilanPassif(bilan.passif) : bilan.passif} hideCodes={hideCodes} />
+          </div>
+          <div className="mt-4 pt-4 border-t border-primary-200 dark:border-primary-800 text-xs text-primary-500 flex justify-between">
+            <span>Équilibre Actif / Passif : <span className="num font-semibold">{fmtFull(bilan.totalActif)}</span> / <span className="num font-semibold">{fmtFull(bilan.totalPassif)}</span></span>
+            <span className={Math.abs(bilan.totalActif - bilan.totalPassif) < 1 ? 'text-success font-semibold' : 'text-error font-semibold'}>
+              Écart : {fmtFull(bilan.totalActif - bilan.totalPassif)} XOF
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {tab === 'cr' && <CRTab monthlyCR={monthlyCR} cr={system === 'Allégé' ? simplifyCR(cr) : cr} simplified={system === 'Allégé'} />}
+
+      {tab === 'balance' && <BalanceTab />}
+
+      {tab === 'tft' && view === 'monthly' && (
+        <Card title="Tableau des Flux de Trésorerie — mensuel" subtitle="Méthode indirecte SYSCOHADA · Jan → Déc + cumul YTD" padded={false}>
+          <MonthlyTable months={monthlyTFT.months} lines={monthlyTFT.lines} />
+        </Card>
+      )}
+
+      {tab === 'tft' && view === 'synthetic' && tft && (
+        <Card title="Tableau des Flux de Trésorerie — synthétique" subtitle="Méthode indirecte — SYSCOHADA révisé 2017">
+          <CollapsibleTable lines={tft.lines} hideCodes={hideCodes} />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-primary-200 dark:border-primary-800">
+            <StatBox label="CAFG" value={tft.totals.cafg} />
+            <StatBox label="Flux opérationnels" value={tft.totals.fluxOperationnels} highlight />
+            <StatBox label="Flux investissement" value={tft.totals.fluxInvestissement} />
+            <StatBox label="Flux financement" value={tft.totals.fluxFinancement} />
+          </div>
+        </Card>
+      )}
+
+      {tab === 'tafire' && tafire && (
+        <Card title="Tableau Financier des Ressources et Emplois" subtitle="TAFIRE — SYSCOHADA">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            <CollapsibleTable title="EMPLOIS STABLES" lines={tafire.emplois} hideCodes={hideCodes} />
+            <CollapsibleTable title="RESSOURCES STABLES" lines={tafire.ressources} hideCodes={hideCodes} />
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-6 pt-6 border-t border-primary-200 dark:border-primary-800">
+            <StatBox label="Variation du FR" value={tafire.varFR} highlight />
+            <StatBox label="Variation du BFR" value={tafire.varBFR} />
+            <StatBox label="Variation trésorerie nette" value={tafire.varTN} highlight />
+          </div>
+          <div className="mt-4 text-xs text-primary-500">
+            <span className="font-medium">Équation de contrôle : </span>
+            Var FR ({fmtFull(tafire.varFR)}) − Var BFR ({fmtFull(tafire.varBFR)}) = Var TN ({fmtFull(tafire.varFR - tafire.varBFR)})
+            {Math.abs((tafire.varFR - tafire.varBFR) - tafire.varTN) < 1
+              ? <span className="text-success ml-2 font-semibold">✓ cohérent</span>
+              : <span className="text-warning ml-2 font-semibold">⚠ écart {fmtFull((tafire.varFR - tafire.varBFR) - tafire.varTN)}</span>}
+          </div>
+        </Card>
+      )}
+
+      {tab === 'cp' && capitalVar.length > 0 && (
+        <CapitalVarCard rows={capitalVar} />
+      )}
+
+      {tab === 'smt' && <SMTView balance={balance} currency={org?.currency ?? 'XOF'} />}
+    </div>
+  );
+}
+
+// ─── SMT — RECETTES / DÉPENSES ──────────────────────────────────────
+function SMTView({ balance, currency }: { balance: BalanceRow[]; currency: string }) {
+  const recettes = balance.filter((r) => r.account.startsWith('7')).reduce((s, r) => s + r.credit - r.debit, 0);
+  const depenses = balance.filter((r) => r.account.startsWith('6')).reduce((s, r) => s + r.debit - r.credit, 0);
+  const solde = recettes - depenses;
+  const treso = balance.filter((r) => r.account.startsWith('5')).reduce((s, r) => s + r.soldeD - r.soldeC, 0);
+
+  const byAccount = (prefix: string) => balance
+    .filter((r) => r.account.startsWith(prefix) && (r.debit || r.credit))
+    .map((r) => ({ ...r, mvt: prefix === '7' ? r.credit - r.debit : r.debit - r.credit }))
+    .sort((a, b) => b.mvt - a.mvt);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <KPI label="Recettes (classe 7)" value={recettes} currency={currency} color="text-success" />
+        <KPI label="Dépenses (classe 6)" value={depenses} currency={currency} color="text-error" />
+        <KPI label="Solde net" value={solde} currency={currency} color={solde >= 0 ? 'text-success' : 'text-error'} />
+        <KPI label="Trésorerie (classe 5)" value={treso} currency={currency} color="text-primary-900 dark:text-primary-100" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card title="Recettes détaillées" padded={false}>
+          <SMTList rows={byAccount('7')} />
+        </Card>
+        <Card title="Dépenses détaillées" padded={false}>
+          <SMTList rows={byAccount('6')} />
+        </Card>
+      </div>
+
+      <p className="text-xs text-primary-500 italic">
+        💡 SMT — Système Minimal de Trésorerie : vue simplifiée des flux encaissés/décaissés.
+        Pour un pilotage plus riche, passez en système Allégé ou Normal dans les paramètres de la société.
+      </p>
+    </div>
+  );
+}
+
+function KPI({ label, value, currency, color }: { label: string; value: number; currency: string; color: string }) {
+  return (
+    <Card>
+      <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">{label}</p>
+      <p className={clsx('mt-1 text-2xl num font-bold', color)}>{fmtFull(value)}</p>
+      <p className="text-[10px] text-primary-400 mt-0.5">{currency}</p>
+    </Card>
+  );
+}
+
+function SMTList({ rows }: { rows: (BalanceRow & { mvt: number })[] }) {
+  if (rows.length === 0) return <div className="py-8 text-center text-sm text-primary-500">Aucun mouvement</div>;
+  return (
+    <div className="divide-y divide-primary-200 dark:divide-primary-800">
+      {rows.slice(0, 50).map((r) => (
+        <div key={r.account} className="flex justify-between items-center py-1.5 px-3 text-sm">
+          <div className="flex gap-3 min-w-0">
+            <span className="num font-mono text-xs text-primary-500 w-20 shrink-0">{r.account}</span>
+            <span className="truncate">{r.label}</span>
+          </div>
+          <span className="num font-semibold">{fmtFull(r.mvt)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
