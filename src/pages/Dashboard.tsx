@@ -11,6 +11,7 @@ import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } from '../hooks/useFinancials';
+import { useChartTheme } from '../lib/chartTheme';
 import { bySection, loadLabels } from '../engine/budgetActual';
 import { useApp } from '../store/app';
 import { C } from '../lib/colors';
@@ -45,6 +46,13 @@ const catalog: Record<string, { title: string; icon: string; subtitle: string }>
   crsec_produits_hao:  { title: 'Produits exceptionnels',    icon: '◉', subtitle: 'Comptes 82, 84, 86, 88 · HAO produits' },
   crsec_charges_hao:   { title: 'Charges exceptionnelles',   icon: '◎', subtitle: 'Comptes 81, 83, 85 · HAO charges' },
   crsec_impots:        { title: 'Impôts sur les bénéfices',  icon: '⌹', subtitle: 'Comptes 87, 89 · participation et impôt' },
+  crtab_produits_expl: { title: "Produits d'exploitation — Table",  icon: '▦', subtitle: 'Tableau détaillé des comptes 70-75' },
+  crtab_charges_expl:  { title: "Charges d'exploitation — Table",   icon: '▦', subtitle: 'Tableau détaillé des comptes 60-66' },
+  crtab_produits_fin:  { title: 'Produits financiers — Table',       icon: '▦', subtitle: 'Tableau détaillé des comptes 77' },
+  crtab_charges_fin:   { title: 'Charges financières — Table',       icon: '▦', subtitle: 'Tableau détaillé des comptes 67' },
+  crtab_produits_hao:  { title: 'Produits exceptionnels — Table',    icon: '▦', subtitle: 'Tableau détaillé des comptes 82, 84, 86, 88' },
+  crtab_charges_hao:   { title: 'Charges exceptionnelles — Table',   icon: '▦', subtitle: 'Tableau détaillé des comptes 81, 83, 85' },
+  crtab_impots:        { title: 'Impôts sur les bénéfices — Table',  icon: '▦', subtitle: 'Tableau détaillé des comptes 87, 89' },
   is_bvsa:    { title: 'Income Statement — Budget vs Actual', icon: '▤', subtitle: 'Current period / Versus N-1 / Year-to-date' },
   cashflow:   { title: 'Cashflow Statement', icon: '◐', subtitle: 'Position trésorerie : encaissements, décaissements, solde' },
   receivables:{ title: 'Receivables & Payables Review', icon: '◓', subtitle: 'Suivi des créances et dettes : KPIs et évolution mensuelle' },
@@ -82,6 +90,7 @@ export default function Dashboard() {
       {id === 'cp' && <ChargesProduits />}
       {id === 'crblock' && <CRBlock />}
       {id?.startsWith('crsec_') && <CRSecDetail sectionKey={id.replace('crsec_', '') as any} />}
+      {id?.startsWith('crtab_') && <CRSecTable sectionKey={id.replace('crtab_', '') as any} />}
       {id === 'is_bvsa' && <ISBudgetVsActual />}
       {id === 'cashflow' && <CashflowStatement />}
       {id === 'receivables' && <ReceivablesReview />}
@@ -396,6 +405,7 @@ function CRBlock() {
   const { currentOrgId } = useApp();
   const sections = bySection(rows, currentOrgId);
   const labels = loadLabels(currentOrgId);
+  const ct = useChartTheme();
   const [zoom, setZoom] = useState<string | null>(null);
 
   if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
@@ -431,7 +441,7 @@ function CRBlock() {
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={70} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
-                <Bar dataKey="realise" fill="#262626" radius={[0,3,3,0]} />
+                <Bar dataKey="realise" fill={ct.bar} radius={[0,3,3,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -443,8 +453,8 @@ function CRBlock() {
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="realise" name="Réalisé" fill="#171717" radius={[3,3,0,0]} />
-                <Bar dataKey="budget" name="Budget" fill="#a3a3a3" radius={[3,3,0,0]} />
+                <Bar dataKey="realise" name="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
+                <Bar dataKey="budget" name="Budget" fill={ct.barAlt} radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -910,6 +920,7 @@ function DarkKPI({ label, value }: { label: string; value: string }) {
 function CRSecDetail({ sectionKey }: { sectionKey: any }) {
   const rows = useBudgetActual();
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const sections = bySection(rows, currentOrgId);
   const labels = loadLabels(currentOrgId);
   const sec = sections.find((s) => s.section === sectionKey);
@@ -965,7 +976,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="valeur" fill="#262626" radius={[3,3,0,0]} />
+              <Bar dataKey="valeur" fill={ct.bar} radius={[3,3,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -978,7 +989,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
                 { name: `${sec.rows.length - 3} autres comptes`, value: Math.max(reste, 0) },
               ]} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value"
                 label={(p: any) => `${((p.value / Math.max(sec.totalRealise, 1)) * 100).toFixed(0)}%`}>
-                <Cell fill="#171717" /><Cell fill="#a3a3a3" />
+                <Cell fill={ct.bar} /><Cell fill={ct.barAlt} />
               </Pie>
               <Tooltip formatter={(v: any) => fmtFull(v)} />
             </PieChart>
@@ -994,7 +1005,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="code" tick={{ fontSize: 9 }} width={80} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="realise" fill="#262626" radius={[0,3,3,0]} />
+              <Bar dataKey="realise" fill={ct.bar} radius={[0,3,3,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1007,8 +1018,8 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="realise" name="Réalisé" fill="#171717" radius={[3,3,0,0]} />
-              <Bar dataKey="budget" name="Budget" fill="#a3a3a3" radius={[3,3,0,0]} />
+              <Bar dataKey="realise" name="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
+              <Bar dataKey="budget" name="Budget" fill={ct.barAlt} radius={[3,3,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

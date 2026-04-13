@@ -3,6 +3,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import { Line } from '../../engine/statements';
 import { fmtFull } from '../../lib/format';
+import { usePalette } from '../../store/theme';
 
 type Props = {
   title?: string;
@@ -119,12 +120,14 @@ function ManualRows({ line, details, open, onToggle, hideCodes }: { line: Line; 
 }
 
 function TotalRow({ line, hasDetails, open, onToggle, hideCodes }: { line: Line; hasDetails?: boolean; open?: boolean; onToggle?: () => void; hideCodes?: boolean }) {
+  const palette = usePalette();
+  const grandStyle = line.grand ? { background: palette.tableHeader, color: palette.tableHeaderText } : undefined;
   return (
     <tr className={clsx(
       'border-b border-primary-200 dark:border-primary-800',
       line.total && !line.grand && 'bg-primary-200/50 dark:bg-primary-800/30 font-semibold',
-      line.grand && 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold',
-    )}>
+      line.grand && 'font-bold',
+    )} style={grandStyle}>
       <td className="py-2 pl-2 w-8 text-center">
         {hasDetails && onToggle && (
           <button onClick={onToggle} className="w-5 h-5 rounded hover:bg-primary-100 dark:hover:bg-primary-800 text-xs font-bold"

@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
+import { PALETTES, PaletteKey, useTheme } from '../store/theme';
 import { db } from '../db/schema';
 import { ensureSeeded } from '../db/seed';
 
@@ -45,27 +46,62 @@ export default function Settings() {
 // ─── APPARENCE ──────────────────────────────────────────────────────
 function TabApparence() {
   const { theme, toggleTheme } = useApp();
+  const paletteKey = useTheme((s) => s.paletteKey);
+  const setPalette = useTheme((s) => s.setPalette);
+
   return (
-    <Card title="Apparence" subtitle="Personnalisation de l'interface">
-      <Row label="Thème" hint="Clair / sombre — persisté dans ce navigateur">
+    <div className="space-y-4">
+      <Card title="Thème clair / sombre" subtitle="Persisté dans ce navigateur">
         <button className="btn-outline" onClick={toggleTheme}>
           {theme === 'dark' ? <><Sun className="w-4 h-4" /> Passer en clair</> : <><Moon className="w-4 h-4" /> Passer en sombre</>}
         </button>
-      </Row>
-      <Row label="Palette" hint="Grayscale professionnelle — Exo 2 / Grand Hotel / JetBrains Mono">
-        <div className="flex gap-1">
-          {['#fafafa','#e5e5e5','#a3a3a3','#525252','#262626','#0a0a0a'].map((c) => (
-            <div key={c} className="w-6 h-6 rounded border border-primary-300" style={{ background: c }} />
-          ))}
+      </Card>
+
+      <Card title="Palette de couleurs" subtitle="Couleurs appliquées aux graphiques, tables, KPIs et dashboards de toute l'application">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {(Object.keys(PALETTES) as PaletteKey[]).map((k) => {
+            const p = PALETTES[k];
+            const active = paletteKey === k;
+            return (
+              <button key={k} onClick={() => setPalette(k)}
+                className={`text-left p-4 rounded-lg border-2 transition ${active ? 'border-primary-900 dark:border-primary-100 bg-primary-200/30 dark:bg-primary-800/30' : 'border-primary-200 dark:border-primary-800 hover:border-primary-400 dark:hover:border-primary-600'}`}>
+                <div className="flex items-start justify-between mb-2">
+                  <p className="font-semibold text-sm">{p.name}</p>
+                  {active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-semibold">Active</span>}
+                </div>
+                <div className="flex gap-0.5 mb-2">
+                  {p.chartColors.map((c, i) => (
+                    <div key={i} className="flex-1 h-6 first:rounded-l last:rounded-r" style={{ background: c }} />
+                  ))}
+                </div>
+                <div className="flex gap-1 text-[10px] text-primary-500">
+                  <span className="px-1.5 py-0.5 rounded text-white" style={{ background: p.tableHeader, color: p.tableHeaderText }}>Table header</span>
+                  <span className="px-1.5 py-0.5 rounded" style={{ background: p.primary, color: '#fff' }}>Primaire</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
-      </Row>
-      <Row label="Langue" hint="Interface utilisateur">
+        <p className="text-xs text-primary-500 mt-4">
+          💡 Le changement est instantané sur tous les graphiques (camembert, barres, courbes), les en-têtes de tables, et les accents primaires.
+        </p>
+      </Card>
+
+      <Card title="Typographie" subtitle="Polices utilisées dans l'application">
+        <div className="space-y-2 text-sm">
+          <Row label="Sans-serif principal" hint="Corps de texte, navigation"><span className="font-sans">Exo 2</span></Row>
+          <Row label="Display" hint="Titre Cockpit en page d'accueil"><span className="font-display text-2xl">Cockpit</span></Row>
+          <Row label="Monospace" hint="Nombres, codes comptables"><span className="num">1 234 567</span></Row>
+        </div>
+      </Card>
+
+      <Card title="Langue" subtitle="Interface utilisateur">
         <select className="input !w-auto" defaultValue="fr" disabled>
           <option value="fr">Français</option>
           <option value="en">English (bientôt)</option>
         </select>
-      </Row>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
