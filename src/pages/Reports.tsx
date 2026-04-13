@@ -1112,7 +1112,7 @@ function LoadModal({ open, onClose, templates, onLoad }: any) {
             <div key={t.id} className="card p-4">
               <div className="flex items-start justify-between mb-2">
                 <p className="font-semibold text-sm">{t.name}</p>
-                <button onClick={() => remove(t.id)} className="btn-ghost !p-1 text-error"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button onClick={() => remove(t.id)} className="btn-ghost !p-1 text-primary-500 hover:text-error"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
               {t.description && <p className="text-xs text-primary-500 mb-3">{t.description}</p>}
               <p className="text-[10px] text-primary-400 mb-3">Créé le {new Date(t.createdAt).toLocaleDateString('fr-FR')}</p>

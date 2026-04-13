@@ -1,61 +1,163 @@
 // Calculs mensuels — CR et Bilan sur 12 mois
 import { db } from '../db/schema';
 import { computeBalance } from './balance';
-import { computeBilan, computeSIG, Line } from './statements';
+import { computeBilan, Line } from './statements';
+import { CR_FLOW, CRSection, getSectionDefs, INTERMEDIATE_LABELS, loadLabels } from './budgetActual';
+import { findSyscoAccount } from '../syscohada/coa';
 
-export type MonthlySerie = {
-  months: string[];            // ['Jan', ..., 'Déc']
-  lines: Array<{
-    code: string;
-    label: string;
-    total?: boolean;
-    grand?: boolean;
-    indent?: number;
-    values: number[];          // 12 valeurs mensuelles (non cumulées)
-    ytd: number;               // total année
-  }>;
+export type MonthlyLine = {
+  code: string;
+  label: string;
+  total?: boolean;
+  grand?: boolean;
+  intermediate?: boolean;   // ligne de résultat intermédiaire (calculée)
+  isCharge?: boolean;
+  indent?: number;
+  accountCodes?: string;
+  values: number[];         // 12 valeurs mensuelles (non cumulées)
+  ytd: number;
 };
 
-// Compte de résultat mensuel — valeurs du mois (non cumulées)
+export type MonthlySerie = {
+  months: string[];
+  lines: MonthlyLine[];
+};
+
+// Compte de résultat mensuel — nomenclature 12 points (opérationnelle)
+// Produits expl / Charges expl / Résultat expl / Produits fin / Charges fin /
+// Résultat fin / Résultat courant / Produits except / Charges except /
+// Résultat except / Impôts / Résultat net
 export async function computeMonthlyCR(orgId: string, year: number): Promise<MonthlySerie> {
   const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  const perMonth: Line[][] = [];
+  const sectionDefs = getSectionDefs(orgId);
+  const labels = loadLabels(orgId);
 
-  for (let m = 1; m <= 12; m++) {
-    // Balance du mois uniquement (sans à-nouveaux, sans cumul)
-    const periods = await db.periods.where('orgId').equals(orgId).toArray();
-    const period = periods.find((p) => p.year === year && p.month === m);
-    if (!period) { perMonth.push([]); continue; }
-    const entries = await db.gl.where('periodId').equals(period.id).toArray();
+  // 1) Pour chaque mois, balance + map compte → (débit, crédit) sur CE mois uniquement
+  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const monthPeriod = (m: number) => periods.find((p) => p.year === year && p.month === m);
+  const allEntries = await db.gl.where('orgId').equals(orgId).toArray();
 
-    // Aggrégation locale
-    const map = new Map<string, { debit: number; credit: number; label: string }>();
+  // Map mois → map compte → net (produit: crédit-débit ; charge: débit-crédit)
+  const netByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
+  for (let m = 0; m < 12; m++) {
+    const period = monthPeriod(m + 1);
+    if (!period) continue;
+    const entries = allEntries.filter((e) => e.periodId === period.id);
     for (const e of entries) {
-      const cur = map.get(e.account) ?? { debit: 0, credit: 0, label: e.label };
-      cur.debit += e.debit; cur.credit += e.credit;
-      map.set(e.account, cur);
+      const c = e.account[0];
+      if (c !== '6' && c !== '7' && c !== '8') continue;
+      const isCharge = c === '6' || e.account.startsWith('81') || e.account.startsWith('83') || e.account.startsWith('85') || e.account.startsWith('87') || e.account.startsWith('89');
+      const net = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
+      const map = netByMonthAccount[m];
+      map.set(e.account, (map.get(e.account) ?? 0) + net);
     }
-    const rows = Array.from(map, ([code, v]) => {
-      const solde = v.debit - v.credit;
-      return {
-        account: code, label: v.label,
-        debit: v.debit, credit: v.credit, solde,
-        soldeD: solde > 0 ? solde : 0,
-        soldeC: solde < 0 ? -solde : 0,
-        class: code[0],
-      };
-    });
-    const { cr } = computeSIG(rows as any);
-    perMonth.push(cr);
   }
 
-  // Fusion : même liste de lignes, 12 valeurs
-  const template = perMonth.find((m) => m.length > 0) ?? [];
-  const lines = template.map((t, idx) => ({
-    code: t.code, label: t.label, total: t.total, grand: t.grand, indent: t.indent,
-    values: perMonth.map((m) => m[idx]?.value ?? 0),
-    ytd: perMonth.reduce((s, m) => s + (m[idx]?.value ?? 0), 0),
-  }));
+  // 2) Collecter tous les comptes mouvementés par section
+  const accountsBySection = new Map<CRSection, Set<string>>();
+  for (const sec of Object.keys(sectionDefs) as CRSection[]) {
+    accountsBySection.set(sec, new Set());
+  }
+  for (let m = 0; m < 12; m++) {
+    for (const account of netByMonthAccount[m].keys()) {
+      for (const [key, def] of Object.entries(sectionDefs)) {
+        if (def.prefixes.some((p) => account.startsWith(p))) {
+          accountsBySection.get(key as CRSection)!.add(account);
+          break;
+        }
+      }
+    }
+  }
+
+  // 3) Construire la structure lignes suivant CR_FLOW
+  const lines: MonthlyLine[] = [];
+
+  // Helpers
+  const sectionTotal = (sec: CRSection, m: number) => {
+    const def = sectionDefs[sec];
+    let total = 0;
+    for (const [account, net] of netByMonthAccount[m]) {
+      if (def.prefixes.some((p) => account.startsWith(p))) total += net;
+    }
+    return total;
+  };
+  const accountValues = (account: string) => {
+    const values = Array.from({ length: 12 }, (_, m) => netByMonthAccount[m].get(account) ?? 0);
+    return { values, ytd: values.reduce((s, v) => s + v, 0) };
+  };
+
+  // Pour calculer les intermédiaires par mois
+  const totalMatrix: Record<CRSection, number[]> = {} as any;
+  for (const sec of Object.keys(sectionDefs) as CRSection[]) {
+    totalMatrix[sec] = Array.from({ length: 12 }, (_, m) => sectionTotal(sec, m));
+  }
+
+  const interValues = (key: string): number[] => {
+    const pe = totalMatrix.produits_expl;
+    const ce = totalMatrix.charges_expl;
+    const pf = totalMatrix.produits_fin;
+    const cf = totalMatrix.charges_fin;
+    const ph = totalMatrix.produits_hao;
+    const ch = totalMatrix.charges_hao;
+    const imp = totalMatrix.impots;
+    switch (key) {
+      case 'res_expl':    return pe.map((v, i) => v - ce[i]);
+      case 'res_fin':     return pf.map((v, i) => v - cf[i]);
+      case 'res_courant': return pe.map((v, i) => v - ce[i] + pf[i] - cf[i]);
+      case 'res_except':  return ph.map((v, i) => v - ch[i]);
+      case 'res_net':     return pe.map((v, i) => v - ce[i] + pf[i] - cf[i] + ph[i] - ch[i] - imp[i]);
+      default: return Array(12).fill(0);
+    }
+  };
+
+  for (const item of CR_FLOW) {
+    if (item.kind === 'section') {
+      const sec = item.key;
+      const def = sectionDefs[sec];
+      const label = labels[sec];
+      const accounts = Array.from(accountsBySection.get(sec) ?? []).sort();
+
+      // Lignes de détail (un compte par ligne)
+      for (const account of accounts) {
+        const sysco = findSyscoAccount(account);
+        const { values, ytd } = accountValues(account);
+        if (Math.abs(ytd) < 0.01) continue;
+        lines.push({
+          code: account,
+          label: sysco?.label ?? account,
+          indent: 1,
+          isCharge: def.isCharge,
+          accountCodes: account,
+          values, ytd,
+        });
+      }
+
+      // Total de section
+      const totals = totalMatrix[sec];
+      lines.push({
+        code: `_${sec.toUpperCase()}`,
+        label: `${def.isCharge ? '− ' : '+ '}${label}`,
+        total: true,
+        isCharge: def.isCharge,
+        accountCodes: def.prefixes.join(', '),
+        values: totals,
+        ytd: totals.reduce((s, v) => s + v, 0),
+      });
+    } else {
+      // Ligne intermédiaire calculée
+      const values = interValues(item.key);
+      const isNet = item.key === 'res_net';
+      lines.push({
+        code: `_${item.key.toUpperCase()}`,
+        label: `= ${INTERMEDIATE_LABELS[item.key]}`,
+        total: true,
+        grand: isNet,
+        intermediate: true,
+        values,
+        ytd: values.reduce((s, v) => s + v, 0),
+      });
+    }
+  }
 
   return { months: MONTHS, lines };
 }

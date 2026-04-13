@@ -342,19 +342,19 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
   const varTN = varFR - varBFR;
 
   const emplois: Line[] = [
-    { code: 'EA', label: "Investissements (acquisitions d'immobilisations)", value: investissements, indent: 1 },
-    { code: 'EB', label: "Distributions de dividendes", value: distributions, indent: 1 },
-    { code: 'EC', label: "Remboursements d'emprunts & dettes financières", value: remboursements, indent: 1 },
-    { code: '_EZ', label: 'TOTAL EMPLOIS STABLES', value: totalEmploisStables, total: true, grand: true },
+    { code: 'EA', label: "Investissements (acquisitions d'immobilisations)", value: investissements, indent: 1, accountCodes: '20-27' },
+    { code: 'EB', label: "Distributions de dividendes", value: distributions, indent: 1, accountCodes: '457' },
+    { code: 'EC', label: "Remboursements d'emprunts & dettes financières", value: remboursements, indent: 1, accountCodes: '16-17' },
+    { code: '_EZ', label: 'TOTAL EMPLOIS STABLES', value: totalEmploisStables, total: true, grand: true, accountCodes: '20-27, 16-17' },
   ];
 
   const ressources: Line[] = [
-    { code: 'RA', label: "Capacité d'autofinancement globale (CAFG)", value: cafg, indent: 1 },
-    { code: 'RB', label: 'Augmentations de capital (& primes)', value: augCapital, indent: 1 },
-    { code: 'RC', label: "Subventions d'investissement reçues", value: augSubv, indent: 1 },
-    { code: 'RD', label: "Prix de cession d'immobilisations", value: pxCess, indent: 1 },
-    { code: 'RE', label: "Emprunts nouveaux & dettes financières", value: newEmprunts, indent: 1 },
-    { code: '_RZ', label: 'TOTAL RESSOURCES STABLES', value: totalRessourcesStables, total: true, grand: true },
+    { code: 'RA', label: "Capacité d'autofinancement globale (CAFG)", value: cafg, indent: 1, accountCodes: '12, 68/78' },
+    { code: 'RB', label: 'Augmentations de capital (& primes)', value: augCapital, indent: 1, accountCodes: '101, 104, 105' },
+    { code: 'RC', label: "Subventions d'investissement reçues", value: augSubv, indent: 1, accountCodes: '14' },
+    { code: 'RD', label: "Prix de cession d'immobilisations", value: pxCess, indent: 1, accountCodes: '82' },
+    { code: 'RE', label: "Emprunts nouveaux & dettes financières", value: newEmprunts, indent: 1, accountCodes: '16-17' },
+    { code: '_RZ', label: 'TOTAL RESSOURCES STABLES', value: totalRessourcesStables, total: true, grand: true, accountCodes: '10-14, 16-17, 82' },
   ];
 
   return { emplois, ressources, totalEmplois: totalEmploisStables, totalRessources: totalRessourcesStables, varFR, varBFR, varTN };
@@ -365,6 +365,7 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
 // ═══════════════════════════════════════════════════════════════════════════
 export type CapitalMovement = {
   rubrique: string;
+  accountCodes?: string;
   ouverture: number;
   augmentation: number;
   diminution: number;
@@ -379,16 +380,17 @@ export async function computeCapitalVariation(orgId: string, year: number): Prom
   const g = (lines: Line[], code: string) => lines.find((l) => l.code === code)?.value ?? 0;
 
   const rubriques = [
-    { key: 'capital', label: 'Capital social', codeO: g(bilanO.passif, 'CA'), codeC: g(bilanC.passif, 'CA') },
-    { key: 'primes', label: 'Primes & réserves', codeO: g(bilanO.passif, 'CD'), codeC: g(bilanC.passif, 'CD') },
-    { key: 'subv', label: "Subventions d'investissement", codeO: g(bilanO.passif, 'CL'), codeC: g(bilanC.passif, 'CL') },
-    { key: 'provRegl', label: 'Provisions réglementées', codeO: g(bilanO.passif, 'CM'), codeC: g(bilanC.passif, 'CM') },
+    { key: 'capital',  label: 'Capital social',                accountCodes: '101',         codeO: g(bilanO.passif, 'CA'), codeC: g(bilanC.passif, 'CA') },
+    { key: 'primes',   label: 'Primes & réserves',             accountCodes: '104-118',     codeO: g(bilanO.passif, 'CD'), codeC: g(bilanC.passif, 'CD') },
+    { key: 'subv',     label: "Subventions d'investissement",  accountCodes: '14',          codeO: g(bilanO.passif, 'CL'), codeC: g(bilanC.passif, 'CL') },
+    { key: 'provRegl', label: 'Provisions réglementées',       accountCodes: '15',          codeO: g(bilanO.passif, 'CM'), codeC: g(bilanC.passif, 'CM') },
   ];
 
   const movements: CapitalMovement[] = rubriques.map((r) => {
     const diff = r.codeC - r.codeO;
     return {
       rubrique: r.label,
+      accountCodes: r.accountCodes,
       ouverture: r.codeO,
       augmentation: Math.max(diff, 0),
       diminution: Math.max(-diff, 0),
@@ -401,6 +403,7 @@ export async function computeCapitalVariation(orgId: string, year: number): Prom
   // Résultat de l'exercice
   movements.push({
     rubrique: "Résultat net de l'exercice",
+    accountCodes: '12',
     ouverture: 0,
     augmentation: 0,
     diminution: 0,

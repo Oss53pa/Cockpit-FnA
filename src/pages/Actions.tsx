@@ -157,7 +157,7 @@ function PointCard({ point: p, linkedCount, onEdit, onDelete, onStatusChange }: 
             <p className="font-semibold leading-tight">{p.title}</p>
             <div className="flex gap-1 shrink-0">
               <button className="btn-ghost !p-1" onClick={onEdit} title="Modifier">✎</button>
-              <button className="btn-ghost !p-1 text-error" onClick={onDelete} title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
+              <button className="btn-ghost !p-1 text-primary-500 hover:text-error" onClick={onDelete} title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
           </div>
 
@@ -285,7 +285,7 @@ function PlanCard({ plan: p, point, late, onEdit, onDelete, onStatusChange, onPr
         </div>
         <div className="flex gap-1 shrink-0">
           <button className="btn-ghost !p-1.5" onClick={onEdit} title="Modifier">✎</button>
-          <button className="btn-ghost !p-1.5 text-error" onClick={onDelete} title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
+          <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error" onClick={onDelete} title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       </div>
 

@@ -25,50 +25,118 @@ const ALL_TABS: Record<StatementTab, string> = {
 
 type ViewMode = 'synthetic' | 'monthly';
 
-function MonthlyTable({ months, lines }: { months: string[]; lines: any[] }) {
+function MonthlyTable({ months, lines, hideCodes }: { months: string[]; lines: any[]; hideCodes?: boolean }) {
+  // Grouper les lignes : chaque ligne total/grand termine un groupe dont les lignes précédentes sont les détails
+  const groups: Array<{ total: any; details: any[] }> = [];
+  let buffer: any[] = [];
+  for (const l of lines) {
+    if (l.total || l.grand) { groups.push({ total: l, details: buffer }); buffer = []; }
+    else buffer.push(l);
+  }
+  if (buffer.length > 0) groups.push({ total: null, details: buffer });
+
+  const keyOf = (g: typeof groups[number], idx: number) => g.total ? `t-${g.total.code}-${idx}` : `orph-${idx}`;
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(groups.map((g, i) => [keyOf(g, i), true]))
+  );
+  const expandAll = () => setExpanded(Object.fromEntries(groups.map((g, i) => [keyOf(g, i), true])));
+  const collapseAll = () => setExpanded({});
+
+  const renderRow = (l: any, i: string | number, isDetail = false) => (
+    <tr key={i} className={clsx(
+      'border-b border-primary-200 dark:border-primary-800',
+      l.total && !l.grand && 'bg-primary-200/40 dark:bg-primary-800/30 font-semibold',
+      l.grand && 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold',
+      isDetail && 'bg-primary-50/50 dark:bg-primary-950/30',
+    )}>
+      <td className="py-1.5 w-8 text-center"></td>
+      {!hideCodes && (
+        <td className="py-1.5 px-2 text-[10px] num font-mono text-primary-500">{l.accountCodes ?? ''}</td>
+      )}
+      <td className="py-1.5 px-2 sticky left-0 bg-inherit" style={{ paddingLeft: `${8 + (l.indent ?? 0) * 10}px` }}>
+        {l.label}
+      </td>
+      {l.values.map((v: number, idx: number) => (
+        <td key={idx} className={clsx('py-1.5 px-2 text-right num', isDetail && 'text-[10px]')}>
+          {v !== 0 ? fmtFull(v) : <span className="text-primary-400">—</span>}
+        </td>
+      ))}
+      <td className={clsx('py-1.5 px-2 text-right num font-bold', isDetail && 'text-[10px]')}>{fmtFull(l.ytd)}</td>
+    </tr>
+  );
+
+  const renderTotal = (l: any, k: string, hasDetails: boolean) => (
+    <tr key={k} className={clsx(
+      'border-b border-primary-200 dark:border-primary-800',
+      l.total && !l.grand && 'bg-primary-200/40 dark:bg-primary-800/30 font-semibold',
+      l.grand && 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold',
+    )}>
+      <td className="py-1.5 pl-2 w-8 text-center">
+        {hasDetails && (
+          <button onClick={() => setExpanded((e) => ({ ...e, [k]: !e[k] }))}
+            className="w-5 h-5 rounded hover:bg-primary-100 dark:hover:bg-primary-800 text-xs font-bold">
+            {expanded[k] ? '−' : '+'}
+          </button>
+        )}
+      </td>
+      {!hideCodes && (
+        <td className="py-1.5 px-2 text-[10px] num font-mono text-primary-500">{l.accountCodes ?? ''}</td>
+      )}
+      <td className="py-1.5 px-2 sticky left-0 bg-inherit" style={{ paddingLeft: `${8 + (l.indent ?? 0) * 10}px` }}>
+        {l.label}
+      </td>
+      {l.values.map((v: number, idx: number) => (
+        <td key={idx} className="py-1.5 px-2 text-right num">
+          {v !== 0 ? fmtFull(v) : <span className="text-primary-400">—</span>}
+        </td>
+      ))}
+      <td className="py-1.5 px-2 text-right num font-bold">{fmtFull(l.ytd)}</td>
+    </tr>
+  );
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead className="border-b-2 border-primary-300 dark:border-primary-700 sticky top-0 bg-primary-100 dark:bg-primary-900">
-          <tr>
-            <th className="text-left py-2 px-2 w-14 text-primary-500 uppercase tracking-wider text-[10px]">Code</th>
-            <th className="text-left py-2 px-2 sticky left-0 bg-primary-100 dark:bg-primary-900 z-10 min-w-[220px] text-primary-500 uppercase tracking-wider text-[10px]">Poste</th>
-            {months.map((m) => (
-              <th key={m} className="text-right py-2 px-2 min-w-[90px] text-primary-500 uppercase tracking-wider text-[10px]">{m}</th>
-            ))}
-            <th className="text-right py-2 px-2 min-w-[110px] font-bold text-primary-900 dark:text-primary-100 uppercase tracking-wider text-[10px]">YTD</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((l, i) => (
-            <tr key={i} className={clsx(
-              'border-b border-primary-200 dark:border-primary-800',
-              l.total && !l.grand && 'bg-primary-200/40 dark:bg-primary-800/30 font-semibold',
-              l.grand && 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold',
-            )}>
-              <td className="py-1.5 px-2 text-[10px] num text-primary-500">
-                {l.code.startsWith('_') ? '' : l.code}
-              </td>
-              <td className="py-1.5 px-2 sticky left-0 bg-inherit" style={{ paddingLeft: `${8 + (l.indent ?? 0) * 10}px` }}>
-                {l.label}
-              </td>
-              {l.values.map((v: number, idx: number) => (
-                <td key={idx} className="py-1.5 px-2 text-right num">
-                  {v !== 0 ? fmtFull(v) : <span className="text-primary-400">—</span>}
-                </td>
+    <div>
+      <div className="flex justify-end gap-1 p-2 border-b border-primary-200 dark:border-primary-800">
+        <button onClick={expandAll} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout déplier</button>
+        <span className="text-primary-300">·</span>
+        <button onClick={collapseAll} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout replier</button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="border-b-2 border-primary-300 dark:border-primary-700 sticky top-0 bg-primary-100 dark:bg-primary-900">
+            <tr>
+              <th className="w-8"></th>
+              {!hideCodes && <th className="text-left py-2 px-2 w-32 text-primary-500 uppercase tracking-wider text-[10px]">Comptes</th>}
+              <th className="text-left py-2 px-2 sticky left-0 bg-primary-100 dark:bg-primary-900 z-10 min-w-[220px] text-primary-500 uppercase tracking-wider text-[10px]">Poste</th>
+              {months.map((m) => (
+                <th key={m} className="text-right py-2 px-2 min-w-[90px] text-primary-500 uppercase tracking-wider text-[10px]">{m}</th>
               ))}
-              <td className="py-1.5 px-2 text-right num font-bold">{fmtFull(l.ytd)}</td>
+              <th className="text-right py-2 px-2 min-w-[110px] font-bold text-primary-900 dark:text-primary-100 uppercase tracking-wider text-[10px]">YTD</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {groups.map((g, gi) => {
+              const k = keyOf(g, gi);
+              const hasDetails = g.details.length > 0;
+              const isOpen = expanded[k];
+              if (!g.total) {
+                // Orphelins (pas de total de fin)
+                return g.details.map((d, di) => renderRow(d, `orph-${gi}-${di}`));
+              }
+              return [
+                isOpen ? g.details.map((d, di) => renderRow(d, `${k}-d-${di}`, true)) : null,
+                renderTotal(g.total, k, hasDetails),
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-const MONTH_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-function CRTab({ monthlyCR, cr, simplified }: { monthlyCR: any; cr: any[]; simplified?: boolean }) {
+function CRTab({ monthlyCR, cr, simplified, hideCodes }: { monthlyCR: any; cr: any[]; simplified?: boolean; hideCodes?: boolean }) {
   void simplified; // consumer may use it to disable sub-tabs if needed
   const [sub, setSub] = useState<'synthese' | 'mensuel' | 'budget'>('synthese');
   return (
@@ -87,10 +155,10 @@ function CRTab({ monthlyCR, cr, simplified }: { monthlyCR: any; cr: any[]; simpl
         ))}
       </div>
 
-      {sub === 'synthese' && <CRSynthese cr={cr} />}
+      {sub === 'synthese' && <CRSynthese cr={cr} hideCodes={hideCodes} />}
       {sub === 'mensuel' && (
         <Card title="Compte de résultat mensuel" subtitle="Valeurs du mois — non cumulées" padded={false}>
-          <MonthlyTable months={monthlyCR.months} lines={monthlyCR.lines} />
+          <MonthlyTable months={monthlyCR.months} lines={monthlyCR.lines} hideCodes={hideCodes} />
         </Card>
       )}
       {sub === 'budget' && <BudgetActualView />}
@@ -99,7 +167,8 @@ function CRTab({ monthlyCR, cr, simplified }: { monthlyCR: any; cr: any[]; simpl
 }
 
 // ─── CR SYNTHÈSE — DRAG & DROP + COLLAPSE + LABELS ÉDITABLES ─────
-function CRSynthese({ cr }: { cr: any[] }) {
+function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
+  void cr;
   const { currentOrgId } = useApp();
   const rows = useBudgetActual();
   const [order, setOrder] = useState<CRSection[]>(() => loadOrder(currentOrgId));
@@ -261,7 +330,7 @@ function CRSynthese({ cr }: { cr: any[] }) {
                     <tr key={r.code} className="bg-primary-50 dark:bg-primary-950">
                       <td colSpan={2}></td>
                       <td className="py-1.5 px-3 pl-12 text-xs">
-                        <span className="font-mono text-primary-500 mr-2">{r.code}</span>
+                        {!hideCodes && <span className="font-mono text-primary-500 mr-2">{r.code}</span>}
                         {r.label}
                       </td>
                       <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.realise)}</td>
@@ -306,7 +375,7 @@ function GripIcon() {
 }
 
 // ─── VARIATION CAPITAUX PROPRES — collapsible ──────────────────────
-function CapitalVarCard({ rows }: { rows: any[] }) {
+function CapitalVarCard({ rows, hideCodes }: { rows: any[]; hideCodes?: boolean }) {
   const [open, setOpen] = useState(true);
   const detail = rows.filter((r) => !r.rubrique.startsWith('TOTAL'));
   const total = rows.find((r) => r.rubrique.startsWith('TOTAL'));
@@ -325,6 +394,7 @@ function CapitalVarCard({ rows }: { rows: any[] }) {
           <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
             <tr>
               <th className="text-left py-2 w-8"></th>
+              {!hideCodes && <th className="text-left py-2 px-3 w-28">Comptes</th>}
               <th className="text-left py-2 px-3">Rubrique</th>
               <th className="text-right py-2 px-3">Solde ouverture</th>
               <th className="text-right py-2 px-3">Augmentation</th>
@@ -338,6 +408,7 @@ function CapitalVarCard({ rows }: { rows: any[] }) {
             {open && detail.map((m, i) => (
               <tr key={i} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30">
                 <td className="py-1.5"></td>
+                {!hideCodes && <td className="py-1.5 px-3 text-xs num font-mono text-primary-500">{m.accountCodes ?? ''}</td>}
                 <td className="py-1.5 px-3 text-xs">{m.rubrique}</td>
                 <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(m.ouverture)}</td>
                 <td className="py-1.5 px-3 text-right num text-xs text-success">{m.augmentation ? '+ ' + fmtFull(m.augmentation) : '—'}</td>
@@ -354,6 +425,7 @@ function CapitalVarCard({ rows }: { rows: any[] }) {
                     {open ? '−' : '+'}
                   </button>
                 </td>
+                {!hideCodes && <td className="py-2 px-3 text-xs num font-mono">10-15</td>}
                 <td className="py-2 px-3">{total.rubrique}</td>
                 <td className="py-2 px-3 text-right num">{fmtFull(total.ouverture)}</td>
                 <td className="py-2 px-3 text-right num">+ {fmtFull(total.augmentation)}</td>
@@ -378,6 +450,12 @@ function BudgetActualView() {
   const totalRealise = rows.reduce((s, r) => s + r.realise, 0);
   const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
 
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(sections.map((s) => [s.section, true]))
+  );
+  const expandAll = () => setExpanded(Object.fromEntries(sections.map((s) => [s.section, true])));
+  const collapseAll = () => setExpanded({});
+
   if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
 
   return (
@@ -401,9 +479,15 @@ function BudgetActualView() {
 
       {view === 'table' && (
         <Card padded={false}>
+          <div className="flex justify-end gap-1 p-2 border-b border-primary-200 dark:border-primary-800">
+            <button onClick={expandAll} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout déplier</button>
+            <span className="text-primary-300">·</span>
+            <button onClick={collapseAll} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout replier</button>
+          </div>
           <table className="w-full text-sm">
             <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700 sticky top-0 bg-primary-100 dark:bg-primary-900">
               <tr>
+                <th className="w-8"></th>
                 <th className="text-left py-2 px-3">Section</th>
                 <th className="text-left py-2 px-3">Compte</th>
                 <th className="text-left py-2 px-3">Libellé</th>
@@ -418,7 +502,13 @@ function BudgetActualView() {
               {sections.map((sec) => (
                 <>
                   <tr key={`s-${sec.section}`} className="bg-primary-200 dark:bg-primary-800 font-semibold">
-                    <td className="py-2 px-3" colSpan={3}>{sec.label}</td>
+                    <td className="py-2 pl-2 w-8 text-center">
+                      <button onClick={() => setExpanded((e) => ({ ...e, [sec.section]: !e[sec.section] }))}
+                        className="w-5 h-5 rounded hover:bg-primary-300 dark:hover:bg-primary-700 text-xs font-bold">
+                        {expanded[sec.section] ? '−' : '+'}
+                      </button>
+                    </td>
+                    <td className="py-2 px-3" colSpan={3}>{sec.label} <span className="text-[10px] text-primary-500 font-normal">({sec.rows.length} comptes)</span></td>
                     <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
                     <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
                     <td className={clsx('py-2 px-3 text-right num',
@@ -428,8 +518,9 @@ function BudgetActualView() {
                     <td className="py-2 px-3 text-right num text-xs">{sec.ecartPct >= 0 ? '+' : ''}{sec.ecartPct.toFixed(1)} %</td>
                     <td></td>
                   </tr>
-                  {sec.rows.map((r) => (
-                    <tr key={r.code} className="border-b border-primary-200 dark:border-primary-800 hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                  {expanded[sec.section] && sec.rows.map((r) => (
+                    <tr key={r.code} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30 hover:bg-primary-100 dark:hover:bg-primary-900">
+                      <td></td>
                       <td></td>
                       <td className="py-1.5 px-3 num font-mono text-xs">{r.code}</td>
                       <td className="py-1.5 px-3 text-xs">{r.label}</td>
@@ -616,11 +707,11 @@ export default function States() {
       {tab === 'bilan' && view === 'monthly' && (
         <>
           <Card title="BILAN — ACTIF" subtitle="Soldes à la fin de chaque mois" padded={false}>
-            <MonthlyTable months={monthlyBilan.months} lines={monthlyBilan.actif} />
+            <MonthlyTable months={monthlyBilan.months} lines={monthlyBilan.actif} hideCodes={hideCodes} />
           </Card>
           <div className="mt-6">
             <Card title="BILAN — PASSIF" subtitle="Soldes à la fin de chaque mois" padded={false}>
-              <MonthlyTable months={monthlyBilan.months} lines={monthlyBilan.passif} />
+              <MonthlyTable months={monthlyBilan.months} lines={monthlyBilan.passif} hideCodes={hideCodes} />
             </Card>
           </div>
         </>
@@ -644,17 +735,17 @@ export default function States() {
         </Card>
       )}
 
-      {tab === 'cr' && <CRTab monthlyCR={monthlyCR} cr={system === 'Allégé' ? simplifyCR(cr) : cr} simplified={system === 'Allégé'} />}
+      {tab === 'cr' && <CRTab monthlyCR={monthlyCR} cr={system === 'Allégé' ? simplifyCR(cr) : cr} simplified={system === 'Allégé'} hideCodes={hideCodes} />}
 
       {tab === 'tft' && view === 'monthly' && (
         <Card title="Tableau des Flux de Trésorerie — mensuel" subtitle="Méthode indirecte SYSCOHADA · Jan → Déc + cumul YTD" padded={false}>
-          <MonthlyTable months={monthlyTFT.months} lines={monthlyTFT.lines} />
+          <MonthlyTable months={monthlyTFT.months} lines={monthlyTFT.lines} hideCodes />
         </Card>
       )}
 
       {tab === 'tft' && view === 'synthetic' && tft && (
         <Card title="Tableau des Flux de Trésorerie — synthétique" subtitle="Méthode indirecte — SYSCOHADA révisé 2017">
-          <CollapsibleTable lines={tft.lines} hideCodes={hideCodes} />
+          <CollapsibleTable lines={tft.lines} hideCodes />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-primary-200 dark:border-primary-800">
             <StatBox label="CAFG" value={tft.totals.cafg} />
             <StatBox label="Flux opérationnels" value={tft.totals.fluxOperationnels} highlight />
@@ -686,7 +777,7 @@ export default function States() {
       )}
 
       {tab === 'cp' && capitalVar.length > 0 && (
-        <CapitalVarCard rows={capitalVar} />
+        <CapitalVarCard rows={capitalVar} hideCodes={hideCodes} />
       )}
 
       {tab === 'smt' && <SMTView balance={balance} currency={org?.currency ?? 'XOF'} />}

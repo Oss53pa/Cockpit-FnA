@@ -616,7 +616,7 @@ function ISBudgetVsActual() {
           <div key={sec.section} className="card overflow-hidden">
             {/* Section header noir avec n° */}
             <div className="bg-primary-900 dark:bg-primary-800 px-4 py-2 flex items-center justify-between">
-              <p className="text-error font-bold text-sm">{idx + 1}. {labels[sec.section]}</p>
+              <p className="text-primary-900 dark:text-primary-50 font-bold text-sm">{idx + 1}. {labels[sec.section]}</p>
               <p className="text-primary-50 text-xs font-semibold">Mars</p>
             </div>
 
@@ -687,7 +687,7 @@ function ISBudgetVsActual() {
                   </tr>
                   {/* Ligne d'ajustement rouge */}
                   <tr className="border-t-2 border-error font-bold">
-                    <td className="py-2 px-3 text-error uppercase text-xs tracking-wider">Adjusted total</td>
+                    <td className="py-2 px-3 text-primary-900 dark:text-primary-50 uppercase text-xs tracking-wider">Adjusted total</td>
                     <td className="text-right num py-2 px-2">{fmtFull(totBudget)}</td>
                     <td className="text-right num py-2 px-2">{fmtFull(totRealise)}</td>
                     <td className={clsx('text-right num py-2 px-2', totDiff < 0 ? 'text-error' : '')}>
@@ -742,8 +742,8 @@ function CashflowStatement() {
     <div className="card overflow-hidden">
       {/* Header rouge style "Cashflow statement" */}
       <div className="bg-white dark:bg-primary-900 border-b border-primary-200 dark:border-primary-800 px-4 py-2 flex justify-between items-center">
-        <p className="text-error font-bold text-sm">Cashflow statement</p>
-        <p className="text-error font-bold text-xs">Mars</p>
+        <p className="text-primary-900 dark:text-primary-50 font-bold text-sm">Cashflow statement</p>
+        <p className="text-primary-500 font-bold text-xs">Mars</p>
       </div>
 
       {/* Bandeau 5 KPIs */}
@@ -825,10 +825,10 @@ function ReceivablesReview() {
     <div className="card overflow-hidden">
       {/* Header rouge */}
       <div className="bg-white dark:bg-primary-900 border-b border-primary-200 dark:border-primary-800 px-4 py-2 flex justify-between items-center">
-        <p className="text-error font-bold text-sm">5. Customer & others receivable management review</p>
-        <p className="text-error font-bold text-xs">Mars</p>
+        <p className="text-primary-900 dark:text-primary-50 font-bold text-sm">5. Customer & others receivable management review</p>
+        <p className="text-primary-500 font-bold text-xs">Mars</p>
       </div>
-      <p className="px-4 py-2 italic text-error text-xs">This discussion concerns an overview of the level of receivables and debts at the end of 31 mars {currentYear}.</p>
+      <p className="px-4 py-2 italic text-primary-500 text-xs">This discussion concerns an overview of the level of receivables and debts at the end of 31 mars {currentYear}.</p>
 
       {/* 4 KPI cards sombres */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4">

@@ -107,7 +107,7 @@ export default function Orgs() {
                   </select>
                 </div>
               </div>
-              <button className="btn-ghost !p-1.5 text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
+              <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>

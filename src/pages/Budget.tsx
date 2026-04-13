@@ -333,7 +333,7 @@ function Versions({ versions, onOpen, onDuplicate, onDelete, onCreate }: {
             <Badge variant="info">Version</Badge>
             <div className="flex gap-1">
               <button className="btn-ghost !p-1.5" title="Dupliquer" onClick={() => onDuplicate(v)}><Copy className="w-4 h-4" /></button>
-              <button className="btn-ghost !p-1.5 text-error" title="Supprimer" onClick={() => onDelete(v)}><Trash2 className="w-4 h-4" /></button>
+              <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error" title="Supprimer" onClick={() => onDelete(v)}><Trash2 className="w-4 h-4" /></button>
             </div>
           </div>
           <p className="font-semibold text-lg">{v}</p>

@@ -178,20 +178,23 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
   );
 }
 
-// ─── 2. BALANCE GÉNÉRALE ──────────────────────────────────────────
-const bgColumns: Column<BalanceRow>[] = [
-  { header: 'Compte',  width: '140px', cell: (r) => <span className="num font-mono">{r.account}</span> },
-  { header: 'Libellé', width: '1fr',   cell: (r) => <span className="text-xs">{r.label}</span> },
-  { header: 'Débit',   width: '160px', align: 'right', cell: (r) => <span className="num">{r.debit > 0 ? fmtFull(r.debit) : <span className="text-primary-400">—</span>}</span> },
-  { header: 'Crédit',  width: '160px', align: 'right', cell: (r) => <span className="num">{r.credit > 0 ? fmtFull(r.credit) : <span className="text-primary-400">—</span>}</span> },
-  { header: 'Solde D', width: '140px', align: 'right', cell: (r) => <span className="num">{r.soldeD > 0 ? fmtFull(r.soldeD) : ''}</span> },
-  { header: 'Solde C', width: '140px', align: 'right', cell: (r) => <span className="num">{r.soldeC > 0 ? fmtFull(r.soldeC) : ''}</span> },
-];
+// ─── 2. BALANCE GÉNÉRALE (avec regroupement par classe collapsible) ──
+const CLASS_LABELS: Record<string, string> = {
+  '1': 'Classe 1 — Ressources durables',
+  '2': 'Classe 2 — Actif immobilisé',
+  '3': 'Classe 3 — Stocks',
+  '4': 'Classe 4 — Tiers',
+  '5': 'Classe 5 — Trésorerie',
+  '6': 'Classe 6 — Charges',
+  '7': 'Classe 7 — Produits',
+  '8': 'Classe 8 — Autres',
+};
 
 function BGView({ orgId, year, importId }: { orgId: string; year: number; importId: string }) {
   const [classFilter, setClassFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<BalanceRow[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ '1': true, '2': true, '3': true, '4': true, '5': true, '6': true, '7': true, '8': true });
   useEffect(() => { if (orgId) computeBalance({ orgId, year, importId }).then(setRows); }, [orgId, year, importId]);
 
   const filtered = rows
@@ -202,31 +205,97 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
   const totSD = filtered.reduce((s, r) => s + r.soldeD, 0);
   const totSC = filtered.reduce((s, r) => s + r.soldeC, 0);
 
+  // Groupement par classe
+  const byClass = new Map<string, BalanceRow[]>();
+  filtered.forEach((r) => {
+    const k = r.account[0];
+    if (!byClass.has(k)) byClass.set(k, []);
+    byClass.get(k)!.push(r);
+  });
+  const classes = Array.from(byClass.keys()).sort();
+
+  const expandAll = () => setExpanded(Object.fromEntries(classes.map((c) => [c, true])));
+  const collapseAll = () => setExpanded({});
+
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
           <input className="input !py-1.5 max-w-xs" placeholder="🔍 Compte / libellé…" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="input !w-auto !py-1.5" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
             <option value="all">Toutes classes</option>
             {['1','2','3','4','5','6','7','8'].map((c) => <option key={c} value={c}>Classe {c}</option>)}
           </select>
+          <button onClick={expandAll} className="text-[11px] text-primary-500 hover:text-primary-900 px-2">Tout déplier</button>
+          <span className="text-primary-300">·</span>
+          <button onClick={collapseAll} className="text-[11px] text-primary-500 hover:text-primary-900 px-2">Tout replier</button>
           <span className="ml-auto text-xs text-primary-500"><span className="num font-semibold">{filtered.length}</span> compte(s) sur <span className="num">{rows.length}</span></span>
           <EquilibreBadge balanced={Math.abs(totD - totC) < 1} delta={totD - totC} />
         </div>
       </Card>
+
       <Card padded={false}>
-        <VirtualTable
-          rows={filtered} rowKey={(r) => r.account} rowHeight={30} height={560}
-          empty="Aucun compte" columns={bgColumns}
-          footer={<>
-            <div className="py-2 px-3 col-span-2">TOTAUX</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totSD)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totSC)}</div>
-          </>}
-        />
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700 sticky top-0 bg-primary-100 dark:bg-primary-900 z-10">
+              <tr>
+                <th className="text-left py-2 w-8"></th>
+                <th className="text-left py-2 px-3">Compte</th>
+                <th className="text-left py-2 px-3">Libellé</th>
+                <th className="text-right py-2 px-3">Débit</th>
+                <th className="text-right py-2 px-3">Crédit</th>
+                <th className="text-right py-2 px-3">Solde D</th>
+                <th className="text-right py-2 px-3">Solde C</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+              {classes.map((c) => {
+                const cRows = byClass.get(c) ?? [];
+                const cD = cRows.reduce((s, r) => s + r.debit, 0);
+                const cC = cRows.reduce((s, r) => s + r.credit, 0);
+                const cSD = cRows.reduce((s, r) => s + r.soldeD, 0);
+                const cSC = cRows.reduce((s, r) => s + r.soldeC, 0);
+                const isOpen = expanded[c];
+                return [
+                  <tr key={`h-${c}`} className="bg-primary-200 dark:bg-primary-800 font-semibold">
+                    <td className="py-2 pl-2 w-8 text-center">
+                      <button onClick={() => setExpanded((e) => ({ ...e, [c]: !e[c] }))} className="w-5 h-5 rounded hover:bg-primary-300 dark:hover:bg-primary-700 text-xs font-bold">
+                        {isOpen ? '−' : '+'}
+                      </button>
+                    </td>
+                    <td className="py-2 px-3 num font-mono">Cl. {c}</td>
+                    <td className="py-2 px-3">{CLASS_LABELS[c] ?? `Classe ${c}`} <span className="text-[10px] text-primary-500 font-normal">({cRows.length} comptes)</span></td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(cD)}</td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(cC)}</td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(cSD)}</td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(cSC)}</td>
+                  </tr>,
+                  ...(isOpen ? cRows.map((r) => (
+                    <tr key={r.account} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                      <td></td>
+                      <td className="py-1.5 px-3 num font-mono text-xs">{r.account}</td>
+                      <td className="py-1.5 px-3 text-xs">{r.label}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.debit)}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.credit)}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{r.soldeD ? fmtFull(r.soldeD) : ''}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{r.soldeC ? fmtFull(r.soldeC) : ''}</td>
+                    </tr>
+                  )) : []),
+                ];
+              })}
+            </tbody>
+            <tfoot className="border-t-2 border-primary-300 dark:border-primary-700 bg-primary-100 dark:bg-primary-900 sticky bottom-0">
+              <tr className="font-bold">
+                <td></td>
+                <td colSpan={2} className="py-2 px-3">TOTAUX</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(totD)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(totC)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(totSD)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(totSC)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </Card>
     </div>
   );

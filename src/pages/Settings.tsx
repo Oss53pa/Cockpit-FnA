@@ -176,7 +176,7 @@ function TabSocietes() {
                       : <button className="badge bg-primary-200 dark:bg-primary-800 hover:bg-primary-300 dark:hover:bg-primary-700" onClick={() => setCurrentOrg(o.id)}>Sélectionner</button>}
                   </div>
                 </div>
-                <button className="btn-ghost !p-1.5 text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
+                <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

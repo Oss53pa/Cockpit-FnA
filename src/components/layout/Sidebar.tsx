@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Upload, FileSpreadsheet, Calculator, BarChart3,
+  LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
 } from 'lucide-react';
 import clsx from 'clsx';
