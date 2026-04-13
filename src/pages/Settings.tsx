@@ -74,16 +74,17 @@ function TabApparence() {
                     <div key={i} className="flex-1 h-6 first:rounded-l last:rounded-r" style={{ background: c }} />
                   ))}
                 </div>
-                <div className="flex gap-1 text-[10px] text-primary-500">
-                  <span className="px-1.5 py-0.5 rounded text-white" style={{ background: p.tableHeader, color: p.tableHeaderText }}>Table header</span>
-                  <span className="px-1.5 py-0.5 rounded" style={{ background: p.primary, color: '#fff' }}>Primaire</span>
+                <div className="flex gap-0.5">
+                  {p.scale.map((c, i) => (
+                    <div key={i} className="flex-1 h-3 first:rounded-l last:rounded-r" style={{ background: c }} />
+                  ))}
                 </div>
               </button>
             );
           })}
         </div>
         <p className="text-xs text-primary-500 mt-4">
-          💡 Le changement est instantané sur tous les graphiques (camembert, barres, courbes), les en-têtes de tables, et les accents primaires.
+          Le changement est instantané sur tous les graphiques (camembert, barres, courbes), les en-têtes de tables, et les accents primaires.
         </p>
       </Card>
 
@@ -225,9 +226,9 @@ function TabRatios() {
     <Card title="Ratios de référence" subtitle="Cibles et seuils comparés aux résultats calculés"
       action={<button className="btn-outline" onClick={() => { if (confirm('Restaurer les cibles par défaut ?')) reset(); }}>Restaurer défaut</button>}>
       <p className="text-xs text-primary-500 mb-4">
-        🟢 <strong>OK</strong> : le ratio atteint ou dépasse la cible &nbsp;·&nbsp;
-        🟠 <strong>Vigilance</strong> : ≥ seuil de vigilance × cible &nbsp;·&nbsp;
-        🔴 <strong>Alerte</strong> : en dessous du seuil d'alerte
+        OK <strong>OK</strong> : le ratio atteint ou dépasse la cible &nbsp;·&nbsp;
+        -- <strong>Vigilance</strong> : ≥ seuil de vigilance × cible &nbsp;·&nbsp;
+        !! <strong>Alerte</strong> : en dessous du seuil d'alerte
       </p>
 
       {families.map((fam) => {
@@ -286,7 +287,7 @@ function TabRatios() {
       })}
 
       <div className="mt-4 p-3 bg-primary-200/30 dark:bg-primary-800/30 rounded-lg text-xs text-primary-600 dark:text-primary-400">
-        💡 « Inversé » : cocher si une valeur plus basse est meilleure (ex : DSO, endettement). Les modifications sont appliquées immédiatement sur la page Ratios.
+        « Inversé » : cocher si une valeur plus basse est meilleure (ex : DSO, endettement). Les modifications sont appliquées immédiatement sur la page Ratios.
       </div>
     </Card>
   );

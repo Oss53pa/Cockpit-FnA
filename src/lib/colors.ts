@@ -1,4 +1,4 @@
-// Palette grayscale + statuts OHADA
+// Palette grayscale + statuts OHADA (fallback quand le store n'est pas disponible)
 export const C = {
   // Grayscale (pour charts, KPIs, éléments neutres)
   primary:   '#171717',
@@ -20,4 +20,5 @@ export const C = {
   accent4:   '#d4d4d4',
 };
 
-export const CHART_COLORS = ['#0a0a0a', '#262626', '#404040', '#525252', '#737373', '#a3a3a3', '#d4d4d4'];
+// Couleurs de graphique par défaut (utilisées si aucune palette n'est chargée)
+export const CHART_COLORS = ['#374151', '#6b7280', '#9ca3af', '#4b5563', '#d1d5db', '#1f2937', '#e5e7eb'];

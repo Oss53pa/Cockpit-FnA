@@ -36,7 +36,7 @@
 
 @layer components {
   .card {
-    @apply bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl;
+    @apply bg-white dark:bg-primary-900 border border-primary-200/60 dark:border-primary-800 rounded-xl shadow-sm;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;

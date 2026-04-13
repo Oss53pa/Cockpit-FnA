@@ -7,15 +7,19 @@ import { BalanceRow } from './balance';
 import { Ratio } from './ratios';
 
 // ─── PALETTES ──────────────────────────────────────────────────────
-export type PaletteKey = 'mono' | 'corporate' | 'forest' | 'sunset' | 'ocean' | 'bw';
+export type PaletteKey =
+  | 'graphite' | 'ardoise' | 'marine' | 'foret'
+  | 'sable' | 'bordeaux' | 'acier' | 'aubergine';
 
 export const PALETTES: Record<PaletteKey, { name: string; primary: string; secondary: string; accent: string; success: string; danger: string; neutral: string; tableHeader: string; tableHeaderText: string; chartColors: string[] }> = {
-  mono:      { name: 'Monochrome (défaut)', primary: '#171717', secondary: '#404040', accent: '#737373', success: '#22c55e', danger: '#ef4444', neutral: '#a3a3a3', tableHeader: '#171717', tableHeaderText: '#fafafa', chartColors: ['#0a0a0a','#262626','#404040','#525252','#737373','#a3a3a3','#d4d4d4'] },
-  corporate: { name: 'Corporate (bleu)',    primary: '#1e40af', secondary: '#3b82f6', accent: '#6366f1', success: '#10b981', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#1e3a5f', tableHeaderText: '#ffffff', chartColors: ['#1e3a5f','#1e40af','#3b82f6','#60a5fa','#93c5fd','#bfdbfe','#dbeafe'] },
-  forest:    { name: 'Forêt (vert)',        primary: '#065f46', secondary: '#10b981', accent: '#14b8a6', success: '#22c55e', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#064e3b', tableHeaderText: '#ffffff', chartColors: ['#064e3b','#065f46','#047857','#10b981','#34d399','#6ee7b7','#a7f3d0'] },
-  sunset:    { name: 'Coucher (orange)',    primary: '#9a3412', secondary: '#f97316', accent: '#fb923c', success: '#22c55e', danger: '#dc2626', neutral: '#94a3b8', tableHeader: '#7c2d12', tableHeaderText: '#ffffff', chartColors: ['#7c2d12','#9a3412','#c2410c','#f97316','#fb923c','#fdba74','#fed7aa'] },
-  ocean:     { name: 'Océan (cyan)',        primary: '#0e7490', secondary: '#06b6d4', accent: '#22d3ee', success: '#10b981', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#155e75', tableHeaderText: '#ffffff', chartColors: ['#155e75','#0e7490','#0891b2','#06b6d4','#22d3ee','#67e8f9','#a5f3fc'] },
-  bw:        { name: 'N&B strict',          primary: '#000000', secondary: '#525252', accent: '#737373', success: '#000000', danger: '#000000', neutral: '#a3a3a3', tableHeader: '#000000', tableHeaderText: '#ffffff', chartColors: ['#000000','#262626','#404040','#525252','#737373','#a3a3a3','#d4d4d4'] },
+  graphite:  { name: 'Graphite',   primary: '#171717', secondary: '#404040', accent: '#737373', success: '#22c55e', danger: '#ef4444', neutral: '#a3a3a3', tableHeader: '#171717', tableHeaderText: '#fafafa', chartColors: ['#374151','#6b7280','#9ca3af','#4b5563','#d1d5db','#1f2937','#e5e7eb'] },
+  ardoise:   { name: 'Ardoise',    primary: '#0f172a', secondary: '#334155', accent: '#64748b', success: '#22c55e', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#0f172a', tableHeaderText: '#f8fafc', chartColors: ['#334155','#64748b','#94a3b8','#475569','#cbd5e1','#1e293b','#e2e8f0'] },
+  marine:    { name: 'Marine',     primary: '#122a52', secondary: '#2f5285', accent: '#456da0', success: '#22c55e', danger: '#ef4444', neutral: '#9bb5e0', tableHeader: '#122a52', tableHeaderText: '#f0f5ff', chartColors: ['#1e3a6a','#456da0','#6889c0','#2f5285','#9bb5e0','#0a1a38','#c2d4f2'] },
+  foret:     { name: 'Forêt',      primary: '#183024', secondary: '#375e4c', accent: '#4d8068', success: '#22c55e', danger: '#ef4444', neutral: '#a3c5b0', tableHeader: '#183024', tableHeaderText: '#f2f7f4', chartColors: ['#264536','#4d8068','#6fa388','#375e4c','#a3c5b0','#0e1f16','#c8ddd0'] },
+  sable:     { name: 'Sable',      primary: '#3a3022', secondary: '#6e604a', accent: '#8e7d66', success: '#22c55e', danger: '#ef4444', neutral: '#b3a28a', tableHeader: '#3a3022', tableHeaderText: '#faf8f5', chartColors: ['#544834','#8e7d66','#b3a28a','#6e604a','#d4c7b5','#251e14','#e8dfd4'] },
+  bordeaux:  { name: 'Bordeaux',   primary: '#421c1c', secondary: '#7a3c3c', accent: '#9c5555', success: '#22c55e', danger: '#ef4444', neutral: '#c07878', tableHeader: '#421c1c', tableHeaderText: '#fdf5f5', chartColors: ['#5e2a2a','#9c5555','#c07878','#7a3c3c','#dba8a8','#2c1010','#eecfcf'] },
+  acier:     { name: 'Acier',      primary: '#212e3b', secondary: '#46596a', accent: '#5f7485', success: '#22c55e', danger: '#ef4444', neutral: '#8294a5', tableHeader: '#212e3b', tableHeaderText: '#f4f6f8', chartColors: ['#324050','#5f7485','#8294a5','#46596a','#adbac7','#141e28','#d0d8e0'] },
+  aubergine: { name: 'Aubergine',  primary: '#321c3a', secondary: '#613c6c', accent: '#7e558a', success: '#22c55e', danger: '#ef4444', neutral: '#a078aa', tableHeader: '#321c3a', tableHeaderText: '#f9f5fa', chartColors: ['#482a52','#7e558a','#a078aa','#613c6c','#c4a8cc','#201028','#decfe4'] },
 };
 
 // ─── BLOCS ─────────────────────────────────────────────────────────
@@ -69,7 +73,7 @@ export const DEFAULT_CONFIG = (period: string): ReportConfig => ({
     confidentiality: 'interne',
   },
   format: 'A4_portrait',
-  palette: 'mono',
+  palette: 'graphite',
   options: { includeCover: true, includeTOC: true, includeFooter: true, includePageNumbers: true },
   blocks: [],
   recipients: [],

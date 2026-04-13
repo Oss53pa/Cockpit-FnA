@@ -2,6 +2,7 @@ import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import clsx from 'clsx';
 import { fmtMoney, fmtPct } from '../../lib/format';
 import { Sparkline } from './Sparkline';
+import { usePalette } from '../../store/theme';
 
 type Props = {
   label: string;
@@ -15,12 +16,12 @@ type Props = {
   subtitle?: string;
 };
 
-const accents = {
-  default: { ring: 'from-primary-900 to-primary-700 dark:from-primary-100 dark:to-primary-300', color: '#171717' },
-  success: { ring: 'from-success to-success/60', color: '#22c55e' },
-  warning: { ring: 'from-warning to-warning/60', color: '#f59e0b' },
-  error:   { ring: 'from-error to-error/60', color: '#ef4444' },
-  info:    { ring: 'from-info to-info/60', color: '#3b82f6' },
+const accentRings = {
+  default: 'from-primary-900 to-primary-700 dark:from-primary-100 dark:to-primary-300',
+  success: 'from-primary-800 to-primary-600 dark:from-primary-200 dark:to-primary-400',
+  warning: 'from-primary-700 to-primary-500 dark:from-primary-300 dark:to-primary-500',
+  error:   'from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-600',
+  info:    'from-primary-500 to-primary-300 dark:from-primary-500 dark:to-primary-700',
 };
 
 export function KpiPremium({ label, value, previous, trend, currency = 'XOF', format = 'money', inverse = false, accent = 'default', subtitle }: Props) {
@@ -36,11 +37,12 @@ export function KpiPremium({ label, value, previous, trend, currency = 'XOF', fo
     return new Intl.NumberFormat('fr-FR').format(value);
   };
 
-  const a = accents[accent];
+  const palette = usePalette();
+  const ring = accentRings[accent];
 
   return (
     <div className="relative card overflow-hidden group">
-      <div className={clsx('absolute top-0 left-0 right-0 h-1 bg-gradient-to-r opacity-80', a.ring)} />
+      <div className={clsx('absolute top-0 left-0 right-0 h-1 bg-gradient-to-r opacity-80', ring)} />
       <div className="p-5">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
@@ -59,7 +61,7 @@ export function KpiPremium({ label, value, previous, trend, currency = 'XOF', fo
         </p>
         {trend && trend.length > 1 && (
           <div className="-mx-1 mt-2 opacity-90">
-            <Sparkline data={trend} color={a.color} height={36} />
+            <Sparkline data={trend} color={palette.scale[9]} height={36} />
           </div>
         )}
       </div>
