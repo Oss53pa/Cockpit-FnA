@@ -7,19 +7,17 @@ import { BalanceRow } from './balance';
 import { Ratio } from './ratios';
 
 // ─── PALETTES ──────────────────────────────────────────────────────
-export type PaletteKey =
-  | 'graphite' | 'ardoise' | 'marine' | 'foret'
-  | 'sable' | 'bordeaux' | 'acier' | 'aubergine';
+export type PaletteKey = string;
 
-export const PALETTES: Record<PaletteKey, { name: string; primary: string; secondary: string; accent: string; success: string; danger: string; neutral: string; tableHeader: string; tableHeaderText: string; chartColors: string[] }> = {
-  graphite:  { name: 'Graphite',   primary: '#171717', secondary: '#404040', accent: '#737373', success: '#22c55e', danger: '#ef4444', neutral: '#a3a3a3', tableHeader: '#171717', tableHeaderText: '#fafafa', chartColors: ['#374151','#6b7280','#9ca3af','#4b5563','#d1d5db','#1f2937','#e5e7eb'] },
-  ardoise:   { name: 'Ardoise',    primary: '#0f172a', secondary: '#334155', accent: '#64748b', success: '#22c55e', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#0f172a', tableHeaderText: '#f8fafc', chartColors: ['#334155','#64748b','#94a3b8','#475569','#cbd5e1','#1e293b','#e2e8f0'] },
-  marine:    { name: 'Marine',     primary: '#122a52', secondary: '#2f5285', accent: '#456da0', success: '#22c55e', danger: '#ef4444', neutral: '#9bb5e0', tableHeader: '#122a52', tableHeaderText: '#f0f5ff', chartColors: ['#1e3a6a','#456da0','#6889c0','#2f5285','#9bb5e0','#0a1a38','#c2d4f2'] },
-  foret:     { name: 'Forêt',      primary: '#183024', secondary: '#375e4c', accent: '#4d8068', success: '#22c55e', danger: '#ef4444', neutral: '#a3c5b0', tableHeader: '#183024', tableHeaderText: '#f2f7f4', chartColors: ['#264536','#4d8068','#6fa388','#375e4c','#a3c5b0','#0e1f16','#c8ddd0'] },
-  sable:     { name: 'Sable',      primary: '#3a3022', secondary: '#6e604a', accent: '#8e7d66', success: '#22c55e', danger: '#ef4444', neutral: '#b3a28a', tableHeader: '#3a3022', tableHeaderText: '#faf8f5', chartColors: ['#544834','#8e7d66','#b3a28a','#6e604a','#d4c7b5','#251e14','#e8dfd4'] },
-  bordeaux:  { name: 'Bordeaux',   primary: '#421c1c', secondary: '#7a3c3c', accent: '#9c5555', success: '#22c55e', danger: '#ef4444', neutral: '#c07878', tableHeader: '#421c1c', tableHeaderText: '#fdf5f5', chartColors: ['#5e2a2a','#9c5555','#c07878','#7a3c3c','#dba8a8','#2c1010','#eecfcf'] },
-  acier:     { name: 'Acier',      primary: '#212e3b', secondary: '#46596a', accent: '#5f7485', success: '#22c55e', danger: '#ef4444', neutral: '#8294a5', tableHeader: '#212e3b', tableHeaderText: '#f4f6f8', chartColors: ['#324050','#5f7485','#8294a5','#46596a','#adbac7','#141e28','#d0d8e0'] },
-  aubergine: { name: 'Aubergine',  primary: '#321c3a', secondary: '#613c6c', accent: '#7e558a', success: '#22c55e', danger: '#ef4444', neutral: '#a078aa', tableHeader: '#321c3a', tableHeaderText: '#f9f5fa', chartColors: ['#482a52','#7e558a','#a078aa','#613c6c','#c4a8cc','#201028','#decfe4'] },
+export const PALETTES: Record<string, { name: string; primary: string; secondary: string; accent: string; success: string; danger: string; neutral: string; tableHeader: string; tableHeaderText: string; chartColors: string[] }> = {
+  graphite:  { name: 'Graphite',   primary: '#171717', secondary: '#404040', accent: '#737373', success: '#22c55e', danger: '#ef4444', neutral: '#a3a3a3', tableHeader: '#171717', tableHeaderText: '#fafafa', chartColors: ['#374151','#dc2626','#2563eb','#d97706','#059669','#7c3aed','#db2777'] },
+  ardoise:   { name: 'Ardoise',    primary: '#0f172a', secondary: '#334155', accent: '#64748b', success: '#22c55e', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#0f172a', tableHeaderText: '#f8fafc', chartColors: ['#475569','#0ea5e9','#f59e0b','#10b981','#8b5cf6','#f43f5e','#06b6d4'] },
+  marine:    { name: 'Marine',     primary: '#122a52', secondary: '#2f5285', accent: '#456da0', success: '#22c55e', danger: '#ef4444', neutral: '#9bb5e0', tableHeader: '#122a52', tableHeaderText: '#f0f5ff', chartColors: ['#1e40af','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#06b6d4'] },
+  foret:     { name: 'Forêt',      primary: '#183024', secondary: '#375e4c', accent: '#4d8068', success: '#22c55e', danger: '#ef4444', neutral: '#a3c5b0', tableHeader: '#183024', tableHeaderText: '#f2f7f4', chartColors: ['#065f46','#d97706','#dc2626','#2563eb','#7c3aed','#db2777','#0891b2'] },
+  sable:     { name: 'Sable',      primary: '#3a3022', secondary: '#6e604a', accent: '#8e7d66', success: '#22c55e', danger: '#ef4444', neutral: '#b3a28a', tableHeader: '#3a3022', tableHeaderText: '#faf8f5', chartColors: ['#92400e','#1d4ed8','#047857','#be123c','#6d28d9','#0e7490','#a16207'] },
+  bordeaux:  { name: 'Bordeaux',   primary: '#421c1c', secondary: '#7a3c3c', accent: '#9c5555', success: '#22c55e', danger: '#ef4444', neutral: '#c07878', tableHeader: '#421c1c', tableHeaderText: '#fdf5f5', chartColors: ['#991b1b','#2563eb','#d97706','#059669','#7c3aed','#0891b2','#c2410c'] },
+  acier:     { name: 'Acier',      primary: '#212e3b', secondary: '#46596a', accent: '#5f7485', success: '#22c55e', danger: '#ef4444', neutral: '#8294a5', tableHeader: '#212e3b', tableHeaderText: '#f4f6f8', chartColors: ['#334155','#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899'] },
+  aubergine: { name: 'Aubergine',  primary: '#321c3a', secondary: '#613c6c', accent: '#7e558a', success: '#22c55e', danger: '#ef4444', neutral: '#a078aa', tableHeader: '#321c3a', tableHeaderText: '#f9f5fa', chartColors: ['#7c3aed','#2563eb','#db2777','#f59e0b','#10b981','#ef4444','#0891b2'] },
 };
 
 // ─── BLOCS ─────────────────────────────────────────────────────────
