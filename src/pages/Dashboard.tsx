@@ -915,14 +915,107 @@ function DarkKPI({ label, value }: { label: string; value: string }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// CR — DETAIL D'UNE SECTION (dashboard dédié)
+// CR — TABLE D'UNE SECTION (vue table seule, sans graphiques)
+// ══════════════════════════════════════════════════════════════════════
+function CRSecTable({ sectionKey }: { sectionKey: any }) {
+  const rows = useBudgetActual();
+  const { currentOrgId } = useApp();
+  const sections = bySection(rows, currentOrgId);
+  const labels = loadLabels(currentOrgId);
+  const sec = sections.find((s) => s.section === sectionKey);
+  const [open, setOpen] = useState(true);
+
+  if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
+  if (!sec) return <div className="py-12 text-center text-primary-500">Section introuvable</div>;
+
+  return (
+    <>
+      {/* KPIs en haut, sobres */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <KPICard title="Comptes" value={String(sec.rows.length)} icon="◫" />
+        <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon="◆" />
+        <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon="○" />
+        <KPICard title="Écart" value={fmtK(sec.totalEcart)} unit="XOF" subValue={`${sec.ecartPct.toFixed(1)} %`} icon={sec.totalEcart >= 0 ? '↑' : '↓'} />
+      </div>
+
+      <ChartCard title={`Détail des comptes — ${labels[sec.section]}`}
+        action={
+          <div className="flex gap-1">
+            <button onClick={() => setOpen(true)} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout déplier</button>
+            <span className="text-primary-300">·</span>
+            <button onClick={() => setOpen(false)} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout replier</button>
+          </div>
+        }>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
+              <tr>
+                <th className="text-left py-2 w-8"></th>
+                <th className="text-left py-2 px-3">Compte</th>
+                <th className="text-left py-2 px-3">Libellé</th>
+                <th className="text-right py-2 px-3">Réalisé</th>
+                <th className="text-right py-2 px-3">Budget</th>
+                <th className="text-right py-2 px-3">Écart</th>
+                <th className="text-right py-2 px-3">Écart %</th>
+                <th className="text-right py-2 px-3">% section</th>
+                <th className="text-center py-2 px-3">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {open && sec.rows.map((r) => (
+                <tr key={r.code} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30 hover:bg-primary-100 dark:hover:bg-primary-900">
+                  <td></td>
+                  <td className="py-2 px-3 num font-mono">{r.code}</td>
+                  <td className="py-2 px-3 text-xs">{r.label}</td>
+                  <td className="py-2 px-3 text-right num font-semibold">{fmtFull(r.realise)}</td>
+                  <td className="py-2 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
+                  <td className={clsx('py-2 px-3 text-right num',
+                    r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
+                    {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
+                  </td>
+                  <td className="py-2 px-3 text-right num text-xs">{r.ecartPct >= 0 ? '+' : ''}{r.ecartPct.toFixed(1)} %</td>
+                  <td className="py-2 px-3 text-right num text-xs text-primary-500">{sec.totalRealise ? ((r.realise / sec.totalRealise) * 100).toFixed(1) : 0} %</td>
+                  <td className="py-2 px-3 text-center">
+                    <span className={clsx('text-xs font-semibold',
+                      r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : 'text-primary-400')}>
+                      {r.status === 'favorable' ? '✓' : r.status === 'defavorable' ? '⚠' : '—'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold">
+                <td className="py-2 pl-2 w-8 text-center">
+                  <button onClick={() => setOpen(!open)} className="w-5 h-5 rounded hover:bg-primary-700 dark:hover:bg-primary-300 text-xs font-bold" title={open ? 'Replier' : 'Déplier'}>
+                    {open ? '−' : '+'}
+                  </button>
+                </td>
+                <td colSpan={2} className="py-2 px-3">TOTAL SECTION ({sec.rows.length} comptes)</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
+                <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
+                <td className="py-2 px-3 text-right num">{sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}</td>
+                <td className="py-2 px-3 text-right num">{sec.ecartPct.toFixed(1)} %</td>
+                <td colSpan={2}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
+
+      <div className="mt-4 card p-3 text-xs text-primary-500">
+        💡 Pour la version avec graphiques (KPIs + évolution + concentration + top 10), allez dans le <strong>Catalogue → CR — Dashboards</strong>.
+      </div>
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CR — DETAIL D'UNE SECTION (dashboard dédié, charts + KPIs)
 // ══════════════════════════════════════════════════════════════════════
 function CRSecDetail({ sectionKey }: { sectionKey: any }) {
   const rows = useBudgetActual();
   const { currentOrgId, currentYear } = useApp();
   const ct = useChartTheme();
   const sections = bySection(rows, currentOrgId);
-  const labels = loadLabels(currentOrgId);
   const sec = sections.find((s) => s.section === sectionKey);
   const [monthly, setMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
 
@@ -1025,54 +1118,9 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         </ChartCard>
       </div>
 
-      <ChartCard title={`Détail des ${sec.rows.length} comptes — ${labels[sec.section]}`}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b-2 border-primary-300 dark:border-primary-700 text-xs uppercase text-primary-500">
-              <th className="text-left py-2 px-3">Compte</th>
-              <th className="text-left py-2 px-3">Libellé</th>
-              <th className="text-right py-2 px-3">Réalisé</th>
-              <th className="text-right py-2 px-3">Budget</th>
-              <th className="text-right py-2 px-3">Écart</th>
-              <th className="text-right py-2 px-3">Écart %</th>
-              <th className="text-right py-2 px-3">% section</th>
-              <th className="text-center py-2 px-3">Statut</th>
-            </tr></thead>
-            <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
-              {sec.rows.map((r) => (
-                <tr key={r.code} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
-                  <td className="py-2 px-3 num font-mono">{r.code}</td>
-                  <td className="py-2 px-3 text-xs">{r.label}</td>
-                  <td className="py-2 px-3 text-right num font-semibold">{fmtFull(r.realise)}</td>
-                  <td className="py-2 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
-                  <td className={clsx('py-2 px-3 text-right num font-semibold',
-                    r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
-                    {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
-                  </td>
-                  <td className="py-2 px-3 text-right num text-xs">{r.ecartPct >= 0 ? '+' : ''}{r.ecartPct.toFixed(1)} %</td>
-                  <td className="py-2 px-3 text-right num text-xs text-primary-500">{sec.totalRealise ? ((r.realise / sec.totalRealise) * 100).toFixed(1) : 0} %</td>
-                  <td className="py-2 px-3 text-center">
-                    <span className={clsx('text-xs font-semibold',
-                      r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : 'text-primary-400')}>
-                      {r.status === 'favorable' ? '✓' : r.status === 'defavorable' ? '⚠' : '—'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-primary-300 dark:border-primary-700 font-bold bg-primary-100 dark:bg-primary-900">
-                <td colSpan={2} className="py-2 px-3">TOTAL SECTION</td>
-                <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
-                <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
-                <td className="py-2 px-3 text-right num">{sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}</td>
-                <td className="py-2 px-3 text-right num">{sec.ecartPct.toFixed(1)} %</td>
-                <td colSpan={2}></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </ChartCard>
+      <div className="card p-4 text-xs text-primary-500">
+        💡 Pour le <strong>tableau détaillé</strong> avec collapsibles, ouvrez la version <strong>Table</strong> dans le Catalogue → CR — Tables.
+      </div>
     </>
   );
 }
