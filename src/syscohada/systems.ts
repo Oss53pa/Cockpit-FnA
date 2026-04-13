@@ -8,14 +8,14 @@ export const SYSTEM_META: Record<AccountingSystem, { label: string; desc: string
   SMT:      { label: 'Système Minimal', desc: 'Livre recettes/dépenses, état de trésorerie',           caThreshold: 'CA < 30 M XOF' },
 };
 
-export type StatementTab = 'bilan' | 'cr' | 'balance' | 'tft' | 'tafire' | 'cp' | 'smt';
+export type StatementTab = 'bilan' | 'cr' | 'tft' | 'tafire' | 'cp' | 'smt';
 
 export function availableTabs(system: AccountingSystem): StatementTab[] {
   switch (system) {
-    case 'SMT':     return ['smt', 'balance'];
-    case 'Allégé':  return ['bilan', 'cr', 'balance'];
+    case 'SMT':     return ['smt'];
+    case 'Allégé':  return ['bilan', 'cr'];
     case 'Normal':
-    default:        return ['bilan', 'cr', 'balance', 'tft', 'tafire', 'cp'];
+    default:        return ['bilan', 'cr', 'tft', 'tafire', 'cp'];
   }
 }
 

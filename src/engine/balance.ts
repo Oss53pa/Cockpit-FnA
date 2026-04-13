@@ -1,6 +1,41 @@
-// Moteur de calcul — Balance générale
+// Moteur de calcul — Balances dérivées du Grand Livre
 import { db, GLEntry } from '../db/schema';
 import { findSyscoAccount, classOf } from '../syscohada/coa';
+
+export type AuxBalanceRow = {
+  tier: string;          // code tiers ou n° compte auxiliaire
+  label: string;         // libellé du compte ou du tiers
+  account: string;       // compte (411xxx ou 401xxx)
+  debit: number;
+  credit: number;
+  solde: number;         // soldeD positif = créance/dette
+};
+
+// Balance auxiliaire — clients (411) ou fournisseurs (401) groupée par tiers
+export async function computeAuxBalance(opts: {
+  orgId: string; year?: number; kind: 'client' | 'fournisseur'; importId?: string;
+}): Promise<AuxBalanceRow[]> {
+  const { orgId, year, kind, importId } = opts;
+  const prefix = kind === 'client' ? '411' : '401';
+  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const ids = new Set(periods.filter((p) => year === undefined || p.year === year).map((p) => p.id));
+  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const accountLabels = new Map((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => [a.code, a.label] as const));
+  const map = new Map<string, AuxBalanceRow>();
+  for (const e of entries) {
+    if (!ids.has(e.periodId)) continue;
+    if (!e.account.startsWith(prefix)) continue;
+    if (importId && importId !== 'all' && e.importId !== importId) continue;
+    const tier = e.tiers || e.account;
+    const label = accountLabels.get(e.account) ?? e.label ?? '—';
+    const cur = map.get(tier) ?? { tier, label, account: e.account, debit: 0, credit: 0, solde: 0 };
+    cur.debit += e.debit;
+    cur.credit += e.credit;
+    cur.solde = cur.debit - cur.credit;
+    map.set(tier, cur);
+  }
+  return Array.from(map.values()).filter((r) => Math.abs(r.solde) > 0.01).sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
+}
 
 export type BalanceRow = {
   account: string;
@@ -20,10 +55,11 @@ export type BalanceOpts = {
   fromMonth?: number;     // inclusif (1..12)
   uptoMonth?: number;     // inclusif ; undefined = jusqu'à décembre
   includeOpening?: boolean; // inclure les à-nouveaux (mois 0)
+  importId?: string;      // filtrer sur une version d'import précise
 };
 
 export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
-  const { orgId, year, fromMonth, uptoMonth, includeOpening = true } = opts;
+  const { orgId, year, fromMonth, uptoMonth, includeOpening = true, importId } = opts;
 
   // Récupérer les périodes concernées
   let periods = await db.periods.where('orgId').equals(orgId).toArray();
@@ -38,7 +74,9 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
 
   const periodIds = new Set(periods.map((p) => p.id));
   const all = await db.gl.where('orgId').equals(orgId).toArray();
-  const entries: GLEntry[] = all.filter((e) => periodIds.has(e.periodId));
+  const entries: GLEntry[] = all.filter((e) =>
+    periodIds.has(e.periodId) && (!importId || importId === 'all' || e.importId === importId),
+  );
 
   // Aggrégation par compte
   const acc = new Map<string, { debit: number; credit: number; label: string }>();

@@ -41,10 +41,10 @@ export async function topAccountsByPrefix(orgId: string, year: number, prefixes:
 }
 
 // ─── Balance âgée (clients ou fournisseurs) ─────────────────────────────────
-export type AgedTier = { tier: string; total: number; buckets: number[] };
+export type AgedTier = { tier: string; label: string; total: number; buckets: number[] };
 const BUCKETS = ['Non échu', '0-30j', '31-60j', '61-90j', '> 90j'];
 
-export async function agedBalance(orgId: string, year: number, kind: 'client' | 'fournisseur'): Promise<{ buckets: string[]; rows: AgedTier[] }> {
+export async function agedBalance(orgId: string, year: number, kind: 'client' | 'fournisseur', importId?: string): Promise<{ buckets: string[]; rows: AgedTier[] }> {
   const prefix = kind === 'client' ? '411' : '401';
   const sign = kind === 'client' ? 1 : -1; // clients = solde débiteur, fournisseurs = solde créditeur
   const today = new Date();
@@ -52,15 +52,18 @@ export async function agedBalance(orgId: string, year: number, kind: 'client' | 
   const ids = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
 
-  // Regrouper par tiers
-  const perTiers = new Map<string, { date: string; amount: number }[]>();
+  // Regrouper par tiers (+ libellé associé)
+  const accountLabels = new Map((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => [a.code, a.label] as const));
+  const perTiers = new Map<string, { date: string; amount: number; account: string; label: string }[]>();
   for (const e of entries) {
     if (!ids.has(e.periodId)) continue;
     if (!e.account.startsWith(prefix)) continue;
+    if (importId && importId !== 'all' && e.importId !== importId) continue;
     const amt = (e.debit - e.credit) * sign;
     const tier = e.tiers || e.account;
+    const label = accountLabels.get(e.account) ?? e.label ?? '—';
     const arr = perTiers.get(tier) ?? [];
-    arr.push({ date: e.date, amount: amt });
+    arr.push({ date: e.date, amount: amt, account: e.account, label });
     perTiers.set(tier, arr);
   }
 
@@ -81,7 +84,8 @@ export async function agedBalance(orgId: string, year: number, kind: 'client' | 
       else idx = 4;
       buckets[idx] += m.amount;
     }
-    rows.push({ tier, total, buckets });
+    const label = movements[0]?.label ?? '—';
+    rows.push({ tier, label, total, buckets });
   }
   rows.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
   return { buckets: BUCKETS, rows };

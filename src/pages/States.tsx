@@ -8,17 +8,15 @@ import { bySection, computeIntermediates, CR_FLOW, CRSection, INTERMEDIATE_LABEL
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { useApp } from '../store/app';
 // Line type utilisé via CollapsibleTable
-import { BalanceRow, computeBalance } from '../engine/balance';
+import type { BalanceRow } from '../engine/balance';
 import { fmtFull } from '../lib/format';
 import { CollapsibleTable } from '../components/ui/CollapsibleTable';
-import { VirtualTable, type Column } from '../components/ui/VirtualTable';
 import { exportStatementsPDF, exportStatementsXLSX } from '../engine/exporter';
 import { availableTabs, resolveSystem, simplifyBilanActif, simplifyBilanPassif, simplifyCR, SYSTEM_META, type StatementTab } from '../syscohada/systems';
 
 const ALL_TABS: Record<StatementTab, string> = {
   bilan: 'Bilan',
   cr: 'Compte de résultat',
-  balance: 'Balance générale',
   tft: 'TFT',
   tafire: 'TAFIRE',
   cp: 'Variation capitaux propres',
@@ -70,152 +68,6 @@ function MonthlyTable({ months, lines }: { months: string[]; lines: any[] }) {
 
 const MONTH_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-const balanceColumns: Column<BalanceRow>[] = [
-  { header: 'Compte',         width: '140px', align: 'left',  cell: (r) => <span className="num font-mono">{r.account}</span> },
-  { header: 'Libellé',        width: '1fr',   align: 'left',  cell: (r) => <span className="text-xs">{r.label}</span> },
-  { header: 'Débit période',  width: '160px', align: 'right', cell: (r) => <span className="num">{r.debit > 0 ? fmtFull(r.debit) : <span className="text-primary-400">—</span>}</span> },
-  { header: 'Crédit période', width: '160px', align: 'right', cell: (r) => <span className="num">{r.credit > 0 ? fmtFull(r.credit) : <span className="text-primary-400">—</span>}</span> },
-  { header: 'Solde D',        width: '140px', align: 'right', cell: (r) => <span className="num">{r.soldeD > 0 ? fmtFull(r.soldeD) : ''}</span> },
-  { header: 'Solde C',        width: '140px', align: 'right', cell: (r) => <span className="num">{r.soldeC > 0 ? fmtFull(r.soldeC) : ''}</span> },
-];
-
-function BalanceTab() {
-  const { currentOrgId, currentYear } = useApp();
-  const [fromMonth, setFromMonth] = useState(1);
-  const [uptoMonth, setUptoMonth] = useState(12);
-  const [includeOpening, setIncludeOpening] = useState(true);
-  const [rows, setRows] = useState<BalanceRow[]>([]);
-  const [filter, setFilter] = useState<'all' | 'D' | 'C' | 'moved'>('all');
-  const [search, setSearch] = useState('');
-  const [classFilter, setClassFilter] = useState<string>('all');
-
-  useEffect(() => {
-    if (!currentOrgId) return;
-    computeBalance({
-      orgId: currentOrgId,
-      year: currentYear,
-      fromMonth, uptoMonth,
-      includeOpening,
-    }).then(setRows);
-  }, [currentOrgId, currentYear, fromMonth, uptoMonth, includeOpening]);
-
-  const filtered = rows.filter((r) => {
-    if (classFilter !== 'all' && r.account[0] !== classFilter) return false;
-    if (filter === 'D' && r.soldeD === 0) return false;
-    if (filter === 'C' && r.soldeC === 0) return false;
-    if (filter === 'moved' && r.debit === 0 && r.credit === 0) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!r.account.includes(search) && !r.label.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
-
-  const totD = filtered.reduce((s, r) => s + r.debit, 0);
-  const totC = filtered.reduce((s, r) => s + r.credit, 0);
-  const totSD = filtered.reduce((s, r) => s + r.soldeD, 0);
-  const totSC = filtered.reduce((s, r) => s + r.soldeC, 0);
-  const balanced = Math.abs(totD - totC) < 1;
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Du mois</label>
-            <select className="input !w-auto !py-1.5" value={fromMonth} onChange={(e) => setFromMonth(Number(e.target.value))}>
-              {MONTH_LABELS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Au mois</label>
-            <select className="input !w-auto !py-1.5" value={uptoMonth} onChange={(e) => setUptoMonth(Number(e.target.value))}>
-              {MONTH_LABELS.map((m, i) => <option key={i} value={i + 1} disabled={i + 1 < fromMonth}>{m}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2 pb-1.5">
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={includeOpening} onChange={(e) => setIncludeOpening(e.target.checked)} className="rounded" />
-              <span>Inclure les à-nouveaux (ouverture)</span>
-            </label>
-          </div>
-          <div className="flex gap-1 ml-auto">
-            {[
-              { id: '1mois', label: 'Mois courant', fm: new Date().getMonth() + 1, um: new Date().getMonth() + 1 },
-              { id: 'T1', label: 'T1', fm: 1, um: 3 },
-              { id: 'T2', label: 'T2', fm: 4, um: 6 },
-              { id: 'T3', label: 'T3', fm: 7, um: 9 },
-              { id: 'T4', label: 'T4', fm: 10, um: 12 },
-              { id: 'YTD', label: 'Année complète', fm: 1, um: 12 },
-            ].map((p) => (
-              <button key={p.id} onClick={() => { setFromMonth(p.fm); setUptoMonth(p.um); }}
-                className={clsx('btn !py-1 text-xs',
-                  fromMonth === p.fm && uptoMonth === p.um ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-primary-200 dark:border-primary-800">
-          <input className="input !py-1.5 max-w-xs" placeholder="🔍 Rechercher compte / libellé…"
-            value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="input !w-auto !py-1.5" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-            <option value="all">Toutes classes</option>
-            {['1','2','3','4','5','6','7','8'].map((c) => <option key={c} value={c}>Classe {c}</option>)}
-          </select>
-          <div className="flex gap-1">
-            {([
-              { id: 'all', label: 'Tous' },
-              { id: 'moved', label: 'Mouvementés' },
-              { id: 'D', label: 'Soldes débiteurs' },
-              { id: 'C', label: 'Soldes créditeurs' },
-            ] as const).map((f) => (
-              <button key={f.id} onClick={() => setFilter(f.id)}
-                className={clsx('btn !py-1 text-xs',
-                  filter === f.id ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-3 pt-3 border-t border-primary-200 dark:border-primary-800 flex items-center justify-between text-xs">
-          <span className="text-primary-500">
-            Période : {MONTH_LABELS[fromMonth - 1]} → {MONTH_LABELS[uptoMonth - 1]} {currentYear}
-            {includeOpening && ' · inclut à-nouveaux'}
-          </span>
-          <span className="text-primary-500">
-            <span className="num font-semibold">{filtered.length}</span> compte(s) affiché(s) sur <span className="num">{rows.length}</span>
-            {balanced
-              ? <span className="text-success ml-3">✓ Équilibré</span>
-              : <span className="text-error ml-3">⚠ Écart D−C : {fmtFull(totD - totC)}</span>}
-          </span>
-        </div>
-      </Card>
-
-      <Card padded={false}>
-        <VirtualTable
-          rows={filtered}
-          rowKey={(r) => r.account}
-          rowHeight={30}
-          height={560}
-          empty="Aucun compte ne correspond aux filtres"
-          columns={balanceColumns}
-          footer={<>
-            <div className="py-2 px-3 col-span-2">TOTAUX</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totSD)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totSC)}</div>
-          </>}
-        />
-      </Card>
-    </div>
-  );
-}
-
-// ─── CR TAB AVEC SUB-TABS ──────────────────────────────────────────
 function CRTab({ monthlyCR, cr, simplified }: { monthlyCR: any; cr: any[]; simplified?: boolean }) {
   void simplified; // consumer may use it to disable sub-tabs if needed
   const [sub, setSub] = useState<'synthese' | 'mensuel' | 'budget'>('synthese');
@@ -793,8 +645,6 @@ export default function States() {
       )}
 
       {tab === 'cr' && <CRTab monthlyCR={monthlyCR} cr={system === 'Allégé' ? simplifyCR(cr) : cr} simplified={system === 'Allégé'} />}
-
-      {tab === 'balance' && <BalanceTab />}
 
       {tab === 'tft' && view === 'monthly' && (
         <Card title="Tableau des Flux de Trésorerie — mensuel" subtitle="Méthode indirecte SYSCOHADA · Jan → Déc + cumul YTD" padded={false}>

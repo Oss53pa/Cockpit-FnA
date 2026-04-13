@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { CheckCircle2, Download, FileWarning, UploadCloud, XCircle } from 'lucide-react';
-import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { useApp } from '../store/app';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
 import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
-import { downloadGLTemplate, downloadBalanceGeneraleTemplate, downloadBalanceAuxiliaireTemplate, downloadBalanceAgeeTemplate } from '../engine/templates';
-import { TabSwitch } from '../components/ui/TabSwitch';
+import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 
 const sources = ['SAGE', 'PERFECTO', 'SAARI', 'CEGID', 'ODOO', 'SAP', 'CSV générique', 'Excel'];
@@ -17,19 +15,19 @@ const controls = [
   'Comptes inexistants au plan SYSCOHADA',
   'Continuité des périodes',
   'Validation du format',
-  'Cohérence GL ↔ Balance',
   'Comptes à solde anormal',
   'Lettrage automatique des tiers',
 ];
 
+// Composant réutilisable — uniquement l'IMPORT du Grand Livre.
+// Les balances (générale, auxiliaire, âgée) sont DÉRIVÉES automatiquement du GL,
+// elles ne s'importent jamais séparément.
 export default function Imports() {
   const { currentOrgId, currentYear } = useApp();
   const org = useCurrentOrg();
   const history = useImportsHistory(currentOrgId);
   const periods = usePeriods(currentOrgId).filter((p) => p.year === currentYear && p.month >= 1);
 
-  type ImportKind = 'gl' | 'bg' | 'ba_clients' | 'ba_fournisseurs' | 'agee_clients' | 'agee_fournisseurs';
-  const [kind, setKind] = useState<ImportKind>('gl');
   const [step, setStep] = useState<'idle' | 'mapping' | 'result'>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -77,57 +75,18 @@ export default function Imports() {
   const reset = () => { setStep('idle'); setFile(null); setHeaders([]); setMapping({}); setReport(null); };
 
   return (
-    <div>
-      <PageHeader
-        title="Imports"
-        subtitle="Grand Livre · Balances générale, auxiliaire et âgée — connecteurs SAGE / PERFECTO / SAARI / CEGID / ODOO / SAP"
-        action={
-          <button className="btn-outline" onClick={() => {
-            if (kind === 'gl') downloadGLTemplate(org?.name, currentYear);
-            else if (kind === 'bg') downloadBalanceGeneraleTemplate(org?.name, currentYear);
-            else if (kind === 'ba_clients') downloadBalanceAuxiliaireTemplate(org?.name, currentYear, 'clients');
-            else if (kind === 'ba_fournisseurs') downloadBalanceAuxiliaireTemplate(org?.name, currentYear, 'fournisseurs');
-            else if (kind === 'agee_clients') downloadBalanceAgeeTemplate(org?.name, currentYear, 'clients');
-            else if (kind === 'agee_fournisseurs') downloadBalanceAgeeTemplate(org?.name, currentYear, 'fournisseurs');
-          }}>
-            <Download className="w-4 h-4" /> Télécharger le modèle Excel
-          </button>
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-primary-500 italic">
+          💡 Importez le <strong>Grand Livre</strong> ; toutes les balances (générale, auxiliaire, âgée) sont calculées automatiquement.
+        </p>
+        <button className="btn-outline" onClick={() => downloadGLTemplate(org?.name, currentYear)}>
+          <Download className="w-4 h-4" /> Télécharger le modèle Excel
+        </button>
+      </div>
 
-      <TabSwitch value={kind} onChange={(k) => { setKind(k); setStep('idle'); setFile(null); setReport(null); }} tabs={[
-        { key: 'gl', label: 'Grand Livre' },
-        { key: 'bg', label: 'Balance générale' },
-        { key: 'ba_clients', label: 'Balance auxiliaire — Clients' },
-        { key: 'ba_fournisseurs', label: 'Balance auxiliaire — Fournisseurs' },
-        { key: 'agee_clients', label: 'Balance âgée — Clients' },
-        { key: 'agee_fournisseurs', label: 'Balance âgée — Fournisseurs' },
-      ]} />
-
-      {kind !== 'gl' && (
-        <Card title={`Import ${kind === 'bg' ? 'Balance générale' : kind.startsWith('ba_') ? 'Balance auxiliaire' : 'Balance âgée'}`}
-          subtitle="Téléchargez le modèle, remplissez-le, puis importez-le ici">
-          <div className="py-12 text-center">
-            <UploadCloud className="w-12 h-12 mx-auto text-primary-400 mb-4" />
-            <p className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-2">Import depuis fichier Excel</p>
-            <p className="text-xs text-primary-500 max-w-md mx-auto mb-4">
-              Pour le moment seul le téléchargement du modèle est actif pour ce type. L'import et le rapprochement avec le Grand Livre sont prévus au prochain sprint.
-            </p>
-            <button className="btn-primary" onClick={() => {
-              if (kind === 'bg') downloadBalanceGeneraleTemplate(org?.name, currentYear);
-              else if (kind === 'ba_clients') downloadBalanceAuxiliaireTemplate(org?.name, currentYear, 'clients');
-              else if (kind === 'ba_fournisseurs') downloadBalanceAuxiliaireTemplate(org?.name, currentYear, 'fournisseurs');
-              else if (kind === 'agee_clients') downloadBalanceAgeeTemplate(org?.name, currentYear, 'clients');
-              else if (kind === 'agee_fournisseurs') downloadBalanceAgeeTemplate(org?.name, currentYear, 'fournisseurs');
-            }}>
-              <Download className="w-4 h-4" /> Télécharger le modèle Excel
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {kind === 'gl' && step === 'idle' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      {step === 'idle' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card title="Déposer un fichier" subtitle="CSV, TXT, XLSX — détection automatique des colonnes" className="lg:col-span-2">
             <label className="border-2 border-dashed border-primary-300 dark:border-primary-700 rounded-xl p-10 text-center block hover:border-primary-400 dark:hover:border-primary-600 transition cursor-pointer">
               <UploadCloud className="w-10 h-10 mx-auto text-primary-400 mb-3" />
@@ -158,7 +117,7 @@ export default function Imports() {
         </div>
       )}
 
-      {kind === 'gl' && step === 'mapping' && (
+      {step === 'mapping' && (
         <Card title="Mapping des colonnes" subtitle={`Fichier : ${file?.name} — ${headers.length} colonnes détectées`}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <Select label="Période cible *" value={periodId} onChange={setPeriodId}
@@ -186,7 +145,7 @@ export default function Imports() {
         </Card>
       )}
 
-      {kind === 'gl' && step === 'result' && report && (
+      {step === 'result' && report && (
         <Card title="Résultat de l'import">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <Stat label="Lignes lues" value={report.totalRows} />
@@ -222,45 +181,43 @@ export default function Imports() {
         </Card>
       )}
 
-      <div className="mt-6">
-        <Card title="Historique des imports" subtitle="Traçabilité complète">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
-                <tr>
-                  <th className="text-left py-2 px-3">Date</th>
-                  <th className="text-left py-2 px-3">Utilisateur</th>
-                  <th className="text-left py-2 px-3">Fichier</th>
-                  <th className="text-left py-2 px-3">Source</th>
-                  <th className="text-right py-2 px-3">Écritures</th>
-                  <th className="text-right py-2 px-3">Rejetées</th>
-                  <th className="text-left py-2 px-3">Statut</th>
+      <Card title="Historique des imports" subtitle="Traçabilité complète">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+              <tr>
+                <th className="text-left py-2 px-3">Date</th>
+                <th className="text-left py-2 px-3">Utilisateur</th>
+                <th className="text-left py-2 px-3">Fichier</th>
+                <th className="text-left py-2 px-3">Source</th>
+                <th className="text-right py-2 px-3">Écritures</th>
+                <th className="text-right py-2 px-3">Rejetées</th>
+                <th className="text-left py-2 px-3">Statut</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+              {history.length === 0 && (
+                <tr><td colSpan={7} className="py-6 text-center text-primary-500 text-xs">Aucun import</td></tr>
+              )}
+              {history.map((i) => (
+                <tr key={i.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                  <td className="py-2 px-3 num text-xs">{new Date(i.date).toLocaleString('fr-FR')}</td>
+                  <td className="py-2 px-3">{i.user}</td>
+                  <td className="py-2 px-3 font-mono text-xs">{i.fileName}</td>
+                  <td className="py-2 px-3"><Badge>{i.source}</Badge></td>
+                  <td className="py-2 px-3 text-right num">{i.count.toLocaleString('fr-FR')}</td>
+                  <td className="py-2 px-3 text-right num">{i.rejected}</td>
+                  <td className="py-2 px-3">
+                    {i.status === 'success' && <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Succès</Badge>}
+                    {i.status === 'partial' && <Badge variant="warning"><FileWarning className="w-3 h-3" /> Partiel</Badge>}
+                    {i.status === 'error' && <Badge variant="error"><XCircle className="w-3 h-3" /> Échec</Badge>}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
-                {history.length === 0 && (
-                  <tr><td colSpan={7} className="py-6 text-center text-primary-500 text-xs">Aucun import</td></tr>
-                )}
-                {history.map((i) => (
-                  <tr key={i.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
-                    <td className="py-2 px-3 num text-xs">{new Date(i.date).toLocaleString('fr-FR')}</td>
-                    <td className="py-2 px-3">{i.user}</td>
-                    <td className="py-2 px-3 font-mono text-xs">{i.fileName}</td>
-                    <td className="py-2 px-3"><Badge>{i.source}</Badge></td>
-                    <td className="py-2 px-3 text-right num">{i.count.toLocaleString('fr-FR')}</td>
-                    <td className="py-2 px-3 text-right num">{i.rejected}</td>
-                    <td className="py-2 px-3">
-                      {i.status === 'success' && <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Succès</Badge>}
-                      {i.status === 'partial' && <Badge variant="warning"><FileWarning className="w-3 h-3" /> Partiel</Badge>}
-                      {i.status === 'error' && <Badge variant="error"><XCircle className="w-3 h-3" /> Échec</Badge>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

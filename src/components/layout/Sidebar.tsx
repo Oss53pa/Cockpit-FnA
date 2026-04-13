@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Upload, FileSpreadsheet, Calculator, BarChart3,
-  FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target,
+  FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -19,7 +19,7 @@ const sections = [
   {
     label: 'Données',
     items: [
-      { to: '/imports', icon: Upload, label: 'Imports' },
+      { to: '/grand-livre', icon: BookOpen, label: 'Grand Livre & Balances' },
       { to: '/budget', icon: Wallet, label: 'Budget' },
       { to: '/coa', icon: FolderTree, label: 'Plan comptable' },
     ],

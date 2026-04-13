@@ -17,6 +17,7 @@ const Alerts         = lazy(() => import('./pages/Alerts'));
 const Actions        = lazy(() => import('./pages/Actions'));
 const Budget         = lazy(() => import('./pages/Budget'));
 const COA            = lazy(() => import('./pages/COA'));
+const GrandLivre     = lazy(() => import('./pages/GrandLivre'));
 const Settings       = lazy(() => import('./pages/Settings'));
 
 function PageFallback() {
@@ -54,6 +55,7 @@ function App() {
         <Route path="/imports" element={<AppLayout><Imports /></AppLayout>} />
         <Route path="/budget" element={<AppLayout><Budget /></AppLayout>} />
         <Route path="/coa" element={<AppLayout><COA /></AppLayout>} />
+        <Route path="/grand-livre" element={<AppLayout><GrandLivre /></AppLayout>} />
         <Route path="/states" element={<AppLayout><States /></AppLayout>} />
         <Route path="/ratios" element={<AppLayout><Ratios /></AppLayout>} />
         <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />

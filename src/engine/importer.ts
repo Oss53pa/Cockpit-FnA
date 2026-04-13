@@ -167,7 +167,23 @@ export async function importGL(
 
   // Enregistrement
   await db.transaction('rw', db.gl, db.accounts, db.imports, async () => {
-    if (entries.length > 0) await db.gl.bulkAdd(entries as GLEntry[]);
+    const importId = await db.imports.add({
+      orgId: opts.orgId,
+      date: Date.now(),
+      user: opts.user,
+      fileName: file.name,
+      source: opts.source,
+      kind: 'GL',
+      count: entries.length,
+      rejected: errors.length,
+      status: errors.length === 0 ? 'success' : (entries.length > 0 ? 'partial' : 'error'),
+      report: JSON.stringify({ unknown: [...unknownAccounts], errors: errors.slice(0, 100) }),
+    });
+
+    if (entries.length > 0) {
+      const tagged = entries.map((e) => ({ ...e, importId: String(importId) })) as GLEntry[];
+      await db.gl.bulkAdd(tagged);
+    }
 
     // Créer les comptes inconnus avec mapping SYSCOHADA automatique
     const existing = new Set((await db.accounts.where('orgId').equals(opts.orgId).toArray()).map((a) => a.code));
@@ -185,19 +201,6 @@ export async function importGL(
       });
     }
     if (newAccounts.length > 0) await db.accounts.bulkPut(newAccounts);
-
-    await db.imports.add({
-      orgId: opts.orgId,
-      date: Date.now(),
-      user: opts.user,
-      fileName: file.name,
-      source: opts.source,
-      kind: 'GL',
-      count: entries.length,
-      rejected: errors.length,
-      status: errors.length === 0 ? 'success' : (entries.length > 0 ? 'partial' : 'error'),
-      report: JSON.stringify({ unknown: [...unknownAccounts], errors: errors.slice(0, 100) }),
-    });
   });
 
   return {
