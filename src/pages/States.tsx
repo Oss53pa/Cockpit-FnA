@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Download, FileSpreadsheet, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyBilan, useMonthlyCR, useMonthlyTFT, useRatios, useStatements, useTAFIRE, useTFT } from '../hooks/useFinancials';
-import { bySection, computeIntermediates, CR_FLOW, CRSection, INTERMEDIATE_LABELS, loadLabels, loadOrder, saveLabels, saveOrder } from '../engine/budgetActual';
+import { bySection, computeIntermediates, CR_FLOW, CRSection, CustomSection, INTERMEDIATE_LABELS, loadCustomSections, loadLabels, loadOrder, saveCustomSections, saveLabels, saveOrder } from '../engine/budgetActual';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { useApp } from '../store/app';
 // Line type utilisé via CollapsibleTable
@@ -138,11 +138,12 @@ function MonthlyTable({ months, lines, hideCodes }: { months: string[]; lines: a
 
 function CRTab({ monthlyCR, cr, simplified, hideCodes }: { monthlyCR: any; cr: any[]; simplified?: boolean; hideCodes?: boolean }) {
   void simplified; // consumer may use it to disable sub-tabs if needed
-  const [sub, setSub] = useState<'synthese' | 'mensuel' | 'budget'>('synthese');
+  const [sub, setSub] = useState<'synthese' | 'mensuel' | 'budget' | 'personnaliser'>('personnaliser');
   return (
     <div>
       <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg mb-4 w-fit">
         {[
+          { k: 'personnaliser', label: 'Personnaliser' },
           { k: 'synthese', label: 'Synthèse' },
           { k: 'mensuel', label: 'Mensuel (Jan→Déc)' },
           { k: 'budget', label: 'Budget vs Réalisé' },
@@ -162,71 +163,39 @@ function CRTab({ monthlyCR, cr, simplified, hideCodes }: { monthlyCR: any; cr: a
         </Card>
       )}
       {sub === 'budget' && <BudgetActualView />}
+      {sub === 'personnaliser' && <CRCustomize cr={cr} hideCodes={hideCodes} />}
     </div>
   );
 }
 
-// ─── CR SYNTHÈSE — DRAG & DROP + COLLAPSE + LABELS ÉDITABLES ─────
+// ─── CR SYNTHÈSE — LECTURE SEULE (custom ordre + libellés appliqués) ─────
 function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
-  void cr;
   const { currentOrgId } = useApp();
   const rows = useBudgetActual();
-  const [order, setOrder] = useState<CRSection[]>(() => loadOrder(currentOrgId));
   const [labels, setLabels] = useState<Record<CRSection, string>>(() => loadLabels(currentOrgId));
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [editing, setEditing] = useState<CRSection | null>(null);
-  const [drag, setDrag] = useState<CRSection | null>(null);
 
-  useEffect(() => { setOrder(loadOrder(currentOrgId)); setLabels(loadLabels(currentOrgId)); }, [currentOrgId]);
+  useEffect(() => { setLabels(loadLabels(currentOrgId)); }, [currentOrgId]);
 
   const sectionsAll = bySection(rows, currentOrgId);
-  // map pour accès rapide
   const secMap = new Map(sectionsAll.map((s) => [s.section, s]));
   const inters = computeIntermediates(sectionsAll);
 
-  // Construire le flux : on respecte CR_FLOW pour l'ordre canonique mais l'utilisateur peut réordonner les sections.
-  // L'ordre custom est appliqué uniquement aux sections — les intermédiaires gardent leur position relative.
-  const flow = CR_FLOW.map((item) => {
-    if (item.kind === 'section') {
-      const sec = order.includes(item.key) ? secMap.get(item.key) : secMap.get(item.key);
-      return { kind: 'section' as const, key: item.key, sec };
-    }
-    return { kind: 'inter' as const, key: item.key, data: inters[item.key] };
-  });
+  const customs = loadCustomSections(currentOrgId);
+  const customIds = new Set(customs.map((c) => c.id));
+  const flow: Array<{ kind: 'section'; key: string; sec: any } | { kind: 'inter'; key: any; data: any }> = CR_FLOW.map((item) =>
+    item.kind === 'section'
+      ? { kind: 'section' as const, key: item.key, sec: secMap.get(item.key) }
+      : { kind: 'inter' as const, key: item.key, data: inters[item.key] }
+  );
+  // Append custom sections after standard CR
+  for (const s of sectionsAll) {
+    if (customIds.has(s.section)) flow.push({ kind: 'section', key: s.section, sec: s });
+  }
 
   const toggle = (k: string) => setExpanded((e) => ({ ...e, [k]: !e[k] }));
   const expandAll = () => setExpanded(Object.fromEntries(sectionsAll.map((s) => [s.section, true])));
   const collapseAll = () => setExpanded({});
-
-  const updateLabel = (key: CRSection, v: string) => {
-    const next = { ...labels, [key]: v };
-    setLabels(next); saveLabels(currentOrgId, next);
-  };
-  const reset = () => {
-    if (!confirm('Restaurer les libellés et l\'ordre par défaut ?')) return;
-    localStorage.removeItem(`cr-section-labels:${currentOrgId}`);
-    localStorage.removeItem(`cr-section-order:${currentOrgId}`);
-    setOrder(loadOrder(currentOrgId));
-    setLabels(loadLabels(currentOrgId));
-  };
-
-  // Drag-and-drop
-  const onDragStart = (k: CRSection) => setDrag(k);
-  const onDragOver = (e: React.DragEvent, target: CRSection) => {
-    e.preventDefault();
-    if (!drag || drag === target) return;
-  };
-  const onDrop = (target: CRSection) => {
-    if (!drag || drag === target) return;
-    const newOrder = [...order];
-    const from = newOrder.indexOf(drag);
-    const to = newOrder.indexOf(target);
-    if (from < 0 || to < 0) return;
-    newOrder.splice(from, 1);
-    newOrder.splice(to, 0, drag);
-    setOrder(newOrder); saveOrder(currentOrgId, newOrder);
-    setDrag(null);
-  };
 
   if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
 
@@ -236,16 +205,14 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
         <div className="flex gap-2">
           <button className="btn-outline !py-1.5 text-xs" onClick={expandAll}>Tout déplier</button>
           <button className="btn-outline !py-1.5 text-xs" onClick={collapseAll}>Tout replier</button>
-          <button className="btn-outline !py-1.5 text-xs" onClick={reset}>Réinitialiser libellés/ordre</button>
         </div>
-        <p className="text-[11px] text-primary-500">💡 Glissez-déposez les sections pour les réordonner · cliquez sur le crayon pour renommer · cliquez +/− pour déplier</p>
+        <p className="text-[11px] text-primary-500">Vue de synthèse — utilisez l'onglet <strong>Personnaliser</strong> pour réordonner ou renommer les sections.</p>
       </div>
 
       <Card padded={false}>
         <table className="w-full text-sm">
           <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
             <tr>
-              <th className="text-left py-2 px-3 w-8"></th>
               <th className="text-left py-2 px-3 w-8"></th>
               <th className="text-left py-2 px-3">Section / compte</th>
               <th className="text-right py-2 px-3 w-32">Réalisé</th>
@@ -263,7 +230,7 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                   <tr key={`i-${item.key}`}
                     className={clsx('font-bold',
                       isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
-                    <td colSpan={3} className="py-2.5 px-3 uppercase text-xs tracking-wider">
+                    <td colSpan={2} className="py-2.5 px-3 uppercase text-xs tracking-wider">
                       = {INTERMEDIATE_LABELS[item.key]}
                     </td>
                     <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.realise)}</td>
@@ -276,12 +243,214 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
               const s = item.sec;
               if (!s) return null;
               const open = expanded[s.section];
-              const isOver = drag && drag !== s.section;
               const operator = s.isCharge ? '−' : '+';
               return (
-                <>
+                <React.Fragment key={`s-${s.section}-${idx}`}>
+                  <tr className={clsx('font-semibold',
+                    s.isCharge ? 'bg-primary-100 dark:bg-primary-900' : 'bg-primary-200/60 dark:bg-primary-800/60')}>
+                    <td className="py-2 px-2">
+                      <button onClick={() => toggle(s.section)} className="btn-ghost !p-1 text-sm font-bold">
+                        {open ? '−' : '+'}
+                      </button>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        <span className={clsx('font-bold w-3 text-center', s.isCharge ? 'text-error' : 'text-success')}>{operator}</span>
+                        <span>{labels[s.section]}</span>
+                        <span className="text-[10px] text-primary-400 font-normal">({s.rows.length} comptes)</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 text-right num">{fmtFull(s.totalRealise)}</td>
+                    <td className="py-2 px-3 text-right num text-primary-500 font-normal">{fmtFull(s.totalBudget)}</td>
+                    <td className={clsx('py-2 px-3 text-right num',
+                      s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
+                      {s.totalEcart >= 0 ? '+' : ''}{fmtFull(s.totalEcart)}
+                    </td>
+                    <td className="py-2 px-3 text-right num text-xs text-primary-500 font-normal">—</td>
+                  </tr>
+                  {open && s.rows.map((r) => (
+                    <tr key={r.code} className="bg-primary-50 dark:bg-primary-950">
+                      <td></td>
+                      <td className="py-1.5 px-3 pl-12 text-xs">
+                        {!hideCodes && <span className="font-mono text-primary-500 mr-2">{r.code}</span>}
+                        {r.label}
+                      </td>
+                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.realise)}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs text-primary-500">{fmtFull(r.budget)}</td>
+                      <td className={clsx('py-1.5 px-3 text-right num text-xs',
+                        r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
+                        {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
+                      </td>
+                      <td className="py-1.5 px-3 text-right num text-[10px] text-primary-400">
+                        {s.totalRealise ? ((r.realise / s.totalRealise) * 100).toFixed(1) : 0} %
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+
+      <details className="card p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-primary-700 dark:text-primary-300">
+          Voir le compte de résultat officiel SYSCOHADA (référence)
+        </summary>
+        <div className="mt-4">
+          <CollapsibleTable lines={cr} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// ─── CR PERSONNALISER — DRAG & DROP + LABELS ÉDITABLES ─────
+function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
+  const { currentOrgId } = useApp();
+  const rows = useBudgetActual();
+  const [order, setOrder] = useState<CRSection[]>(() => loadOrder(currentOrgId));
+  const [labels, setLabels] = useState<Record<CRSection, string>>(() => loadLabels(currentOrgId));
+  const [customs, setCustoms] = useState<CustomSection[]>(() => loadCustomSections(currentOrgId));
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<CRSection | null>(null);
+  const [drag, setDrag] = useState<CRSection | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newSec, setNewSec] = useState<{ label: string; prefixes: string; isCharge: boolean }>({ label: '', prefixes: '', isCharge: false });
+
+  useEffect(() => {
+    setOrder(loadOrder(currentOrgId));
+    setLabels(loadLabels(currentOrgId));
+    setCustoms(loadCustomSections(currentOrgId));
+  }, [currentOrgId]);
+
+  const sectionsAll = bySection(rows, currentOrgId);
+  const secMap = new Map(sectionsAll.map((s) => [s.section, s]));
+  const inters = computeIntermediates(sectionsAll);
+  const customIds = new Set(customs.map((c) => c.id));
+
+  const toggle = (k: string) => setExpanded((e) => ({ ...e, [k]: !e[k] }));
+  const expandAll = () => setExpanded(Object.fromEntries(sectionsAll.map((s) => [s.section, true])));
+  const collapseAll = () => setExpanded({});
+
+  const updateLabel = (key: CRSection, v: string) => {
+    const next = { ...labels, [key]: v };
+    setLabels(next); saveLabels(currentOrgId, next);
+  };
+  const reset = () => {
+    if (!confirm('Restaurer les libellés, l\'ordre et supprimer les sections personnalisées ?')) return;
+    localStorage.removeItem(`cr-section-labels:${currentOrgId}`);
+    localStorage.removeItem(`cr-section-order:${currentOrgId}`);
+    localStorage.removeItem(`cr-section-custom:${currentOrgId}`);
+    setCustoms([]);
+    setOrder(loadOrder(currentOrgId));
+    setLabels(loadLabels(currentOrgId));
+  };
+
+  const addSection = () => {
+    const label = newSec.label.trim();
+    const prefixes = newSec.prefixes.split(',').map((s) => s.trim()).filter(Boolean);
+    if (!label || !prefixes.length) { alert('Libellé et préfixes requis (ex : 605, 611)'); return; }
+    const id = `custom_${Date.now()}`;
+    const next = [...customs, { id, label, prefixes, isCharge: newSec.isCharge }];
+    setCustoms(next); saveCustomSections(currentOrgId, next);
+    const nextOrder = [...order, id];
+    setOrder(nextOrder); saveOrder(currentOrgId, nextOrder);
+    const nextLabels = { ...labels, [id]: label };
+    setLabels(nextLabels); saveLabels(currentOrgId, nextLabels);
+    setNewSec({ label: '', prefixes: '', isCharge: false });
+    setShowAdd(false);
+  };
+  const removeSection = (id: string) => {
+    if (!confirm('Supprimer cette section personnalisée ?')) return;
+    const next = customs.filter((c) => c.id !== id);
+    setCustoms(next); saveCustomSections(currentOrgId, next);
+    const nextOrder = order.filter((o) => o !== id);
+    setOrder(nextOrder); saveOrder(currentOrgId, nextOrder);
+  };
+
+  const onDragStart = (k: CRSection) => setDrag(k);
+  const onDragOver = (e: React.DragEvent, _target: CRSection) => { e.preventDefault(); };
+  const onDrop = (target: CRSection) => {
+    if (!drag || drag === target) return;
+    const newOrder = [...order];
+    const from = newOrder.indexOf(drag);
+    const to = newOrder.indexOf(target);
+    if (from < 0 || to < 0) return;
+    newOrder.splice(from, 1);
+    newOrder.splice(to, 0, drag);
+    setOrder(newOrder); saveOrder(currentOrgId, newOrder);
+    setDrag(null);
+  };
+
+  if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button className="btn-primary !py-1.5 text-xs" onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? 'Annuler' : '+ Nouvelle section'}
+          </button>
+          <button className="btn-outline !py-1.5 text-xs" onClick={expandAll}>Tout déplier</button>
+          <button className="btn-outline !py-1.5 text-xs" onClick={collapseAll}>Tout replier</button>
+          <button className="btn-outline !py-1.5 text-xs" onClick={reset}>Réinitialiser</button>
+        </div>
+        <p className="text-[11px] text-primary-500">Glissez-déposez · crayon pour renommer · +/− pour déplier · enregistrement automatique</p>
+      </div>
+
+      {showAdd && (
+        <Card padded>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 mb-1 block">Libellé</label>
+              <input className="input !py-1.5 text-sm w-full" placeholder="Ex : Loyers et charges locatives"
+                value={newSec.label} onChange={(e) => setNewSec((s) => ({ ...s, label: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 mb-1 block">Préfixes de comptes (séparés par ,)</label>
+              <input className="input !py-1.5 text-sm w-full font-mono" placeholder="Ex : 613, 614"
+                value={newSec.prefixes} onChange={(e) => setNewSec((s) => ({ ...s, prefixes: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 mb-1 block">Nature</label>
+              <select className="input !py-1.5 text-sm w-full" value={newSec.isCharge ? '1' : '0'}
+                onChange={(e) => setNewSec((s) => ({ ...s, isCharge: e.target.value === '1' }))}>
+                <option value="0">Produit (+)</option>
+                <option value="1">Charge (−)</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button className="btn-primary !py-1.5 text-xs" onClick={addSection}>Ajouter la section</button>
+          </div>
+        </Card>
+      )}
+
+      <Card padded={false}>
+        <table className="w-full text-sm">
+          <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
+            <tr>
+              <th className="text-left py-2 px-3 w-8"></th>
+              <th className="text-left py-2 px-3 w-8"></th>
+              <th className="text-left py-2 px-3">Section / compte</th>
+              <th className="text-right py-2 px-3 w-32">Réalisé</th>
+              <th className="text-right py-2 px-3 w-32">Budget</th>
+              <th className="text-right py-2 px-3 w-28">Écart</th>
+              <th className="text-right py-2 px-3 w-10"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+            {order.map((id, idx) => {
+              const s = secMap.get(id);
+              if (!s) return null;
+              const open = expanded[s.section];
+              const isOver = drag && drag !== s.section;
+              const operator = s.isCharge ? '−' : '+';
+              const isCustom = customIds.has(id);
+              return (
+                <React.Fragment key={`s-${s.section}-${idx}`}>
                   <tr
-                    key={`s-${s.section}-${idx}`}
                     draggable
                     onDragStart={() => onDragStart(s.section)}
                     onDragOver={(e) => onDragOver(e, s.section)}
@@ -304,17 +473,18 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                           <input
                             autoFocus
                             className="input !py-1 text-sm font-semibold flex-1"
-                            value={labels[s.section]}
+                            value={labels[s.section] ?? ''}
                             onChange={(e) => updateLabel(s.section, e.target.value)}
                             onBlur={() => setEditing(null)}
                             onKeyDown={(e) => e.key === 'Enter' && setEditing(null)}
                           />
                         ) : (
                           <>
-                            <span>{labels[s.section]}</span>
+                            <span>{labels[s.section] ?? s.label}</span>
                             <button onClick={() => setEditing(s.section)} className="btn-ghost !p-1 text-xs opacity-50 hover:opacity-100" title="Renommer">✎</button>
                           </>
                         )}
+                        {isCustom && <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary-300 dark:bg-primary-700 text-primary-700 dark:text-primary-300">custom</span>}
                         <span className="text-[10px] text-primary-400 font-normal">({s.rows.length} comptes)</span>
                       </div>
                     </td>
@@ -324,7 +494,11 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                       s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
                       {s.totalEcart >= 0 ? '+' : ''}{fmtFull(s.totalEcart)}
                     </td>
-                    <td className="py-2 px-3 text-right num text-xs text-primary-500 font-normal">—</td>
+                    <td className="py-2 px-2 text-right">
+                      {isCustom && (
+                        <button onClick={() => removeSection(id)} className="btn-ghost !p-1 text-xs text-primary-500 hover:text-error" title="Supprimer">✕</button>
+                      )}
+                    </td>
                   </tr>
                   {open && s.rows.map((r) => (
                     <tr key={r.code} className="bg-primary-50 dark:bg-primary-950">
@@ -339,19 +513,39 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                         r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
                         {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
                       </td>
-                      <td className="py-1.5 px-3 text-right num text-[10px] text-primary-400">
-                        {s.totalRealise ? ((r.realise / s.totalRealise) * 100).toFixed(1) : 0} %
-                      </td>
+                      <td></td>
                     </tr>
                   ))}
-                </>
+                </React.Fragment>
               );
             })}
           </tbody>
         </table>
       </Card>
 
-      {/* CR officiel SYSCOHADA en référence */}
+      {/* Résultats intermédiaires (calculés sur les sections standard) */}
+      <Card title="Résultats intermédiaires" subtitle="Calculés à partir des sections SYSCOHADA standard" padded={false}>
+        <table className="w-full text-sm">
+          <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+            {CR_FLOW.filter((i) => i.kind === 'inter').map((item: any) => {
+              const data = inters[item.key as keyof typeof inters];
+              const isFinal = item.key === 'res_net';
+              const ecart = data.realise - data.budget;
+              return (
+                <tr key={item.key}
+                  className={clsx('font-bold',
+                    isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
+                  <td className="py-2.5 px-3 uppercase text-xs tracking-wider">= {INTERMEDIATE_LABELS[item.key as keyof typeof INTERMEDIATE_LABELS]}</td>
+                  <td className="py-2.5 px-3 text-right num w-32">{fmtFull(data.realise)}</td>
+                  <td className="py-2.5 px-3 text-right num w-32">{fmtFull(data.budget)}</td>
+                  <td className="py-2.5 px-3 text-right num w-28">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+
       <details className="card p-4">
         <summary className="cursor-pointer text-sm font-semibold text-primary-700 dark:text-primary-300">
           Voir le compte de résultat officiel SYSCOHADA (référence)

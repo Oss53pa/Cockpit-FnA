@@ -14,11 +14,15 @@ export type BudgetActualRow = {
   isCharge: boolean;
 };
 
-export type CRSection =
+// CRSection = identifiant de section (par défaut + sections custom)
+export type CRSection = string;
+export type CRDefaultSection =
   | 'produits_expl' | 'charges_expl'
   | 'produits_fin' | 'charges_fin'
   | 'produits_hao' | 'charges_hao'
   | 'impots';
+
+export type CustomSection = { id: string; label: string; prefixes: string[]; isCharge: boolean };
 
 // Sections en SYSCOHADA :
 // - Produits exploitation : 70-75 + 781 (transferts d'expl.)
@@ -28,7 +32,7 @@ export type CRSection =
 // - Produits HAO          : 82, 84, 86, 88
 // - Charges HAO           : 81, 83, 85
 // - Impôts sur résultat   : 87 (participation) + 89 (impôt)
-const DEFAULT_SECTION_DEFS: Record<CRSection, { label: string; prefixes: string[]; isCharge: boolean }> = {
+const DEFAULT_SECTION_DEFS: Record<CRDefaultSection, { label: string; prefixes: string[]; isCharge: boolean }> = {
   produits_expl: { label: "Produits d'exploitation",  prefixes: ['70','71','72','73','74','75','781'], isCharge: false },
   charges_expl:  { label: "Charges d'exploitation",   prefixes: ['60','61','62','63','64','65','66','681','691'], isCharge: true },
   produits_fin:  { label: 'Produits financiers',       prefixes: ['77','786','797'], isCharge: false },
@@ -67,14 +71,29 @@ export const CR_FLOW: Array<{ kind: 'section'; key: CRSection } | { kind: 'inter
 // Labels personnalisables (persistés en localStorage par société)
 const KEY_LABELS = 'cr-section-labels';
 const KEY_ORDER  = 'cr-section-order';
+const KEY_CUSTOM = 'cr-section-custom';
+
+export function loadCustomSections(orgId: string): CustomSection[] {
+  try {
+    const raw = localStorage.getItem(`${KEY_CUSTOM}:${orgId}`);
+    if (raw) return JSON.parse(raw) as CustomSection[];
+  } catch {}
+  return [];
+}
+export function saveCustomSections(orgId: string, sections: CustomSection[]) {
+  localStorage.setItem(`${KEY_CUSTOM}:${orgId}`, JSON.stringify(sections));
+}
 
 export function loadLabels(orgId: string): Record<CRSection, string> {
   try {
     const raw = localStorage.getItem(`${KEY_LABELS}:${orgId}`);
     const overrides = raw ? JSON.parse(raw) : {};
-    const out: any = {};
-    for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRSection[]) {
+    const out: Record<string, string> = {};
+    for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
       out[k] = overrides[k] ?? DEFAULT_SECTION_DEFS[k].label;
+    }
+    for (const c of loadCustomSections(orgId)) {
+      out[c.id] = overrides[c.id] ?? c.label;
     }
     return out;
   } catch { return Object.fromEntries(Object.entries(DEFAULT_SECTION_DEFS).map(([k, v]) => [k, v.label])) as any; }
@@ -83,25 +102,35 @@ export function saveLabels(orgId: string, labels: Record<CRSection, string>) {
   localStorage.setItem(`${KEY_LABELS}:${orgId}`, JSON.stringify(labels));
 }
 export function loadOrder(orgId: string): CRSection[] {
+  const defaults = Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[];
+  const customIds = loadCustomSections(orgId).map((c) => c.id);
+  let stored: string[] = [];
   try {
     const raw = localStorage.getItem(`${KEY_ORDER}:${orgId}`);
-    if (raw) return JSON.parse(raw);
+    if (raw) stored = JSON.parse(raw);
   } catch {}
-  return Object.keys(DEFAULT_SECTION_DEFS) as CRSection[];
+  const all = [...defaults, ...customIds];
+  // Commencer par l'ordre stocké (filtré) puis compléter avec les ids manquants
+  const filtered = stored.filter((id) => all.includes(id));
+  for (const id of all) if (!filtered.includes(id)) filtered.push(id);
+  return filtered;
 }
 export function saveOrder(orgId: string, order: CRSection[]) {
   localStorage.setItem(`${KEY_ORDER}:${orgId}`, JSON.stringify(order));
 }
 
-// CR_SECTIONS dynamique selon labels custom
-export function getSectionDefs(orgId?: string) {
-  if (!orgId) return DEFAULT_SECTION_DEFS;
+// CR_SECTIONS dynamique selon labels custom + sections custom
+export function getSectionDefs(orgId?: string): Record<string, { label: string; prefixes: string[]; isCharge: boolean }> {
+  if (!orgId) return { ...DEFAULT_SECTION_DEFS };
   const labels = loadLabels(orgId);
-  const out: any = {};
-  for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRSection[]) {
-    out[k] = { ...DEFAULT_SECTION_DEFS[k], label: labels[k] };
+  const out: Record<string, { label: string; prefixes: string[]; isCharge: boolean }> = {};
+  for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
+    out[k] = { ...DEFAULT_SECTION_DEFS[k], label: labels[k] ?? DEFAULT_SECTION_DEFS[k].label };
   }
-  return out as typeof DEFAULT_SECTION_DEFS;
+  for (const c of loadCustomSections(orgId)) {
+    out[c.id] = { label: labels[c.id] ?? c.label, prefixes: c.prefixes, isCharge: c.isCharge };
+  }
+  return out;
 }
 
 // Compat : utilisation directe des defaults
@@ -158,7 +187,7 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
 // Agrégation par section (avec labels et ordre personnalisés si orgId fourni)
 export function bySection(rows: BudgetActualRow[], orgId?: string): Array<{ section: CRSection; label: string; rows: BudgetActualRow[]; totalRealise: number; totalBudget: number; totalEcart: number; ecartPct: number; isCharge: boolean }> {
   const defs = getSectionDefs(orgId);
-  const order = orgId ? loadOrder(orgId) : (Object.keys(defs) as CRSection[]);
+  const order = orgId ? loadOrder(orgId) : (Object.keys(defs) as string[]);
   const out: ReturnType<typeof bySection> = [];
   for (const sec of order) {
     const def = defs[sec];
@@ -175,8 +204,9 @@ export function bySection(rows: BudgetActualRow[], orgId?: string): Array<{ sect
 
 // Détail d'une section seule (pour zoom)
 export function sectionDetail(section: CRSection, rows: BudgetActualRow[]): BudgetActualRow[] {
-  const def = DEFAULT_SECTION_DEFS[section];
-  return rows.filter((r) => def.prefixes.some((p) => r.code.startsWith(p)));
+  const def = (DEFAULT_SECTION_DEFS as any)[section];
+  if (!def) return [];
+  return rows.filter((r) => def.prefixes.some((p: string) => r.code.startsWith(p)));
 }
 
 // Calcul des résultats intermédiaires depuis les sections agrégées
