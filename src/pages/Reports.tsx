@@ -51,6 +51,15 @@ const DASHBOARD_CATALOG: Array<{ id: string; name: string; cat: string; desc: st
   { id: 'btp', name: 'BTP', cat: 'Sectoriel', desc: 'Travaux, sous-traitance, chantiers' },
   { id: 'com', name: 'Commerce', cat: 'Sectoriel', desc: 'Marge commerciale, taux de marque' },
   { id: 'mfi', name: 'Microfinance', cat: 'Sectoriel', desc: 'PNB, encours, PAR' },
+  { id: 'imco', name: 'Immobilier commercial', cat: 'Sectoriel', desc: 'Loyers, taux occupation, rentabilité m²' },
+  { id: 'hot', name: 'Hôtellerie & Restauration', cat: 'Sectoriel', desc: 'RevPAR, ADR, GOP, F&B ratio' },
+  { id: 'agri', name: 'Agriculture', cat: 'Sectoriel', desc: 'Production, intrants, rendement' },
+  { id: 'sante', name: 'Santé', cat: 'Sectoriel', desc: 'Actes, recettes, personnel soignant' },
+  { id: 'transp', name: 'Transport & Logistique', cat: 'Sectoriel', desc: 'CA/km, flotte, carburant' },
+  { id: 'serv', name: 'Services & Conseil', cat: 'Sectoriel', desc: 'Honoraires, taux facturable, marge projets' },
+  { id: 'ana_centres', name: 'Centres de coûts / profit', cat: 'Analytique', desc: 'Charges & produits par centre' },
+  { id: 'ana_projets', name: 'Suivi par projet', cat: 'Analytique', desc: 'Rentabilité, marge, avancement' },
+  { id: 'ana_axes', name: 'Axes analytiques', cat: 'Analytique', desc: 'Analyse multi-axes' },
 ];
 
 // Helper pour KPIs calculés
@@ -174,10 +183,14 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'h1', text: '11. Masse salariale', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Masse salariale' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '12. Ratios financiers', inToc: true },
+      { id: uid(), type: 'h1', text: '12. Comptabilité analytique', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Répartition des charges et produits par centre de coût / section analytique." },
+      { id: uid(), type: 'dashboard', dashboardId: 'analytical', title: 'P&L par section analytique' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '13. Ratios financiers', inToc: true },
       { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '13. Recommandations', inToc: true },
+      { id: uid(), type: 'h1', text: '14. Recommandations', inToc: true },
       { id: uid(), type: 'paragraph', text: "Synthèse des points d'attention identifiés et des actions correctives recommandées." },
       { id: uid(), type: 'h2', text: "Points d'attention", inToc: true },
       { id: uid(), type: 'paragraph', text: "À compléter : ratios hors seuil, écarts significatifs, alertes opérationnelles." },
@@ -233,7 +246,10 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'h1', text: '11. Masse salariale', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Charges de personnel' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '12. Fiscalité', inToc: true },
+      { id: uid(), type: 'h1', text: '12. Comptabilité analytique', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'analytical', title: 'P&L par centre de coût' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '13. Fiscalité', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'fis', title: 'TVA, IS, pression fiscale' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '13. Stocks', inToc: true },
@@ -316,7 +332,11 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'h1', text: '13. Masse salariale et charges sociales', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Charges de personnel' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '14. Immobilisations', inToc: true },
+      { id: uid(), type: 'h1', text: '14. Comptabilité analytique', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Ventilation des charges et produits par centre de coût, projet ou département." },
+      { id: uid(), type: 'dashboard', dashboardId: 'analytical', title: 'P&L par section analytique' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '15. Immobilisations', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'immo', title: 'VNC, amortissements, taux de vétusté' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '15. Fiscalité', inToc: true },
@@ -341,9 +361,105 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'paragraph', text: "À compléter : objectifs du prochain exercice, investissements prévus, évolution du CA et de la rentabilité." },
     ];
   },
+
+  interim: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Synthèse de la période', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Rapport intérimaire de la société sur la période de reporting sélectionnée. Analyse de la performance, de la position financière et des perspectives." },
+      { id: uid(), type: 'kpi', items: [
+        { label: 'CA période', value: k.ca, subValue: 'Cumul période' }, { label: 'RN', value: k.rn, subValue: `Marge ${k.margePct}` },
+        { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` }, { label: 'Trésorerie', value: k.treso },
+      ]},
+      { id: uid(), type: 'kpi', items: [
+        { label: 'Total Actif', value: k.actif }, { label: 'Capitaux propres', value: k.capPropres },
+        { label: 'BFR', value: k.bfr }, { label: 'DSO', value: k.dso },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Bilan intérimaire', inToc: true },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif (arrêté de période)' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif (arrêté de période)' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Compte de résultat de la période', inToc: true },
+      { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat — par nature' },
+      { id: uid(), type: 'table', source: 'sig', title: 'Soldes intermédiaires de gestion' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Analyse du CR par section', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Tableau des flux de trésorerie', inToc: true },
+      { id: uid(), type: 'table', source: 'tft', title: 'TFT — période' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Budget vs Réalisé', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual' },
+      { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail par compte' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Trésorerie et flux', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Cycle clients', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Créances et recouvrement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Cycle fournisseurs', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Dettes fournisseurs' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. BFR et fonds de roulement', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'FR, BFR, TN' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Stocks', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Stocks — valorisation et rotation' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '12. Ratios financiers', inToc: true },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers — période' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '13. Prévisions et perspectives', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Projections basées sur les tendances observées sur la période. À compléter avec les hypothèses de la Direction." },
+      { id: uid(), type: 'h2', text: 'Objectifs période suivante', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : CA prévisionnel, charges cibles, investissements planifiés, recrutements." },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '14. Recommandations', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Points d'attention et actions correctives pour la période suivante." },
+    ];
+  },
 };
 
 function uid() { return Math.random().toString(36).substring(2, 11); }
+
+// Filtre les blocs conditionnels selon les données disponibles
+function filterConditionalBlocks(blocks: Block[], data: any): Block[] {
+  const noStocks = !data?.hasStocks;
+  const noAnalytical = !data?.hasAnalytical;
+  if (!noStocks && !noAnalytical) return blocks;
+
+  // Supprime les blocs stocks + le titre et pageBreak qui les précèdent
+  const result: Block[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    // Dashboard stocks
+    if (noStocks && b.type === 'dashboard' && (b as any).dashboardId === 'stk') {
+      // Supprimer aussi le titre (h1) précédent et le pageBreak précédent
+      while (result.length > 0 && (result[result.length - 1].type === 'h1' || result[result.length - 1].type === 'pageBreak')) {
+        const last = result[result.length - 1];
+        if (last.type === 'h1' && (last as any).text?.toLowerCase().includes('stock')) { result.pop(); break; }
+        if (last.type === 'pageBreak') { result.pop(); continue; }
+        break;
+      }
+      continue;
+    }
+    // Dashboard analytique
+    if (noAnalytical && b.type === 'dashboard' && (b as any).dashboardId === 'analytical') {
+      while (result.length > 0 && (result[result.length - 1].type === 'h1' || result[result.length - 1].type === 'pageBreak')) {
+        const last = result[result.length - 1];
+        if (last.type === 'h1' && (last as any).text?.toLowerCase().includes('analytiq')) { result.pop(); break; }
+        if (last.type === 'pageBreak') { result.pop(); continue; }
+        break;
+      }
+      continue;
+    }
+    result.push(b);
+  }
+  return result;
+}
 
 export default function Reports() {
   const { bilan, cr, sig, balance } = useStatements();
@@ -391,28 +507,86 @@ export default function Reports() {
     const arr = [...c.blocks]; [arr[i], arr[ni]] = [arr[ni], arr[i]];
     return { ...c, blocks: arr };
   });
-  const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => setConfig((c) => ({ ...c, blocks: QUICK_TEMPLATES[k](data) }));
+  const moveBlockToIndex = (srcId: string, targetIndex: number) => {
+    setConfig((c) => {
+      const blocks = [...c.blocks];
+      const srcIdx = blocks.findIndex((b) => b.id === srcId);
+      if (srcIdx < 0) return c;
+      const [moved] = blocks.splice(srcIdx, 1);
+      const adjustedIdx = targetIndex > srcIdx ? targetIndex - 1 : targetIndex;
+      blocks.splice(Math.max(0, Math.min(blocks.length, adjustedIdx)), 0, moved);
+      return { ...c, blocks };
+    });
+  };
+
+  const reorderBlock = (srcId: string, targetId: string, insertAfter: boolean) => {
+    setConfig((c) => {
+      const blocks = [...c.blocks];
+      const srcIdx = blocks.findIndex((b) => b.id === srcId);
+      if (srcIdx < 0) return c;
+      const [moved] = blocks.splice(srcIdx, 1);
+      let targetIdx = blocks.findIndex((b) => b.id === targetId);
+      if (targetIdx < 0) return c;
+      if (insertAfter) targetIdx++;
+      blocks.splice(targetIdx, 0, moved);
+      return { ...c, blocks };
+    });
+  };
+
+  const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => setConfig((c) => ({ ...c, blocks: filterConditionalBlocks(QUICK_TEMPLATES[k](data), data) }));
 
   const palette = PALETTES[config.palette];
 
-  // Données réelles à injecter
+  // Détection données conditionnelles (analytique + stocks)
+  const hasAnalytical = useLiveQuery(async () => {
+    const sample = await db.gl.where('orgId').equals(currentOrgId).limit(500).toArray();
+    return sample.some((e) => !!e.analyticalSection || !!e.analyticalAxis);
+  }, [currentOrgId], false);
+  const hasStocks = balance.some((r) => r.account.startsWith('3') && Math.abs(r.solde) > 1);
+
+  // Recalcul des données selon l'intervalle de période du rapport
+  const periodFromMonth = config.identity.periodFrom ? new Date(config.identity.periodFrom).getMonth() + 1 : undefined;
+  const periodToMonth = config.identity.periodTo ? new Date(config.identity.periodTo).getMonth() + 1 : undefined;
+  const hasPeriodFilter = periodFromMonth !== undefined && periodToMonth !== undefined;
+
+  const periodBalance = useLiveQuery(async () => {
+    if (!currentOrgId || !hasPeriodFilter) return null;
+    const { computeBalance: cb } = await import('../engine/balance');
+    return cb({ orgId: currentOrgId, year: currentYear, fromMonth: periodFromMonth, uptoMonth: periodToMonth, includeOpening: true });
+  }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], null);
+
+  const periodStatements = useMemo(() => {
+    if (!hasPeriodFilter || !periodBalance) return null;
+    const { computeBilan, computeSIG } = require('../engine/statements');
+    const b = computeBilan(periodBalance);
+    const s = computeSIG(periodBalance);
+    return { bilan: b, sig: s.sig, cr: s.cr };
+  }, [periodBalance, hasPeriodFilter]);
+
+  const effectiveBilan = hasPeriodFilter && periodStatements ? periodStatements.bilan : bilan;
+  const effectiveSig = hasPeriodFilter && periodStatements ? periodStatements.sig : sig;
+  const effectiveCR = hasPeriodFilter && periodStatements ? periodStatements.cr : cr;
+  const effectiveBalance = hasPeriodFilter && periodBalance ? periodBalance : balance;
+
   const data = useMemo(() => ({
-    bilanActif: bilan?.actif ?? [],
-    bilanPassif: bilan?.passif ?? [],
-    cr,
-    sig,
-    balance,
+    bilanActif: effectiveBilan?.actif ?? [],
+    bilanPassif: effectiveBilan?.passif ?? [],
+    cr: effectiveCR,
+    sig: effectiveSig,
+    balance: effectiveBalance,
     ratios,
     tft: tft?.lines,
     capital,
     budgetActual,
-  }), [bilan, cr, sig, balance, ratios, tft, capital, budgetActual]);
+    hasAnalytical,
+    hasStocks,
+  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, ratios, tft, capital, budgetActual, hasAnalytical, hasStocks]);
 
   // Rafraîchir les KPIs du rapport par défaut une fois les données chargées (1 fois)
   useEffect(() => {
     if (initialized.current || !sig) return;
     initialized.current = true;
-    setConfig((c) => ({ ...c, blocks: QUICK_TEMPLATES.monthly(data) }));
+    setConfig((c) => ({ ...c, blocks: filterConditionalBlocks(QUICK_TEMPLATES.monthly(data), data) }));
   }, [sig, data]);
 
   const logReport = (title: string, format: string) => {
@@ -467,7 +641,25 @@ export default function Reports() {
             <div className="space-y-2.5">
               <Field label="Titre" v={config.identity.title} on={(v) => setIdentity('title', v)} />
               <Field label="Sous-titre" v={config.identity.subtitle} on={(v) => setIdentity('subtitle', v)} />
-              <Field label="Période" v={config.identity.period} on={(v) => setIdentity('period', v)} />
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Période de reporting</label>
+                <div className="flex gap-2 items-center mb-1">
+                  <input type="date" className="input !py-1 text-xs flex-1" value={config.identity.periodFrom ?? ''} onChange={(e) => {
+                    setIdentity('periodFrom', e.target.value);
+                    const from = e.target.value ? new Date(e.target.value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                    const to = config.identity.periodTo ? new Date(config.identity.periodTo).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                    if (from && to) setIdentity('period', `Du ${from} au ${to}`);
+                  }} />
+                  <span className="text-[10px] text-primary-400">au</span>
+                  <input type="date" className="input !py-1 text-xs flex-1" value={config.identity.periodTo ?? ''} onChange={(e) => {
+                    setIdentity('periodTo', e.target.value);
+                    const from = config.identity.periodFrom ? new Date(config.identity.periodFrom).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                    const to = e.target.value ? new Date(e.target.value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                    if (from && to) setIdentity('period', `Du ${from} au ${to}`);
+                  }} />
+                </div>
+                <input className="input !py-1 text-xs text-primary-400" value={config.identity.period} onChange={(e) => setIdentity('period', e.target.value)} placeholder="Ou saisie libre : Exercice 2025, S1 2025..." />
+              </div>
               <Field label="Auteur" v={config.identity.author} on={(v) => setIdentity('author', v)} />
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Confidentialité</label>
@@ -568,7 +760,7 @@ export default function Reports() {
             <div className="space-y-1">
               {Object.entries(QUICK_TEMPLATES).map(([k]) => (
                 <button key={k} onClick={() => applyTemplate(k as any)} className="w-full text-left px-2.5 py-2 rounded hover:bg-primary-200 dark:hover:bg-primary-800 text-xs font-medium">
-                  {k === 'weekly' ? 'Flash hebdomadaire' : k === 'monthly' ? 'Rapport mensuel' : k === 'quarterly' ? 'Comité trimestriel' : 'Rapport annuel'}
+                  {{ weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel', quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire' }[k] ?? k}
                 </button>
               ))}
             </div>
@@ -578,7 +770,7 @@ export default function Reports() {
         {/* ════════════════ CENTRE — VISUALISEUR ════════════════ */}
         <main className="space-y-3">
           {renderPages(config, data, palette, {
-            updateBlock, removeBlock, moveBlock, insertBlockAt,
+            updateBlock, removeBlock, moveBlock, insertBlockAt, reorderBlock, moveBlockToIndex,
             openTablesCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('tables'); },
             openDashCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('dashboards'); },
             org,
@@ -667,13 +859,13 @@ export default function Reports() {
 // ─── RENDU DES PAGES (simulation A4) ─────────────────────────────
 function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   const isLandscape = config.format === 'A4_landscape';
+  const maxH = config.format === 'pptx' ? 540 : isLandscape ? 595 : 1000; // hauteur utile approximative en px
   const pageStyle = config.format === 'pptx'
     ? { width: '100%', maxWidth: 980, aspectRatio: '16/9', minHeight: 'auto' as const }
     : isLandscape
       ? { width: '100%', maxWidth: 1000, aspectRatio: '297/210', minHeight: 'auto' as const }
       : { width: '100%', maxWidth: 760, minHeight: 1000 };
 
-  // On garde l'index global de chaque bloc pour pouvoir insérer à la bonne position
   const blocksWithIndex = config.blocks.map((b, i) => ({ block: b, index: i }));
   const pages: Array<Array<{ block: Block; index: number }>> = [[]];
   for (const item of blocksWithIndex) {
@@ -684,27 +876,24 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   return (
     <>
       {config.options.includeCover && (
-        <PageA4 style={pageStyle}>
+        <PageA4 style={pageStyle} maxH={maxH}>
           <CoverPage config={config} palette={palette} org={ops.org} />
         </PageA4>
       )}
 
       {config.options.includeTOC && (
-        <PageA4 style={pageStyle}>
+        <PageA4 style={pageStyle} maxH={maxH}>
           <TocPage config={config} palette={palette} />
         </PageA4>
       )}
 
       {pages.map((pageBlocks, pi) => (
-        <PageA4 key={pi} style={pageStyle}>
+        <PageA4 key={pi} style={pageStyle} maxH={maxH}>
           {pageBlocks.length === 0 && (
             <InsertHere index={config.blocks.length} ops={ops} alwaysOpen />
           )}
-          {pageBlocks.map(({ block, index }, i) => (
-            <div key={block.id}>
-              <InsertHere index={index} ops={ops} />
-              <BlockEditor block={block} data={data} palette={palette} ops={ops} />
-            </div>
+          {pageBlocks.map(({ block, index }) => (
+            <DraggableBlock key={block.id} block={block} index={index} ops={ops} data={data} palette={palette} />
           ))}
           {pageBlocks.length > 0 && <InsertHere index={pageBlocks[pageBlocks.length - 1].index + 1} ops={ops} />}
         </PageA4>
@@ -713,20 +902,76 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   );
 }
 
-// ─── BOUTON "+" ENTRE LES BLOCS ────────────────────────────────
+// ─── BLOC DRAGGABLE (HTML5 DnD natif) ─────────────────────────────
+function DraggableBlock({ block, index, ops, data, palette }: { block: Block; index: number; ops: any; data: any; palette: any }) {
+  const [dragOver, setDragOver] = useState<'above' | 'below' | null>(null);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('text/plain', block.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    setDragOver(e.clientY < mid ? 'above' : 'below');
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const srcId = e.dataTransfer.getData('text/plain');
+    if (!srcId || srcId === block.id) { setDragOver(null); return; }
+    ops.reorderBlock(srcId, block.id, dragOver === 'below');
+    setDragOver(null);
+  };
+
+  return (
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setDragOver(null)}
+      onDrop={handleDrop}
+      className="relative"
+    >
+      {dragOver === 'above' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary-900 dark:bg-primary-100 z-10" />}
+      <InsertHere index={index} ops={ops} />
+      <BlockEditor block={block} data={data} palette={palette} ops={ops} />
+      {dragOver === 'below' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-900 dark:bg-primary-100 z-10" />}
+    </div>
+  );
+}
+
+// ─── BOUTON "+" ENTRE LES BLOCS (aussi droppable) ──────────────
 function InsertHere({ index, ops, alwaysOpen }: { index: number; ops: any; alwaysOpen?: boolean }) {
   const [open, setOpen] = useState(alwaysOpen ?? false);
   const [hover, setHover] = useState(false);
+  const [dragHover, setDragHover] = useState(false);
 
   const ins = (b: Block) => { ops.insertBlockAt(index, b); setOpen(false); };
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragHover(true); };
+  const handleDragLeave = () => setDragHover(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const srcId = e.dataTransfer.getData('text/plain');
+    if (srcId && ops.moveBlockToIndex) ops.moveBlockToIndex(srcId, index);
+    setDragHover(false);
+  };
 
   return (
     <div
       className="relative"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
-      <div className={clsx('flex items-center transition-all', open || hover ? 'h-6' : 'h-0.5')}>
+      <div className={clsx('flex items-center transition-all', dragHover ? 'h-8' : open || hover ? 'h-6' : 'h-0.5')}>
+        {dragHover && <div className="absolute inset-x-0 top-1/2 h-1 bg-primary-900 dark:bg-primary-100 rounded" />}
         <div className={clsx('flex-1 h-px transition-colors', hover || open ? 'bg-primary-300 dark:bg-primary-700' : 'bg-transparent')} />
         <button
           onClick={() => setOpen(!open)}
@@ -790,10 +1035,28 @@ function PopBtn({ icon, label, sub, onClick, highlight }: { icon: React.ReactNod
   );
 }
 
-function PageA4({ children, style }: { children: React.ReactNode; style: React.CSSProperties }) {
+function PageA4({ children, style, maxH }: { children: React.ReactNode; style: React.CSSProperties; maxH?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+
+  useEffect(() => {
+    if (!ref.current || !maxH) return;
+    const check = () => setOverflow(ref.current!.scrollHeight > maxH);
+    check();
+    const obs = new ResizeObserver(check);
+    obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [maxH, children]);
+
   return (
-    <div className="bg-white dark:bg-primary-900 border border-primary-300 dark:border-primary-700 rounded p-6 mx-auto overflow-hidden" style={style}>
-      <div className="overflow-hidden break-words">{children}</div>
+    <div className={clsx('bg-white dark:bg-primary-900 border rounded p-6 mx-auto relative',
+      overflow ? 'border-error/50 ring-1 ring-error/20' : 'border-primary-300 dark:border-primary-700')} style={style}>
+      {overflow && (
+        <div className="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-[9px] font-semibold bg-error/10 text-error border border-error/20">
+          Hors marge
+        </div>
+      )}
+      <div ref={ref} className="overflow-hidden break-words">{children}</div>
     </div>
   );
 }

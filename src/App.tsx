@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -18,19 +18,35 @@ const Actions        = lazy(() => import('./pages/Actions'));
 const Budget         = lazy(() => import('./pages/Budget'));
 const COA            = lazy(() => import('./pages/COA'));
 const GrandLivre     = lazy(() => import('./pages/GrandLivre'));
+const Analytical     = lazy(() => import('./pages/Analytical'));
+const AuditTrail     = lazy(() => import('./pages/AuditTrail'));
 const Settings       = lazy(() => import('./pages/Settings'));
 
 function PageFallback() {
-  return <div className="py-20 text-center text-primary-500">Chargement…</div>;
+  return <div className="py-20 text-center text-primary-500">Chargement...</div>;
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
+
+  const toggleCollapse = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem('sidebar-collapsed', String(next));
+  };
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapse}
+      />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-        <main className="flex-1 p-6">
+        <Header onMenuClick={() => setSidebarOpen(true)} />
+        <main className="flex-1 p-3 sm:p-4 lg:p-6">
           <Suspense fallback={<PageFallback />}>{children}</Suspense>
         </main>
       </div>
@@ -43,10 +59,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Page d'accueil sans sidebar ni header */}
         <Route path="/" element={<><Home /><FloatingAI /></>} />
-
-        {/* Toutes les autres pages avec layout complet */}
         <Route path="/dashboards" element={<AppLayout><Dashboards /></AppLayout>} />
         <Route path="/dashboard/home" element={<AppLayout><DashboardHome /></AppLayout>} />
         <Route path="/dashboard/:id" element={<AppLayout><Dashboard /></AppLayout>} />
@@ -60,6 +73,8 @@ function App() {
         <Route path="/ratios" element={<AppLayout><Ratios /></AppLayout>} />
         <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />
         <Route path="/ai" element={<AppLayout><AI /></AppLayout>} />
+        <Route path="/analytical" element={<AppLayout><Analytical /></AppLayout>} />
+        <Route path="/audit" element={<AppLayout><AuditTrail /></AppLayout>} />
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
       </Routes>
     </BrowserRouter>

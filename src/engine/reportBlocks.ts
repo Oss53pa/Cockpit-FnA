@@ -46,6 +46,8 @@ export type ReportConfig = {
     title: string;
     subtitle: string;
     period: string;
+    periodFrom?: string; // YYYY-MM-DD
+    periodTo?: string;   // YYYY-MM-DD
     author: string;
     confidentiality: 'public' | 'interne' | 'confidentiel' | 'strict';
     logoDataUrl?: string;

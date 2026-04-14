@@ -42,10 +42,20 @@ const dashboards = [
   { id: 'btp', route: '/dashboard/btp', name: 'BTP', desc: 'Travaux facturés, achats chantier, sous-traitance, marge', icon: 'HardHat', cat: 'Sectoriel' },
   { id: 'com', route: '/dashboard/com', name: 'Commerce', desc: 'Ventes, coût d\'achat, marge commerciale, taux de marque', icon: 'ShoppingCart', cat: 'Sectoriel' },
   { id: 'mfi', route: '/dashboard/mfi', name: 'Microfinance', desc: 'Produits/charges d\'intérêts, PNB, encours clients', icon: 'Landmark', cat: 'Sectoriel' },
+  { id: 'imco', route: '/dashboard/imco', name: 'Immobilier commercial', desc: 'Loyers, taux occupation, charges locatives, rentabilité m²', icon: 'Building', cat: 'Sectoriel' },
+  { id: 'hot', route: '/dashboard/hot', name: 'Hôtellerie & Restauration', desc: 'RevPAR, taux occupation, ADR, GOP, F&B ratio', icon: 'Hotel', cat: 'Sectoriel' },
+  { id: 'agri', route: '/dashboard/agri', name: 'Agriculture', desc: 'Production, intrants, rendement/ha, subventions, stocks', icon: 'Wheat', cat: 'Sectoriel' },
+  { id: 'sante', route: '/dashboard/sante', name: 'Santé', desc: 'Actes médicaux, recettes, personnel soignant, équipements', icon: 'HeartPulse', cat: 'Sectoriel' },
+  { id: 'transp', route: '/dashboard/transp', name: 'Transport & Logistique', desc: 'CA/km, flotte, carburant, maintenance, taux de remplissage', icon: 'Truck', cat: 'Sectoriel' },
+  { id: 'serv', route: '/dashboard/serv', name: 'Services & Conseil', desc: 'Honoraires, taux facturable, marge projets, staffing', icon: 'Briefcase', cat: 'Sectoriel' },
+  // ─── Comptabilité analytique ───────────────────────────
+  { id: 'ana_centres', route: '/analytical', name: 'Comptabilité analytique', desc: 'P&L par centre de coût, répartition, évolution mensuelle', icon: 'PieChart', cat: 'Analytique' },
+  { id: 'ana_projets', route: '/analytical', name: 'Suivi par section', desc: 'Rentabilité par section analytique, contribution aux charges', icon: 'FolderKanban', cat: 'Analytique' },
+  { id: 'ana_axes', route: '/analytical', name: 'Axes analytiques', desc: 'Analyse multi-axes : région, département, activité', icon: 'GitBranch', cat: 'Analytique' },
 ];
 
 export default function Dashboards() {
-  const [filter, setFilter] = useState<'Tous' | 'Standard' | 'Reporting' | 'CR — Dashboards' | 'CR — Tables' | 'Sectoriel'>('Tous');
+  const [filter, setFilter] = useState<'Tous' | 'Standard' | 'Reporting' | 'CR — Dashboards' | 'CR — Tables' | 'Sectoriel' | 'Analytique'>('Tous');
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const navigate = useNavigate();
@@ -60,7 +70,7 @@ export default function Dashboards() {
       />
 
       <div className="flex gap-2 mb-6">
-        {(['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel'] as const).map((f) => (
+        {(['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Analytique'] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)}
             className={clsx('btn !py-1.5 text-xs',
               filter === f ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>

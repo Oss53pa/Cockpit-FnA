@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { CheckCircle2, Download, FileWarning, UploadCloud, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, FileWarning, Trash2, UploadCloud, XCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { useApp } from '../store/app';
+import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
 import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
@@ -73,6 +74,14 @@ export default function Imports() {
   };
 
   const reset = () => { setStep('idle'); setFile(null); setHeaders([]); setMapping({}); setReport(null); };
+
+  const deleteImport = async (imp: typeof history[number]) => {
+    if (!confirm(`Supprimer l'import "${imp.fileName}" et ses ${imp.count} écritures ?`)) return;
+    await db.transaction('rw', [db.gl, db.imports], async () => {
+      await db.gl.where('importId').equals(String(imp.id)).delete();
+      await db.imports.delete(imp.id!);
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -193,11 +202,12 @@ export default function Imports() {
                 <th className="text-right py-2 px-3">Écritures</th>
                 <th className="text-right py-2 px-3">Rejetées</th>
                 <th className="text-left py-2 px-3">Statut</th>
+                <th className="text-center py-2 px-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
               {history.length === 0 && (
-                <tr><td colSpan={7} className="py-6 text-center text-primary-500 text-xs">Aucun import</td></tr>
+                <tr><td colSpan={8} className="py-6 text-center text-primary-500 text-xs">Aucun import</td></tr>
               )}
               {history.map((i) => (
                 <tr key={i.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
@@ -211,6 +221,11 @@ export default function Imports() {
                     {i.status === 'success' && <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Succès</Badge>}
                     {i.status === 'partial' && <Badge variant="warning"><FileWarning className="w-3 h-3" /> Partiel</Badge>}
                     {i.status === 'error' && <Badge variant="error"><XCircle className="w-3 h-3" /> Échec</Badge>}
+                  </td>
+                  <td className="py-2 px-3 text-center">
+                    <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => deleteImport(i)} title="Supprimer cet import et ses écritures">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}

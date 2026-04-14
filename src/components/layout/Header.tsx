@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Settings } from 'lucide-react';
+import { Bell, LogOut, Menu, Settings } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear } = useApp();
   const orgs = useOrganizations();
   const allPeriods = usePeriods(currentOrgId);
@@ -36,35 +36,41 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-20 bg-primary-900 dark:bg-primary-950 text-primary-50 border-b border-primary-800">
-      <div className="px-6 py-3 flex items-center justify-between gap-4">
-        <div className="text-sm font-medium text-primary-400 tracking-wide">
-          {currentOrg?.name ?? '---'}
-          <span className="text-primary-600 mx-2">|</span>
-          <span className="num">{currentYear}</span>
+      <div className="px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-3">
+          {/* Hamburger — mobile only */}
+          <button onClick={onMenuClick} className="lg:hidden p-1 rounded hover:bg-white/15">
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="text-sm font-medium text-primary-400 tracking-wide truncate">
+            {currentOrg?.name ?? '---'}
+            <span className="text-primary-600 mx-2 hidden sm:inline">|</span>
+            <span className="num hidden sm:inline">{currentYear}</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <select
             value={currentOrgId}
             onChange={(e) => setCurrentOrg(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white font-medium focus:outline-none focus:bg-white/20 cursor-pointer [&>option]:text-primary-900"
+            className="hidden sm:block px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
             {orgs.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
           </select>
           <select
             value={currentYear}
             onChange={(e) => setCurrentYear(Number(e.target.value))}
-            className="px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
+            className="px-2 sm:px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
             {(years.length ? years : [2025]).map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
           <select
             value={currentPeriodId}
             onChange={(e) => setCurrentPeriod(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
+            className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
-            <option value="">YTD — Cumul année</option>
-            {periods.map((p) => (<option key={p.id} value={p.id}>{p.label} {p.closed ? '*' : ''}</option>))}
+            <option value="">YTD</option>
+            {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
           </select>
 
           <div ref={notifRef} className="relative">
@@ -78,17 +84,17 @@ export function Header() {
               )}
             </button>
             {notifOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl overflow-hidden text-primary-900 dark:text-primary-100">
+              <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl overflow-hidden text-primary-900 dark:text-primary-100">
                 <div className="px-4 py-3 border-b border-primary-200 dark:border-primary-800">
                   <p className="font-semibold text-sm">Notifications</p>
-                  <p className="text-xs text-primary-500">{alertCount} alerte(s) active(s)</p>
+                  <p className="text-xs text-primary-500">{alertCount} alerte(s)</p>
                 </div>
                 {alertCount === 0 ? (
                   <div className="p-6 text-center text-xs text-primary-500">Aucune notification</div>
                 ) : (
                   <button className="w-full text-left px-4 py-3 hover:bg-primary-100 dark:hover:bg-primary-800 text-sm"
                     onClick={() => { setNotifOpen(false); navigate('/alerts'); }}>
-                    Voir toutes les alertes →
+                    Voir les alertes
                   </button>
                 )}
               </div>
@@ -103,10 +109,10 @@ export function Header() {
               {initials}
             </button>
             {userOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl overflow-hidden text-primary-900 dark:text-primary-100">
+              <div className="absolute right-0 top-full mt-2 w-56 sm:w-64 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl overflow-hidden text-primary-900 dark:text-primary-100">
                 <div className="px-4 py-3 border-b border-primary-200 dark:border-primary-800">
-                  <p className="font-semibold text-sm">Utilisateur local</p>
-                  <p className="text-xs text-primary-500">mode hors-ligne · IndexedDB</p>
+                  <p className="font-semibold text-sm">{currentOrg?.name ?? 'Utilisateur'}</p>
+                  <p className="text-xs text-primary-500">mode hors-ligne</p>
                 </div>
                 <div className="py-1">
                   <MenuItem icon={<Settings className="w-4 h-4" />} label="Paramètres" onClick={() => { setUserOpen(false); navigate('/settings'); }} />
