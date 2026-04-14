@@ -140,3 +140,16 @@ export function useMonthlyCA() {
     return result;
   }, [currentOrgId, currentYear], []);
 }
+
+export function useBudgetActualMonthly(version?: string) {
+  const { currentOrgId, currentYear } = useApp();
+  return useLiveQuery(
+    async () => {
+      if (!currentOrgId) return null;
+      const { computeBudgetActualMonthly } = await import('../engine/budgetActual');
+      return computeBudgetActualMonthly(currentOrgId, currentYear, version);
+    },
+    [currentOrgId, currentYear, version],
+    null,
+  );
+}

@@ -6,7 +6,7 @@ import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { Collapsible } from '../components/ui/Collapsible';
-import { useBudgetActual, useCapitalVariation, useCurrentOrg, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
+import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { Block, buildPDFFromBlocks, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
@@ -21,7 +21,36 @@ const TABLE_CATALOG: Array<{ v: string; label: string; cat: string; desc: string
   { v: 'tft', label: 'Tableau des flux de trésorerie', cat: 'États', desc: 'CAFG, BFR, flux op./inv./fin.' },
   { v: 'capital', label: 'Variation des capitaux propres', cat: 'États', desc: 'Mouvements par rubrique' },
   { v: 'ratios', label: 'Ratios financiers', cat: 'Analyse', desc: 'Rentabilité, liquidité, structure, activité' },
-  { v: 'budget_actual', label: 'Budget vs Réalisé', cat: 'Analyse', desc: 'Écarts par compte sur tout le CR' },
+  { v: 'budget_actual', label: 'Budget vs Réalisé (annuel)', cat: 'Analyse', desc: 'Écarts annuels par compte sur tout le CR' },
+  { v: 'cr_monthly', label: 'CR mensuel (Jan→Déc)', cat: 'Mensuel', desc: 'Compte de résultat mois par mois' },
+  { v: 'bilan_monthly', label: 'Bilan mensuel (Jan→Déc)', cat: 'Mensuel', desc: 'Bilan actif/passif mois par mois' },
+  { v: 'budget_monthly', label: 'Budget vs Réalisé (mensuel + N-1)', cat: 'Mensuel', desc: 'Réalisé / Budget / N-1 par mois et par section' },
+  // ─── CR Bloc Tables : Monthly ───
+  { v: 'crtab_produits_expl_m', label: "Produits expl. — Monthly", cat: 'CR Monthly', desc: '70-75 : Actual / Budget / N-1 mois + YTD' },
+  { v: 'crtab_charges_expl_m', label: "Charges expl. — Monthly", cat: 'CR Monthly', desc: '60-66 : Actual / Budget / N-1 mois + YTD' },
+  { v: 'crtab_produits_fin_m', label: 'Produits fin. — Monthly', cat: 'CR Monthly', desc: '77 : Actual / Budget / N-1 mois + YTD' },
+  { v: 'crtab_charges_fin_m', label: 'Charges fin. — Monthly', cat: 'CR Monthly', desc: '67 : Actual / Budget / N-1 mois + YTD' },
+  { v: 'crtab_produits_hao_m', label: 'Produits HAO — Monthly', cat: 'CR Monthly', desc: '82,84,86,88 : Actual / Budget / N-1 mois + YTD' },
+  { v: 'crtab_charges_hao_m', label: 'Charges HAO — Monthly', cat: 'CR Monthly', desc: '81,83,85 : Actual / Budget / N-1 mois + YTD' },
+  { v: 'crtab_impots_m', label: 'Impôts — Monthly', cat: 'CR Monthly', desc: '87,89 : Actual / Budget / N-1 mois + YTD' },
+  // ─── CR Bloc Tables : Quarterly ───
+  { v: 'crtab_produits_expl_q', label: "Produits expl. — Quarterly", cat: 'CR Quarterly', desc: '70-75 : Actual / Budget / N-1 trimestre + YTD' },
+  { v: 'crtab_charges_expl_q', label: "Charges expl. — Quarterly", cat: 'CR Quarterly', desc: '60-66 : Actual / Budget / N-1 trimestre + YTD' },
+  { v: 'crtab_produits_fin_q', label: 'Produits fin. — Quarterly', cat: 'CR Quarterly', desc: '77 : Actual / Budget / N-1 trimestre + YTD' },
+  { v: 'crtab_charges_fin_q', label: 'Charges fin. — Quarterly', cat: 'CR Quarterly', desc: '67 : Actual / Budget / N-1 trimestre + YTD' },
+  { v: 'crtab_impots_q', label: 'Impôts — Quarterly', cat: 'CR Quarterly', desc: '87,89 : Actual / Budget / N-1 trimestre + YTD' },
+  // ─── CR Bloc Tables : Interim (S1/S2) ───
+  { v: 'crtab_produits_expl_s', label: "Produits expl. — Interim", cat: 'CR Interim', desc: '70-75 : Actual / Budget / N-1 semestre + YTD' },
+  { v: 'crtab_charges_expl_s', label: "Charges expl. — Interim", cat: 'CR Interim', desc: '60-66 : Actual / Budget / N-1 semestre + YTD' },
+  { v: 'crtab_produits_fin_s', label: 'Produits fin. — Interim', cat: 'CR Interim', desc: '77 : Actual / Budget / N-1 semestre + YTD' },
+  { v: 'crtab_charges_fin_s', label: 'Charges fin. — Interim', cat: 'CR Interim', desc: '67 : Actual / Budget / N-1 semestre + YTD' },
+  { v: 'crtab_impots_s', label: 'Impôts — Interim', cat: 'CR Interim', desc: '87,89 : Actual / Budget / N-1 semestre + YTD' },
+  // ─── CR Bloc Tables : Annual ───
+  { v: 'crtab_produits_expl_a', label: "Produits expl. — Annual", cat: 'CR Annual', desc: '70-75 : Actual / Budget / N-1 exercice complet' },
+  { v: 'crtab_charges_expl_a', label: "Charges expl. — Annual", cat: 'CR Annual', desc: '60-66 : Actual / Budget / N-1 exercice complet' },
+  { v: 'crtab_produits_fin_a', label: 'Produits fin. — Annual', cat: 'CR Annual', desc: '77 : Actual / Budget / N-1 exercice complet' },
+  { v: 'crtab_charges_fin_a', label: 'Charges fin. — Annual', cat: 'CR Annual', desc: '67 : Actual / Budget / N-1 exercice complet' },
+  { v: 'crtab_impots_a', label: 'Impôts — Annual', cat: 'CR Annual', desc: '87,89 : Actual / Budget / N-1 exercice complet' },
 ];
 
 // Synchronisé avec le catalogue Dashboards
@@ -37,7 +66,8 @@ const DASHBOARD_CATALOG: Array<{ id: string; name: string; cat: string; desc: st
   { id: 'bfr', name: 'BFR', cat: 'Standard', desc: 'FR, BFR, TN, équation' },
   { id: 'sal', name: 'Masse salariale', cat: 'Standard', desc: 'Charges, ratio, évolution' },
   { id: 'fis', name: 'Fiscalité', cat: 'Standard', desc: 'TVA, IS, pression fiscale' },
-  { id: 'is_bvsa', name: 'Income Statement Budget vs Actual', cat: 'Reporting', desc: 'Current period / N-1 / YTD' },
+  { id: 'is_bvsa', name: 'Budget vs Actual (annuel)', cat: 'Reporting', desc: 'Réalisé vs Budget annuel par section' },
+  { id: 'is_bvsa_monthly', name: 'Budget vs Actual (mensuel + N-1)', cat: 'Reporting', desc: 'Comparaison mensuelle Réalisé / Budget / N-1' },
   { id: 'cashflow', name: 'Cashflow Statement', cat: 'Reporting', desc: 'KPIs + Cash In/Out + Solde' },
   { id: 'receivables', name: 'Receivables & Payables Review', cat: 'Reporting', desc: 'Donuts + évolution mensuelle' },
   { id: 'crsec_produits_expl', name: "CR — Produits d'exploitation", cat: 'CR détaillé', desc: 'Comptes 70-75' },
@@ -47,6 +77,11 @@ const DASHBOARD_CATALOG: Array<{ id: string; name: string; cat: string; desc: st
   { id: 'crsec_produits_hao', name: 'CR — Produits exceptionnels', cat: 'CR détaillé', desc: 'Comptes 82, 84, 86, 88' },
   { id: 'crsec_charges_hao', name: 'CR — Charges exceptionnelles', cat: 'CR détaillé', desc: 'Comptes 81, 83, 85' },
   { id: 'crsec_impots', name: 'CR — Impôts sur bénéfices', cat: 'CR détaillé', desc: 'Comptes 87, 89' },
+  // CR Bloc Dashboards par période
+  { id: 'crblock_monthly', name: 'CR Bloc — Monthly', cat: 'CR Monthly', desc: 'Toutes sections CR : Actual/Budget/N-1 mois + YTD' },
+  { id: 'crblock_quarterly', name: 'CR Bloc — Quarterly', cat: 'CR Quarterly', desc: 'Toutes sections CR : trimestre + YTD' },
+  { id: 'crblock_interim', name: 'CR Bloc — Interim', cat: 'CR Interim', desc: 'Toutes sections CR : semestre + YTD' },
+  { id: 'crblock_annual', name: 'CR Bloc — Annual', cat: 'CR Annual', desc: 'Toutes sections CR : exercice complet vs Budget vs N-1' },
   { id: 'ind', name: 'Industrie', cat: 'Sectoriel', desc: 'Production, MP, marge industrielle' },
   { id: 'btp', name: 'BTP', cat: 'Sectoriel', desc: 'Travaux, sous-traitance, chantiers' },
   { id: 'com', name: 'Commerce', cat: 'Sectoriel', desc: 'Marge commerciale, taux de marque' },
@@ -148,8 +183,16 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'table', source: 'sig', title: 'SIG — formation du résultat' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '3. Analyse du CR par bloc', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Décomposition du compte de résultat par section : produits d'exploitation, charges d'exploitation, résultat financier, résultat HAO, impôts. Chaque section présente les KPIs, l'évolution mensuelle et les top 10 comptes." },
+      { id: uid(), type: 'paragraph', text: "Décomposition du compte de résultat par section. Format : Actual / Budget / N-1 (mois + YTD)." },
       { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc' },
+      { id: uid(), type: 'h2', text: "3.1 Produits d'exploitation — Mensuel", inToc: true },
+      { id: uid(), type: 'table', source: 'crtab_produits_expl_m', title: "Produits d'exploitation (70-75) — Month + YTD" },
+      { id: uid(), type: 'h2', text: "3.2 Charges d'exploitation — Mensuel", inToc: true },
+      { id: uid(), type: 'table', source: 'crtab_charges_expl_m', title: "Charges d'exploitation (60-66) — Month + YTD" },
+      { id: uid(), type: 'h2', text: '3.3 Produits financiers — Mensuel', inToc: true },
+      { id: uid(), type: 'table', source: 'crtab_produits_fin_m', title: 'Produits financiers (77) — Month + YTD' },
+      { id: uid(), type: 'h2', text: '3.4 Charges financières — Mensuel', inToc: true },
+      { id: uid(), type: 'table', source: 'crtab_charges_fin_m', title: 'Charges financières (67) — Month + YTD' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '4. Position financière — Bilan', inToc: true },
       { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
@@ -161,6 +204,7 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '5. Budget vs Réalisé', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Income Statement — Budget vs Actual' },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa_monthly', title: 'Budget vs Réalisé — Mensuel + N-1' },
       { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail Budget vs Réalisé par compte' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '6. Trésorerie', inToc: true },
@@ -221,11 +265,16 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat' },
       { id: uid(), type: 'table', source: 'sig', title: 'SIG' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '4. Analyse du CR par section', inToc: true },
-      { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc (7 sections)' },
+      { id: uid(), type: 'h1', text: '4. Analyse du CR par section — Quarterly', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'crblock_quarterly', title: 'CR Bloc — Quarterly' },
+      { id: uid(), type: 'table', source: 'crtab_produits_expl_q', title: "Produits d'exploitation — Quarterly" },
+      { id: uid(), type: 'table', source: 'crtab_charges_expl_q', title: "Charges d'exploitation — Quarterly" },
+      { id: uid(), type: 'table', source: 'crtab_produits_fin_q', title: 'Produits financiers — Quarterly' },
+      { id: uid(), type: 'table', source: 'crtab_charges_fin_q', title: 'Charges financières — Quarterly' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '5. Budget vs Réalisé', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual' },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa_monthly', title: 'Budget vs Réalisé — Mensuel + N-1' },
       { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail par compte' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '6. Tableau des flux de trésorerie', inToc: true },
@@ -296,18 +345,18 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat par nature' },
       { id: uid(), type: 'table', source: 'sig', title: 'Soldes intermédiaires de gestion' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '5. Analyse du CR par section', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Décomposition détaillée du compte de résultat en 7 sections : produits et charges d'exploitation, financiers, HAO et impôts." },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_produits_expl', title: "Produits d'exploitation (70-75)" },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_charges_expl', title: "Charges d'exploitation (60-66)" },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_produits_fin', title: 'Produits financiers (77)' },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_charges_fin', title: 'Charges financières (67)' },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_produits_hao', title: 'Produits exceptionnels (HAO)' },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_charges_hao', title: 'Charges exceptionnelles (HAO)' },
-      { id: uid(), type: 'dashboard', dashboardId: 'crsec_impots', title: 'Impôts sur les bénéfices (87, 89)' },
+      { id: uid(), type: 'h1', text: '5. Analyse du CR par section — Annual', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition détaillée du CR : Actual / Budget / N-1 sur l'exercice complet." },
+      { id: uid(), type: 'dashboard', dashboardId: 'crblock_annual', title: 'CR Bloc — Annual' },
+      { id: uid(), type: 'table', source: 'crtab_produits_expl_a', title: "Produits d'exploitation — Annual" },
+      { id: uid(), type: 'table', source: 'crtab_charges_expl_a', title: "Charges d'exploitation — Annual" },
+      { id: uid(), type: 'table', source: 'crtab_produits_fin_a', title: 'Produits financiers — Annual' },
+      { id: uid(), type: 'table', source: 'crtab_charges_fin_a', title: 'Charges financières — Annual' },
+      { id: uid(), type: 'table', source: 'crtab_impots_a', title: 'Impôts — Annual' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '6. Budget vs Réalisé', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual' },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa_monthly', title: 'Budget vs Réalisé — Mensuel + N-1' },
       { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail par compte' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '7. Tableau des flux de trésorerie', inToc: true },
@@ -384,14 +433,19 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat — par nature' },
       { id: uid(), type: 'table', source: 'sig', title: 'Soldes intermédiaires de gestion' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '4. Analyse du CR par section', inToc: true },
-      { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc' },
+      { id: uid(), type: 'h1', text: '4. Analyse du CR par section — Interim', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'crblock_interim', title: 'CR Bloc — Interim' },
+      { id: uid(), type: 'table', source: 'crtab_produits_expl_s', title: "Produits d'exploitation — Interim" },
+      { id: uid(), type: 'table', source: 'crtab_charges_expl_s', title: "Charges d'exploitation — Interim" },
+      { id: uid(), type: 'table', source: 'crtab_produits_fin_s', title: 'Produits financiers — Interim' },
+      { id: uid(), type: 'table', source: 'crtab_charges_fin_s', title: 'Charges financières — Interim' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '5. Tableau des flux de trésorerie', inToc: true },
       { id: uid(), type: 'table', source: 'tft', title: 'TFT — période' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '6. Budget vs Réalisé', inToc: true },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual' },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa_monthly', title: 'Budget vs Réalisé — Mensuel + N-1' },
       { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail par compte' },
       { id: uid(), type: 'pageBreak' },
       { id: uid(), type: 'h1', text: '7. Trésorerie et flux', inToc: true },
@@ -467,6 +521,8 @@ export default function Reports() {
   const tft = useTFT();
   const capital = useCapitalVariation();
   const budgetActual = useBudgetActual();
+  const monthlyCR = useMonthlyCR();
+  const monthlyBilan = useMonthlyBilan();
   const org = useCurrentOrg();
   const { currentYear, currentOrgId } = useApp();
 
@@ -578,9 +634,11 @@ export default function Reports() {
     tft: tft?.lines,
     capital,
     budgetActual,
+    monthlyCR,
+    monthlyBilan,
     hasAnalytical,
     hasStocks,
-  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, ratios, tft, capital, budgetActual, hasAnalytical, hasStocks]);
+  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, ratios, tft, capital, budgetActual, monthlyCR, monthlyBilan, hasAnalytical, hasStocks]);
 
   // Rafraîchir les KPIs du rapport par défaut une fois les données chargées (1 fois)
   useEffect(() => {
@@ -1222,9 +1280,79 @@ function TablePreview({ source, data, palette, title }: any) {
     case 'sig': head.push('Solde', 'Valeur'); body = [['Marge brute', fmtFull(data.sig?.margeBrute ?? 0)], ['VA', fmtFull(data.sig?.valeurAjoutee ?? 0)], ['EBE', fmtFull(data.sig?.ebe ?? 0)], ['Résultat exploitation', fmtFull(data.sig?.re ?? 0)], ['Résultat net', fmtFull(data.sig?.resultat ?? 0)]]; break;
     case 'balance': head.push('Compte', 'Libellé', 'Solde D', 'Solde C'); body = data.balance.slice(0, 10).map((r: any) => [r.account, r.label, r.soldeD ? fmtFull(r.soldeD) : '', r.soldeC ? fmtFull(r.soldeC) : '']); break;
     case 'ratios': head.push('Ratio', 'Valeur', 'Cible', 'Statut'); body = data.ratios.slice(0, 10).map((r: any) => [r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}`, `${r.target}`, r.status === 'good' ? 'OK' : r.status === 'warn' ? '--' : '!!']); break;
-    case 'budget_actual': head.push('Compte', 'Réalisé', 'Budget', 'Écart'); body = (data.budgetActual ?? []).slice(0, 10).map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart)]); break;
+    case 'budget_actual': head.push('Compte', 'Réalisé', 'Budget', 'Écart', 'Var %'); body = (data.budgetActual ?? []).slice(0, 10).map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart), r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—']); break;
     case 'capital': head.push('Rubrique', 'Ouverture', 'Augm.', 'Clôture'); body = (data.capital ?? []).map((m: any) => [m.rubrique, fmtFull(m.ouverture), m.augmentation ? '+' + fmtFull(m.augmentation) : '—', fmtFull(m.cloture)]); break;
     case 'tft': head.push('Code', 'Poste', 'Montant'); body = (data.tft ?? []).slice(0, 12).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
+    case 'cr_monthly': {
+      const mcr = data.monthlyCR;
+      if (mcr?.lines?.length) {
+        head.push('Poste', ...mcr.months.slice(0, 6), 'YTD');
+        body = mcr.lines.filter((l: any) => l.total || l.grand).slice(0, 10).map((l: any) => [
+          l.label, ...l.values.slice(0, 6).map((v: number) => fmtFull(v)), fmtFull(l.ytd),
+        ]);
+      } else {
+        head.push('Poste', 'Jan', 'Fév', 'Mar', 'Total');
+        body = [['CA', '—', '—', '—', fmtFull(data.sig?.ca ?? 0)], ['RN', '—', '—', '—', fmtFull(data.sig?.resultat ?? 0)]];
+      }
+      break;
+    }
+    case 'bilan_monthly': {
+      const mb = data.monthlyBilan;
+      if (mb?.actif?.length) {
+        head.push('Poste', ...mb.months.slice(0, 6), 'Fin');
+        body = mb.actif.filter((l: any) => l.total || l.grand).slice(0, 8).map((l: any) => [
+          l.label, ...l.values.slice(0, 6).map((v: number) => fmtFull(v)), fmtFull(l.ytd),
+        ]);
+      } else {
+        head.push('Poste', 'Valeur'); body = data.bilanActif.slice(0, 8).map((l: any) => [l.label, fmtFull(l.value)]);
+      }
+      break;
+    }
+    case 'budget_monthly': {
+      head.push('Section', 'Actual Mois', 'Budget Mois', 'N-1 Mois', 'Actual YTD', 'Budget YTD');
+      const ba = data.budgetActual ?? [];
+      const produits = ba.filter((r: any) => r.code?.startsWith('7'));
+      const charges = ba.filter((r: any) => r.code?.startsWith('6'));
+      const totProdR = produits.reduce((s: number, r: any) => s + r.realise, 0);
+      const totProdB = produits.reduce((s: number, r: any) => s + r.budget, 0);
+      const totChR = charges.reduce((s: number, r: any) => s + r.realise, 0);
+      const totChB = charges.reduce((s: number, r: any) => s + r.budget, 0);
+      body = [
+        ['Produits expl.', '—', '—', '—', fmtFull(totProdR), fmtFull(totProdB)],
+        ['Charges expl.', '—', '—', '—', fmtFull(totChR), fmtFull(totChB)],
+        ['Résultat', '—', '—', '—', fmtFull(totProdR - totChR), fmtFull(totProdB - totChB)],
+      ];
+      break;
+    }
+    default: {
+      // CR bloc par période (crtab_*_m / _q / _s / _a)
+      if (source.startsWith('crtab_')) {
+        const BASE_PREFIXES: Record<string, string[]> = {
+          produits_expl: ['70','71','72','73','74','75','781'],
+          charges_expl: ['60','61','62','63','64','65','66','681','691'],
+          produits_fin: ['77','786','797'],
+          charges_fin: ['67','687','697'],
+          produits_hao: ['82','84','86','88'],
+          charges_hao: ['81','83','85'],
+          impots: ['87','89'],
+        };
+        // Extraire le nom de section et le suffixe de période
+        const parts = source.replace('crtab_', '').split('_');
+        const suffix = parts[parts.length - 1]; // m, q, s, a
+        const sectionKey = parts.slice(0, -1).join('_');
+        const prefixes = BASE_PREFIXES[sectionKey] ?? [];
+        const ba = data.budgetActual ?? [];
+        const filtered = ba.filter((r: any) => prefixes.some((p: string) => r.code?.startsWith(p)));
+
+        const periodLabel = { m: 'Monthly', q: 'Quarterly', s: 'Interim', a: 'Annual' }[suffix] ?? '';
+        head.push('Compte', 'Libellé', `Actual ${periodLabel}`, `Budget ${periodLabel}`, 'Écart', 'Var %', 'N-1');
+        body = filtered.slice(0, 12).map((r: any) => [
+          r.code, r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart),
+          r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—', '—',
+        ]);
+      }
+      break;
+    }
   }
   return (
     <div>
@@ -1247,7 +1375,7 @@ function TablePreview({ source, data, palette, title }: any) {
 function DashboardSnippet({ id, data, palette }: any) {
   const dash = DASHBOARD_CATALOG.find((d) => d.id === id);
   const kpis = (() => {
-    if (id === 'home' || id === 'cp' || id === 'crblock' || id === 'is_bvsa') return [
+    if (id === 'home' || id === 'cp' || id === 'crblock' || id === 'is_bvsa' || id === 'is_bvsa_monthly' || id?.startsWith('crblock_')) return [
       { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
       { label: 'Résultat net', value: fmtMoney(data.sig?.resultat ?? 0) },
       { label: 'EBE', value: fmtMoney(data.sig?.ebe ?? 0) },

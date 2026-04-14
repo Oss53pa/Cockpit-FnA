@@ -10,7 +10,7 @@ import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
 // Line type utilisé via CollapsibleTable
 import type { BalanceRow } from '../engine/balance';
-import { fmtFull } from '../lib/format';
+import { fmtFull, fmtK } from '../lib/format';
 import { CollapsibleTable } from '../components/ui/CollapsibleTable';
 import { exportStatementsPDF, exportStatementsXLSX } from '../engine/exporter';
 import { availableTabs, resolveSystem, simplifyBilanActif, simplifyBilanPassif, simplifyCR, SYSTEM_META, type StatementTab } from '../syscohada/systems';
@@ -641,7 +641,7 @@ function CapitalVarCard({ rows, hideCodes }: { rows: any[]; hideCodes?: boolean 
 function BudgetActualView() {
   const rows = useBudgetActual();
   const ct = useChartTheme();
-  const [view, setView] = useState<'table' | 'dashboard'>('table');
+  const [view, setView] = useState<'table' | 'dashboard' | 'monthly'>('table');
   const sections = bySection(rows);
   const totalRealise = rows.reduce((s, r) => s + r.realise, 0);
   const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
@@ -666,7 +666,10 @@ function BudgetActualView() {
         <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg">
           <button onClick={() => setView('table')}
             className={clsx('px-3 py-1.5 text-xs rounded-md font-medium',
-              view === 'table' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>Table</button>
+              view === 'table' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>Annuel</button>
+          <button onClick={() => setView('monthly')}
+            className={clsx('px-3 py-1.5 text-xs rounded-md font-medium',
+              view === 'monthly' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>Mensuel + N-1</button>
           <button onClick={() => setView('dashboard')}
             className={clsx('px-3 py-1.5 text-xs rounded-md font-medium',
               view === 'dashboard' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>Tableau de bord</button>
@@ -741,6 +744,8 @@ function BudgetActualView() {
           </table>
         </Card>
       )}
+
+      {view === 'monthly' && <BudgetMonthlyView />}
 
       {view === 'dashboard' && (
         <div className="space-y-6">
@@ -1042,6 +1047,87 @@ function SMTList({ rows }: { rows: (BalanceRow & { mvt: number })[] }) {
           <span className="num font-semibold">{fmtFull(r.mvt)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Budget vs Réalisé mensuel + N-1
+function BudgetMonthlyView() {
+  const { currentOrgId, currentYear } = useApp();
+  const [data, setData] = useState<any>(null);
+  const [mode, setMode] = useState<'realise_budget' | 'realise_n1'>('realise_budget');
+
+  useEffect(() => {
+    import('../engine/budgetActual').then(({ computeBudgetActualMonthly, monthlySummaryBySection }) => {
+      computeBudgetActualMonthly(currentOrgId, currentYear).then((raw) => {
+        const sections = monthlySummaryBySection(raw, currentOrgId);
+        setData({ months: raw.months, sections, rows: raw.rows });
+      });
+    });
+  }, [currentOrgId, currentYear]);
+
+  if (!data) return <div className="py-12 text-center text-primary-500">Chargement...</div>;
+  const { months, sections } = data;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg w-fit">
+        <button onClick={() => setMode('realise_budget')}
+          className={clsx('px-3 py-1.5 text-xs rounded-md font-medium', mode === 'realise_budget' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600')}>
+          Réalisé vs Budget
+        </button>
+        <button onClick={() => setMode('realise_n1')}
+          className={clsx('px-3 py-1.5 text-xs rounded-md font-medium', mode === 'realise_n1' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600')}>
+          Réalisé N vs N-1
+        </button>
+      </div>
+      <Card padded={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead className="bg-primary-100 dark:bg-primary-900 sticky top-0">
+              <tr>
+                <th className="text-left py-2 px-3 font-semibold min-w-[180px]">Section</th>
+                {months.map((m: string) => <th key={m} className="text-right py-2 px-1.5 font-semibold w-[65px]">{m}</th>)}
+                <th className="text-right py-2 px-3 font-semibold border-l-2 border-primary-300 dark:border-primary-700">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sections.map((sec: any) => {
+                const cmp = mode === 'realise_budget' ? 'budget' : 'n1';
+                const totCmp = mode === 'realise_budget' ? sec.totalBudget : sec.totalN1;
+                return (
+                  <React.Fragment key={sec.section}>
+                    <tr className="border-b border-primary-200 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-950/30">
+                      <td className="py-1.5 px-3 font-semibold" rowSpan={3}>
+                        <span className="text-xs">{sec.label}</span>
+                        <br/><span className="text-[9px] text-primary-400">{sec.isCharge ? 'Charges' : 'Produits'}</span>
+                      </td>
+                      {sec.months.map((m: any, i: number) => <td key={i} className="py-1 px-1.5 text-right num">{fmtK(m.realise)}</td>)}
+                      <td className="py-1 px-3 text-right num font-semibold border-l-2 border-primary-300 dark:border-primary-700">{fmtK(sec.totalRealise)}</td>
+                    </tr>
+                    <tr className="border-b border-primary-100 dark:border-primary-800/50 text-primary-500">
+                      {sec.months.map((m: any, i: number) => <td key={i} className="py-1 px-1.5 text-right num text-[10px]">{fmtK(m[cmp])}</td>)}
+                      <td className="py-1 px-3 text-right num text-[10px] border-l-2 border-primary-300 dark:border-primary-700">{fmtK(totCmp)}</td>
+                    </tr>
+                    <tr className="border-b-2 border-primary-200 dark:border-primary-700">
+                      {sec.months.map((m: any, i: number) => {
+                        const e = m.realise - m[cmp];
+                        return <td key={i} className={clsx('py-1 px-1.5 text-right num text-[10px] font-medium', e === 0 ? 'text-primary-400' : (sec.isCharge ? (e <= 0 ? '' : 'text-primary-500') : (e >= 0 ? '' : 'text-primary-500')))}>{e >= 0 ? '+' : ''}{fmtK(e)}</td>;
+                      })}
+                      <td className="py-1 px-3 text-right num text-[10px] font-semibold border-l-2 border-primary-300 dark:border-primary-700">
+                        {(sec.totalRealise - totCmp) >= 0 ? '+' : ''}{fmtK(sec.totalRealise - totCmp)}
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-2 text-[10px] text-primary-400 border-t border-primary-200 dark:border-primary-800">
+          Ligne 1 : Réalisé {currentYear} | Ligne 2 : {mode === 'realise_budget' ? 'Budget' : `Réalisé ${currentYear - 1}`} | Ligne 3 : Écart
+        </div>
+      </Card>
     </div>
   );
 }

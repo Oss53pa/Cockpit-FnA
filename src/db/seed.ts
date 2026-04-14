@@ -220,19 +220,34 @@ async function seedOrg(org: Organization, year: number, scale: number) {
 }
 
 export async function ensureSeeded() {
-  const nb = await db.organizations.count();
-  if (nb > 0) return;
+  // Plus de données démo — l'utilisateur importe ses propres données
+  // via Grand Livre → Import
+}
 
-  await seedOrg(
-    { id: 'sa-001', name: 'SOCIÉTÉ ALPHA SA', currency: 'XOF', sector: 'Industrie', rccm: 'CI-ABJ-2018-B-1234', ifu: '9801234F', createdAt: Date.now() },
-    2025, 1.0,
-  );
-  await seedOrg(
-    { id: 'sa-002', name: 'BÉTA DISTRIBUTION', currency: 'XOF', sector: 'Commerce', rccm: 'CI-ABJ-2020-B-5678', ifu: '9805678G', createdAt: Date.now() },
-    2025, 0.6,
-  );
-  await seedOrg(
-    { id: 'sa-003', name: 'GAMMA BTP', currency: 'XOF', sector: 'BTP', rccm: 'CI-ABJ-2019-B-9012', ifu: '9809012H', createdAt: Date.now() },
-    2025, 1.3,
-  );
+// Vider toute la base IndexedDB
+export async function clearAllData() {
+  await db.gl.clear();
+  await db.accounts.clear();
+  await db.periods.clear();
+  await db.fiscalYears.clear();
+  await db.organizations.clear();
+  await db.imports.clear();
+  await db.budgets.clear();
+  await db.mappings.clear();
+  await db.reports.clear();
+  await db.templates.clear();
+  await db.attentionPoints.clear();
+  await db.actionPlans.clear();
+}
+
+// Supprimer les données d'une société spécifique
+export async function clearOrgData(orgId: string) {
+  await db.gl.where('orgId').equals(orgId).delete();
+  await db.accounts.where('orgId').equals(orgId).delete();
+  await db.periods.where('orgId').equals(orgId).delete();
+  await db.fiscalYears.where('orgId').equals(orgId).delete();
+  await db.imports.where('orgId').equals(orgId).delete();
+  await db.budgets.where('orgId').equals(orgId).delete();
+  await db.mappings.where('orgId').equals(orgId).delete();
+  await db.organizations.delete(orgId);
 }

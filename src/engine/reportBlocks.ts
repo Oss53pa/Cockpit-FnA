@@ -32,7 +32,7 @@ export type BlockBase = {
 export type BlockH = BlockBase & { type: 'h1' | 'h2' | 'h3'; text: string; inToc?: boolean };
 export type BlockParagraph = BlockBase & { type: 'paragraph'; text: string };
 export type BlockKpi = BlockBase & { type: 'kpi'; items: Array<{ label: string; value: string; subValue?: string }> };
-export type BlockTable = BlockBase & { type: 'table'; title?: string; source: 'bilan_actif' | 'bilan_passif' | 'cr' | 'sig' | 'balance' | 'ratios' | 'budget_actual' | 'capital' | 'tft'; limit?: number };
+export type BlockTable = BlockBase & { type: 'table'; title?: string; source: string; limit?: number };
 export type BlockDashboard = BlockBase & { type: 'dashboard'; dashboardId: string; title?: string };
 export type BlockPageBreak = BlockBase & { type: 'pageBreak' };
 export type BlockImage = BlockBase & { type: 'image'; dataUrl: string; caption?: string };
@@ -286,7 +286,7 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
           ]; title ||= 'Soldes intermédiaires de gestion'; break;
           case 'balance': head = ['Compte', 'Libellé', 'Débit', 'Crédit', 'Solde D', 'Solde C']; body = data.balance.slice(0, limit).map((r) => [r.account, r.label, fmt(r.debit), fmt(r.credit), r.soldeD ? fmt(r.soldeD) : '', r.soldeC ? fmt(r.soldeC) : '']); title ||= `Balance générale (${Math.min(limit, data.balance.length)} sur ${data.balance.length})`; break;
           case 'ratios': head = ['Famille', 'Ratio', 'Valeur', 'Cible', 'Statut']; body = data.ratios.map((r) => [r.family, r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : r.unit === 'j' ? `${Math.round(r.value)} j` : r.value.toFixed(2), `${r.target}${r.unit === '%' ? ' %' : ''}`, r.status === 'good' ? 'OK' : r.status === 'warn' ? 'Vigilance' : 'Alerte']); title ||= 'Ratios financiers'; break;
-          case 'budget_actual': head = ['Compte', 'Libellé', 'Réalisé', 'Budget', 'Écart']; body = (data.budgetActual ?? []).slice(0, limit).map((r) => [r.code, r.label, fmt(r.realise), fmt(r.budget), fmt(r.ecart)]); title ||= 'Budget vs Réalisé'; break;
+          case 'budget_actual': head = ['Compte', 'Libellé', 'Réalisé', 'Budget', 'Écart', 'Var %']; body = (data.budgetActual ?? []).slice(0, limit).map((r) => [r.code, r.label, fmt(r.realise), fmt(r.budget), fmt(r.ecart), r.ecartPct ? r.ecartPct.toFixed(1) + '%' : '—']); title ||= 'Budget vs Réalisé'; break;
           case 'capital': head = ['Rubrique', 'Ouverture', 'Augm.', 'Dimin.', 'Clôture']; body = (data.capital ?? []).map((m: any) => [m.rubrique, fmt(m.ouverture), m.augmentation ? '+' + fmt(m.augmentation) : '—', m.diminution ? '−' + fmt(m.diminution) : '—', fmt(m.cloture)]); title ||= 'Variation des capitaux propres'; break;
           case 'tft': head = ['Code', 'Poste', 'Montant']; body = (data.tft ?? []).map((l) => [l.code.startsWith('_') ? '' : l.code, l.label, fmt(l.value)]); title ||= 'Tableau des flux de trésorerie'; break;
         }

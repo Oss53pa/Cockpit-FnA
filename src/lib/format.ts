@@ -9,7 +9,7 @@ export const fmtMoney = (v: number, currency = 'XOF') => {
 };
 
 export const fmtFull = (v: number) =>
-  new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v).replace(/\u202F/g, ' ').replace(/\u00A0/g, ' ');
 
 export const fmtPct = (v: number, digits = 1) =>
   `${v >= 0 ? '+' : ''}${v.toFixed(digits)} %`;

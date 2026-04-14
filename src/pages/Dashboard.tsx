@@ -1012,12 +1012,18 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
   const sections = bySection(rows, currentOrgId);
   const labels = loadLabels(currentOrgId);
   const [n1Map, setN1Map] = useState<Map<string, number>>(new Map());
+  const [monthlyMap, setMonthlyMap] = useState<Map<string, Array<{ realise: number; budget: number; n1: number }>>>(new Map());
+  const currentMonth = new Date().getMonth();
+  const MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
   useEffect(() => {
     import('../engine/budgetActual').then(({ computeBudgetActualMonthly }) => {
       computeBudgetActualMonthly(currentOrgId, currentYear).then((raw) => {
-        const m = new Map<string, number>();
-        for (const r of raw.rows) m.set(r.code, r.totalN1);
-        setN1Map(m);
+        const n1m = new Map<string, number>();
+        const mm = new Map<string, Array<{ realise: number; budget: number; n1: number }>>();
+        for (const r of raw.rows) { n1m.set(r.code, r.totalN1); mm.set(r.code, r.months); }
+        setN1Map(n1m);
+        setMonthlyMap(mm);
       });
     });
   }, [currentOrgId, currentYear]);
@@ -1027,9 +1033,18 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
   if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
   if (!sec) return <div className="py-12 text-center text-primary-500">Section introuvable</div>;
 
+  // Calcul des totaux mensuels pour la section
+  const m = currentMonth > 0 ? currentMonth - 1 : 0;
+  const secMonth = sec.rows.reduce((acc, r) => {
+    const md = monthlyMap.get(r.code);
+    if (!md) return acc;
+    return { actualM: acc.actualM + md[m].realise, budgetM: acc.budgetM + md[m].budget, n1M: acc.n1M + md[m].n1 };
+  }, { actualM: 0, budgetM: 0, n1M: 0 });
+  const n1Ytd = sec.rows.reduce((s, r) => s + (n1Map.get(r.code) ?? 0), 0);
+
   return (
     <>
-      {/* KPIs en haut, sobres */}
+      {/* KPIs en haut */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Comptes" value={String(sec.rows.length)} icon="◫" />
         <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon="◆" />
@@ -1037,7 +1052,57 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
         <KPICard title="Écart" value={fmtK(sec.totalEcart)} unit="XOF" subValue={`${sec.ecartPct.toFixed(1)} %`} icon={sec.totalEcart >= 0 ? '↑' : '↓'} />
       </div>
 
-      <ChartCard title={`Détail des comptes — ${labels[sec.section]}`}
+      {/* Tableau Month + YTD par compte */}
+      <ChartCard title={`Mensuel — ${labels[sec.section]} (${MONTHS_SHORT[m]})`} className="mb-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead className="bg-primary-100 dark:bg-primary-900">
+              <tr>
+                <th className="text-left py-1.5 px-2 font-semibold" rowSpan={2}>Compte</th>
+                <th className="text-center py-1 px-1 font-semibold border-l border-primary-200 dark:border-primary-700" colSpan={3}>Mois ({MONTHS_SHORT[m]})</th>
+                <th className="text-center py-1 px-1 font-semibold border-l-2 border-primary-300 dark:border-primary-600" colSpan={3}>Year-to-Date</th>
+              </tr>
+              <tr className="text-[10px] text-primary-500">
+                <th className="py-1 px-1 text-right border-l border-primary-200 dark:border-primary-700">Actual</th>
+                <th className="py-1 px-1 text-right">Budget</th>
+                <th className="py-1 px-1 text-right">N-1</th>
+                <th className="py-1 px-1 text-right border-l-2 border-primary-300 dark:border-primary-600">Actual</th>
+                <th className="py-1 px-1 text-right">Budget</th>
+                <th className="py-1 px-1 text-right">N-1</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+              {sec.rows.slice(0, 15).map((r) => {
+                const md = monthlyMap.get(r.code);
+                const n1v = n1Map.get(r.code) ?? 0;
+                return (
+                  <tr key={r.code} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
+                    <td className="py-1.5 px-2"><span className="font-mono text-primary-400 mr-1">{r.code}</span>{r.label}</td>
+                    <td className="py-1.5 px-1 text-right num border-l border-primary-200 dark:border-primary-700">{md ? fmtFull(md[m].realise) : '—'}</td>
+                    <td className="py-1.5 px-1 text-right num text-primary-500">{md ? fmtFull(md[m].budget) : '—'}</td>
+                    <td className="py-1.5 px-1 text-right num text-primary-400">{md ? fmtFull(md[m].n1) : '—'}</td>
+                    <td className="py-1.5 px-1 text-right num font-semibold border-l-2 border-primary-300 dark:border-primary-600">{fmtFull(r.realise)}</td>
+                    <td className="py-1.5 px-1 text-right num text-primary-500">{fmtFull(r.budget)}</td>
+                    <td className="py-1.5 px-1 text-right num text-primary-400">{n1v ? fmtFull(n1v) : '—'}</td>
+                  </tr>
+                );
+              })}
+              {/* Total section */}
+              <tr className="font-semibold bg-primary-100 dark:bg-primary-800">
+                <td className="py-1.5 px-2">TOTAL</td>
+                <td className="py-1.5 px-1 text-right num border-l border-primary-200 dark:border-primary-700">{fmtFull(secMonth.actualM)}</td>
+                <td className="py-1.5 px-1 text-right num text-primary-500">{fmtFull(secMonth.budgetM)}</td>
+                <td className="py-1.5 px-1 text-right num text-primary-400">{fmtFull(secMonth.n1M)}</td>
+                <td className="py-1.5 px-1 text-right num border-l-2 border-primary-300 dark:border-primary-600">{fmtFull(sec.totalRealise)}</td>
+                <td className="py-1.5 px-1 text-right num text-primary-500">{fmtFull(sec.totalBudget)}</td>
+                <td className="py-1.5 px-1 text-right num text-primary-400">{fmtFull(n1Ytd)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
+
+      <ChartCard title={`Détail annuel — ${labels[sec.section]}`}
         action={
           <div className="flex gap-1">
             <button onClick={() => setOpen(true)} className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 px-2">Tout déplier</button>

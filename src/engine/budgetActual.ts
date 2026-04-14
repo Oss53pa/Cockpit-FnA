@@ -209,6 +209,133 @@ export function sectionDetail(section: CRSection, rows: BudgetActualRow[]): Budg
   return rows.filter((r) => def.prefixes.some((p: string) => r.code.startsWith(p)));
 }
 
+// ─── BUDGET VS RÉALISÉ MENSUEL + N-1 ──────────────────────────────
+
+export type MonthlyBudgetRow = {
+  code: string;
+  label: string;
+  isCharge: boolean;
+  months: Array<{ realise: number; budget: number; n1: number; ecart: number }>;
+  totalRealise: number;
+  totalBudget: number;
+  totalN1: number;
+  totalEcart: number;
+};
+
+export async function computeBudgetActualMonthly(orgId: string, year: number, version?: string): Promise<{ months: string[]; rows: MonthlyBudgetRow[] }> {
+  const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+
+  // Périodes année N et N-1
+  const periodsByMonth = new Map<number, string>(); // month → periodId
+  const periodsByMonthN1 = new Map<number, string>();
+  for (const p of periods) {
+    if (p.year === year && p.month >= 1 && p.month <= 12) periodsByMonth.set(p.month, p.id);
+    if (p.year === year - 1 && p.month >= 1 && p.month <= 12) periodsByMonthN1.set(p.month, p.id);
+  }
+
+  // Réalisé par compte × mois (année N)
+  const realise = new Map<string, number[]>(); // account → [12 mois]
+  // Réalisé N-1
+  const realiseN1 = new Map<string, number[]>();
+
+  for (const e of entries) {
+    const c = e.account[0];
+    if (c !== '6' && c !== '7') continue;
+    const v = c === '6' ? e.debit - e.credit : e.credit - e.debit;
+
+    // Année N
+    for (let m = 1; m <= 12; m++) {
+      if (e.periodId === periodsByMonth.get(m)) {
+        const arr = realise.get(e.account) ?? Array(12).fill(0);
+        arr[m - 1] += v;
+        realise.set(e.account, arr);
+      }
+    }
+    // Année N-1
+    for (let m = 1; m <= 12; m++) {
+      if (e.periodId === periodsByMonthN1.get(m)) {
+        const arr = realiseN1.get(e.account) ?? Array(12).fill(0);
+        arr[m - 1] += v;
+        realiseN1.set(e.account, arr);
+      }
+    }
+  }
+
+  // Budget par compte × mois
+  const budgetMonthly = new Map<string, number[]>();
+  if (version) {
+    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).toArray();
+    for (const l of lines) {
+      const arr = budgetMonthly.get(l.account) ?? Array(12).fill(0);
+      arr[l.month - 1] += l.amount;
+      budgetMonthly.set(l.account, arr);
+    }
+  }
+
+  // Fusionner tous les comptes
+  const allAccounts = new Set([...realise.keys(), ...realiseN1.keys(), ...budgetMonthly.keys()]);
+  const rows: MonthlyBudgetRow[] = [];
+
+  for (const account of allAccounts) {
+    const rN = realise.get(account) ?? Array(12).fill(0);
+    const rN1 = realiseN1.get(account) ?? Array(12).fill(0);
+    const bud = budgetMonthly.get(account) ?? (version ? Array(12).fill(0) : rN.map((v) => Math.round(v * 0.95)));
+    const sysco = findSyscoAccount(account);
+    const isCharge = account.startsWith('6');
+
+    const months = rN.map((r, i) => ({
+      realise: r,
+      budget: bud[i],
+      n1: rN1[i],
+      ecart: r - bud[i],
+    }));
+
+    rows.push({
+      code: account,
+      label: sysco?.label ?? 'Compte',
+      isCharge,
+      months,
+      totalRealise: rN.reduce((s, v) => s + v, 0),
+      totalBudget: bud.reduce((s, v) => s + v, 0),
+      totalN1: rN1.reduce((s, v) => s + v, 0),
+      totalEcart: rN.reduce((s, v) => s + v, 0) - bud.reduce((s, v) => s + v, 0),
+    });
+  }
+
+  return { months: MONTHS, rows: rows.sort((a, b) => a.code.localeCompare(b.code)) };
+}
+
+// Agréger le mensuel par section
+export function monthlySummaryBySection(data: { months: string[]; rows: MonthlyBudgetRow[] }, orgId?: string) {
+  const defs = getSectionDefs(orgId);
+  const order = orgId ? loadOrder(orgId) : Object.keys(defs);
+  const sections: Array<{
+    section: string; label: string; isCharge: boolean;
+    months: Array<{ realise: number; budget: number; n1: number }>;
+    totalRealise: number; totalBudget: number; totalN1: number;
+  }> = [];
+
+  for (const sec of order) {
+    const def = defs[sec];
+    if (!def) continue;
+    const subset = data.rows.filter((r) => def.prefixes.some((p) => r.code.startsWith(p)));
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      realise: subset.reduce((s, r) => s + r.months[i].realise, 0),
+      budget: subset.reduce((s, r) => s + r.months[i].budget, 0),
+      n1: subset.reduce((s, r) => s + r.months[i].n1, 0),
+    }));
+    sections.push({
+      section: sec, label: def.label, isCharge: def.isCharge, months,
+      totalRealise: months.reduce((s, m) => s + m.realise, 0),
+      totalBudget: months.reduce((s, m) => s + m.budget, 0),
+      totalN1: months.reduce((s, m) => s + m.n1, 0),
+    });
+  }
+  return sections;
+}
+
 // Calcul des résultats intermédiaires depuis les sections agrégées
 export function computeIntermediates(secs: ReturnType<typeof bySection>) {
   const get = (k: CRSection) => secs.find((s) => s.section === k);

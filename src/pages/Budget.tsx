@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowDown, ArrowUp, Copy, Download, Plus, Save, Trash2, TrendingDown, TrendingUp, Upload, Wallet, Wand2 } from 'lucide-react';
 import clsx from 'clsx';
@@ -22,7 +22,7 @@ import * as XLSX from 'xlsx';
 
 const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 
-type Tab = 'versions' | 'saisie' | 'ecarts';
+type Tab = 'versions' | 'saisie' | 'ecarts' | 'mensuel';
 
 // Comptes pertinents pour budgétisation (classes 6 et 7)
 const budgetable = SYSCOHADA_COA.filter((a) => (a.class === '6' || a.class === '7') && a.code.length <= 3);
@@ -166,11 +166,11 @@ export default function Budget() {
       />
 
       <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 mb-6">
-        {(['versions','saisie','ecarts'] as Tab[]).map((t) => (
+        {(['versions','saisie','ecarts','mensuel'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition',
               tab === t ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500 hover:text-primary-900')}>
-            {t === 'versions' ? 'Versions' : t === 'saisie' ? 'Saisie budgétaire' : 'Écarts Budget vs Réalisé'}
+            {{ versions: 'Versions', saisie: 'Saisie budgétaire', ecarts: 'Écarts Budget vs Réalisé', mensuel: 'Mensuel + N-1' }[t]}
           </button>
         ))}
       </div>
@@ -275,7 +275,11 @@ export default function Budget() {
       )}
 
       {tab === 'ecarts' && (
-        <Variance version={version} rows={variance} />
+        <Variance version={version} rows={variance} orgId={currentOrgId} year={currentYear} />
+      )}
+
+      {tab === 'mensuel' && (
+        <BudgetMonthlyTab orgId={currentOrgId} year={currentYear} version={version} />
       )}
 
       <NewVersionModal
@@ -402,7 +406,17 @@ function DistributeMenu({ onPick, onRemove }: { onPick: (amt: number, s: Seasona
   );
 }
 
-function Variance({ version, rows }: { version: string; rows: VarianceRow[] }) {
+function Variance({ version, rows, orgId, year }: { version: string; rows: VarianceRow[]; orgId: string; year: number }) {
+  const [n1Map, setN1Map] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    import('../engine/budgetActual').then(({ computeBudgetActualMonthly }) => {
+      computeBudgetActualMonthly(orgId, year).then((raw) => {
+        const m = new Map<string, number>();
+        for (const r of raw.rows) m.set(r.code, r.totalN1);
+        setN1Map(m);
+      });
+    });
+  }, [orgId, year]);
   if (!version) {
     return <Card><div className="py-12 text-center text-primary-500">Sélectionnez une version budgétaire</div></Card>;
   }
@@ -452,11 +466,16 @@ function Variance({ version, rows }: { version: string; rows: VarianceRow[] }) {
                 <th className="text-right py-2 px-3">Réalisé</th>
                 <th className="text-right py-2 px-3">Écart</th>
                 <th className="text-right py-2 px-3">Écart %</th>
+                <th className="text-right py-2 px-3">N-1</th>
+                <th className="text-right py-2 px-3">Var N-1</th>
                 <th className="text-center py-2 px-3">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const n1 = n1Map.get(r.account) ?? 0;
+                const varN1 = n1 ? ((r.realise - n1) / Math.abs(n1) * 100) : 0;
+                return (
                 <tr key={r.account} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
                   <td className="py-1.5 px-3 num font-mono">{r.account}</td>
                   <td className="py-1.5 px-3 text-xs">{r.label}</td>
@@ -470,13 +489,18 @@ function Variance({ version, rows }: { version: string; rows: VarianceRow[] }) {
                     r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : 'text-primary-500')}>
                     {fmtPct(r.ecartPct)}
                   </td>
+                  <td className="py-1.5 px-3 text-right num text-primary-400">{n1 ? fmtFull(n1) : '—'}</td>
+                  <td className={clsx('py-1.5 px-3 text-right num text-xs', varN1 === 0 ? 'text-primary-400' : (r.account.startsWith('6') ? (varN1 <= 0 ? 'text-success' : 'text-error') : (varN1 >= 0 ? 'text-success' : 'text-error')))}>
+                    {n1 ? `${varN1 >= 0 ? '+' : ''}${varN1.toFixed(1)}%` : '—'}
+                  </td>
                   <td className="py-1.5 px-3 text-center">
                     {r.status === 'favorable' && <Badge variant="success"><ArrowUp className="w-3 h-3" /> Favorable</Badge>}
                     {r.status === 'defavorable' && <Badge variant="error"><ArrowDown className="w-3 h-3" /> Défavorable</Badge>}
                     {r.status === 'neutral' && <Badge>Neutre</Badge>}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -515,5 +539,82 @@ function NewVersionModal({ open, onClose, existing, onCreate }: {
         )}
       </div>
     </Modal>
+  );
+}
+
+function BudgetMonthlyTab({ orgId, year, version }: { orgId: string; year: number; version: string }) {
+  const [data, setData] = useState<any>(null);
+  const [mode, setMode] = useState<'budget' | 'n1'>('budget');
+
+  useEffect(() => {
+    import('../engine/budgetActual').then(({ computeBudgetActualMonthly, monthlySummaryBySection }) => {
+      computeBudgetActualMonthly(orgId, year, version || undefined).then((raw) => {
+        setData({ months: raw.months, sections: monthlySummaryBySection(raw, orgId), rows: raw.rows });
+      });
+    });
+  }, [orgId, year, version]);
+
+  if (!data) return <Card><div className="py-12 text-center text-primary-500">Chargement...</div></Card>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg w-fit">
+        <button onClick={() => setMode('budget')}
+          className={clsx('px-3 py-1.5 text-xs rounded-md font-medium', mode === 'budget' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600')}>
+          Réalisé vs Budget
+        </button>
+        <button onClick={() => setMode('n1')}
+          className={clsx('px-3 py-1.5 text-xs rounded-md font-medium', mode === 'n1' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600')}>
+          Réalisé N vs N-1
+        </button>
+      </div>
+
+      <Card padded={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead className="bg-primary-100 dark:bg-primary-900 sticky top-0">
+              <tr>
+                <th className="text-left py-2 px-3 font-semibold min-w-[160px]">Section</th>
+                {data.months.map((m: string) => <th key={m} className="text-right py-2 px-1 font-semibold w-[60px]">{m}</th>)}
+                <th className="text-right py-2 px-3 font-semibold border-l-2 border-primary-300 dark:border-primary-700">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.sections.map((sec: any) => {
+                const cmp = mode === 'budget' ? 'budget' : 'n1';
+                const totCmp = mode === 'budget' ? sec.totalBudget : sec.totalN1;
+                return (
+                  <React.Fragment key={sec.section}>
+                    <tr className="border-b border-primary-200 dark:border-primary-800">
+                      <td className="py-1.5 px-3 font-semibold" rowSpan={3}>
+                        <span className="text-xs">{sec.label}</span>
+                      </td>
+                      {sec.months.map((m: any, i: number) => <td key={i} className="py-1 px-1 text-right num">{fmtMoney(m.realise).replace(/ XOF/, '')}</td>)}
+                      <td className="py-1 px-3 text-right num font-semibold border-l-2 border-primary-300 dark:border-primary-700">{fmtMoney(sec.totalRealise).replace(/ XOF/, '')}</td>
+                    </tr>
+                    <tr className="text-primary-500">
+                      {sec.months.map((m: any, i: number) => <td key={i} className="py-1 px-1 text-right num text-[10px]">{fmtMoney(m[cmp]).replace(/ XOF/, '')}</td>)}
+                      <td className="py-1 px-3 text-right num text-[10px] border-l-2 border-primary-300 dark:border-primary-700">{fmtMoney(totCmp).replace(/ XOF/, '')}</td>
+                    </tr>
+                    <tr className="border-b-2 border-primary-200 dark:border-primary-700">
+                      {sec.months.map((m: any, i: number) => {
+                        const e = m.realise - m[cmp];
+                        return <td key={i} className={clsx('py-1 px-1 text-right num text-[10px] font-medium', e === 0 ? 'text-primary-400' : (sec.isCharge ? (e <= 0 ? 'text-success' : 'text-error') : (e >= 0 ? 'text-success' : 'text-error')))}>{e >= 0 ? '+' : ''}{fmtMoney(e).replace(/ XOF/, '')}</td>;
+                      })}
+                      <td className="py-1 px-3 text-right num text-[10px] font-semibold border-l-2 border-primary-300 dark:border-primary-700">
+                        {(sec.totalRealise - totCmp) >= 0 ? '+' : ''}{fmtMoney(sec.totalRealise - totCmp).replace(/ XOF/, '')}
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-2 text-[10px] text-primary-400 border-t border-primary-200 dark:border-primary-800">
+          Ligne 1 : Réalisé {year} | Ligne 2 : {mode === 'budget' ? `Budget ${version}` : `Réalisé ${year - 1}`} | Ligne 3 : Écart
+        </div>
+      </Card>
+    </div>
   );
 }
