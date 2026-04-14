@@ -421,17 +421,40 @@ function ChargesProduits() {
 // ══════════════════════════════════════════════════════════════════════
 function CRBlock() {
   const rows = useBudgetActual();
-  const { currentOrgId } = useApp();
+  const { currentOrgId, currentYear } = useApp();
   const sections = bySection(rows, currentOrgId);
   const labels = loadLabels(currentOrgId);
   const ct = useChartTheme();
   const [zoom, setZoom] = useState<string | null>(null);
+
+  // Données mensuelles + N-1 pour comparaison
+  const [n1Data, setN1Data] = useState<Map<string, number>>(new Map());
+  const [monthlyData, setMonthlyData] = useState<Map<string, { months: Array<{ realise: number; budget: number; n1: number }> }>>(new Map());
+  const currentMonth = new Date().getMonth(); // 0-based
+
+  useEffect(() => {
+    import('../engine/budgetActual').then(({ computeBudgetActualMonthly }) => {
+      computeBudgetActualMonthly(currentOrgId, currentYear).then((raw) => {
+        const n1Map = new Map<string, number>();
+        const mMap = new Map<string, { months: Array<{ realise: number; budget: number; n1: number }> }>();
+        for (const r of raw.rows) {
+          n1Map.set(r.code, r.totalN1);
+          mMap.set(r.code, { months: r.months });
+        }
+        setN1Data(n1Map);
+        setMonthlyData(mMap);
+      });
+    });
+  }, [currentOrgId, currentYear]);
 
   if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
 
   const totalProduits = sections.filter((s) => !s.isCharge).reduce((acc, s) => acc + s.totalRealise, 0);
   const totalCharges = sections.filter((s) => s.isCharge).reduce((acc, s) => acc + s.totalRealise, 0);
   const resultat = totalProduits - totalCharges;
+
+  // Calcul N-1 par section
+  const sectionN1 = (sec: typeof sections[0]) => sec.rows.reduce((s, r) => s + (n1Data.get(r.code) ?? 0), 0);
 
   if (zoom) {
     const sec = sections.find((s) => s.section === zoom);
@@ -486,11 +509,16 @@ function CRBlock() {
               <th className="text-left py-2 px-3">Libellé</th>
               <th className="text-right py-2 px-3">Réalisé</th>
               <th className="text-right py-2 px-3">Budget</th>
-              <th className="text-right py-2 px-3">Écart</th>
+              <th className="text-right py-2 px-3">Écart B/R</th>
+              <th className="text-right py-2 px-3">N-1</th>
+              <th className="text-right py-2 px-3">vs N-1</th>
               <th className="text-right py-2 px-3">% section</th>
             </tr></thead>
             <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
-              {sec.rows.map((r) => (
+              {sec.rows.map((r) => {
+                const n1Val = n1Data.get(r.code) ?? 0;
+                const varN1 = n1Val ? ((r.realise - n1Val) / Math.abs(n1Val) * 100) : 0;
+                return (
                 <tr key={r.code}>
                   <td className="py-2 px-3 num font-mono">{r.code}</td>
                   <td className="py-2 px-3">{r.label}</td>
@@ -500,9 +528,14 @@ function CRBlock() {
                     r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
                     {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
                   </td>
+                  <td className="py-2 px-3 text-right num text-primary-400">{fmtFull(n1Val)}</td>
+                  <td className={clsx('py-2 px-3 text-right num text-xs', varN1 === 0 ? 'text-primary-400' : (r.isCharge ? (varN1 <= 0 ? 'text-success' : 'text-error') : (varN1 >= 0 ? 'text-success' : 'text-error')))}>
+                    {varN1 !== 0 ? `${varN1 >= 0 ? '+' : ''}${varN1.toFixed(1)} %` : '—'}
+                  </td>
                   <td className="py-2 px-3 text-right num text-xs text-primary-500">{total ? ((r.realise / total) * 100).toFixed(1) : 0} %</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </ChartCard>
@@ -538,23 +571,58 @@ function CRBlock() {
                 <button onClick={() => setZoom(sec.section)} className="btn-outline !py-1.5 text-xs">Analyser →</button>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                <div className="border border-primary-200 dark:border-primary-800 p-2 rounded">
-                  <p className="text-[10px] uppercase text-primary-500 font-semibold">Réalisé</p>
-                  <p className="num text-sm font-bold mt-0.5">{fmtFull(sec.totalRealise)}</p>
-                </div>
-                <div className="border border-primary-200 dark:border-primary-800 p-2 rounded">
-                  <p className="text-[10px] uppercase text-primary-500 font-semibold">Budget</p>
-                  <p className="num text-sm font-bold mt-0.5 text-primary-500">{fmtFull(sec.totalBudget)}</p>
-                </div>
-                <div className="border border-primary-200 dark:border-primary-800 p-2 rounded">
-                  <p className="text-[10px] uppercase text-primary-500 font-semibold">Écart</p>
-                  <p className={clsx('num text-sm font-bold mt-0.5',
-                    sec.totalEcart > 0 ? (sec.isCharge ? 'text-error' : 'text-success') : (sec.isCharge ? 'text-success' : 'text-error'))}>
-                    {sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}
-                  </p>
-                </div>
-              </div>
+              {/* Tableau reporting standard : Month + YTD */}
+              {(() => {
+                const m = currentMonth > 0 ? currentMonth - 1 : 0; // dernier mois complet
+                const secMonthly = sec.rows.reduce((acc, r) => {
+                  const md = monthlyData.get(r.code);
+                  if (!md) return acc;
+                  return { actualM: acc.actualM + md.months[m].realise, budgetM: acc.budgetM + md.months[m].budget, n1M: acc.n1M + md.months[m].n1 };
+                }, { actualM: 0, budgetM: 0, n1M: 0 });
+                const n1Ytd = sectionN1(sec);
+                const MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+                const monthLabel = MONTHS_SHORT[m];
+                return (
+                  <table className="w-full text-[10px] mb-3 border border-primary-200 dark:border-primary-800 rounded overflow-hidden">
+                    <thead><tr className="bg-primary-100 dark:bg-primary-800">
+                      <th className="py-1 px-2"></th>
+                      <th className="py-1 px-2 text-right font-semibold" colSpan={3}>Mois ({monthLabel})</th>
+                      <th className="py-1 px-2 text-right font-semibold border-l border-primary-200 dark:border-primary-700" colSpan={3}>Year-to-Date</th>
+                    </tr>
+                    <tr className="bg-primary-50 dark:bg-primary-900 text-primary-500">
+                      <th className="py-1 px-2 text-left"></th>
+                      <th className="py-1 px-2 text-right">Actual</th>
+                      <th className="py-1 px-2 text-right">Budget</th>
+                      <th className="py-1 px-2 text-right">N-1</th>
+                      <th className="py-1 px-2 text-right border-l border-primary-200 dark:border-primary-700">Actual</th>
+                      <th className="py-1 px-2 text-right">Budget</th>
+                      <th className="py-1 px-2 text-right">N-1</th>
+                    </tr></thead>
+                    <tbody>
+                      <tr className="font-semibold">
+                        <td className="py-1.5 px-2">{sec.isCharge ? 'Charges' : 'Produits'}</td>
+                        <td className="py-1.5 px-2 text-right num">{fmtK(secMonthly.actualM)}</td>
+                        <td className="py-1.5 px-2 text-right num text-primary-500">{fmtK(secMonthly.budgetM)}</td>
+                        <td className="py-1.5 px-2 text-right num text-primary-400">{fmtK(secMonthly.n1M)}</td>
+                        <td className="py-1.5 px-2 text-right num border-l border-primary-200 dark:border-primary-700">{fmtK(sec.totalRealise)}</td>
+                        <td className="py-1.5 px-2 text-right num text-primary-500">{fmtK(sec.totalBudget)}</td>
+                        <td className="py-1.5 px-2 text-right num text-primary-400">{fmtK(n1Ytd)}</td>
+                      </tr>
+                      <tr className="text-[9px] text-primary-500">
+                        <td className="py-1 px-2">Écart</td>
+                        <td colSpan={2} className={clsx('py-1 px-2 text-right num', (secMonthly.actualM - secMonthly.budgetM) === 0 ? '' : (sec.isCharge ? (secMonthly.actualM - secMonthly.budgetM <= 0 ? 'text-success' : 'text-error') : (secMonthly.actualM - secMonthly.budgetM >= 0 ? 'text-success' : 'text-error')))}>
+                          {(secMonthly.actualM - secMonthly.budgetM) >= 0 ? '+' : ''}{fmtK(secMonthly.actualM - secMonthly.budgetM)}
+                        </td>
+                        <td className="py-1 px-2 text-right num">{secMonthly.n1M ? `${((secMonthly.actualM - secMonthly.n1M) / Math.abs(secMonthly.n1M) * 100).toFixed(0)}%` : '—'}</td>
+                        <td colSpan={2} className={clsx('py-1 px-2 text-right num border-l border-primary-200 dark:border-primary-700', sec.totalEcart === 0 ? '' : (sec.isCharge ? (sec.totalEcart <= 0 ? 'text-success' : 'text-error') : (sec.totalEcart >= 0 ? 'text-success' : 'text-error')))}>
+                          {sec.totalEcart >= 0 ? '+' : ''}{fmtK(sec.totalEcart)}
+                        </td>
+                        <td className="py-1 px-2 text-right num">{n1Ytd ? `${((sec.totalRealise - n1Ytd) / Math.abs(n1Ytd) * 100).toFixed(0)}%` : '—'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                );
+              })()}
 
               <div className="mb-3">
                 <div className="flex justify-between text-[10px] text-primary-500 mb-1">
@@ -738,6 +806,7 @@ function ISBudgetVsActual() {
 // ══════════════════════════════════════════════════════════════════════
 function CashflowStatement() {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const [data, setData] = useState<{ labels: string[]; cumul: number[]; encaissements: number[]; decaissements: number[]; opening: number }>({ labels: [], cumul: [], encaissements: [], decaissements: [], opening: 0 });
 
   useEffect(() => {
@@ -807,6 +876,7 @@ function KPIBox({ label, value }: { label: string; value: string }) {
 // ══════════════════════════════════════════════════════════════════════
 function ReceivablesReview() {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const balance = useBalance();
   const [monthlyAR, setMonthlyAR] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
   const [monthlyAP, setMonthlyAP] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
@@ -938,9 +1008,19 @@ function DarkKPI({ label, value }: { label: string; value: string }) {
 // ══════════════════════════════════════════════════════════════════════
 function CRSecTable({ sectionKey }: { sectionKey: any }) {
   const rows = useBudgetActual();
-  const { currentOrgId } = useApp();
+  const { currentOrgId, currentYear } = useApp();
   const sections = bySection(rows, currentOrgId);
   const labels = loadLabels(currentOrgId);
+  const [n1Map, setN1Map] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    import('../engine/budgetActual').then(({ computeBudgetActualMonthly }) => {
+      computeBudgetActualMonthly(currentOrgId, currentYear).then((raw) => {
+        const m = new Map<string, number>();
+        for (const r of raw.rows) m.set(r.code, r.totalN1);
+        setN1Map(m);
+      });
+    });
+  }, [currentOrgId, currentYear]);
   const sec = sections.find((s) => s.section === sectionKey);
   const [open, setOpen] = useState(true);
 
@@ -975,13 +1055,15 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
                 <th className="text-right py-2 px-3">Réalisé</th>
                 <th className="text-right py-2 px-3">Budget</th>
                 <th className="text-right py-2 px-3">Écart</th>
-                <th className="text-right py-2 px-3">Écart %</th>
+                <th className="text-right py-2 px-3">Var %</th>
+                <th className="text-right py-2 px-3">N-1</th>
+                <th className="text-right py-2 px-3">Var N-1</th>
                 <th className="text-right py-2 px-3">% section</th>
                 <th className="text-center py-2 px-3">Statut</th>
               </tr>
             </thead>
             <tbody>
-              {open && sec.rows.map((r) => (
+              {open && sec.rows.map((r) => { const n1v = n1Map.get(r.code) ?? 0; const varN1v = n1v ? ((r.realise - n1v) / Math.abs(n1v) * 100) : 0; return (
                 <tr key={r.code} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30 hover:bg-primary-100 dark:hover:bg-primary-900">
                   <td></td>
                   <td className="py-2 px-3 num font-mono">{r.code}</td>
@@ -993,6 +1075,8 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
                     {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
                   </td>
                   <td className="py-2 px-3 text-right num text-xs">{r.ecartPct >= 0 ? '+' : ''}{r.ecartPct.toFixed(1)} %</td>
+                  <td className="py-2 px-3 text-right num text-primary-400">{n1v ? fmtFull(n1v) : '—'}</td>
+                  <td className={clsx('py-2 px-3 text-right num text-xs', varN1v === 0 ? 'text-primary-400' : (r.isCharge ? (varN1v <= 0 ? 'text-success' : 'text-error') : (varN1v >= 0 ? 'text-success' : 'text-error')))}>  {n1v ? `${varN1v >= 0 ? '+': ''}${varN1v.toFixed(1)}%` : '—'}</td>
                   <td className="py-2 px-3 text-right num text-xs text-primary-500">{sec.totalRealise ? ((r.realise / sec.totalRealise) * 100).toFixed(1) : 0} %</td>
                   <td className="py-2 px-3 text-center">
                     <span className={clsx('text-xs font-semibold',
@@ -1001,7 +1085,7 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
                     </span>
                   </td>
                 </tr>
-              ))}
+              ); })}
               <tr className="bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold">
                 <td className="py-2 pl-2 w-8 text-center">
                   <button onClick={() => setOpen(!open)} className="w-5 h-5 rounded hover:bg-primary-700 dark:hover:bg-primary-300 text-xs font-bold" title={open ? 'Replier' : 'Déplier'}>

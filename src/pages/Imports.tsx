@@ -78,7 +78,9 @@ export default function Imports() {
   const deleteImport = async (imp: typeof history[number]) => {
     if (!confirm(`Supprimer l'import "${imp.fileName}" et ses ${imp.count} écritures ?`)) return;
     await db.transaction('rw', [db.gl, db.imports], async () => {
-      await db.gl.where('importId').equals(String(imp.id)).delete();
+      const impId = String(imp.id);
+      const toDelete = await db.gl.filter((e) => e.importId === impId).primaryKeys();
+      await db.gl.bulkDelete(toDelete);
       await db.imports.delete(imp.id!);
     });
   };
