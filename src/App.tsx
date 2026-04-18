@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Home from './pages/Home';
 
 const Imports        = lazy(() => import('./pages/Imports'));
@@ -57,6 +58,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<><Home /><FloatingAI /></>} />
@@ -78,6 +80,7 @@ function App() {
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
