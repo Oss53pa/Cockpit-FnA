@@ -205,6 +205,15 @@ function parseDate(s: any): string | null {
 }
 
 // ── Contrôles et import ────────────────────────────────────────────────────
+export type UnbalancedPiece = {
+  journal: string;
+  piece: string;
+  debit: number;
+  credit: number;
+  gap: number;
+  accounts: string[];
+};
+
 export type ImportReport = {
   totalRows: number;
   imported: number;
@@ -214,6 +223,7 @@ export type ImportReport = {
   balanced: boolean;
   unknownAccounts: string[];
   errors: { row: number; reason: string }[];
+  unbalancedPieces: UnbalancedPiece[];
 };
 
 export async function importGL(
@@ -266,6 +276,32 @@ export async function importGL(
 
   const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
+  // Détection des pièces déséquilibrées avec comptes concernés
+  const pieceMap = new Map<string, { debit: number; credit: number; accounts: Set<string> }>();
+  for (const e of entries) {
+    const key = `${e.journal}||${e.piece}`;
+    let p = pieceMap.get(key);
+    if (!p) { p = { debit: 0, credit: 0, accounts: new Set() }; pieceMap.set(key, p); }
+    p.debit += e.debit;
+    p.credit += e.credit;
+    p.accounts.add(e.account);
+  }
+  const unbalancedPieces: UnbalancedPiece[] = [];
+  for (const [key, p] of pieceMap) {
+    const gap = Math.round((p.debit - p.credit) * 100) / 100;
+    if (Math.abs(gap) >= 0.01) {
+      const [journal, piece] = key.split('||');
+      unbalancedPieces.push({
+        journal, piece,
+        debit: Math.round(p.debit * 100) / 100,
+        credit: Math.round(p.credit * 100) / 100,
+        gap,
+        accounts: [...p.accounts],
+      });
+    }
+  }
+  unbalancedPieces.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+
   // Enregistrement
   await db.transaction('rw', db.gl, db.accounts, db.imports, async () => {
     const importId = await db.imports.add({
@@ -311,5 +347,6 @@ export async function importGL(
     totalDebit, totalCredit, balanced,
     unknownAccounts: [...unknownAccounts],
     errors,
+    unbalancedPieces,
   };
 }

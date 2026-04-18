@@ -5,7 +5,7 @@ import { Badge } from '../components/ui/Badge';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
-import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
+import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport, UnbalancedPiece } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 
@@ -180,6 +180,45 @@ export default function Imports() {
               </p>
             </div>
           </div>
+          {report.unbalancedPieces.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-xs uppercase tracking-wider font-semibold mb-2 text-error">
+                {report.unbalancedPieces.length} pièce(s) déséquilibrée(s)
+              </h4>
+              <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800 sticky top-0 bg-white dark:bg-primary-950">
+                    <tr>
+                      <th className="text-left py-1.5 px-2">Journal</th>
+                      <th className="text-left py-1.5 px-2">Pièce</th>
+                      <th className="text-right py-1.5 px-2">Débit</th>
+                      <th className="text-right py-1.5 px-2">Crédit</th>
+                      <th className="text-right py-1.5 px-2">Écart</th>
+                      <th className="text-left py-1.5 px-2">Comptes concernés</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                    {report.unbalancedPieces.slice(0, 50).map((p, i) => (
+                      <tr key={i} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
+                        <td className="py-1.5 px-2 font-mono">{p.journal}</td>
+                        <td className="py-1.5 px-2 font-mono">{p.piece || '—'}</td>
+                        <td className="py-1.5 px-2 text-right num">{fmtFull(p.debit)}</td>
+                        <td className="py-1.5 px-2 text-right num">{fmtFull(p.credit)}</td>
+                        <td className="py-1.5 px-2 text-right num font-semibold text-error">{fmtFull(p.gap)}</td>
+                        <td className="py-1.5 px-2">
+                          <div className="flex flex-wrap gap-1">
+                            {p.accounts.map((a) => (
+                              <span key={a} className="inline-block bg-primary-100 dark:bg-primary-800 rounded px-1.5 py-0.5 font-mono">{a}</span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           {report.errors.length > 0 && (
             <div className="mb-4">
               <h4 className="text-xs uppercase tracking-wider font-semibold mb-2 text-error">{report.errors.length} erreur(s)</h4>
