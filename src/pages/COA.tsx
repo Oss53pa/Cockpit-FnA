@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderTree, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderTree, Search, Upload } from 'lucide-react';
 import { downloadCOATemplate } from '../engine/templates';
+import { importCOA, COAImportReport } from '../engine/importer';
 import { useCurrentOrg } from '../hooks/useFinancials';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -35,6 +36,17 @@ export default function COA() {
   const [activeClass, setActiveClass] = useState<string>('all');
   const [view, setView] = useState<'sysco' | 'imported'>('sysco');
   const [selected, setSelected] = useState<{ code: string; label: string; type?: string; class?: string } | null>(null);
+  const [coaReport, setCoaReport] = useState<COAImportReport | null>(null);
+
+  const onImportCOA = async (file: File) => {
+    if (!currentOrgId) return;
+    try {
+      const report = await importCOA(file, currentOrgId);
+      setCoaReport(report);
+    } catch (e: any) {
+      alert(`Erreur import : ${e.message}`);
+    }
+  };
 
   const accounts = useLiveQuery(
     () => (currentOrgId ? db.accounts.where('orgId').equals(currentOrgId).toArray() : Promise.resolve([] as Account[])),
@@ -100,12 +112,37 @@ export default function COA() {
             <button className="btn-outline" onClick={() => downloadCOATemplate(org?.name)}>
               <FileSpreadsheet className="w-4 h-4" /> Modèle Excel
             </button>
+            <label className="btn-outline cursor-pointer">
+              <Upload className="w-4 h-4" /> Importer
+              <input type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden"
+                onChange={(e) => e.target.files?.[0] && onImportCOA(e.target.files[0])} />
+            </label>
             <button className="btn-outline" onClick={exportCSV}>
               <Download className="w-4 h-4" /> Exporter CSV
             </button>
           </div>
         }
       />
+
+      {coaReport && (
+        <div className="mb-6 p-4 rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/30">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold">Résultat de l'import</h4>
+            <button className="text-xs text-primary-500 hover:text-primary-700" onClick={() => setCoaReport(null)}>Fermer</button>
+          </div>
+          <div className="flex gap-4 text-sm">
+            <span>{coaReport.imported} compte(s) importé(s)</span>
+            <span>{coaReport.updated} mis à jour</span>
+            <span>{coaReport.imported - coaReport.updated} nouveau(x)</span>
+            {coaReport.errors.length > 0 && <span className="text-error">{coaReport.errors.length} erreur(s)</span>}
+          </div>
+          {coaReport.errors.length > 0 && (
+            <div className="mt-2 text-xs font-mono max-h-20 overflow-y-auto">
+              {coaReport.errors.map((e, i) => <div key={i}>Ligne {e.row} : {e.reason}</div>)}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-6">
         {['1','2','3','4','5','6','7','8'].map((c) => (

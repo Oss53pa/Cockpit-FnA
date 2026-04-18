@@ -302,8 +302,45 @@ export async function importGL(
   }
   unbalancedPieces.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
 
+  // Auto-affectation des écritures aux périodes selon leur date
+  const MONTH_LABELS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
   // Enregistrement
-  await db.transaction('rw', db.gl, db.accounts, db.imports, async () => {
+  await db.transaction('rw', [db.gl, db.accounts, db.imports, db.periods, db.fiscalYears], async () => {
+    // Charger les périodes existantes et les exercices
+    const existingPeriods = await db.periods.where('orgId').equals(opts.orgId).toArray();
+    const periodIndex = new Map(existingPeriods.map((p) => [`${p.year}-${p.month}`, p.id]));
+    const fiscalYears = await db.fiscalYears.where('orgId').equals(opts.orgId).toArray();
+    const fyIndex = new Map(fiscalYears.map((fy) => [fy.year, fy.id]));
+
+    // Résoudre ou créer la période pour chaque écriture
+    const resolvePeriodId = async (date: string): Promise<string> => {
+      const y = parseInt(date.substring(0, 4));
+      const m = parseInt(date.substring(5, 7));
+      const key = `${y}-${m}`;
+      const cached = periodIndex.get(key);
+      if (cached) return cached;
+
+      // Créer l'exercice si besoin
+      let fyId = fyIndex.get(y);
+      if (!fyId) {
+        fyId = `fy-${opts.orgId}-${y}`;
+        await db.fiscalYears.put({ id: fyId, orgId: opts.orgId, year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31`, closed: false });
+        fyIndex.set(y, fyId);
+      }
+      // Créer la période
+      const pId = `p-${opts.orgId}-${y}-${m}`;
+      await db.periods.put({ id: pId, orgId: opts.orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
+      periodIndex.set(key, pId);
+      return pId;
+    };
+
+    // Affecter chaque écriture à sa bonne période
+    for (const e of entries) {
+      e.periodId = await resolvePeriodId(e.date);
+    }
+
     const importId = await db.imports.add({
       orgId: opts.orgId,
       date: Date.now(),
@@ -348,5 +385,60 @@ export async function importGL(
     unknownAccounts: [...unknownAccounts],
     errors,
     unbalancedPieces,
+  };
+}
+
+// ── Import Plan Comptable ──────────────────────────────────────────────────
+export type COAImportReport = {
+  totalRows: number;
+  imported: number;
+  updated: number;
+  errors: { row: number; reason: string }[];
+};
+
+export async function importCOA(
+  file: File,
+  orgId: string,
+): Promise<COAImportReport> {
+  const { rows } = await parseFile(file);
+  const errors: COAImportReport['errors'] = [];
+  const toImport: Account[] = [];
+
+  // Détection des colonnes
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const colCode = headers.find((h) => /^code$/i.test(h.trim()) || /^compte$/i.test(h.trim()));
+  const colLabel = headers.find((h) => /^libell[éeè]/i.test(h.trim()) || /^label/i.test(h.trim()) || /^intitul/i.test(h.trim()));
+  const colClass = headers.find((h) => /^classe$/i.test(h.trim()));
+  const colType = headers.find((h) => /^type$/i.test(h.trim()));
+  const colSysco = headers.find((h) => /sysco/i.test(h.trim()) || /^compte\s*sysco/i.test(h.trim()));
+
+  if (!colCode) throw new Error('Colonne "Code" ou "Compte" introuvable dans le fichier.');
+  if (!colLabel) throw new Error('Colonne "Libellé" introuvable dans le fichier.');
+
+  rows.forEach((r, idx) => {
+    const code = String(r[colCode!] ?? '').trim();
+    if (!code || !/^\d/.test(code)) return; // skip non-account rows
+    const label = String(r[colLabel!] ?? '').trim();
+    if (!label) { errors.push({ row: idx + 2, reason: `Libellé manquant pour le compte ${code}` }); return; }
+
+    const cls = colClass ? String(r[colClass] ?? '').trim() : classOf(code) ?? 'X';
+    const type = colType ? String(r[colType] ?? '').trim() as Account['type'] : (findSyscoAccount(code)?.type ?? 'X');
+    const syscoCode = colSysco ? String(r[colSysco] ?? '').trim() : findSyscoAccount(code)?.code;
+
+    toImport.push({ orgId, code, label, class: cls, type, syscoCode });
+  });
+
+  let updated = 0;
+  if (toImport.length > 0) {
+    const existing = new Set((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => a.code));
+    updated = toImport.filter((a) => existing.has(a.code)).length;
+    await db.accounts.bulkPut(toImport);
+  }
+
+  return {
+    totalRows: rows.length,
+    imported: toImport.length,
+    updated,
+    errors,
   };
 }

@@ -99,7 +99,7 @@ export default function Budget() {
     } finally { setBusy(false); }
   };
 
-  const importBudgetExcel = async (file: File) => {
+  const importBudgetExcel = async (file: File, targetYear?: number) => {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
     // Cherche la feuille Budget (nom contient "Budget")
@@ -107,7 +107,9 @@ export default function Budget() {
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: 0, raw: true });
 
-    const versionName = prompt('Nom de la version à créer/écraser ?', version || 'V1_initial');
+    const year = targetYear ?? currentYear;
+    const defaultVersion = targetYear && targetYear < currentYear ? `Budget_N-1_${targetYear}` : (version || 'V1_initial');
+    const versionName = prompt(`Nom de la version à créer/écraser (année ${year}) ?`, defaultVersion);
     if (!versionName?.trim()) return;
 
     const items: Array<{ account: string; monthly: number[] }> = [];
@@ -124,10 +126,12 @@ export default function Budget() {
       alert('Aucune donnée valide détectée dans le fichier.');
       return;
     }
-    await saveBudget(currentOrgId, currentYear, versionName.trim(), items);
-    setVersion(versionName.trim());
-    setTab('saisie');
-    alert(`✓ ${items.length} compte(s) importés dans la version « ${versionName.trim()} ».`);
+    await saveBudget(currentOrgId, year, versionName.trim(), items);
+    if (year === currentYear) {
+      setVersion(versionName.trim());
+      setTab('saisie');
+    }
+    alert(`${items.length} compte(s) importés dans la version « ${versionName.trim()} » (${year}).`);
   };
 
   const removeVer = async (v: string) => {
@@ -151,9 +155,14 @@ export default function Budget() {
               <Download className="w-4 h-4" /> Modèle Excel
             </button>
             <label className="btn-outline cursor-pointer">
-              <Upload className="w-4 h-4" /> Importer
+              <Upload className="w-4 h-4" /> Importer N
               <input type="file" accept=".xlsx,.xls" className="hidden"
                 onChange={(e) => e.target.files?.[0] && importBudgetExcel(e.target.files[0])} />
+            </label>
+            <label className="btn-outline cursor-pointer">
+              <Upload className="w-4 h-4" /> Importer N-1
+              <input type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={(e) => e.target.files?.[0] && importBudgetExcel(e.target.files[0], currentYear - 1)} />
             </label>
             {versions.length > 0 && (
               <select className="input !w-auto !py-1.5" value={version} onChange={(e) => setVersion(e.target.value)}>
