@@ -1,6 +1,8 @@
 // Palette globale appliquée à toute l'app (charts, tables, KPIs, dashboards)
 import { create } from 'zustand';
 
+export type PaletteKey = string;
+
 export type Palette = {
   name: string;
   /** Échelle 50→950 de gris teintés pour l'UI entière */
@@ -15,9 +17,9 @@ export type Palette = {
 // ── Génération automatique d'échelle à partir d'une couleur de base ──
 function hexToHsl(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
-  let r = parseInt(h.substring(0, 2), 16) / 255;
-  let g = parseInt(h.substring(2, 4), 16) / 255;
-  let b = parseInt(h.substring(4, 6), 16) / 255;
+  const r = parseInt(h.substring(0, 2), 16) / 255;
+  const g = parseInt(h.substring(2, 4), 16) / 255;
+  const b = parseInt(h.substring(4, 6), 16) / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   let hue = 0, sat = 0;
   const lig = (max + min) / 2;

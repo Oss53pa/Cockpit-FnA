@@ -10,6 +10,7 @@ import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useM
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { Block, buildPDFFromBlocks, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
+import { computeBilan, computeSIG } from '../engine/statements';
 import { fmtFull, fmtMoney } from '../lib/format';
 
 const TABLE_CATALOG: Array<{ v: string; label: string; cat: string; desc: string }> = [
@@ -613,7 +614,6 @@ export default function Reports() {
 
   const periodStatements = useMemo(() => {
     if (!hasPeriodFilter || !periodBalance) return null;
-    const { computeBilan, computeSIG } = require('../engine/statements');
     const b = computeBilan(periodBalance);
     const s = computeSIG(periodBalance);
     return { bilan: b, sig: s.sig, cr: s.cr };
@@ -1344,7 +1344,7 @@ function TablePreview({ source, data, palette, title }: any) {
         const ba = data.budgetActual ?? [];
         const filtered = ba.filter((r: any) => prefixes.some((p: string) => r.code?.startsWith(p)));
 
-        const periodLabel = { m: 'Monthly', q: 'Quarterly', s: 'Interim', a: 'Annual' }[suffix] ?? '';
+        const periodLabel = ({ m: 'Monthly', q: 'Quarterly', s: 'Interim', a: 'Annual' } as Record<string, string>)[suffix] ?? '';
         head.push('Compte', 'Libellé', `Actual ${periodLabel}`, `Budget ${periodLabel}`, 'Écart', 'Var %', 'N-1');
         body = filtered.slice(0, 12).map((r: any) => [
           r.code, r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart),

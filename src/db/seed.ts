@@ -123,7 +123,7 @@ function makeEntries(
   return entries;
 }
 
-async function seedOrg(org: Organization, year: number, scale: number) {
+export async function seedOrg(org: Organization, year: number, scale: number) {
   await db.organizations.put(org);
 
   const fy: FiscalYear = {

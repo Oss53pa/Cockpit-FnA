@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Menu, Settings } from 'lucide-react';
+import { Bell, HelpCircle, LogOut, Menu, Settings } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
+import { HelpModal } from '../ui/HelpModal';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear } = useApp();
@@ -19,6 +20,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -73,6 +75,16 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
           </select>
 
+          <button
+            type="button"
+            title="Objet & mode d'emploi"
+            aria-label="Objet & mode d'emploi"
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
+            onClick={() => { setHelpOpen(true); setNotifOpen(false); setUserOpen(false); }}
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
+
           <div ref={notifRef} className="relative">
             <button className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition relative"
               onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); }}>
@@ -123,6 +135,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </div>
         </div>
       </div>
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </header>
   );
 }

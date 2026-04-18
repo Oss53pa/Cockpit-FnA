@@ -5,7 +5,7 @@ import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { useApp } from '../store/app';
-import { getAuditTrail, clearAuditTrail, exportAuditTrailCSV, type AuditEntry } from '../engine/auditLog';
+import { getAuditTrail, clearAuditTrail, exportAuditTrailCSV } from '../engine/auditLog';
 
 const ACTION_LABELS: Record<string, string> = {
   create: 'Création', update: 'Modification', delete: 'Suppression',

@@ -184,7 +184,7 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
 
   const customs = loadCustomSections(currentOrgId);
   const customIds = new Set(customs.map((c) => c.id));
-  const flow: Array<{ kind: 'section'; key: string; sec: any } | { kind: 'inter'; key: any; data: any }> = CR_FLOW.map((item) =>
+  const flow: Array<{ kind: 'section'; key: string; sec: ReturnType<typeof bySection>[number] | undefined } | { kind: 'inter'; key: string; data: { realise: number; budget: number } }> = CR_FLOW.map((item) =>
     item.kind === 'section'
       ? { kind: 'section' as const, key: item.key, sec: secMap.get(item.key) }
       : { kind: 'inter' as const, key: item.key, data: inters[item.key] }
@@ -232,7 +232,7 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                     className={clsx('font-bold',
                       isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
                     <td colSpan={2} className="py-2.5 px-3 uppercase text-xs tracking-wider">
-                      = {INTERMEDIATE_LABELS[item.key]}
+                      = {INTERMEDIATE_LABELS[item.key as keyof typeof INTERMEDIATE_LABELS]}
                     </td>
                     <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.realise)}</td>
                     <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.budget)}</td>

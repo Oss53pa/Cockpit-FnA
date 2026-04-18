@@ -77,7 +77,7 @@ export function loadCustomSections(orgId: string): CustomSection[] {
   try {
     const raw = localStorage.getItem(`${KEY_CUSTOM}:${orgId}`);
     if (raw) return JSON.parse(raw) as CustomSection[];
-  } catch {}
+  } catch { /* ignore */ }
   return [];
 }
 export function saveCustomSections(orgId: string, sections: CustomSection[]) {
@@ -108,7 +108,7 @@ export function loadOrder(orgId: string): CRSection[] {
   try {
     const raw = localStorage.getItem(`${KEY_ORDER}:${orgId}`);
     if (raw) stored = JSON.parse(raw);
-  } catch {}
+  } catch { /* ignore */ }
   const all = [...defaults, ...customIds];
   // Commencer par l'ordre stocké (filtré) puis compléter avec les ids manquants
   const filtered = stored.filter((id) => all.includes(id));
@@ -153,7 +153,7 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
   }
 
   // Budget : si version fournie, depuis Dexie ; sinon = réalisé × 0.95 (simulation)
-  let budgetMap = new Map<string, number>();
+  const budgetMap = new Map<string, number>();
   if (version) {
     const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).toArray();
     for (const l of lines) {

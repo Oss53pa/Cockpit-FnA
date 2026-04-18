@@ -1,6 +1,6 @@
 // Benchmark sectoriel — Compare les ratios aux normes OHADA
 import type { Ratio } from '../ratios';
-import { getNormes, type Secteur } from '../../syscohada/atlas';
+import { getNormes } from '../../syscohada/atlas';
 
 export type BenchmarkPosition = 'below' | 'within' | 'above';
 

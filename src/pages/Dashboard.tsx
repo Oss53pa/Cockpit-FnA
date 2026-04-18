@@ -3016,7 +3016,7 @@ function SecTransport() {
         <KPICard title="Chiffre d'affaires" value={fmtK(ca)} unit="XOF" icon="▲" />
         <KPICard title="Carburant & énergie" value={fmtK(carburant)} unit="XOF" subValue={`${ratioCarb.toFixed(1)} % du CA`} icon="▼" inverse />
         <KPICard title="Entretien flotte" value={fmtK(entretien)} unit="XOF" icon="⚙" />
-        <KPICard title="Marge d'exploitation" value={fmtK(sig.resultatExploitation)} unit="XOF" icon="◆" />
+        <KPICard title="Marge d'exploitation" value={fmtK(sig.re)} unit="XOF" icon="◆" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Flotte (VB)" value={fmtK(flotte)} unit="XOF" icon="▣" />
@@ -3047,10 +3047,8 @@ function SecTransport() {
 // ─── SERVICES & CONSEIL ──────────────────────────────────────────
 function SecServices() {
   const { sig, balance } = useStatements();
-  const ct = useChartTheme();
   if (!sig) return null;
 
-  const honoraires = balance.filter(r => r.account.startsWith('706') || r.account.startsWith('708')).reduce((s,r) => s+r.credit-r.debit, 0);
   const soustraitance = balance.filter(r => r.account.startsWith('611') || r.account.startsWith('621')).reduce((s,r) => s+r.debit-r.credit, 0);
   const personnel = balance.filter(r => r.account.startsWith('66')).reduce((s,r) => s+r.debit-r.credit, 0);
   const ca = balance.filter(r => r.account.startsWith('70')).reduce((s,r) => s+r.credit-r.debit, 0);
@@ -3077,7 +3075,7 @@ function SecServices() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Masse salariale" value={fmtK(personnel)} unit="XOF" subValue={`${ratioPersonnel.toFixed(1)} % du CA`} icon="●" />
         <KPICard title="CA / collaborateur" value={fmtK(personnel ? ca / (personnel / 500000) : 0)} icon="↗" subValue="estimation" />
-        <KPICard title="Résultat exploit." value={fmtK(sig.resultatExploitation)} unit="XOF" icon="◆" />
+        <KPICard title="Résultat exploit." value={fmtK(sig.re)} unit="XOF" icon="◆" />
         <KPICard title="Projets actifs" value={String(projets.length)} icon="▣" />
       </div>
       <ChartCard title="Suivi des missions — avancement et marge">
@@ -3116,7 +3114,7 @@ function SecServices() {
 // ══════════════════════════════════════════════════════════════════════
 // COMPTABILITÉ ANALYTIQUE — dispatch
 // ══════════════════════════════════════════════════════════════════════
-function Analytique({ id }: { id: string }) {
+function Analytique({ id: _id }: { id: string }) {
   const { balance } = useStatements();
   const ct = useChartTheme();
   if (!balance || balance.length === 0) return <div className="py-20 text-center text-primary-500">Aucune donnée analytique disponible.</div>;

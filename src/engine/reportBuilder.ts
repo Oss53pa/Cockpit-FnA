@@ -104,7 +104,7 @@ export function buildReport(params: ReportParams, data: ReportData): jsPDF {
     doc.setTextColor(10, 10, 10);
 
     if (params.logoDataUrl) {
-      try { doc.addImage(params.logoDataUrl, 'PNG', W / 2 - 40, margin + 70, 80, 60, undefined, 'FAST'); } catch {}
+      try { doc.addImage(params.logoDataUrl, 'PNG', W / 2 - 40, margin + 70, 80, 60, undefined, 'FAST'); } catch { /* ignore */ }
     }
 
     doc.setFontSize(28);

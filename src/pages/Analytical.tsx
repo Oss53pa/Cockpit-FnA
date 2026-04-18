@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { ChartCard } from '../components/ui/ChartCard';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { useApp } from '../store/app';
-import { computeAnalyticalPL, computeAnalyticalMonthly, listAxes, listSections, type AnalyticalRow } from '../engine/analytical';
+import { computeAnalyticalPL, computeAnalyticalMonthly, listAxes, type AnalyticalRow } from '../engine/analytical';
 import { useChartColors } from '../store/theme';
 import { fmtFull } from '../lib/format';
 
@@ -64,7 +64,7 @@ export default function Analytical() {
                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={(e) => e.name}>
                       {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => fmtFull(v)} />
+                    <Tooltip formatter={(v) => fmtFull(Number(v))} />
                   </PieChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -75,7 +75,7 @@ export default function Analytical() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                     <XAxis type="number" tickFormatter={(v) => fmtFull(v)} tick={{ fontSize: 10 }} />
                     <YAxis type="category" dataKey="section" width={120} tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v: number) => fmtFull(v)} />
+                    <Tooltip formatter={(v) => fmtFull(Number(v))} />
                     <Bar dataKey="charges" fill={chartColors[0]} radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -98,7 +98,7 @@ export default function Analytical() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.map((r, i) => (
+                    {data.map((r) => (
                       <tr key={r.section} className="border-b border-primary-100 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/50 cursor-pointer" onClick={() => setSelectedSection(r.section)}>
                         <td className="px-4 py-2 font-medium">{r.section}</td>
                         <td className="px-4 py-2 text-right num">{fmtFull(r.charges)}</td>
@@ -123,7 +123,7 @@ export default function Analytical() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                   <YAxis tickFormatter={(v) => fmtFull(v)} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number) => fmtFull(v)} />
+                  <Tooltip formatter={(v) => fmtFull(Number(v))} />
                   <Line type="monotone" dataKey="charges" stroke={chartColors[0]} strokeWidth={2} dot={false} name="Charges" />
                   <Line type="monotone" dataKey="produits" stroke={chartColors[1]} strokeWidth={2} dot={false} name="Produits" />
                 </LineChart>

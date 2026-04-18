@@ -89,7 +89,7 @@ export type ReportData = {
   ratios: Ratio[];
   tft?: Line[];
   capital?: any[];
-  budgetActual?: Array<{ code: string; label: string; realise: number; budget: number; ecart: number; status: string }>;
+  budgetActual?: Array<{ code: string; label: string; realise: number; budget: number; ecart: number; ecartPct?: number; status: string }>;
 };
 
 // ─── PDF BUILDER ───────────────────────────────────────────────────
@@ -127,7 +127,7 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
     doc.text(CONFIDENTIALITY_LABEL[config.identity.confidentiality].toUpperCase(), W / 2, margin + 30, { align: 'center' });
 
     if (config.identity.logoDataUrl) {
-      try { doc.addImage(config.identity.logoDataUrl, 'PNG', W / 2 - 40, margin + 70, 80, 60, undefined, 'FAST'); } catch {}
+      try { doc.addImage(config.identity.logoDataUrl, 'PNG', W / 2 - 40, margin + 70, 80, 60, undefined, 'FAST'); } catch { /* ignore */ }
     }
 
     doc.setFontSize(28);
@@ -331,7 +331,7 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
     if (block.type === 'image') {
       const img = block as BlockImage;
       ensureSpace(220);
-      try { doc.addImage(img.dataUrl, 'PNG', margin, cursorY, W - 2 * margin, 200, undefined, 'FAST'); } catch {}
+      try { doc.addImage(img.dataUrl, 'PNG', margin, cursorY, W - 2 * margin, 200, undefined, 'FAST'); } catch { /* ignore */ }
       cursorY += 210;
       if (img.caption) {
         doc.setFontSize(9);

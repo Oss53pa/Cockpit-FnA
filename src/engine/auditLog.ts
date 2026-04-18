@@ -1,5 +1,4 @@
 // Audit trail — Journal des modifications
-import { db } from '../db/schema';
 
 export interface AuditEntry {
   id?: number;

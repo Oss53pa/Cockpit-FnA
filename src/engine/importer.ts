@@ -71,7 +71,7 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
 function parseAmount(s: any): number {
   if (s === undefined || s === null || s === '') return 0;
   if (typeof s === 'number') return s;
-  const str = String(s).replace(/\s/g, '').replace(/\u00A0/g, '').replace(/[^\d,.\-]/g, '');
+  const str = String(s).replace(/\s/g, '').replace(/\u00A0/g, '').replace(/[^\d,.-]/g, '');
   // Détection virgule/point
   const hasC = str.includes(',');
   const hasP = str.includes('.');
@@ -92,7 +92,7 @@ function parseDate(s: any): string | null {
   // ISO
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
   // DD/MM/YYYY ou DD-MM-YYYY
-  const m = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+  const m = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
   if (m) {
     const d = m[1].padStart(2, '0');
     const mo = m[2].padStart(2, '0');
