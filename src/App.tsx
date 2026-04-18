@@ -1,27 +1,28 @@
-import { lazy, Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 import Home from './pages/Home';
 
-const Imports        = lazy(() => import('./pages/Imports'));
-const States         = lazy(() => import('./pages/States'));
-const Ratios         = lazy(() => import('./pages/Ratios'));
-const Dashboards     = lazy(() => import('./pages/Dashboards'));
-const Dashboard      = lazy(() => import('./pages/Dashboard'));
-const DashboardHome  = lazy(() => import('./pages/DashboardHome'));
-const Reports        = lazy(() => import('./pages/Reports'));
-const AI             = lazy(() => import('./pages/AI'));
-const Alerts         = lazy(() => import('./pages/Alerts'));
-const Actions        = lazy(() => import('./pages/Actions'));
-const Budget         = lazy(() => import('./pages/Budget'));
-const COA            = lazy(() => import('./pages/COA'));
-const GrandLivre     = lazy(() => import('./pages/GrandLivre'));
-const Analytical     = lazy(() => import('./pages/Analytical'));
-const AuditTrail     = lazy(() => import('./pages/AuditTrail'));
-const Settings       = lazy(() => import('./pages/Settings'));
+const Imports        = lazyWithRetry(() => import('./pages/Imports'));
+const States         = lazyWithRetry(() => import('./pages/States'));
+const Ratios         = lazyWithRetry(() => import('./pages/Ratios'));
+const Dashboards     = lazyWithRetry(() => import('./pages/Dashboards'));
+const Dashboard      = lazyWithRetry(() => import('./pages/Dashboard'));
+const DashboardHome  = lazyWithRetry(() => import('./pages/DashboardHome'));
+const Reports        = lazyWithRetry(() => import('./pages/Reports'));
+const AI             = lazyWithRetry(() => import('./pages/AI'));
+const Alerts         = lazyWithRetry(() => import('./pages/Alerts'));
+const Actions        = lazyWithRetry(() => import('./pages/Actions'));
+const Budget         = lazyWithRetry(() => import('./pages/Budget'));
+const COA            = lazyWithRetry(() => import('./pages/COA'));
+const GrandLivre     = lazyWithRetry(() => import('./pages/GrandLivre'));
+const Analytical     = lazyWithRetry(() => import('./pages/Analytical'));
+const AuditTrail     = lazyWithRetry(() => import('./pages/AuditTrail'));
+const Settings       = lazyWithRetry(() => import('./pages/Settings'));
 
 function PageFallback() {
   return <div className="py-20 text-center text-primary-500">Chargement...</div>;

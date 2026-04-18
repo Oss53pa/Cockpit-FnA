@@ -5,7 +5,7 @@ import { Badge } from '../components/ui/Badge';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
-import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport, UnbalancedPiece } from '../engine/importer';
+import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 

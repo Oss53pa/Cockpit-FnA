@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderTree, Search, Upload } from 'lucide-react';
 import { downloadCOATemplate } from '../engine/templates';
