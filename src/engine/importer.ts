@@ -59,7 +59,19 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
   if (ext === 'xlsx' || ext === 'xls') {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const ws = wb.Sheets[wb.SheetNames[0]];
+
+    // Chercher la feuille contenant des en-têtes reconnus (COMPTE, DATE, DEBIT…)
+    const dataKeywords = /^(compte|date|journal|debit|crédit|credit|libelle|description)$/i;
+    let ws = wb.Sheets[wb.SheetNames[0]];
+    for (const name of wb.SheetNames) {
+      const candidate = wb.Sheets[name];
+      const firstRow = XLSX.utils.sheet_to_json<ParsedRow>(candidate, { defval: '', raw: false, header: 1 })[0] as unknown as string[];
+      if (firstRow && Array.isArray(firstRow) && firstRow.some((h) => dataKeywords.test(String(h).trim()))) {
+        ws = candidate;
+        break;
+      }
+    }
+
     const rows = XLSX.utils.sheet_to_json<ParsedRow>(ws, { defval: '', raw: false });
     const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
     return { headers, rows };
