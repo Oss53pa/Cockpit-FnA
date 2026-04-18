@@ -85,21 +85,110 @@ function parseAmount(s: any): number {
   return isNaN(n) ? 0 : n;
 }
 
+// Mois français (abrégés et complets) → numéro
+const FRENCH_MONTHS: Record<string, string> = {
+  'janvier': '01', 'février': '02', 'mars': '03', 'avril': '04',
+  'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08',
+  'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12',
+  'janv': '01', 'févr': '02', 'avr': '04', 'juil': '07',
+  'sept': '09', 'oct': '10', 'nov': '11', 'déc': '12',
+  'jan': '01', 'fev': '02', 'fév': '02', 'mar': '03', 'avr.': '04',
+  'jui': '06', 'jul': '07', 'aou': '08', 'aoû': '08',
+  'sep': '09', 'dec': '12',
+};
+// Mois anglais
+const ENGLISH_MONTHS: Record<string, string> = {
+  'january': '01', 'february': '02', 'march': '03', 'april': '04',
+  'may': '05', 'june': '06', 'july': '07', 'august': '08',
+  'september': '09', 'october': '10', 'november': '11', 'december': '12',
+  'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+  'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09',
+  'oct': '10', 'nov': '11', 'dec': '12',
+};
+const ALL_MONTHS: Record<string, string> = { ...FRENCH_MONTHS, ...ENGLISH_MONTHS };
+
+function fixYear(y: string): string {
+  if (y.length === 2) return parseInt(y) > 50 ? '19' + y : '20' + y;
+  return y;
+}
+
+function validDate(y: string, m: string, d: string): string | null {
+  const yn = parseInt(y), mn = parseInt(m), dn = parseInt(d);
+  if (yn < 1900 || yn > 2100 || mn < 1 || mn > 12 || dn < 1 || dn > 31) return null;
+  return `${y}-${m}-${d}`;
+}
+
 function parseDate(s: any): string | null {
   if (!s) return null;
-  if (s instanceof Date) return s.toISOString().substring(0, 10);
-  const str = String(s).trim();
-  // ISO
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
-  // DD/MM/YYYY ou DD-MM-YYYY
-  const m = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
-  if (m) {
-    const d = m[1].padStart(2, '0');
-    const mo = m[2].padStart(2, '0');
-    let y = m[3];
-    if (y.length === 2) y = parseInt(y) > 50 ? '19' + y : '20' + y;
-    return `${y}-${mo}-${d}`;
+  if (s instanceof Date && !isNaN(s.getTime())) return s.toISOString().substring(0, 10);
+
+  // Nombre brut → serial Excel (ex: 45307)
+  if (typeof s === 'number') {
+    if (s > 59) s -= 1; // bug Excel: faux 29 fév 1900
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const d = new Date(epoch.getTime() + s * 86400000);
+    if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
+    return null;
   }
+
+  const str = String(s).trim();
+  if (!str) return null;
+
+  // ISO : YYYY-MM-DD (avec ou sans heure)
+  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return validDate(iso[1], iso[2], iso[3]);
+
+  // YYYY/MM/DD
+  const ymd = str.match(/^(\d{4})[/.](\d{1,2})[/.](\d{1,2})/);
+  if (ymd) return validDate(ymd[1], ymd[2].padStart(2, '0'), ymd[3].padStart(2, '0'));
+
+  // YYYYMMDD (compact)
+  const compact = str.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) return validDate(compact[1], compact[2], compact[3]);
+
+  // DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY (avec ou sans heure)
+  const dmy = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+  if (dmy) {
+    const d = dmy[1].padStart(2, '0');
+    const mo = dmy[2].padStart(2, '0');
+    const y = fixYear(dmy[3]);
+    return validDate(y, mo, d);
+  }
+
+  // Mois textuels : "15 janvier 2024", "15-janv-2024", "15 jan. 2024"
+  const textDmy = str.match(/^(\d{1,2})[\s/\-.,]+([a-zéèûùàô.]+)[\s/\-.,]+(\d{2,4})/i);
+  if (textDmy) {
+    const mKey = textDmy[2].toLowerCase().replace(/\.$/, '');
+    const mo = ALL_MONTHS[mKey];
+    if (mo) return validDate(fixYear(textDmy[3]), mo, textDmy[1].padStart(2, '0'));
+  }
+
+  // "January 15, 2024", "Jan 15 2024"
+  const textMdy = str.match(/^([a-zéèûùàô.]+)[\s/\-.,]+(\d{1,2})[\s,]+(\d{2,4})/i);
+  if (textMdy) {
+    const mKey = textMdy[1].toLowerCase().replace(/\.$/, '');
+    const mo = ALL_MONTHS[mKey];
+    if (mo) return validDate(fixYear(textMdy[3]), mo, textMdy[2].padStart(2, '0'));
+  }
+
+  // "2024 janvier 15", "2024-Jan-15"
+  const textYmd = str.match(/^(\d{4})[\s/\-.,]+([a-zéèûùàô.]+)[\s/\-.,]+(\d{1,2})/i);
+  if (textYmd) {
+    const mKey = textYmd[2].toLowerCase().replace(/\.$/, '');
+    const mo = ALL_MONTHS[mKey];
+    if (mo) return validDate(textYmd[1], mo, textYmd[3].padStart(2, '0'));
+  }
+
+  // Serial Excel sous forme de string (ex: "45307")
+  const num = parseFloat(str);
+  if (!isNaN(num) && num > 365 && num < 200000 && /^\d+(\.\d+)?$/.test(str)) {
+    let serial = num;
+    if (serial > 59) serial -= 1;
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const d = new Date(epoch.getTime() + serial * 86400000);
+    if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
+  }
+
   return null;
 }
 
