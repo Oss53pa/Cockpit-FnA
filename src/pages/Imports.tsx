@@ -54,7 +54,7 @@ export default function Imports() {
   };
 
   const runImport = async () => {
-    if (!file || !periodId) return;
+    if (!file) return;
     const required: (keyof ColumnMapping)[] = ['date', 'account', 'debit', 'credit'];
     for (const k of required) {
       if (!mapping[k]) { alert(`Colonne manquante : ${k}`); return; }
@@ -131,11 +131,14 @@ export default function Imports() {
       {step === 'mapping' && (
         <Card title="Mapping des colonnes" subtitle={`Fichier : ${file?.name} — ${headers.length} colonnes détectées`}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <Select label="Période cible *" value={periodId} onChange={setPeriodId}
-              options={[{ v: '', l: '— Choisir —' }, ...periods.map((p) => ({ v: p.id, l: p.label }))]} />
+            <Select label="Période cible" value={periodId} onChange={setPeriodId}
+              options={[{ v: '', l: 'Auto (selon dates des écritures)' }, ...periods.map((p) => ({ v: p.id, l: p.label }))]} />
             <Select label="Source" value={source} onChange={setSource}
               options={sources.map((s) => ({ v: s, l: s }))} />
           </div>
+          <p className="text-[11px] text-primary-500 italic mb-4 -mt-2">
+            Laissez <strong>Auto</strong> pour affecter chaque écriture à sa période selon sa date (les périodes et exercices manquants sont créés automatiquement).
+          </p>
           <h4 className="text-xs uppercase tracking-wider text-primary-500 font-semibold mb-3">Correspondance des colonnes</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {(['date','journal','piece','account','label','debit','credit','tiers','analyticalSection'] as const).map((field) => (
@@ -149,7 +152,7 @@ export default function Imports() {
           </div>
           <div className="flex gap-2 mt-6 pt-4 border-t border-primary-200 dark:border-primary-800">
             <button className="btn-outline" onClick={reset}>Annuler</button>
-            <button className="btn-primary" onClick={runImport} disabled={loading || !periodId}>
+            <button className="btn-primary" onClick={runImport} disabled={loading}>
               {loading ? 'Import en cours…' : 'Lancer l\'import'}
             </button>
           </div>
