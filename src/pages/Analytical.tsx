@@ -26,10 +26,14 @@ type Tab = 'dashboard' | 'axes' | 'codes' | 'rules' | 'assign';
 
 const uid = () => crypto.randomUUID();
 
+const VALID_TABS: Tab[] = ['dashboard', 'axes', 'codes', 'rules', 'assign'];
+
 export default function Analytical() {
   const { currentOrgId, currentYear } = useApp();
   const ct = useChartTheme();
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const [searchParams] = useSearchParams();
+  const initialTab = VALID_TABS.includes(searchParams.get('tab') as Tab) ? (searchParams.get('tab') as Tab) : 'dashboard';
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [axes, setAxes] = useState<AnalyticAxis[]>([]);
   const [refresh, setRefresh] = useState(0);
   const bump = () => setRefresh((r) => r + 1);
