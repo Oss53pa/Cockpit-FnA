@@ -219,6 +219,7 @@ function applyPalette(p: Palette) {
   }
   s.setProperty('--th-bg', p.tableHeader);
   s.setProperty('--th-text', p.tableHeaderText);
+  s.setProperty('--grid-color', p.scale[2]); // grille des graphiques
 }
 
 // ── Store ──────────────────────────────────────────────────────────

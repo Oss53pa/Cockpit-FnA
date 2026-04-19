@@ -14,7 +14,6 @@ import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } 
 import { useChartTheme } from '../lib/chartTheme';
 import { bySection, loadLabels } from '../engine/budgetActual';
 import { useApp } from '../store/app';
-import { C } from '../lib/colors';
 import { fmtFull } from '../lib/format';
 import { agedBalance, fiscalite, immobilisationsDetail, masseSalariale, monthlyByPrefix, topAccountsByPrefix, tresorerieMonthly, AgedTier } from '../engine/analytics';
 
@@ -136,13 +135,13 @@ function ChargesProduits() {
   const ratioCA = totalProduits ? (totalCharges / totalProduits) * 100 : 0;
 
   const repartitionCharges = [
-    { name: 'Achats & MP', prefix: ['60'], color: C.primary },
-    { name: 'Personnel', prefix: ['66'], color: C.secondary },
-    { name: 'Services ext.', prefix: ['61','62','63'], color: C.accent1 },
-    { name: 'Amortissements', prefix: ['68','69'], color: C.accent3 },
-    { name: 'Impôts & taxes', prefix: ['64'], color: C.warning },
-    { name: 'Charges fin.', prefix: ['67'], color: C.danger },
-    { name: 'Autres', prefix: ['65'], color: '#94a3b8' },
+    { name: 'Achats & MP', prefix: ['60'], color: ct.at(0) },
+    { name: 'Personnel', prefix: ['66'], color: ct.at(1) },
+    { name: 'Services ext.', prefix: ['61','62','63'], color: ct.at(2) },
+    { name: 'Amortissements', prefix: ['68','69'], color: ct.at(3) },
+    { name: 'Impôts & taxes', prefix: ['64'], color: ct.at(4) },
+    { name: 'Charges fin.', prefix: ['67'], color: ct.at(5) },
+    { name: 'Autres', prefix: ['65'], color: ct.at(6) },
   ].map((c) => ({
     name: c.name,
     color: c.color,
@@ -150,11 +149,11 @@ function ChargesProduits() {
   })).filter((c) => c.value > 0).map((c) => ({ ...c, pct: Math.round((c.value / Math.max(totalCharges, 1)) * 100) }));
 
   const repartitionProduits = [
-    { name: 'Ventes marchandises', prefix: ['701'], color: C.primary },
-    { name: 'Ventes produits', prefix: ['702','703','704'], color: C.success },
-    { name: 'Prestations services', prefix: ['705','706','707'], color: C.info },
-    { name: 'Subventions', prefix: ['71'], color: C.accent1 },
-    { name: 'Autres produits', prefix: ['75','77','78'], color: C.warning },
+    { name: 'Ventes marchandises', prefix: ['701'], color: ct.at(0) },
+    { name: 'Ventes produits', prefix: ['702','703','704'], color: ct.at(1) },
+    { name: 'Prestations services', prefix: ['705','706','707'], color: ct.at(2) },
+    { name: 'Subventions', prefix: ['71'], color: ct.at(3) },
+    { name: 'Autres produits', prefix: ['75','77','78'], color: ct.at(4) },
   ].map((c) => ({
     name: c.name,
     color: c.color,
@@ -288,7 +287,7 @@ function ChargesProduits() {
                         <td className="py-1 px-1">{c.code} — {c.label}</td>
                         <td className="text-right num font-semibold">{fmtFull(c.value)}</td>
                         <td className="text-right num text-primary-500">{((c.value / Math.max(totalCharges, 1)) * 100).toFixed(1)} %</td>
-                        <td className="text-right num font-semibold" style={{ color: v > 0 ? C.danger : C.success }}>
+                        <td className="text-right num font-semibold" style={{ color: v > 0 ? ct.at(1) : ct.at(4) }}>
                           {v > 0 ? '↑' : '↓'} {Math.abs(v).toFixed(1)} %
                         </td>
                       </tr>
@@ -366,7 +365,7 @@ function ChargesProduits() {
                   <div key={i} className="flex justify-between items-center py-2 border-b border-primary-100 dark:border-primary-800">
                     <span className="font-medium">{item.poste}</span>
                     <div className="flex gap-3 items-center">
-                      <span className="num font-semibold" style={{ color: favorable ? C.success : C.danger }}>
+                      <span className="num font-semibold" style={{ color: favorable ? ct.at(4) : ct.at(1) }}>
                         {ecart > 0 ? '+' : ''}{fmtFull(ecart)}
                       </span>
                       <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
@@ -383,11 +382,11 @@ function ChargesProduits() {
           <ChartCard title="Synthèse budgétaire">
             <div className="p-2">
               {[
-                { label: 'Total Budget Charges', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.budget, 0)), color: C.warning },
-                { label: 'Total Réalisé Charges', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.realise, 0)), color: C.danger },
-                { label: 'Écart global', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.realise - r.budget, 0)), color: C.danger },
-                { label: 'Postes en dépassement', value: `${budgetVsRealise.filter(r => r.realise > r.budget).length} / ${budgetVsRealise.length}`, color: C.danger },
-                { label: 'Postes favorables', value: `${budgetVsRealise.filter(r => r.realise <= r.budget).length} / ${budgetVsRealise.length}`, color: C.success },
+                { label: 'Total Budget Charges', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.budget, 0)), color: ct.at(3) },
+                { label: 'Total Réalisé Charges', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.realise, 0)), color: ct.at(1) },
+                { label: 'Écart global', value: fmtFull(budgetVsRealise.reduce((s, r) => s + r.realise - r.budget, 0)), color: ct.at(1) },
+                { label: 'Postes en dépassement', value: `${budgetVsRealise.filter(r => r.realise > r.budget).length} / ${budgetVsRealise.length}`, color: ct.at(1) },
+                { label: 'Postes favorables', value: `${budgetVsRealise.filter(r => r.realise <= r.budget).length} / ${budgetVsRealise.length}`, color: ct.at(4) },
               ].map((item, i) => (
                 <div key={i} className="flex justify-between py-2.5 border-b border-primary-100 dark:border-primary-800">
                   <span className="text-xs text-primary-600">{item.label}</span>
@@ -1300,7 +1299,7 @@ function CycleClient() {
   const douteuses = balance.filter((r) => r.account.startsWith('416')).reduce((s, r) => s + r.soldeD, 0);
   const dso = ratios.find((r) => r.code === 'DSO')?.value ?? 0;
   const bucketTotals = aged.buckets.map((b, i) => ({ tranche: b, montant: aged.rows.reduce((s, r) => s + r.buckets[i], 0),
-    color: [C.success, C.primary, C.warning, C.accent4, C.danger][i] }));
+    color: [ct.at(4), ct.at(0), ct.at(3), ct.at(5), ct.at(1)][i] }));
   const top90 = aged.rows.reduce((s, r) => s + (r.buckets[4] ?? 0), 0);
 
   const dsoEvol = ca.labels.map((m, i) => ({ mois: m, dso: Math.round(48 + Math.sin(i/2)*10 + i*0.8), objectif: 60 }));
@@ -1315,8 +1314,8 @@ function CycleClient() {
   const top10sans3 = aged.rows.slice(3, 10).reduce((s, r) => s + r.total, 0);
   const autres = creances - top3 - top10sans3;
   const concentration = [
-    { name: 'Top 3 clients', value: creances ? Math.round((top3 / creances) * 100) : 0, color: C.primary },
-    { name: 'Clients 4-10', value: creances ? Math.round((top10sans3 / creances) * 100) : 0, color: C.secondary },
+    { name: 'Top 3 clients', value: creances ? Math.round((top3 / creances) * 100) : 0, color: ct.at(0) },
+    { name: 'Clients 4-10', value: creances ? Math.round((top10sans3 / creances) * 100) : 0, color: ct.at(1) },
     { name: 'Autres', value: creances ? Math.round((autres / creances) * 100) : 0, color: '#cbd5e1' },
   ];
 
@@ -1324,7 +1323,7 @@ function CycleClient() {
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
         <KPICard title="Créances totales" value={fmtK(creances)} unit="XOF" variation={8.2} color={ct.at(0)} icon="💳" />
-        <KPICard title="DSO" value={`${Math.round(dso)} j`} variation={5} color={dso > 60 ? C.warning : C.success} icon="⏱️" inverse subValue="Objectif : 60 jours" />
+        <KPICard title="DSO" value={`${Math.round(dso)} j`} variation={5} color={dso > 60 ? ct.at(3) : ct.at(4)} icon="⏱️" inverse subValue="Objectif : 60 jours" />
         <KPICard title="Taux recouvrement" value="87 %" variation={-2.1} color={ct.at(0)} icon="✅" subValue="Objectif : 90 %" />
         <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" variation={12} color={ct.at(1)} icon="CD" inverse />
         <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" variation={15} color={ct.at(1)} icon="90" inverse />
@@ -1382,7 +1381,7 @@ function CycleClient() {
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               <Bar dataKey="taux" name="Taux recouvrement" radius={[4,4,0,0]}>
-                {recouv.map((e, i) => <Cell key={i} fill={e.taux >= 90 ? C.success : e.taux >= 80 ? C.warning : C.danger} />)}
+                {recouv.map((e, i) => <Cell key={i} fill={e.taux >= 90 ? ct.at(4) : e.taux >= 80 ? ct.at(3) : ct.at(1)} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -1413,7 +1412,7 @@ function CycleClient() {
                       <td className="py-1.5 px-1 text-primary-400 font-bold">{i + 1}</td>
                       <td className="py-1.5 px-1 font-mono">{r.tier}</td>
                       <td className="py-1.5 px-1 text-right num font-semibold">{fmtFull(r.total)}</td>
-                      <td className="py-1.5 px-1 text-right num" style={{ color: r.buckets[4] > 0 ? C.danger : undefined }}>
+                      <td className="py-1.5 px-1 text-right num" style={{ color: r.buckets[4] > 0 ? ct.at(1) : undefined }}>
                         {r.buckets[4] > 0 ? fmtFull(r.buckets[4]) : '—'}
                       </td>
                       <td className="py-1.5 px-1 text-center">
@@ -1480,7 +1479,7 @@ function CycleFournisseur() {
   const dsoRatio = ratios.find((r) => r.code === 'DSO')?.value ?? 0;
   const echues = aged.rows.reduce((s, r) => s + (r.buckets[4] ?? 0), 0);
   const bucketTotals = aged.buckets.map((b, i) => ({ tranche: b, montant: aged.rows.reduce((s, r) => s + r.buckets[i], 0),
-    color: [C.success, C.primary, C.warning, C.accent4, C.danger][i] }));
+    color: [ct.at(4), ct.at(0), ct.at(3), ct.at(5), ct.at(1)][i] }));
 
   const dpoEvol = ca.labels.map((m, i) => ({
     mois: m,
@@ -1505,8 +1504,8 @@ function CycleFournisseur() {
   const top10sans3 = aged.rows.slice(3, 10).reduce((s, r) => s + r.total, 0);
   const autres = dettes - top3 - top10sans3;
   const concentration = [
-    { name: 'Top 3 fournisseurs', value: dettes ? Math.round((top3 / dettes) * 100) : 0, color: C.primary },
-    { name: 'Fournisseurs 4-10', value: dettes ? Math.round((top10sans3 / dettes) * 100) : 0, color: C.secondary },
+    { name: 'Top 3 fournisseurs', value: dettes ? Math.round((top3 / dettes) * 100) : 0, color: ct.at(0) },
+    { name: 'Fournisseurs 4-10', value: dettes ? Math.round((top10sans3 / dettes) * 100) : 0, color: ct.at(1) },
     { name: 'Autres', value: dettes ? Math.round((autres / dettes) * 100) : 0, color: '#cbd5e1' },
   ];
 
@@ -1601,7 +1600,7 @@ function CycleFournisseur() {
                       <td className="py-1.5 px-1 text-primary-400 font-bold">{i + 1}</td>
                       <td className="py-1.5 px-1 font-mono">{r.tier}</td>
                       <td className="py-1.5 px-1 text-right num font-semibold">{fmtFull(r.total)}</td>
-                      <td className="py-1.5 px-1 text-right num" style={{ color: retard ? C.danger : undefined }}>
+                      <td className="py-1.5 px-1 text-right num" style={{ color: retard ? ct.at(1) : undefined }}>
                         {retard ? fmtFull(r.buckets[4]) : '—'}
                       </td>
                       <td className="py-1.5 px-1 text-center">
@@ -1694,12 +1693,12 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
   frBfrTn.forEach(d => d.tn = d.fr - d.bfr);
 
   const decomposition = [
-    { name: 'Stocks', value: stocks, color: C.primary },
-    { name: 'Créances clients', value: creances, color: C.secondary },
-    { name: 'Autres créances', value: autresC, color: C.accent1 },
-    { name: 'Dettes fournisseurs', value: -dettesFourn, color: C.accent4 },
-    { name: 'Dettes fiscales', value: -dettesFisc, color: C.warning },
-    { name: 'Autres dettes', value: -autresD, color: C.danger },
+    { name: 'Stocks', value: stocks, color: ct.at(0) },
+    { name: 'Créances clients', value: creances, color: ct.at(1) },
+    { name: 'Autres créances', value: autresC, color: ct.at(2) },
+    { name: 'Dettes fournisseurs', value: -dettesFourn, color: ct.at(5) },
+    { name: 'Dettes fiscales', value: -dettesFisc, color: ct.at(3) },
+    { name: 'Autres dettes', value: -autresD, color: ct.at(1) },
   ];
 
   const dso = sig.ca ? (creances / (sig.ca * 1.18)) * 360 : 0;
@@ -1708,10 +1707,10 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
   const cycleConv = dso + rotStocks - dpoV;
 
   const cycleData = [
-    { label: 'DSO (Clients)', jours: Math.round(dso), color: C.primary },
-    { label: 'Rotation Stocks', jours: Math.round(rotStocks), color: C.accent1 },
-    { label: 'DPO (Fournisseurs)', jours: -Math.round(dpoV), color: C.accent4 },
-    { label: 'Cycle Conversion', jours: Math.round(cycleConv), color: C.danger },
+    { label: 'DSO (Clients)', jours: Math.round(dso), color: ct.at(0) },
+    { label: 'Rotation Stocks', jours: Math.round(rotStocks), color: ct.at(2) },
+    { label: 'DPO (Fournisseurs)', jours: -Math.round(dpoV), color: ct.at(5) },
+    { label: 'Cycle Conversion', jours: Math.round(cycleConv), color: ct.at(1) },
   ];
 
   const previsionnel = [
@@ -1816,19 +1815,19 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
               {decomposition.filter(d => d.value > 0).map((item, i) => (
                 <div key={i} className="flex justify-between py-1.5 border-b border-primary-100 dark:border-primary-800 text-xs">
                   <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: item.color }} />{item.name}</span>
-                  <span className="num font-semibold" style={{ color: C.success }}>+{fmtFull(item.value)}</span>
+                  <span className="num font-semibold" style={{ color: ct.at(4) }}>+{fmtFull(item.value)}</span>
                 </div>
               ))}
               <div className="text-xs font-semibold mt-3 mb-2">Passif circulant d'exploitation</div>
               {decomposition.filter(d => d.value < 0).map((item, i) => (
                 <div key={i} className="flex justify-between py-1.5 border-b border-primary-100 dark:border-primary-800 text-xs">
                   <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: item.color }} />{item.name}</span>
-                  <span className="num font-semibold" style={{ color: C.danger }}>{fmtFull(item.value)}</span>
+                  <span className="num font-semibold" style={{ color: ct.at(1) }}>{fmtFull(item.value)}</span>
                 </div>
               ))}
               <div className="flex justify-between pt-3 mt-2 border-t-2 border-primary-700 dark:border-primary-300 text-sm font-bold">
                 <span>= BFR</span>
-                <span className="num" style={{ color: C.warning }}>{fmtFull(bfr)} XOF</span>
+                <span className="num" style={{ color: ct.at(3) }}>{fmtFull(bfr)} XOF</span>
               </div>
             </div>
           </ChartCard>
@@ -1837,7 +1836,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
             <div className="p-2">
               {tre.labels.map((m, i) => {
                 const jours = sig.ca ? Math.round((bfr / sig.ca) * 360 * (0.8 + Math.sin(i) * 0.2)) : 0;
-                const color = jours > 40 ? C.danger : jours > 25 ? C.warning : C.success;
+                const color = jours > 40 ? ct.at(1) : jours > 25 ? ct.at(3) : ct.at(4);
                 return (
                   <div key={i} className="flex items-center gap-2 mb-1.5">
                     <span className="text-[11px] w-8 text-primary-500">{m}</span>
@@ -1863,9 +1862,9 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="optimiste" name="Scénario optimiste" fill={C.success + '20'} stroke={ct.at(4)} strokeWidth={2} />
-                <Area type="monotone" dataKey="base" name="Scénario base" fill={C.primary + '20'} stroke={ct.at(0)} strokeWidth={2.5} />
-                <Area type="monotone" dataKey="pessimiste" name="Scénario pessimiste" fill={C.danger + '20'} stroke={ct.at(1)} strokeWidth={2} />
+                <Area type="monotone" dataKey="optimiste" name="Scénario optimiste" fill={ct.at(4) + '20'} stroke={ct.at(4)} strokeWidth={2} />
+                <Area type="monotone" dataKey="base" name="Scénario base" fill={ct.at(0) + '20'} stroke={ct.at(0)} strokeWidth={2.5} />
+                <Area type="monotone" dataKey="pessimiste" name="Scénario pessimiste" fill={ct.at(1) + '20'} stroke={ct.at(1)} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -1874,9 +1873,9 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
             <ChartCard title="Hypothèses du prévisionnel">
               <div className="text-xs">
                 {[
-                  { scenario: 'Optimiste', hyp: 'DSO réduit à 45j, CA +10%, charges stables', color: C.success },
-                  { scenario: 'Base', hyp: 'Tendance actuelle maintenue, pas de changement majeur', color: C.primary },
-                  { scenario: 'Pessimiste', hyp: 'DSO à 70j, CA -5%, hausse charges 3%', color: C.danger },
+                  { scenario: 'Optimiste', hyp: 'DSO réduit à 45j, CA +10%, charges stables', color: ct.at(4) },
+                  { scenario: 'Base', hyp: 'Tendance actuelle maintenue, pas de changement majeur', color: ct.at(0) },
+                  { scenario: 'Pessimiste', hyp: 'DSO à 70j, CA -5%, hausse charges 3%', color: ct.at(1) },
                 ].map((s, i) => (
                   <div key={i} className="py-2.5 border-b border-primary-100 dark:border-primary-800">
                     <div className="flex items-center gap-1.5 mb-1">
@@ -1934,11 +1933,11 @@ function MasseSalariale() {
   }));
 
   const msRepartition = [
-    { name: 'Salaires de base', value: 73, color: C.primary },
-    { name: 'Charges sociales', value: 22, color: C.secondary },
-    { name: 'Primes & indemnités', value: 3, color: C.accent1 },
-    { name: 'Avantages', value: 1, color: C.accent3 },
-    { name: 'Formation', value: 1, color: C.warning },
+    { name: 'Salaires de base', value: 73, color: ct.at(0) },
+    { name: 'Charges sociales', value: 22, color: ct.at(1) },
+    { name: 'Primes & indemnités', value: 3, color: ct.at(2) },
+    { name: 'Avantages', value: 1, color: ct.at(4) },
+    { name: 'Formation', value: 1, color: ct.at(3) },
   ];
 
   const msDept = [
@@ -1954,10 +1953,10 @@ function MasseSalariale() {
 
   // Provisions
   const provStock = [
-    { type: 'Provisions pour risques', dotation: Math.round(totMasse * 0.04), reprise: Math.round(totMasse * 0.01), solde: Math.round(totMasse * 0.07), color: C.danger },
-    { type: 'Provisions pour charges', dotation: Math.round(totMasse * 0.025), reprise: Math.round(totMasse * 0.02), solde: Math.round(totMasse * 0.045), color: C.warning },
-    { type: 'Dépréciation stocks', dotation: Math.round(totMasse * 0.013), reprise: Math.round(totMasse * 0.005), solde: Math.round(totMasse * 0.03), color: C.accent4 },
-    { type: 'Dépréciation créances', dotation: Math.round(totMasse * 0.02), reprise: Math.round(totMasse * 0.008), solde: Math.round(totMasse * 0.055), color: C.info },
+    { type: 'Provisions pour risques', dotation: Math.round(totMasse * 0.04), reprise: Math.round(totMasse * 0.01), solde: Math.round(totMasse * 0.07), color: ct.at(1) },
+    { type: 'Provisions pour charges', dotation: Math.round(totMasse * 0.025), reprise: Math.round(totMasse * 0.02), solde: Math.round(totMasse * 0.045), color: ct.at(3) },
+    { type: 'Dépréciation stocks', dotation: Math.round(totMasse * 0.013), reprise: Math.round(totMasse * 0.005), solde: Math.round(totMasse * 0.03), color: ct.at(5) },
+    { type: 'Dépréciation créances', dotation: Math.round(totMasse * 0.02), reprise: Math.round(totMasse * 0.008), solde: Math.round(totMasse * 0.055), color: ct.at(2) },
   ];
 
   const provEvol = data.labels.map((m, i) => ({
@@ -1976,7 +1975,7 @@ function MasseSalariale() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
             <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" variation={5.1} color={ct.at(0)} icon="MS" inverse />
-            <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} variation={-1.2} color={ratio < 25 ? C.success : C.warning} icon="RA" inverse subValue="Objectif : < 22%" />
+            <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} variation={-1.2} color={ratio < 25 ? ct.at(4) : ct.at(3)} icon="RA" inverse subValue="Objectif : < 22%" />
             <KPICard title="Salaires directs" value={fmtK(salaires)} unit="XOF" color={ct.at(1)} icon="💼" />
             <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" variation={4.8} color={ct.at(2)} icon="CS" inverse />
             <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={ct.at(3)} icon="📅" />
@@ -2029,7 +2028,7 @@ function MasseSalariale() {
                       <span><span className="font-bold num">{fmtFull(d.montant)}</span> <span className="text-primary-500">({d.pct}%)</span></span>
                     </div>
                     <div className="h-2 bg-primary-100 dark:bg-primary-800 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${d.pct / 35 * 100}%`, background: C.primary }} />
+                      <div className="h-full rounded-full" style={{ width: `${d.pct / 35 * 100}%`, background: ct.at(0) }} />
                     </div>
                   </div>
                 ))}
@@ -2096,8 +2095,8 @@ function MasseSalariale() {
                         <td className="py-2 px-1">
                           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: p.color }} />{p.type}</span>
                         </td>
-                        <td className="py-2 px-1 text-right num font-semibold" style={{ color: C.danger }}>{fmtFull(p.dotation)}</td>
-                        <td className="py-2 px-1 text-right num font-semibold" style={{ color: C.success }}>{fmtFull(p.reprise)}</td>
+                        <td className="py-2 px-1 text-right num font-semibold" style={{ color: ct.at(1) }}>{fmtFull(p.dotation)}</td>
+                        <td className="py-2 px-1 text-right num font-semibold" style={{ color: ct.at(4) }}>{fmtFull(p.reprise)}</td>
                         <td className="py-2 px-1 text-right num font-bold">{fmtFull(p.solde)}</td>
                       </tr>
                     ))}
@@ -2105,8 +2104,8 @@ function MasseSalariale() {
                   <tfoot>
                     <tr className="border-t-2 border-primary-700 dark:border-primary-300">
                       <td className="py-2 px-1 font-bold">TOTAL</td>
-                      <td className="py-2 px-1 text-right num font-bold" style={{ color: C.danger }}>{fmtFull(provStock.reduce((s, p) => s + p.dotation, 0))}</td>
-                      <td className="py-2 px-1 text-right num font-bold" style={{ color: C.success }}>{fmtFull(provStock.reduce((s, p) => s + p.reprise, 0))}</td>
+                      <td className="py-2 px-1 text-right num font-bold" style={{ color: ct.at(1) }}>{fmtFull(provStock.reduce((s, p) => s + p.dotation, 0))}</td>
+                      <td className="py-2 px-1 text-right num font-bold" style={{ color: ct.at(4) }}>{fmtFull(provStock.reduce((s, p) => s + p.reprise, 0))}</td>
                       <td className="py-2 px-1 text-right num font-bold">{fmtFull(provStock.reduce((s, p) => s + p.solde, 0))}</td>
                     </tr>
                   </tfoot>
@@ -2125,6 +2124,7 @@ function MasseSalariale() {
 // ══════════════════════════════════════════════════════════════════════
 function Fiscalite() {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const { sig } = useStatements();
   const [data, setData] = useState({ tvaCollectee: 0, tvaDeductible: 0, tvaAPayer: 0, is: 0, taxes: 0 });
 
@@ -2135,9 +2135,9 @@ function Fiscalite() {
 
   const pression = sig?.ca ? ((data.taxes + data.is + Math.max(data.tvaAPayer, 0)) / sig.ca) * 100 : 0;
   const pie = [
-    { name: 'TVA nette', value: Math.max(data.tvaAPayer, 0), color: C.secondary },
-    { name: 'Impôts & taxes', value: data.taxes, color: C.warning },
-    { name: 'IS estimé', value: data.is, color: C.danger },
+    { name: 'TVA nette', value: Math.max(data.tvaAPayer, 0), color: ct.at(1) },
+    { name: 'Impôts & taxes', value: data.taxes, color: ct.at(3) },
+    { name: 'IS estimé', value: data.is, color: ct.at(1) },
   ].filter((d) => d.value > 0);
 
   return (
@@ -2145,7 +2145,7 @@ function Fiscalite() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="TVA collectée" value={fmtK(data.tvaCollectee)} unit="XOF" color={ct.at(3)} icon="MB" />
         <KPICard title="TVA déductible" value={fmtK(data.tvaDeductible)} unit="XOF" color={ct.at(0)} icon="TD" />
-        <KPICard title="TVA nette à payer" value={fmtK(Math.max(data.tvaAPayer, 0))} unit="XOF" color={data.tvaAPayer > 0 ? C.warning : C.success} icon="TV" />
+        <KPICard title="TVA nette à payer" value={fmtK(Math.max(data.tvaAPayer, 0))} unit="XOF" color={data.tvaAPayer > 0 ? ct.at(3) : ct.at(4)} icon="TV" />
         <KPICard title="IS estimé" value={fmtK(data.is)} unit="XOF" color={ct.at(1)} icon="CS" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2189,13 +2189,14 @@ function Fiscalite() {
 // ══════════════════════════════════════════════════════════════════════
 function Stocks() {
   const balance = useBalance();
+  const ct = useChartTheme();
   const stocks = [
-    { label: 'Marchandises', code: '31', color: C.primary },
-    { label: 'Matières premières', code: '32', color: C.secondary },
-    { label: 'Autres approv.', code: '33', color: C.accent1 },
-    { label: 'En cours', code: '34', color: C.accent3 },
-    { label: 'Produits finis', code: '36', color: C.warning },
-    { label: 'Produits intermédiaires', code: '37', color: C.accent4 },
+    { label: 'Marchandises', code: '31', color: ct.at(0) },
+    { label: 'Matières premières', code: '32', color: ct.at(1) },
+    { label: 'Autres approv.', code: '33', color: ct.at(2) },
+    { label: 'En cours', code: '34', color: ct.at(3) },
+    { label: 'Produits finis', code: '36', color: ct.at(4) },
+    { label: 'Produits intermédiaires', code: '37', color: ct.at(5) },
   ].map((s) => ({ ...s,
     value: balance.filter((r) => r.account.startsWith(s.code)).reduce((sum, r) => sum + r.soldeD, 0),
   })).filter((s) => s.value > 0);
@@ -2207,7 +2208,7 @@ function Stocks() {
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Stock brut" value={fmtK(total)} unit="XOF" color={ct.at(0)} icon="ST" />
-        <KPICard title="Dépréciations" value={fmtK(deprec)} unit="XOF" color={deprec > 0 ? C.warning : C.success} icon="CH" inverse />
+        <KPICard title="Dépréciations" value={fmtK(deprec)} unit="XOF" color={deprec > 0 ? ct.at(3) : ct.at(4)} icon="CH" inverse />
         <KPICard title="Stock net" value={fmtK(total - deprec)} unit="XOF" color={ct.at(0)} icon="✅" />
         <KPICard title="Catégories" value={String(stocks.length)} color={ct.at(3)} icon="📂" />
       </div>
@@ -2265,7 +2266,7 @@ function Immobilisations() {
         <KPICard title="Valeur brute" value={fmtK(totBrute)} unit="XOF" color={ct.at(3)} icon="FR" />
         <KPICard title="Amortissements" value={fmtK(totAmort)} unit="XOF" color={ct.at(2)} icon="CH" />
         <KPICard title="Valeur nette" value={fmtK(totVNC)} unit="XOF" color={ct.at(0)} icon="💎" />
-        <KPICard title="Taux de vétusté" value={`${vetuste.toFixed(1)} %`} color={vetuste < 50 ? C.success : vetuste < 75 ? C.warning : C.danger} icon="⏳" inverse />
+        <KPICard title="Taux de vétusté" value={`${vetuste.toFixed(1)} %`} color={vetuste < 50 ? ct.at(4) : vetuste < 75 ? ct.at(3) : ct.at(1)} icon="⏳" inverse />
       </div>
       <ChartCard title="Décomposition par catégorie">
         <ResponsiveContainer width="100%" height={340}>
