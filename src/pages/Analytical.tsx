@@ -1,5 +1,6 @@
 // Comptabilité Analytique — Plan multi-axes, règles de mapping, affectation, dashboard
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Line, ComposedChart } from 'recharts';
 import { Layers, Play, Plus, Settings, Trash2, Wand2, Zap } from 'lucide-react';
 import clsx from 'clsx';

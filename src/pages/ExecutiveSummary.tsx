@@ -166,7 +166,7 @@ export default function ExecutiveSummary() {
       />
 
       {/* KPIs Headline — 4 colonnes */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <KPICard
           title="Chiffre d'affaires"
           value={fmtK(ca)}
@@ -200,7 +200,7 @@ export default function ExecutiveSummary() {
       </div>
 
       {/* KPIs secondaires */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <KPICard title="EBE" value={fmtK(ebe)} unit="XOF" subValue={`${ebePct.toFixed(1)} % du CA`} icon={<Activity className="w-4 h-4" />} color={ct.at(3)} />
         <KPICard title="Résultat d'exploitation" value={fmtK(re)} unit="XOF" icon={<Activity className="w-4 h-4" />} color={ct.at(4)} />
         <KPICard title="Total actif" value={fmtK(totalActif)} unit="XOF" icon={<Scale className="w-4 h-4" />} color={ct.at(5)} />
@@ -231,9 +231,9 @@ export default function ExecutiveSummary() {
       </ChartCard>
 
       {/* Radar performance + Waterfall résultat */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
         <ChartCard title="Pyramide de performance" subtitle="6 axes normalisés à 100 (cible indicative)" accent={ct.at(0)}>
-          <div style={{ height: 340 }}>
+          <div style={{ height: 260 }}>
             <ResponsiveRadar
               data={radarData}
               keys={['valeur', 'cible']}
@@ -257,7 +257,7 @@ export default function ExecutiveSummary() {
         </ChartCard>
 
         <ChartCard title="Cascade du résultat — SIG SYSCOHADA" subtitle="De la valeur ajoutée au résultat net" accent={ct.at(1)}>
-          <div style={{ height: 340 }}>
+          <div style={{ height: 260 }}>
             <ResponsiveBar
               data={waterfall}
               keys={['valeur']}
@@ -285,9 +285,9 @@ export default function ExecutiveSummary() {
       </div>
 
       {/* Structure du bilan en double pie chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
         <ChartCard title="Structure de l'Actif" subtitle="Répartition du Total Actif" accent={ct.at(0)}>
-          <div style={{ height: 300 }}>
+          <div style={{ height: 230 }}>
             <ResponsivePie
               data={bilanData.actif}
               margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
@@ -310,7 +310,7 @@ export default function ExecutiveSummary() {
         </ChartCard>
 
         <ChartCard title="Structure du Passif" subtitle="Répartition du Total Passif" accent={ct.at(1)}>
-          <div style={{ height: 300 }}>
+          <div style={{ height: 230 }}>
             <ResponsivePie
               data={bilanData.passif}
               margin={{ top: 20, right: 20, bottom: 40, left: 20 }}

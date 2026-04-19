@@ -24,6 +24,9 @@ const Analytical     = lazyWithRetry(() => import('./pages/Analytical'));
 const AuditTrail     = lazyWithRetry(() => import('./pages/AuditTrail'));
 const Settings       = lazyWithRetry(() => import('./pages/Settings'));
 const ExecutiveSummary = lazyWithRetry(() => import('./pages/ExecutiveSummary'));
+const ComplianceSyscohada = lazyWithRetry(() => import('./pages/ComplianceSyscohada'));
+const BreakEven = lazyWithRetry(() => import('./pages/BreakEven'));
+const ParetoAccounts = lazyWithRetry(() => import('./pages/ParetoAccounts'));
 
 function PageFallback() {
   return <div className="py-20 text-center text-primary-500">Chargement...</div>;
@@ -81,6 +84,9 @@ function App() {
         <Route path="/audit" element={<AppLayout><AuditTrail /></AppLayout>} />
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
         <Route path="/dashboard/exec" element={<AppLayout><ExecutiveSummary /></AppLayout>} />
+        <Route path="/dashboard/compliance" element={<AppLayout><ComplianceSyscohada /></AppLayout>} />
+        <Route path="/dashboard/breakeven" element={<AppLayout><BreakEven /></AppLayout>} />
+        <Route path="/dashboard/pareto" element={<AppLayout><ParetoAccounts /></AppLayout>} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>

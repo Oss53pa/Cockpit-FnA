@@ -8,6 +8,9 @@ import { Modal } from '../components/ui/Modal';
 
 const dashboards = [
   { id: 'exec', route: '/dashboard/exec', name: 'Executive Summary ★', desc: 'Vue exécutive one-pager : KPIs, radar de performance, cascade SIG, structure bilan, alertes', icon: 'Sparkles', cat: 'Standard' },
+  { id: 'compliance', route: '/dashboard/compliance', name: 'Compliance SYSCOHADA ★', desc: '10 contrôles automatiques de conformité : équilibre balance, bilan, signes de classes, mapping…', icon: 'ShieldCheck', cat: 'Standard' },
+  { id: 'breakeven', route: '/dashboard/breakeven', name: 'Seuil de rentabilité ★', desc: 'Point mort, marge de sécurité, décomposition coûts fixes/variables, courbe visuelle', icon: 'Target', cat: 'Standard' },
+  { id: 'pareto', route: '/dashboard/pareto', name: 'Analyse ABC (Pareto) ★', desc: "Les 20 % de comptes qui font 80 % du CA / des charges, classés A/B/C avec courbe cumulée", icon: 'BarChart3', cat: 'Standard' },
   { id: 'home', route: '/dashboard/home', name: 'Synthèse de gestion', desc: "KPIs, alertes, structure financière, performance globale", icon: 'LayoutDashboard', cat: 'Standard' },
   { id: 'cp', route: '/dashboard/cp', name: 'Charges & Produits', desc: 'Répartition par nature, évolution mensuelle, top 10, concentration', icon: 'TrendingDown', cat: 'Standard' },
   { id: 'crblock', route: '/dashboard/crblock', name: 'CR par bloc', desc: 'Vue d\'ensemble : 7 sections du CR + résultats intermédiaires', icon: 'Layers', cat: 'Standard' },
@@ -49,9 +52,11 @@ const dashboards = [
   { id: 'transp', route: '/dashboard/transp', name: 'Transport & Logistique', desc: 'CA/km, flotte, carburant, maintenance, taux de remplissage', icon: 'Truck', cat: 'Sectoriel' },
   { id: 'serv', route: '/dashboard/serv', name: 'Services & Conseil', desc: 'Honoraires, taux facturable, marge projets, staffing', icon: 'Briefcase', cat: 'Sectoriel' },
   // ─── Comptabilité analytique ───────────────────────────
-  { id: 'ana_centres', route: '/analytical', name: 'Comptabilité analytique', desc: 'P&L par centre de coût, répartition, évolution mensuelle', icon: 'PieChart', cat: 'Analytique' },
-  { id: 'ana_projets', route: '/analytical', name: 'Suivi par section', desc: 'Rentabilité par section analytique, contribution aux charges', icon: 'FolderKanban', cat: 'Analytique' },
-  { id: 'ana_axes', route: '/analytical', name: 'Axes analytiques', desc: 'Analyse multi-axes : région, département, activité', icon: 'GitBranch', cat: 'Analytique' },
+  { id: 'ana_dashboard', route: '/analytical?tab=dashboard', name: 'Dashboard analytique', desc: 'KPIs couverture, répartition charges/produits par code, évolution mensuelle, budget vs réalisé', icon: 'PieChart', cat: 'Analytique' },
+  { id: 'ana_axes', route: '/analytical?tab=axes', name: 'Plan analytique (Axes)', desc: 'Configuration des axes analytiques : projet, centre de coût, région, activité (jusqu\'à 5 axes)', icon: 'GitBranch', cat: 'Analytique' },
+  { id: 'ana_codes', route: '/analytical?tab=codes', name: 'Codes analytiques', desc: 'Gestion des codes hiérarchiques par axe : création, recherche, activation', icon: 'FolderKanban', cat: 'Analytique' },
+  { id: 'ana_rules', route: '/analytical?tab=rules', name: 'Règles de mapping', desc: 'Moteur d\'affectation automatique : règles par priorité, simulation, application en masse', icon: 'Wand2', cat: 'Analytique' },
+  { id: 'ana_assign', route: '/analytical?tab=assign', name: 'Affectation manuelle', desc: 'Lignes non affectées : sélection multiple, affectation manuelle en masse par axe', icon: 'ListChecks', cat: 'Analytique' },
 ];
 
 export default function Dashboards() {

@@ -688,9 +688,9 @@ function ISBudgetVsActual() {
 
         return (
           <div key={sec.section} className="card overflow-hidden">
-            {/* Section header noir avec n° */}
+            {/* Section header noir avec n° — texte clair sur fond foncé */}
             <div className="bg-primary-900 dark:bg-primary-800 px-4 py-2 flex items-center justify-between">
-              <p className="text-primary-900 dark:text-primary-50 font-bold text-sm">{idx + 1}. {labels[sec.section]}</p>
+              <p className="text-primary-50 font-bold text-sm">{idx + 1}. {labels[sec.section]}</p>
               <p className="text-primary-50 text-xs font-semibold">Mars</p>
             </div>
 
