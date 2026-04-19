@@ -30,7 +30,11 @@ export default function DashboardHome() {
   const org = useCurrentOrg();
   const monthly = useMonthlyCA();
   const ratios = useRatios();
-  const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  const { currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth } = useApp();
+  const MONTH_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const periodLabel = (fromMonth === 1 && toMonth === 12)
+    ? `Cumul YTD ${currentYear}`
+    : `${MONTH_SHORT[fromMonth - 1]} → ${MONTH_SHORT[toMonth - 1]} ${currentYear}`;
   const navigate = useNavigate();
   const [fr, setFR] = useState<FRBFRRow[]>([]);
   const [tab, setTab] = useState<'perf' | 'risk'>('perf');
@@ -74,7 +78,7 @@ export default function DashboardHome() {
     <div>
       <PageHeader
         title="Synthèse de gestion"
-        subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · ${currentPeriodId ? 'Période sélectionnée' : 'Cumul YTD'}`}
+        subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · ${currentPeriodId ? 'Période sélectionnée' : periodLabel}`}
         action={
           <div className="flex gap-2">
             <button className="btn-outline" onClick={() => navigate('/ai')}><Sparkles className="w-4 h-4" /> Commenter avec l'IA</button>

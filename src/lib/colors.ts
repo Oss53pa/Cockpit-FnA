@@ -13,6 +13,12 @@ export const C = {
   danger:    '#ef4444',
   info:      '#3b82f6',
 
+  // Niveaux de sévérité
+  sevLow:      '#6b7280',
+  sevMedium:   '#f59e0b',
+  sevHigh:     '#ef4444',
+  sevCritical: '#7f1d1d',
+
   // Nuances grayscale utilisées comme "accents" neutres dans les charts
   accent1:   '#525252',
   accent2:   '#737373',

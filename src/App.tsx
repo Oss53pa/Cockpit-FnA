@@ -1,10 +1,12 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { lazyWithRetry } from './lib/lazyWithRetry';
+import { useApp } from './store/app';
+import { useAmountMode } from './lib/format';
 import Home from './pages/Home';
 
 const Imports        = lazyWithRetry(() => import('./pages/Imports'));
@@ -37,6 +39,17 @@ function PageFallback() {
 function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
+  // Triple mécanisme pour garantir le re-render au toggle Entier ↔ Abrégé :
+  // 1) abonnement au store Zustand
+  // 2) abonnement à l'event custom via useAmountMode (useSyncExternalStore)
+  // 3) compteur incrémenté en useEffect qui sert de key={remountKey} sur <main>
+  // Comme ça le subtree est forcément démonté/remonté à chaque changement,
+  // et tous les fmtK/fmtMoney sont ré-évalués depuis localStorage à jour.
+  const amountModeStore = useApp((s) => s.amountMode);
+  const amountModeReactive = useAmountMode();
+  const amountMode = amountModeReactive || amountModeStore;
+  const [remountKey, setRemountKey] = useState(0);
+  useEffect(() => { setRemountKey((k) => k + 1); }, [amountMode]);
 
   const toggleCollapse = () => {
     const next = !collapsed;
@@ -54,7 +67,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       />
       <div className="flex-1 flex flex-col min-w-0">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 p-3 sm:p-4 lg:p-6">
+        <main key={`${amountMode}-${remountKey}`} className="flex-1 p-3 sm:p-4 lg:p-6">
           <Suspense fallback={<PageFallback />}>{children}</Suspense>
         </main>
       </div>

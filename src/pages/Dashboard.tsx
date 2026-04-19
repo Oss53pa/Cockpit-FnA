@@ -82,12 +82,14 @@ export default function Dashboard() {
   // useApp sans sélecteur : le composant se re-rend à chaque changement du
   // store, y compris quand l'utilisateur toggle amountMode (Entier ↔ Abrégé).
   // fmtK/fmtMoney lisent alors le mode à jour depuis localStorage.
-  const { currentYear } = useApp();
+  const { currentYear, fromMonth, toMonth } = useApp();
   const ct = useChartTheme();
   const meta = catalog[id];
   if (!meta) return <div className="py-20 text-center text-primary-500">Dashboard introuvable</div>;
 
-  const subtitle = `${meta.subtitle} — ${org?.name ?? '—'} · Exercice ${currentYear}`;
+  const MONTH_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const periodTag = (fromMonth === 1 && toMonth === 12) ? '' : ` · ${MONTH_SHORT[fromMonth - 1]} → ${MONTH_SHORT[toMonth - 1]}`;
+  const subtitle = `${meta.subtitle} — ${org?.name ?? '—'} · Exercice ${currentYear}${periodTag}`;
 
   return (
     <div>

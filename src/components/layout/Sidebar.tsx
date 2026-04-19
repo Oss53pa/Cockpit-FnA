@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
+  Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
   X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList,
 } from 'lucide-react';
@@ -10,7 +10,7 @@ const sections = [
   {
     label: 'Pilotage',
     items: [
-      { to: '/', icon: LayoutDashboard, label: 'Accueil' },
+      { to: '/', icon: Home, label: 'Accueil' },
       { to: '/dashboard/home', icon: LayoutDashboard, label: 'Synthèse' },
       { to: '/dashboards', icon: BarChart3, label: 'Catalogue' },
       { to: '/alerts', icon: Bell, label: 'Alertes' },
@@ -20,9 +20,9 @@ const sections = [
   {
     label: 'Données',
     items: [
-      { to: '/grand-livre', icon: BookOpen, label: 'Grand Livre' },
-      { to: '/budget', icon: Wallet, label: 'Budget' },
       { to: '/coa', icon: FolderTree, label: 'Plan comptable' },
+      { to: '/budget', icon: Wallet, label: 'Budget' },
+      { to: '/grand-livre', icon: BookOpen, label: 'Grand Livre' },
     ],
   },
   {
@@ -56,16 +56,23 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
   // Full nav content (used by desktop expanded + mobile drawer)
   const fullNav = (showClose: boolean) => (
     <>
-      <div className="px-5 py-5 border-b border-primary-200 dark:border-primary-800 flex items-center justify-between">
+      <div className="px-5 py-5 border-b border-primary-200 dark:border-primary-800 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit F&amp;A</p>
           <p className="text-[10px] uppercase tracking-[0.15em] text-primary-400 mt-1.5">SYSCOHADA 2017</p>
         </div>
-        {showClose && onClose && (
-          <button onClick={onClose} className="p-1 rounded hover:bg-primary-200 dark:hover:bg-primary-800 shrink-0">
-            <X className="w-5 h-5 text-primary-500" />
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {onToggleCollapse && (
+            <button onClick={onToggleCollapse} className="p-1.5 rounded hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 transition" title="Replier la sidebar">
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+          )}
+          {showClose && onClose && (
+            <button onClick={onClose} className="p-1 rounded hover:bg-primary-200 dark:hover:bg-primary-800">
+              <X className="w-5 h-5 text-primary-500" />
+            </button>
+          )}
+        </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
         {sections.map((sec) => (

@@ -30,6 +30,11 @@ type AppState = {
   setAmountMode: (m: AmountDisplayMode) => void;
   currentImport: ImportSelection;
   setCurrentImport: (s: ImportSelection) => void;
+  // Sélecteur de période global : intervalle de mois pour filtrer les données
+  // 1..12 inclus. fromMonth=1, toMonth=12 = année complète (défaut).
+  fromMonth: number;
+  toMonth: number;
+  setPeriodRange: (from: number, to: number) => void;
 };
 
 const DEFAULT_CURRENT_YEAR = (() => {
@@ -66,11 +71,23 @@ export const useApp = create<AppState>((set) => ({
   setAmountMode: (m) => {
     localStorage.setItem('amount-mode', m);
     set({ amountMode: m });
+    // Notifier tous les composants abonnés via useAmountMode (lib/format.ts)
+    // pour qu'ils ré-évaluent fmtK / fmtMoney instantanément.
+    import('../lib/format').then((mod) => mod.notifyAmountModeChanged()).catch(() => {});
   },
   currentImport: (localStorage.getItem('current-import') as ImportSelection) || 'latest',
   setCurrentImport: (s) => {
     localStorage.setItem('current-import', s);
     set({ currentImport: s });
+  },
+  fromMonth: parseInt(localStorage.getItem('period-from') || '1', 10) || 1,
+  toMonth: parseInt(localStorage.getItem('period-to') || '12', 10) || 12,
+  setPeriodRange: (from, to) => {
+    const f = Math.max(1, Math.min(12, from));
+    const t = Math.max(f, Math.min(12, to));
+    localStorage.setItem('period-from', String(f));
+    localStorage.setItem('period-to', String(t));
+    set({ fromMonth: f, toMonth: t });
   },
 }));
 

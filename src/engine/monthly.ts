@@ -36,6 +36,34 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   const periods = await db.periods.where('orgId').equals(orgId).toArray();
   const monthPeriod = (m: number) => periods.find((p) => p.year === year && p.month === m);
   const allEntries = await db.gl.where('orgId').equals(orgId).toArray();
+  // Plan comptable propre à l'entreprise — priorité :
+  // 1) db.accounts (si Plan Comptable importé explicitement)
+  // 2) libellé le plus fréquent dans les écritures GL (e.label)
+  // 3) libellé SYSCOHADA générique (fallback)
+  const orgAccounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const orgLabelByCode = new Map(orgAccounts.map((a) => [a.code, a.label] as const));
+  // Calcul du libellé GL le plus fréquent par compte
+  const glLabelFreq = new Map<string, Map<string, number>>();
+  for (const e of allEntries) {
+    if (!e.label) continue;
+    const lbl = e.label.trim();
+    if (!lbl) continue;
+    let m = glLabelFreq.get(e.account);
+    if (!m) { m = new Map(); glLabelFreq.set(e.account, m); }
+    m.set(lbl, (m.get(lbl) ?? 0) + 1);
+  }
+  const glLabelByCode = new Map<string, string>();
+  for (const [code, m] of glLabelFreq) {
+    let best = ''; let bestN = 0;
+    for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
+    if (best) glLabelByCode.set(code, best);
+  }
+  const resolveLabel = (account: string): string => {
+    return orgLabelByCode.get(account)
+      ?? glLabelByCode.get(account)
+      ?? findSyscoAccount(account)?.label
+      ?? account;
+  };
 
   // Map mois → map compte → net (produit: crédit-débit ; charge: débit-crédit)
   const netByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
@@ -119,12 +147,11 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
 
       // Lignes de détail (un compte par ligne)
       for (const account of accounts) {
-        const sysco = findSyscoAccount(account);
         const { values, ytd } = accountValues(account);
         if (Math.abs(ytd) < 0.01) continue;
         lines.push({
           code: account,
-          label: sysco?.label ?? account,
+          label: resolveLabel(account),
           indent: 1,
           isCharge: def.isCharge,
           accountCodes: account,

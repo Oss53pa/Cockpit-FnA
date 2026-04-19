@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Table as TableIcon, Download } from 'lucide-react';
+import { LayoutGrid, Table as TableIcon, Download, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -68,15 +68,24 @@ export default function Ratios() {
           <p className="num text-2xl font-bold mt-1">{ratios.length}</p>
         </div></Card>
         <Card><div className="p-4">
-          <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Conformes</p>
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+            <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Conformes</p>
+          </div>
           <p className="num text-2xl font-bold mt-1 text-success">{counts.good}</p>
         </div></Card>
         <Card><div className="p-4">
-          <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Vigilance</p>
+          <div className="flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-warning" />
+            <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Vigilance</p>
+          </div>
           <p className="num text-2xl font-bold mt-1 text-warning">{counts.warn}</p>
         </div></Card>
         <Card><div className="p-4">
-          <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Alertes</p>
+          <div className="flex items-center gap-1.5">
+            <XCircle className="w-3.5 h-3.5 text-error" />
+            <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Alertes</p>
+          </div>
           <p className="num text-2xl font-bold mt-1 text-error">{counts.alert}</p>
         </div></Card>
       </div>
@@ -110,14 +119,13 @@ export default function Ratios() {
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-500 mb-3">{fam}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {list.map((r) => {
-                    const dot = r.status === 'good' ? 'OK' : r.status === 'warn' ? '--' : '!!';
                     return (
                       <Card key={r.code}>
                         <div className="p-5">
                           <div className="flex items-start justify-between mb-2">
                             <p className="text-xs text-primary-500 font-medium">{r.label}</p>
-                            <Badge variant={r.status === 'good' ? 'success' : r.status === 'warn' ? 'warning' : 'error'}>
-                              {dot}
+                            <Badge variant={r.status === 'good' ? 'success' : r.status === 'warn' ? 'warning' : 'error'} showIcon>
+                              {r.status === 'good' ? 'Conforme' : r.status === 'warn' ? 'Vigilance' : 'Alerte'}
                             </Badge>
                           </div>
                           <p className="num text-2xl font-bold">{formatValue(r.value, r.unit)}</p>
@@ -173,8 +181,8 @@ export default function Ratios() {
                          `${ecart >= 0 ? '+' : ''}${ecartPct.toFixed(1)} %`}
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <Badge variant={r.status === 'good' ? 'success' : r.status === 'warn' ? 'warning' : 'error'}>
-                          {r.status === 'good' ? 'OK' : r.status === 'warn' ? 'Vigilance' : 'Alerte'}
+                        <Badge variant={r.status === 'good' ? 'success' : r.status === 'warn' ? 'warning' : 'error'} showIcon>
+                          {r.status === 'good' ? 'Conforme' : r.status === 'warn' ? 'Vigilance' : 'Alerte'}
                         </Badge>
                       </td>
                       <td className="py-2.5 px-3 text-xs font-mono text-primary-500">{r.formula}</td>
@@ -192,9 +200,9 @@ export default function Ratios() {
         <Card><div className="p-4">
           <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider mb-2">Légende statuts</p>
           <div className="space-y-1.5 text-xs">
-            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-success" /> <span><strong>OK</strong> — ratio conforme ou supérieur à la cible</span></div>
-            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-warning" /> <span><strong>Vigilance</strong> — entre 80 % et 100 % de la cible</span></div>
-            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-error" /> <span><strong>Alerte</strong> — en-dessous de 80 % de la cible</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" /> <span><strong>Conforme</strong> — ratio conforme ou supérieur à la cible</span></div>
+            <div className="flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" /> <span><strong>Vigilance</strong> — entre 80 % et 100 % de la cible</span></div>
+            <div className="flex items-center gap-2"><XCircle className="w-3.5 h-3.5 text-error shrink-0" /> <span><strong>Alerte</strong> — en-dessous de 80 % de la cible</span></div>
           </div>
         </div></Card>
         <Card><div className="p-4">

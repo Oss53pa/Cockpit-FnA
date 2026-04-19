@@ -1,13 +1,31 @@
-// Mode d'affichage global : lu depuis localStorage pour être synchrone avec le
-// store zustand (évite la contrainte de hooks dans les formatters utilisés dans
-// les charts, tooltips, lambdas, etc.). Les pages qui changent le mode
-// déclenchent un re-render via useApp().amountMode donc les valeurs affichées
-// restent cohérentes.
+// Mode d'affichage global : lu depuis localStorage. Pour garantir le re-render
+// instantané quand l'utilisateur toggle Entier ↔ Abrégé, on dispatch un événement
+// custom 'amount-mode-changed' depuis le store. Les composants peuvent s'abonner
+// via useSyncExternalStore (voir useAmountMode plus bas).
 function currentMode(): 'full' | 'short' {
   try {
     const v = localStorage.getItem('amount-mode');
     return v === 'short' ? 'short' : 'full';
   } catch { return 'full'; }
+}
+
+// Émetteur d'événement pour notifier les composants du changement de mode
+const subscribers = new Set<() => void>();
+export function notifyAmountModeChanged() {
+  subscribers.forEach((cb) => cb());
+}
+function subscribe(cb: () => void) {
+  subscribers.add(cb);
+  return () => subscribers.delete(cb);
+}
+function getSnapshot(): 'full' | 'short' { return currentMode(); }
+
+// Hook React : retourne le mode actuel et déclenche un re-render à chaque
+// changement. Permet aux composants d'utiliser fmtK et compagnie de manière
+// réactive sans avoir à s'abonner manuellement au store Zustand.
+import { useSyncExternalStore } from 'react';
+export function useAmountMode(): 'full' | 'short' {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 const frFull = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });

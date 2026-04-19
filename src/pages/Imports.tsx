@@ -5,7 +5,7 @@ import { Badge } from '../components/ui/Badge';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
-import { detectColumns, importGL, migrateGLPeriods, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
+import { detectColumns, importGL, migrateGLPeriods, resyncAccountLabels, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 
@@ -102,6 +102,45 @@ export default function Imports() {
             finally { setLoading(false); }
           }}>
             <RefreshCw className="w-4 h-4" /> Recalculer les périodes
+          </button>
+          <button className="btn-outline" onClick={async () => {
+            if (!confirm('Resynchroniser les libellés des comptes depuis votre Grand Livre ?\nLes libellés SYSCOHADA génériques seront remplacés par ceux de votre plan comptable entreprise.')) return;
+            setLoading(true);
+            try {
+              const res = await resyncAccountLabels(currentOrgId);
+              alert(`${res.updated} libellé(s) de compte mis à jour depuis le GL.`);
+            } catch (e: any) { alert(e.message); }
+            finally { setLoading(false); }
+          }}>
+            <RefreshCw className="w-4 h-4" /> Resync libellés
+          </button>
+          <button className="btn-outline" onClick={async () => {
+            const code = prompt('Diagnostic — entrez le préfixe de compte à inspecter (ex: 706, 706100) :', '706');
+            if (!code) return;
+            const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
+            const periodById = new Map(periods.map((p) => [p.id, p]));
+            const entries = (await db.gl.where('orgId').equals(currentOrgId).toArray())
+              .filter((e) => e.account.startsWith(code) && new Date(e.date).getFullYear() === currentYear);
+            const byMonth = new Map<string, { count: number; debit: number; credit: number; periodMonth: number | undefined; sample: string }>();
+            for (const e of entries) {
+              const dateMonth = e.date.substring(5, 7);
+              const period = periodById.get(e.periodId);
+              const key = `date=${dateMonth} → period=${period ? `${period.year}/${period.month}` : 'INTROUVABLE'}`;
+              const cur = byMonth.get(key) ?? { count: 0, debit: 0, credit: 0, periodMonth: period?.month, sample: '' };
+              cur.count++;
+              cur.debit += e.debit;
+              cur.credit += e.credit;
+              if (!cur.sample) cur.sample = `${e.account} | ${e.label?.substring(0, 30)} | jrn=${e.journal}`;
+              byMonth.set(key, cur);
+            }
+            const lines = [`Compte ${code} — exercice ${currentYear} : ${entries.length} écriture(s)`, ''];
+            for (const [k, v] of Array.from(byMonth.entries()).sort()) {
+              lines.push(`${k}`);
+              lines.push(`  ${v.count} écr. | D=${v.debit.toFixed(0)} C=${v.credit.toFixed(0)} | ex: ${v.sample}`);
+            }
+            alert(lines.join('\n'));
+          }}>
+            <FileWarning className="w-4 h-4" /> Diagnostic compte
           </button>
           <button className="btn-outline" onClick={() => downloadGLTemplate(org?.name, currentYear)}>
             <Download className="w-4 h-4" /> Télécharger le modèle Excel

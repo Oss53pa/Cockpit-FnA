@@ -87,7 +87,7 @@ function MonthlyTable({ months, lines, hideCodes }: { months: string[]; lines: a
         {l.label}
       </td>
       {l.values.map((v: number, idx: number) => (
-        <td key={idx} className="py-1.5 px-2 text-right num">
+        <td key={idx} className="py-1.5 px-2 text-right num whitespace-nowrap">
           {v !== 0 ? fmtFull(v) : <span className="text-primary-400">—</span>}
         </td>
       ))}
@@ -216,10 +216,10 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
             <tr>
               <th className="text-left py-2 px-3 w-8"></th>
               <th className="text-left py-2 px-3">Section / compte</th>
-              <th className="text-right py-2 px-3 w-32">Réalisé</th>
-              <th className="text-right py-2 px-3 w-32">Budget</th>
-              <th className="text-right py-2 px-3 w-28">Écart</th>
-              <th className="text-right py-2 px-3 w-20">% activité</th>
+              <th className="text-right py-2 px-3 w-44 whitespace-nowrap">Réalisé</th>
+              <th className="text-right py-2 px-3 w-44 whitespace-nowrap">Budget</th>
+              <th className="text-right py-2 px-3 w-40 whitespace-nowrap">Écart</th>
+              <th className="text-right py-2 px-3 w-24">% activité</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
@@ -234,9 +234,9 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                     <td colSpan={2} className="py-2.5 px-3 uppercase text-xs tracking-wider">
                       = {INTERMEDIATE_LABELS[item.key as keyof typeof INTERMEDIATE_LABELS]}
                     </td>
-                    <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.realise)}</td>
-                    <td className="py-2.5 px-3 text-right num">{fmtFull(item.data.budget)}</td>
-                    <td className="py-2.5 px-3 text-right num">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                    <td className="py-2.5 px-3 text-right num whitespace-nowrap">{fmtFull(item.data.realise)}</td>
+                    <td className="py-2.5 px-3 text-right num whitespace-nowrap">{fmtFull(item.data.budget)}</td>
+                    <td className="py-2.5 px-3 text-right num whitespace-nowrap">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
                     <td></td>
                   </tr>
                 );
@@ -261,7 +261,7 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                         <span className="text-[10px] text-primary-400 font-normal">({s.rows.length} comptes)</span>
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-right num">{fmtFull(s.totalRealise)}</td>
+                    <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(s.totalRealise)}</td>
                     <td className="py-2 px-3 text-right num text-primary-500 font-normal">{fmtFull(s.totalBudget)}</td>
                     <td className={clsx('py-2 px-3 text-right num',
                       s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
@@ -489,7 +489,7 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                         <span className="text-[10px] text-primary-400 font-normal">({s.rows.length} comptes)</span>
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-right num">{fmtFull(s.totalRealise)}</td>
+                    <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(s.totalRealise)}</td>
                     <td className="py-2 px-3 text-right num text-primary-500 font-normal">{fmtFull(s.totalBudget)}</td>
                     <td className={clsx('py-2 px-3 text-right num',
                       s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
@@ -622,12 +622,12 @@ function CapitalVarCard({ rows, hideCodes }: { rows: any[]; hideCodes?: boolean 
                 </td>
                 {!hideCodes && <td className="py-2 px-3 text-xs num font-mono">10-15</td>}
                 <td className="py-2 px-3">{total.rubrique}</td>
-                <td className="py-2 px-3 text-right num">{fmtFull(total.ouverture)}</td>
-                <td className="py-2 px-3 text-right num">+ {fmtFull(total.augmentation)}</td>
-                <td className="py-2 px-3 text-right num">− {fmtFull(total.diminution)}</td>
-                <td className="py-2 px-3 text-right num">{fmtFull(total.affectationResN1)}</td>
-                <td className="py-2 px-3 text-right num">{fmtFull(total.resultatExercice)}</td>
-                <td className="py-2 px-3 text-right num">{fmtFull(total.cloture)}</td>
+                <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(total.ouverture)}</td>
+                <td className="py-2 px-3 text-right num whitespace-nowrap">+ {fmtFull(total.augmentation)}</td>
+                <td className="py-2 px-3 text-right num whitespace-nowrap">− {fmtFull(total.diminution)}</td>
+                <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(total.affectationResN1)}</td>
+                <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(total.resultatExercice)}</td>
+                <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(total.cloture)}</td>
               </tr>
             )}
           </tbody>
@@ -644,8 +644,16 @@ function BudgetActualView() {
   const [view, setView] = useState<'table' | 'dashboard' | 'monthly'>('table');
   const sections = bySection(rows);
   const intermediates = computeIntermediates(sections);
-  const totalRealise = rows.reduce((s, r) => s + r.realise, 0);
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
+  // Totaux SYSCOHADA cohérents :
+  //   Produits = sections produits (70-79, 82, 84, 86, 88)
+  //   Charges  = sections charges (60-69, 81, 83, 85) + impôts (87, 89)
+  //   Résultat = Produits − Charges
+  const totalProduitsR = sections.filter((s) => !s.isCharge).reduce((sum, s) => sum + s.totalRealise, 0);
+  const totalChargesR  = sections.filter((s) =>  s.isCharge).reduce((sum, s) => sum + s.totalRealise, 0);
+  const totalProduitsB = sections.filter((s) => !s.isCharge).reduce((sum, s) => sum + s.totalBudget, 0);
+  const totalChargesB  = sections.filter((s) =>  s.isCharge).reduce((sum, s) => sum + s.totalBudget, 0);
+  const resultatR = totalProduitsR - totalChargesR;
+  const resultatB = totalProduitsB - totalChargesB;
 
   // Flux SYSCOHADA : sections entrelacées avec les résultats intermédiaires
   const secMap = new Map(sections.map((s) => [s.section, s]));
@@ -674,9 +682,9 @@ function BudgetActualView() {
     <>
       <div className="flex items-center justify-between mb-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 mr-4">
-          <StatBox label="Total Réalisé" value={totalRealise} />
-          <StatBox label="Total Budget" value={totalBudget} />
-          <StatBox label="Écart total" value={totalRealise - totalBudget} highlight />
+          <StatBox label="Résultat Réalisé" value={resultatR} highlight />
+          <StatBox label="Résultat Budget" value={resultatB} />
+          <StatBox label="Écart Résultat" value={resultatR - resultatB} highlight />
           <StatBox label="Comptes analysés" value={rows.length} />
         </div>
         <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg">
@@ -726,9 +734,9 @@ function BudgetActualView() {
                         isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
                       <td></td>
                       <td className="py-2.5 px-3 uppercase text-xs tracking-wider" colSpan={3}>= {item.label}</td>
-                      <td className="py-2.5 px-3 text-right num">{fmtFull(data.realise)}</td>
-                      <td className="py-2.5 px-3 text-right num">{fmtFull(data.budget)}</td>
-                      <td className="py-2.5 px-3 text-right num">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                      <td className="py-2.5 px-3 text-right num whitespace-nowrap">{fmtFull(data.realise)}</td>
+                      <td className="py-2.5 px-3 text-right num whitespace-nowrap">{fmtFull(data.budget)}</td>
+                      <td className="py-2.5 px-3 text-right num whitespace-nowrap">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
                       <td className="py-2.5 px-3 text-right num text-xs">{ecartPct >= 0 ? '+' : ''}{ecartPct.toFixed(1)} %</td>
                       <td></td>
                     </tr>
@@ -748,8 +756,8 @@ function BudgetActualView() {
                         <span className={clsx('mr-2 font-bold text-base', sec.isCharge ? 'text-error' : 'text-success')}>{sec.isCharge ? '−' : '+'}</span>
                         {sec.label} <span className="text-[10px] text-primary-500 font-normal">({sec.rows.length} comptes)</span>
                       </td>
-                      <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
-                      <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
+                      <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(sec.totalRealise)}</td>
+                      <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(sec.totalBudget)}</td>
                       <td className={clsx('py-2 px-3 text-right num',
                         sec.totalEcart > 0 ? (sec.isCharge ? 'text-error' : 'text-success') : (sec.isCharge ? 'text-success' : 'text-error'))}>
                         {sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}
@@ -763,7 +771,7 @@ function BudgetActualView() {
                         <td></td>
                         <td className="py-1.5 px-3 num font-mono text-xs">{r.code}</td>
                         <td className="py-1.5 px-3 text-xs">{r.label}</td>
-                        <td className="py-1.5 px-3 text-right num">{fmtFull(r.realise)}</td>
+                        <td className="py-1.5 px-3 text-right num whitespace-nowrap">{fmtFull(r.realise)}</td>
                         <td className="py-1.5 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
                         <td className={clsx('py-1.5 px-3 text-right num',
                           r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
@@ -1143,7 +1151,7 @@ function BudgetMonthlyView() {
                         <span className="text-xs">{sec.label}</span>
                         <br/><span className="text-[9px] text-primary-400">{sec.isCharge ? 'Charges' : 'Produits'}</span>
                       </td>
-                      {sec.months.map((m: any, i: number) => <td key={i} className="py-1 px-1.5 text-right num">{fmtK(m.realise)}</td>)}
+                      {sec.months.map((m: any, i: number) => <td key={i} className="py-1 px-1.5 text-right num whitespace-nowrap">{fmtK(m.realise)}</td>)}
                       <td className="py-1 px-3 text-right num font-semibold border-l-2 border-primary-300 dark:border-primary-700">{fmtK(sec.totalRealise)}</td>
                     </tr>
                     <tr className="border-b border-primary-100 dark:border-primary-800/50 text-primary-500">

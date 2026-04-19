@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Download, Eye, Mail, Plus, Save, Send, Trash2, Type, Hash, BarChart3, Table as TableIcon, MoveDown } from 'lucide-react';
+import { Download, Eye, FileText, Mail, Plus, Save, Send, Sparkles, Trash2, Type, Hash, BarChart3, Table as TableIcon, MoveDown } from 'lucide-react';
 import clsx from 'clsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -8,8 +8,8 @@ import { Modal } from '../components/ui/Modal';
 import { Collapsible } from '../components/ui/Collapsible';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
-import { Block, buildPDFFromBlocks, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
+import { db, ReportDoc } from '../db/schema';
+import { Block, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
 import { computeBilan, computeSIG } from '../engine/statements';
 import { fmtFull, fmtMoney } from '../lib/format';
 
@@ -56,6 +56,18 @@ const TABLE_CATALOG: Array<{ v: string; label: string; cat: string; desc: string
 
 // Synchronisé avec le catalogue Dashboards
 const DASHBOARD_CATALOG: Array<{ id: string; name: string; cat: string; desc: string }> = [
+  // ─── Dashboards Premium ★ ───
+  { id: 'struct_actif', name: 'Structure de l\'Actif ★', cat: 'Premium', desc: 'Donut + table : immo / circulant / trésorerie' },
+  { id: 'struct_passif', name: 'Structure du Passif ★', cat: 'Premium', desc: 'Donut + table : CP / dettes financières / circulantes' },
+  { id: 'pyramide_perf', name: 'Pyramide des performances ★', cat: 'Premium', desc: 'ROE = Marge × Rotation × Levier (analyse Du Pont)' },
+  { id: 'ratios_table', name: 'Table des Ratios financiers ★', cat: 'Premium', desc: 'Tous ratios + cibles + statut + benchmark' },
+  { id: 'exec', name: 'Executive Summary ★', cat: 'Premium', desc: 'Vue exécutive : KPIs, radar, cascade SIG, alertes' },
+  { id: 'compliance', name: 'Compliance SYSCOHADA ★', cat: 'Premium', desc: '10 contrôles automatiques de conformité' },
+  { id: 'breakeven', name: 'Seuil de rentabilité ★', cat: 'Premium', desc: 'Point mort, marge de sécurité, coûts fixes/variables' },
+  { id: 'pareto', name: 'Analyse ABC (Pareto) ★', cat: 'Premium', desc: 'Top 20% des comptes qui font 80% du CA / charges' },
+  { id: 'cashforecast', name: 'Cashflow prévisionnel 13 sem ★', cat: 'Premium', desc: 'Projection 13 semaines + alertes' },
+  { id: 'waterfall', name: 'Waterfall — Cascade SIG ★', cat: 'Premium', desc: 'Cascade visuelle CA → Résultat Net' },
+  // ─── Standards ───
   { id: 'home', name: 'Synthèse de gestion', cat: 'Standard', desc: "KPIs, alertes, structure financière" },
   { id: 'cp', name: 'Charges & Produits', cat: 'Standard', desc: 'Répartition par nature, top 10' },
   { id: 'crblock', name: 'CR par bloc', cat: 'Standard', desc: '7 sections + résultats intermédiaires' },
@@ -168,6 +180,7 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
   monthly: (data) => {
     const k = computeKPIs(data);
     return [
+      // ═══ I. SYNTHÈSE ═══
       { id: uid(), type: 'h1', text: '1. Synthèse exécutive', inToc: true },
       { id: uid(), type: 'paragraph', text: "Le présent rapport présente la performance financière de la société sur la période. Il analyse les principaux indicateurs de gestion, l'évolution de la trésorerie et les écarts par rapport au budget." },
       { id: uid(), type: 'kpi', items: [
@@ -176,26 +189,50 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
         { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
         { label: 'Trésorerie nette', value: k.treso },
       ]},
+      { id: uid(), type: 'dashboard', dashboardId: 'exec', title: 'Vue exécutive — KPIs, radar, alertes' },
       { id: uid(), type: 'h2', text: '1.1 Faits marquants', inToc: true },
       { id: uid(), type: 'paragraph', text: "Éléments significatifs de la période : variations notables, événements exceptionnels, décisions structurantes. À compléter." },
       { id: uid(), type: 'pageBreak' },
+
+      // ═══ II. PERFORMANCE — Compte de Résultat ═══
       { id: uid(), type: 'h1', text: '2. Compte de résultat', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Présentation du compte de résultat SYSCOHADA et des soldes intermédiaires de gestion." },
       { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat — par nature' },
       { id: uid(), type: 'table', source: 'sig', title: 'SIG — formation du résultat' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '3. Analyse du CR par bloc', inToc: true },
+      { id: uid(), type: 'h1', text: '3. Waterfall — Cascade SIG', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Cascade visuelle du chiffre d'affaires au résultat net via les soldes intermédiaires." },
+      { id: uid(), type: 'dashboard', dashboardId: 'waterfall', title: 'Waterfall — du CA au RN' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Analyse du CR par bloc', inToc: true },
       { id: uid(), type: 'paragraph', text: "Décomposition du compte de résultat par section. Format : Actual / Budget / N-1 (mois + YTD)." },
       { id: uid(), type: 'dashboard', dashboardId: 'crblock', title: 'CR — Analyse par bloc' },
-      { id: uid(), type: 'h2', text: "3.1 Produits d'exploitation — Mensuel", inToc: true },
+      { id: uid(), type: 'pageBreak' },
+      // Section 4.1-4.2 : Produits & Charges d'exploitation (les plus volumineuses)
+      { id: uid(), type: 'h2', text: "4.1 Produits d'exploitation — Mensuel", inToc: true },
       { id: uid(), type: 'table', source: 'crtab_produits_expl_m', title: "Produits d'exploitation (70-75) — Month + YTD" },
-      { id: uid(), type: 'h2', text: "3.2 Charges d'exploitation — Mensuel", inToc: true },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h2', text: "4.2 Charges d'exploitation — Mensuel", inToc: true },
       { id: uid(), type: 'table', source: 'crtab_charges_expl_m', title: "Charges d'exploitation (60-66) — Month + YTD" },
-      { id: uid(), type: 'h2', text: '3.3 Produits financiers — Mensuel', inToc: true },
+      { id: uid(), type: 'pageBreak' },
+      // Section 4.3-4.4 : Financières (généralement courtes, peuvent tenir ensemble)
+      { id: uid(), type: 'h2', text: '4.3 Produits financiers — Mensuel', inToc: true },
       { id: uid(), type: 'table', source: 'crtab_produits_fin_m', title: 'Produits financiers (77) — Month + YTD' },
-      { id: uid(), type: 'h2', text: '3.4 Charges financières — Mensuel', inToc: true },
+      { id: uid(), type: 'h2', text: '4.4 Charges financières — Mensuel', inToc: true },
       { id: uid(), type: 'table', source: 'crtab_charges_fin_m', title: 'Charges financières (67) — Month + YTD' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '4. Position financière — Bilan', inToc: true },
+      { id: uid(), type: 'h1', text: '5. Seuil de rentabilité', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Point mort, marge de sécurité et structure des coûts fixes/variables." },
+      { id: uid(), type: 'dashboard', dashboardId: 'breakeven', title: 'Seuil de rentabilité' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Pareto des comptes (ABC)', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Top 20 % des comptes qui pèsent 80 % du CA et des charges (loi de Pareto)." },
+      { id: uid(), type: 'dashboard', dashboardId: 'pareto', title: 'Analyse ABC — Pareto' },
+      { id: uid(), type: 'pageBreak' },
+
+      // ═══ III. STRUCTURE — Bilan ═══
+      { id: uid(), type: 'h1', text: '7. Position financière — Bilan', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Bilan SYSCOHADA — Actif et Passif aux normes OHADA révisé 2017. Tous les montants sont exprimés en franc CFA (XOF)." },
       { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
       { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
       { id: uid(), type: 'kpi', items: [
@@ -203,44 +240,116 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
         { label: 'BFR', value: k.bfr, subValue: "d'exploitation" }, { label: 'Trésorerie nette', value: k.treso },
       ]},
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '5. Budget vs Réalisé', inToc: true },
+      { id: uid(), type: 'h1', text: "7.1 Structure de l'Actif", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition graphique du patrimoine de l'entreprise par grande masse." },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_actif', title: "Structure de l'Actif" },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: "7.2 Structure du Passif", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition des sources de financement : capitaux propres, dettes financières, dettes circulantes." },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_passif', title: 'Structure du Passif' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: "8. Variation des capitaux propres", inToc: true },
+      { id: uid(), type: 'paragraph', text: "État obligatoire SYSCOHADA présentant l'évolution des capitaux propres : ouverture, augmentations, distributions, résultat de l'exercice et clôture." },
+      { id: uid(), type: 'table', source: 'capital', title: 'Variation des capitaux propres' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: "9. Tableau des Flux de Trésorerie (TFT)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "TFT SYSCOHADA — méthode indirecte. Présente les flux de trésorerie liés aux opérations d'exploitation, d'investissement et de financement." },
+      { id: uid(), type: 'table', source: 'tft', title: 'TFT — Flux de trésorerie' },
+      { id: uid(), type: 'pageBreak' },
+
+      // ═══ IV. SUIVI BUDGÉTAIRE ═══
+      { id: uid(), type: 'h1', text: '10. Budget vs Réalisé', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Analyse des écarts entre le réalisé de la période et le budget validé." },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Income Statement — Budget vs Actual' },
       { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa_monthly', title: 'Budget vs Réalisé — Mensuel + N-1' },
       { id: uid(), type: 'table', source: 'budget_actual', title: 'Détail Budget vs Réalisé par compte' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '6. Trésorerie', inToc: true },
-      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow Statement' },
-      { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '7. Cycle clients', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Suivi des créances clients : DSO, balance âgée, concentration, top débiteurs." },
-      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Cycle Client' },
-      { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '8. Cycle fournisseurs', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Suivi des dettes fournisseurs : DPO, échéances, concentration." },
-      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Cycle Fournisseur' },
-      { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '9. BFR et fonds de roulement', inToc: true },
+
+      // ═══ V. CYCLES D'EXPLOITATION ═══
+      { id: uid(), type: 'h1', text: '11. BFR et fonds de roulement', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Équation FR / BFR / TN, décomposition par poste, cycle d'exploitation." },
       { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'BFR — Fonds de roulement' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '10. Stocks', inToc: true },
+      { id: uid(), type: 'h1', text: '12. Cycle clients', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Suivi des créances clients : DSO, balance âgée RÉELLE basée sur les dates des écritures, concentration, top débiteurs." },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Cycle Client' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '13. Cycle fournisseurs', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Suivi des dettes fournisseurs : DPO calculé sur achats classes 60-63, échéancier réel, concentration, dépendance." },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Cycle Fournisseur' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '14. Stocks', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Valorisation par nature, dépréciations, rotation des stocks." },
       { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Stocks — valorisation et rotation' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '11. Masse salariale', inToc: true },
+
+      // ═══ VI. TRÉSORERIE ═══
+      { id: uid(), type: 'h1', text: '15. Trésorerie — Évolution mensuelle', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Cash In (encaissements classes 70-77) vs Cash Out (décaissements classes 60-67) — données issues du GL réel." },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow Statement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '16. Cashflow prévisionnel', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Projection de trésorerie sur 13 semaines avec alertes seuils critiques." },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashforecast', title: 'Cashflow prévisionnel 13 semaines' },
+      { id: uid(), type: 'pageBreak' },
+
+      // ═══ VII. RESSOURCES HUMAINES ═══
+      { id: uid(), type: 'h1', text: '17. Masse salariale', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Évolution de la masse salariale, des charges sociales et du ratio masse / CA." },
       { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Masse salariale' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '12. Comptabilité analytique', inToc: true },
+
+      // ═══ VIII. COMPTABILITÉ ANALYTIQUE (conditionnel) ═══
+      { id: uid(), type: 'h1', text: '18. Comptabilité analytique', inToc: true },
       { id: uid(), type: 'paragraph', text: "Répartition des charges et produits par centre de coût / section analytique." },
       { id: uid(), type: 'dashboard', dashboardId: 'analytical', title: 'P&L par section analytique' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '13. Ratios financiers', inToc: true },
-      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios financiers' },
+
+      // ═══ IX. CONFORMITÉ ET RATIOS ═══
+      { id: uid(), type: 'h1', text: '19. Pyramide des performances (Du Pont)', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition multiplicative de la performance : ROE = Marge nette × Rotation actif × Levier financier. Permet d'identifier les leviers d'amélioration de la rentabilité." },
+      { id: uid(), type: 'dashboard', dashboardId: 'pyramide_perf', title: 'Pyramide Du Pont' },
       { id: uid(), type: 'pageBreak' },
-      { id: uid(), type: 'h1', text: '14. Recommandations', inToc: true },
+      { id: uid(), type: 'h1', text: '20. Ratios financiers', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Ratios de structure, liquidité, rentabilité et performance — comparés aux normes sectorielles SYSCOHADA." },
+      { id: uid(), type: 'dashboard', dashboardId: 'ratios_table', title: 'Tableau complet des ratios' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '21. Compliance SYSCOHADA', inToc: true },
+      { id: uid(), type: 'paragraph', text: "10 contrôles automatiques de conformité comptable SYSCOHADA révisé 2017." },
+      { id: uid(), type: 'dashboard', dashboardId: 'compliance', title: 'Compliance SYSCOHADA' },
+      { id: uid(), type: 'pageBreak' },
+
+      // ═══ X. NOTES ANNEXES (obligatoire SYSCOHADA art. 38) ═══
+      { id: uid(), type: 'h1', text: '22. Notes annexes', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Notes complémentaires aux états financiers, conformément à l'article 38 du règlement SYSCOHADA. À compléter par les notes spécifiques de l'entreprise." },
+      { id: uid(), type: 'h2', text: "22.1 Méthodes comptables", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Les états financiers sont établis selon les principes comptables SYSCOHADA révisé 2017. Les méthodes appliquées sont : amortissement linéaire des immobilisations, valorisation des stocks au CMP (coût moyen pondéré), conversion des opérations en devises au cours du jour. À détailler selon les spécificités de l'entreprise." },
+      { id: uid(), type: 'h2', text: "22.2 Engagements hors bilan", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : cautions et garanties données/reçues, contrats de location-financement non comptabilisés, litiges en cours, options et engagements de retraite." },
+      { id: uid(), type: 'h2', text: "22.3 Événements postérieurs à la clôture", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : événements significatifs survenus entre la date de clôture et la date d'établissement du présent rapport." },
+      { id: uid(), type: 'h2', text: "22.4 Parties liées", inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : transactions avec les parties liées (filiales, dirigeants, actionnaires majoritaires), conformément à l'IAS 24." },
+      { id: uid(), type: 'pageBreak' },
+
+      // ═══ XI. RECOMMANDATIONS ═══
+      { id: uid(), type: 'h1', text: '23. Recommandations et plan d\'action', inToc: true },
       { id: uid(), type: 'paragraph', text: "Synthèse des points d'attention identifiés et des actions correctives recommandées." },
-      { id: uid(), type: 'h2', text: "Points d'attention", inToc: true },
+      { id: uid(), type: 'h2', text: "23.1 Points d'attention", inToc: true },
       { id: uid(), type: 'paragraph', text: "À compléter : ratios hors seuil, écarts significatifs, alertes opérationnelles." },
-      { id: uid(), type: 'h2', text: "Plan d'action", inToc: true },
+      { id: uid(), type: 'h2', text: "23.2 Plan d'action", inToc: true },
       { id: uid(), type: 'paragraph', text: "À compléter : actions, responsables, échéances, KPIs de suivi." },
+      { id: uid(), type: 'pageBreak' },
+
+      // ═══ XII. SIGNATURES ═══
+      { id: uid(), type: 'h1', text: '24. Validation et signatures', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Le présent rapport a été établi sous la responsabilité des signataires ci-dessous, conformément aux normes SYSCOHADA en vigueur." },
+      { id: uid(), type: 'kpi', items: [
+        { label: 'Préparé par', value: '________________', subValue: 'Direction Financière' },
+        { label: 'Vérifié par', value: '________________', subValue: 'Contrôle de gestion' },
+        { label: 'Approuvé par', value: '________________', subValue: 'Direction Générale' },
+        { label: 'Date / Signature', value: '________________', subValue: '' },
+      ]},
     ];
   },
 
@@ -480,37 +589,45 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
 
 function uid() { return Math.random().toString(36).substring(2, 11); }
 
-// Filtre les blocs conditionnels selon les données disponibles
+// Filtre les blocs conditionnels selon les données disponibles.
+// Supprime des SECTIONS COMPLÈTES (h1 + paragraphes + dashboard + pageBreak final)
+// quand les données ne sont pas disponibles dans le GL.
 function filterConditionalBlocks(blocks: Block[], data: any): Block[] {
   const noStocks = !data?.hasStocks;
   const noAnalytical = !data?.hasAnalytical;
   if (!noStocks && !noAnalytical) return blocks;
 
-  // Supprime les blocs stocks + le titre et pageBreak qui les précèdent
+  // Mots-clés des sections à supprimer si la condition est remplie
+  const sectionsToRemove: { keyword: RegExp; condition: boolean }[] = [];
+  if (noStocks) sectionsToRemove.push({ keyword: /\bstocks?\b/i, condition: true });
+  if (noAnalytical) sectionsToRemove.push({ keyword: /analytiq/i, condition: true });
+
   const result: Block[] = [];
+  let skipUntilNextPageBreak = false;
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
-    // Dashboard stocks
-    if (noStocks && b.type === 'dashboard' && (b as any).dashboardId === 'stk') {
-      // Supprimer aussi le titre (h1) précédent et le pageBreak précédent
-      while (result.length > 0 && (result[result.length - 1].type === 'h1' || result[result.length - 1].type === 'pageBreak')) {
-        const last = result[result.length - 1];
-        if (last.type === 'h1' && (last as any).text?.toLowerCase().includes('stock')) { result.pop(); break; }
-        if (last.type === 'pageBreak') { result.pop(); continue; }
-        break;
-      }
+
+    // Si on est en train de skip, on continue jusqu'au pageBreak (inclus)
+    if (skipUntilNextPageBreak) {
+      if (b.type === 'pageBreak') skipUntilNextPageBreak = false;
       continue;
     }
-    // Dashboard analytique
-    if (noAnalytical && b.type === 'dashboard' && (b as any).dashboardId === 'analytical') {
-      while (result.length > 0 && (result[result.length - 1].type === 'h1' || result[result.length - 1].type === 'pageBreak')) {
-        const last = result[result.length - 1];
-        if (last.type === 'h1' && (last as any).text?.toLowerCase().includes('analytiq')) { result.pop(); break; }
-        if (last.type === 'pageBreak') { result.pop(); continue; }
-        break;
+
+    // Détection d'un h1 qui correspond à une section conditionnelle
+    if (b.type === 'h1') {
+      const text = ((b as any).text || '') as string;
+      const matchSection = sectionsToRemove.find((s) => s.keyword.test(text));
+      if (matchSection) {
+        // Skip ce h1 + tout jusqu'au prochain pageBreak
+        // Aussi : si le bloc précédent dans result est un pageBreak, on le retire
+        if (result.length > 0 && result[result.length - 1].type === 'pageBreak') {
+          result.pop();
+        }
+        skipUntilNextPageBreak = true;
+        continue;
       }
-      continue;
     }
+
     result.push(b);
   }
   return result;
@@ -531,12 +648,65 @@ export default function Reports() {
   const [openSend, setOpenSend] = useState(false);
   const [openSave, setOpenSave] = useState(false);
   const [openLoad, setOpenLoad] = useState(false);
+  const [openJournal, setOpenJournal] = useState(false);
+  const [currentReportId, setCurrentReportId] = useState<number | null>(null);
   const [openCatalog, setOpenCatalog] = useState<'tables' | 'dashboards' | null>(null);
   const [insertAtIndex, setInsertAtIndex] = useState<number | null>(null);
   const [tocLabel, setTocLabel] = useState('');
   const [journal, setJournal] = useState<Array<{ date: number; title: string; format: string }>>(() => {
     try { return JSON.parse(localStorage.getItem('report-journal') ?? '[]'); } catch { return []; }
   });
+
+  // Journal des rapports persistés (vrais ReportDoc en DB)
+  const savedReports: ReportDoc[] = useLiveQuery(
+    () => (currentOrgId ? db.reports.where('orgId').equals(currentOrgId).reverse().sortBy('updatedAt') : Promise.resolve([] as ReportDoc[])),
+    [currentOrgId], [] as ReportDoc[],
+  ) ?? [];
+
+  // Sauvegarder le rapport courant comme document persistant
+  const saveReport = async (newSave = false) => {
+    if (!currentOrgId) return;
+    const now = Date.now();
+    const payload = {
+      orgId: currentOrgId,
+      title: config.identity.title || `Rapport ${new Date(now).toLocaleDateString('fr-FR')}`,
+      type: 'report',
+      author: config.identity.author || 'Utilisateur local',
+      status: 'draft' as const,
+      content: JSON.stringify(config),
+      updatedAt: now,
+    };
+    if (currentReportId && !newSave) {
+      await db.reports.update(currentReportId, payload);
+      alert('✅ Rapport mis à jour.');
+    } else {
+      const id = await db.reports.add({ ...payload, createdAt: now });
+      setCurrentReportId(id as number);
+      alert(`✅ Rapport enregistré.`);
+    }
+  };
+
+  const loadReport = (rep: any) => {
+    try {
+      const cfg = JSON.parse(rep.content);
+      setConfig(cfg);
+      setCurrentReportId(rep.id);
+      setOpenJournal(false);
+    } catch (e: any) {
+      alert(`Erreur chargement : ${e.message}`);
+    }
+  };
+
+  const deleteReport = async (id: number) => {
+    if (!confirm('Supprimer ce rapport définitivement ?')) return;
+    await db.reports.delete(id);
+    if (currentReportId === id) setCurrentReportId(null);
+  };
+  // Pliage des sidebars (état persisté)
+  const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('reports-left-collapsed') === 'true');
+  const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('reports-right-collapsed') === 'true');
+  const toggleLeft = () => { const n = !leftCollapsed; setLeftCollapsed(n); localStorage.setItem('reports-left-collapsed', String(n)); };
+  const toggleRight = () => { const n = !rightCollapsed; setRightCollapsed(n); localStorage.setItem('reports-right-collapsed', String(n)); };
 
   const templates = useLiveQuery(() => db.templates.where('orgId').equals(currentOrgId).toArray(), [currentOrgId]) ?? [];
 
@@ -624,6 +794,29 @@ export default function Reports() {
   const effectiveCR = hasPeriodFilter && periodStatements ? periodStatements.cr : cr;
   const effectiveBalance = hasPeriodFilter && periodBalance ? periodBalance : balance;
 
+  // Balances auxiliaires (vraie ventilation par tier — pas de regroupement parent)
+  const auxClient = useLiveQuery(async () => {
+    if (!currentOrgId) return [];
+    const { computeAuxBalance } = await import('../engine/balance');
+    return computeAuxBalance({ orgId: currentOrgId, year: currentYear, kind: 'client' });
+  }, [currentOrgId, currentYear], []);
+  const auxFournisseur = useLiveQuery(async () => {
+    if (!currentOrgId) return [];
+    const { computeAuxBalance } = await import('../engine/balance');
+    return computeAuxBalance({ orgId: currentOrgId, year: currentYear, kind: 'fournisseur' });
+  }, [currentOrgId, currentYear], []);
+  // Balances ÂGÉES réelles (calculées depuis les dates GL — pas de %fictifs)
+  const agedClient = useLiveQuery(async () => {
+    if (!currentOrgId) return null;
+    const { agedBalance } = await import('../engine/analytics');
+    return agedBalance(currentOrgId, currentYear, 'client');
+  }, [currentOrgId, currentYear], null);
+  const agedFournisseur = useLiveQuery(async () => {
+    if (!currentOrgId) return null;
+    const { agedBalance } = await import('../engine/analytics');
+    return agedBalance(currentOrgId, currentYear, 'fournisseur');
+  }, [currentOrgId, currentYear], null);
+
   const data = useMemo(() => ({
     bilanActif: effectiveBilan?.actif ?? [],
     bilanPassif: effectiveBilan?.passif ?? [],
@@ -636,9 +829,13 @@ export default function Reports() {
     budgetActual,
     monthlyCR,
     monthlyBilan,
+    auxClient,
+    auxFournisseur,
+    agedClient,
+    agedFournisseur,
     hasAnalytical,
     hasStocks,
-  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, ratios, tft, capital, budgetActual, monthlyCR, monthlyBilan, hasAnalytical, hasStocks]);
+  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, ratios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, hasAnalytical, hasStocks]);
 
   // Rafraîchir les KPIs du rapport par défaut une fois les données chargées (1 fois)
   useEffect(() => {
@@ -664,10 +861,13 @@ export default function Reports() {
         else { window.open(URL.createObjectURL(blob), '_blank'); }
       });
     } else {
-      const doc = buildPDFFromBlocks(config, data, org?.name ?? '—',
-        [org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ') || undefined);
-      if (download) doc.save(`${config.identity.title.replace(/\s+/g, '_')}.pdf`);
-      else window.open(URL.createObjectURL(doc.output('blob')), '_blank');
+      // ✨ NOUVEAU : impression HTML/CSS WYSIWYG — le PDF correspond EXACTEMENT à
+      // l'aperçu en ligne. Utilise window.print() avec un style print qui masque
+      // tout sauf les pages du rapport. L'utilisateur choisit "Enregistrer en PDF"
+      // dans la boîte de dialogue d'impression du navigateur.
+      // Mode "download" et "preview" font la même chose : ouvrent le dialog d'impression.
+      void download;
+      window.print();
     }
   };
 
@@ -680,9 +880,34 @@ export default function Reports() {
         title="Reporting"
         subtitle="Éditeur par blocs · Visualiseur · Sommaire personnalisé · A4/PPTX · Palette"
         action={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button className="btn-primary" onClick={() => saveReport(false)} title={currentReportId ? 'Mettre à jour le rapport courant' : 'Enregistrer un nouveau rapport'}>
+              <Save className="w-4 h-4" /> {currentReportId ? 'Sauvegarder' : 'Enregistrer le rapport'}
+            </button>
+            {currentReportId && (
+              <button className="btn-outline" onClick={() => { setCurrentReportId(null); saveReport(true); }} title="Enregistrer comme nouveau rapport">
+                <Save className="w-4 h-4" /> Enregistrer sous…
+              </button>
+            )}
+            <button className="btn-outline" onClick={() => setOpenJournal(true)}>
+              <FileText className="w-4 h-4" /> Journal des rapports ({savedReports.length})
+            </button>
             <button className="btn-outline" onClick={() => setOpenLoad(true)}>Charger un modèle</button>
             <button className="btn-outline" onClick={() => setOpenSave(true)}><Save className="w-4 h-4" /> Enregistrer modèle</button>
+            <button className="btn-outline" onClick={async () => {
+              if (!confirm("Auto-commenter le rapport avec Proph3t ?\nGénère un commentaire sous chaque H1, H2 et H3.")) return;
+              const { autoCommentReport } = await import('../engine/proph3/reportCommentator');
+              const res = autoCommentReport(config.blocks as any, data as any);
+              setConfig((c) => ({ ...c, blocks: res.blocks as any }));
+              alert(`✅ ${res.count} section(s) commentée(s) par Proph3t.`);
+            }}><Sparkles className="w-4 h-4" /> Commenter avec Proph3t</button>
+            <button className="btn-outline" onClick={async () => {
+              if (!confirm("Effacer tous les commentaires générés par Proph3t ?\nLes paragraphes que vous avez écrits manuellement sont préservés.")) return;
+              const { clearAutoComments } = await import('../engine/proph3/reportCommentator');
+              const res = clearAutoComments(config.blocks as any);
+              setConfig((c) => ({ ...c, blocks: res.blocks as any }));
+              alert(`✅ ${res.count} commentaire(s) Proph3t supprimé(s).`);
+            }}>Effacer commentaires Proph3t</button>
             <button className="btn-outline" onClick={() => generate(false)}><Eye className="w-4 h-4" /> Aperçu</button>
             <button className="btn-outline" onClick={() => generate(true)}><Download className="w-4 h-4" /> Télécharger</button>
             <button className="btn-primary" onClick={() => setOpenSend(true)}><Send className="w-4 h-4" /> Envoyer</button>
@@ -690,10 +915,21 @@ export default function Reports() {
         }
       />
 
-      <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr_300px] gap-4">
+      <div className="grid grid-cols-1 gap-4" style={{
+        gridTemplateColumns: `${leftCollapsed ? '48px' : '340px'} minmax(0, 1fr) ${rightCollapsed ? '48px' : '320px'}`,
+      }}>
 
         {/* ════════════════ SIDEBAR GAUCHE — ÉDITEUR ════════════════ */}
+        {leftCollapsed ? (
+          <button onClick={toggleLeft} className="self-start sticky top-20 w-10 h-12 rounded-lg bg-primary-900 dark:bg-primary-100 hover:scale-105 text-primary-50 dark:text-primary-900 shadow-md flex items-center justify-center transition font-bold text-lg" title="Déplier l'éditeur">
+            ›
+          </button>
+        ) : (
         <aside className="space-y-3 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-100px)] xl:overflow-y-auto pr-1">
+          <div className="flex items-center justify-between mb-2 px-2 py-1.5 bg-primary-200 dark:bg-primary-800 rounded-lg">
+            <p className="text-[11px] uppercase tracking-wider text-primary-700 dark:text-primary-200 font-bold">⚙ Éditeur</p>
+            <button onClick={toggleLeft} className="w-7 h-7 rounded bg-primary-50 dark:bg-primary-900 hover:bg-primary-100 dark:hover:bg-primary-950 text-primary-700 dark:text-primary-200 flex items-center justify-center font-bold shadow-sm" title="Replier l'éditeur">‹</button>
+          </div>
 
           <Collapsible title="Identité" defaultOpen>
             <div className="space-y-2.5">
@@ -701,20 +937,25 @@ export default function Reports() {
               <Field label="Sous-titre" v={config.identity.subtitle} on={(v) => setIdentity('subtitle', v)} />
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Période de reporting</label>
-                <div className="flex gap-2 items-center mb-1">
-                  <input type="date" className="input !py-1 text-xs flex-1" value={config.identity.periodFrom ?? ''} onChange={(e) => {
-                    setIdentity('periodFrom', e.target.value);
-                    const from = e.target.value ? new Date(e.target.value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
-                    const to = config.identity.periodTo ? new Date(config.identity.periodTo).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
-                    if (from && to) setIdentity('period', `Du ${from} au ${to}`);
-                  }} />
-                  <span className="text-[10px] text-primary-400">au</span>
-                  <input type="date" className="input !py-1 text-xs flex-1" value={config.identity.periodTo ?? ''} onChange={(e) => {
-                    setIdentity('periodTo', e.target.value);
-                    const from = config.identity.periodFrom ? new Date(config.identity.periodFrom).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
-                    const to = e.target.value ? new Date(e.target.value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
-                    if (from && to) setIdentity('period', `Du ${from} au ${to}`);
-                  }} />
+                <div className="grid grid-cols-2 gap-2 mb-1.5">
+                  <div>
+                    <label className="text-[9px] text-primary-400 block mb-0.5">Du</label>
+                    <input type="date" className="input !py-1 text-xs w-full" value={config.identity.periodFrom ?? ''} onChange={(e) => {
+                      setIdentity('periodFrom', e.target.value);
+                      const from = e.target.value ? new Date(e.target.value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                      const to = config.identity.periodTo ? new Date(config.identity.periodTo).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                      if (from && to) setIdentity('period', `Du ${from} au ${to}`);
+                    }} />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-primary-400 block mb-0.5">Au</label>
+                    <input type="date" className="input !py-1 text-xs w-full" value={config.identity.periodTo ?? ''} onChange={(e) => {
+                      setIdentity('periodTo', e.target.value);
+                      const from = config.identity.periodFrom ? new Date(config.identity.periodFrom).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                      const to = e.target.value ? new Date(e.target.value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+                      if (from && to) setIdentity('period', `Du ${from} au ${to}`);
+                    }} />
+                  </div>
                 </div>
                 <input className="input !py-1 text-xs text-primary-400" value={config.identity.period} onChange={(e) => setIdentity('period', e.target.value)} placeholder="Ou saisie libre : Exercice 2025, S1 2025..." />
               </div>
@@ -824,19 +1065,30 @@ export default function Reports() {
             </div>
           </Collapsible>
         </aside>
+        )}
 
         {/* ════════════════ CENTRE — VISUALISEUR ════════════════ */}
-        <main className="space-y-3">
+        <main className="space-y-3 report-print-area">
           {renderPages(config, data, palette, {
             updateBlock, removeBlock, moveBlock, insertBlockAt, reorderBlock, moveBlockToIndex,
             openTablesCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('tables'); },
             openDashCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('dashboards'); },
             org,
+            setLogo: (dataUrl: string) => setIdentity('logoDataUrl', dataUrl),
           })}
         </main>
 
         {/* ════════════════ SIDEBAR DROITE ════════════════ */}
+        {rightCollapsed ? (
+          <button onClick={toggleRight} className="self-start sticky top-20 w-10 h-12 rounded-lg bg-primary-900 dark:bg-primary-100 hover:scale-105 text-primary-50 dark:text-primary-900 shadow-md flex items-center justify-center transition font-bold text-lg" title="Déplier le récapitulatif">
+            ‹
+          </button>
+        ) : (
         <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-100px)] xl:overflow-y-auto pr-1">
+          <div className="flex items-center justify-between mb-2 px-2 py-1.5 bg-primary-200 dark:bg-primary-800 rounded-lg">
+            <button onClick={toggleRight} className="w-7 h-7 rounded bg-primary-50 dark:bg-primary-900 hover:bg-primary-100 dark:hover:bg-primary-950 text-primary-700 dark:text-primary-200 flex items-center justify-center font-bold shadow-sm" title="Replier le récapitulatif">›</button>
+            <p className="text-[11px] uppercase tracking-wider text-primary-700 dark:text-primary-200 font-bold">📋 Récapitulatif</p>
+          </div>
           <div className="card p-4">
             <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold mb-3">Récapitulatif</p>
             <div className="space-y-1.5 text-xs">
@@ -884,6 +1136,7 @@ export default function Reports() {
             </div>
           )}
         </aside>
+        )}
       </div>
 
       <CatalogModal
@@ -910,6 +1163,14 @@ export default function Reports() {
       <SendModal open={openSend} onClose={() => setOpenSend(false)} config={config} setConfig={setConfig} onValidate={() => generate(true)} />
       <SaveModal open={openSave} onClose={() => setOpenSave(false)} config={config} orgId={currentOrgId} />
       <LoadModal open={openLoad} onClose={() => setOpenLoad(false)} templates={templates} onLoad={(t: any) => { setConfig(JSON.parse(t.config)); setOpenLoad(false); }} />
+      <ReportJournalModal
+        open={openJournal}
+        onClose={() => setOpenJournal(false)}
+        reports={savedReports as any}
+        currentReportId={currentReportId}
+        onLoad={loadReport}
+        onDelete={deleteReport}
+      />
     </div>
   );
 }
@@ -917,36 +1178,144 @@ export default function Reports() {
 // ─── RENDU DES PAGES (simulation A4) ─────────────────────────────
 function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   const isLandscape = config.format === 'A4_landscape';
-  const maxH = config.format === 'pptx' ? 540 : isLandscape ? 595 : 1000; // hauteur utile approximative en px
+  // maxH = hauteur MAX d'une page (au-delà → badge "Hors marge"). Cela respecte
+  // la dimension A4 mais on n'IMPOSE plus de minHeight, donc une page courte
+  // ne génère plus d'espace blanc inutile.
+  const maxH = config.format === 'pptx' ? 540 : isLandscape ? 760 : 1400;
   const pageStyle = config.format === 'pptx'
-    ? { width: '100%', maxWidth: 980, aspectRatio: '16/9', minHeight: 'auto' as const }
+    ? { width: '100%', maxWidth: 1400, aspectRatio: '16/9', minHeight: 'auto' as const, maxHeight: maxH }
     : isLandscape
-      ? { width: '100%', maxWidth: 1000, aspectRatio: '297/210', minHeight: 'auto' as const }
-      : { width: '100%', maxWidth: 760, minHeight: 1000 };
+      ? { width: '100%', maxWidth: 1400, aspectRatio: '297/210', minHeight: 'auto' as const, maxHeight: maxH }
+      : { width: '100%', maxWidth: 1100, minHeight: 'auto' as const, maxHeight: maxH };
 
+  // Estimation de la hauteur de chaque bloc (en px) pour pagination auto.
+  // Pour les tables : on utilise le NOMBRE RÉEL DE LIGNES dans `data` afin
+  // d'éviter qu'une table de 30 lignes soit estimée à 320px et déborde.
+  const estimateTableRows = (source: string): number => {
+    const ba = data?.budgetActual ?? [];
+    if (!source) return 10;
+    if (source === 'budget_actual') {
+      return ba.filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01).length;
+    }
+    if (source.startsWith('crtab_')) {
+      const PFX: Record<string, string[]> = {
+        produits_expl: ['70','71','72','73','74','75','781'],
+        charges_expl: ['60','61','62','63','64','65','66','681','691'],
+        produits_fin: ['77','786','797'],
+        charges_fin: ['67','687','697'],
+        produits_hao: ['82','84','86','88'],
+        charges_hao: ['81','83','85'],
+        impots: ['87','89'],
+      };
+      const parts = source.replace('crtab_', '').split('_');
+      const sectionKey = parts.slice(0, -1).join('_');
+      const prefixes = PFX[sectionKey] ?? [];
+      return ba
+        .filter((r: any) => prefixes.some((p) => r.code?.startsWith(p)))
+        .filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01)
+        .length;
+    }
+    if (source === 'balance') return (data?.balance ?? []).filter((r: any) => Math.abs(r.soldeD) > 0.01 || Math.abs(r.soldeC) > 0.01).length;
+    if (source === 'bilan_actif') return (data?.bilanActif ?? []).length;
+    if (source === 'bilan_passif') return (data?.bilanPassif ?? []).length;
+    if (source === 'cr') return (data?.cr ?? []).length;
+    if (source === 'ratios') return (data?.ratios ?? []).length;
+    if (source === 'tft') return (data?.tft ?? []).length;
+    if (source === 'sig') return 5;
+    return 10;
+  };
+
+  const estimateHeight = (b: Block): number => {
+    switch (b.type) {
+      case 'h1': return 60;
+      case 'h2': return 42;
+      case 'h3': return 32;
+      case 'paragraph': {
+        const text = (b as any).text || '';
+        const lines = Math.ceil(text.length / 90);
+        return Math.max(40, lines * 22 + 16);
+      }
+      case 'kpi': {
+        const items = (b as any).items?.length || 4;
+        const rows = Math.ceil(items / 4);
+        return rows * 80 + 40;
+      }
+      case 'table': {
+        // Header (~50) + titre (~25) + N lignes × 24px + footer (~25)
+        const rows = Math.min(estimateTableRows((b as any).source), 30);
+        return Math.max(120, 100 + rows * 24);
+      }
+      case 'dashboard': {
+        const dashId = (b as any).dashboardId;
+        if (dashId === 'pareto') return 540;
+        if (dashId === 'client' || dashId === 'fr') return 480;
+        if (dashId === 'waterfall') return 280;
+        if (dashId === 'cashflow') return 340;
+        if (dashId === 'cashforecast') return 340;
+        if (dashId === 'bfr') return 280;
+        if (dashId === 'exec') return 340;
+        if (dashId === 'struct_actif' || dashId === 'struct_passif') return 280;
+        if (dashId === 'pyramide_perf') return 380;
+        if (dashId === 'ratios_table') return 540;
+        if (dashId === 'compliance') return 700; // KPIs + 10 contrôles + recos
+        return 220;
+      }
+      case 'pageBreak': return 0;
+      default: return 60;
+    }
+  };
+
+  // Pagination : respecte les pageBreaks manuels ET ajoute des sauts auto si on dépasse maxH
+  const PAGE_BUDGET = maxH - 80; // marge de sécurité (padding p-6 = 48px + safety)
   const blocksWithIndex = config.blocks.map((b, i) => ({ block: b, index: i }));
   const pages: Array<Array<{ block: Block; index: number }>> = [[]];
+  let currentHeight = 0;
   for (const item of blocksWithIndex) {
-    if (item.block.type === 'pageBreak') pages.push([]);
-    else pages[pages.length - 1].push(item);
+    if (item.block.type === 'pageBreak') {
+      pages.push([]);
+      currentHeight = 0;
+      continue;
+    }
+    const h = estimateHeight(item.block);
+    // Si le bloc seul dépasse, on l'isole sur sa propre page
+    if (h > PAGE_BUDGET && pages[pages.length - 1].length > 0) {
+      pages.push([item]);
+      currentHeight = h;
+      continue;
+    }
+    // Si l'ajout dépasse, on commence une nouvelle page
+    if (currentHeight + h > PAGE_BUDGET && pages[pages.length - 1].length > 0) {
+      pages.push([item]);
+      currentHeight = h;
+    } else {
+      pages[pages.length - 1].push(item);
+      currentHeight += h;
+    }
   }
+
+  // Calcul du nombre total de pages pour la pagination
+  const coverPages = config.options.includeCover ? 1 : 0;
+  const tocPages = config.options.includeTOC ? 1 : 0;
+  const backCoverPages = (config.options as any).includeBackCover !== false ? 1 : 0; // activé par défaut
+  const totalPages = coverPages + tocPages + pages.length + backCoverPages;
+  let pageNum = 0;
 
   return (
     <>
       {config.options.includeCover && (
-        <PageA4 style={pageStyle} maxH={maxH}>
-          <CoverPage config={config} palette={palette} org={ops.org} />
+        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber>
+          <CoverPage config={config} palette={palette} org={ops.org} setLogo={ops.setLogo} />
         </PageA4>
       )}
 
       {config.options.includeTOC && (
-        <PageA4 style={pageStyle} maxH={maxH}>
+        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette}>
           <TocPage config={config} palette={palette} />
         </PageA4>
       )}
 
       {pages.map((pageBlocks, pi) => (
-        <PageA4 key={pi} style={pageStyle} maxH={maxH}>
+        <PageA4 key={pi} style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette}>
           {pageBlocks.length === 0 && (
             <InsertHere index={config.blocks.length} ops={ops} alwaysOpen />
           )}
@@ -956,6 +1325,12 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
           {pageBlocks.length > 0 && <InsertHere index={pageBlocks[pageBlocks.length - 1].index + 1} ops={ops} />}
         </PageA4>
       ))}
+
+      {backCoverPages > 0 && (
+        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber>
+          <BackCoverPage config={config} palette={palette} org={ops.org} />
+        </PageA4>
+      )}
     </>
   );
 }
@@ -1093,7 +1468,15 @@ function PopBtn({ icon, label, sub, onClick, highlight }: { icon: React.ReactNod
   );
 }
 
-function PageA4({ children, style, maxH }: { children: React.ReactNode; style: React.CSSProperties; maxH?: number }) {
+function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumber }: {
+  children: React.ReactNode;
+  style: React.CSSProperties;
+  maxH?: number;
+  pageNum?: number;
+  totalPages?: number;
+  palette?: any;
+  hideNumber?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
 
@@ -1107,23 +1490,84 @@ function PageA4({ children, style, maxH }: { children: React.ReactNode; style: R
   }, [maxH, children]);
 
   return (
-    <div className={clsx('bg-white dark:bg-primary-900 border rounded p-6 mx-auto relative',
+    <div className={clsx('bg-white dark:bg-primary-900 border rounded mx-auto relative flex flex-col',
       overflow ? 'border-error/50 ring-1 ring-error/20' : 'border-primary-300 dark:border-primary-700')} style={style}>
       {overflow && (
         <div className="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-[9px] font-semibold bg-error/10 text-error border border-error/20">
-          Hors marge
+          Hors marge — créez un nouveau saut de page
         </div>
       )}
-      <div ref={ref} className="overflow-hidden break-words">{children}</div>
+      <div ref={ref} className="break-words flex-1 flex flex-col gap-1 p-6 pb-10">{children}</div>
+      {/* Footer avec numéro de page */}
+      {!hideNumber && pageNum && totalPages && (
+        <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
+          <span style={{ color: palette?.primary ?? undefined }}>Page {pageNum} / {totalPages}</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function CoverPage({ config, palette, org }: any) {
+function CoverPage({ config, palette, org, setLogo }: any) {
+  const [dragOver, setDragOver] = useState(false);
+
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      alert('Glissez une image (PNG, JPG, SVG)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && setLogo) setLogo(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
-    <div className="border-2 rounded p-6 h-full flex flex-col" style={{ borderColor: palette.primary, minHeight: 700 }}>
+    <div
+      className={clsx('border-2 rounded p-6 h-full flex flex-col relative transition-colors', dragOver && 'bg-primary-100 dark:bg-primary-900')}
+      style={{ borderColor: palette.primary, minHeight: 700 }}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+    >
+      {dragOver && (
+        <div className="absolute inset-0 flex items-center justify-center bg-primary-100/80 dark:bg-primary-900/80 z-10 rounded">
+          <div className="text-center">
+            <p className="text-2xl font-bold" style={{ color: palette.primary }}>📥 Déposez votre logo</p>
+            <p className="text-xs text-primary-500 mt-2">Format PNG, JPG ou SVG</p>
+          </div>
+        </div>
+      )}
       <p className="text-center text-[10px] uppercase tracking-widest text-primary-500 font-semibold">{config.identity.confidentiality}</p>
-      {config.identity.logoDataUrl && <div className="text-center mt-6"><img src={config.identity.logoDataUrl} alt="logo" className="inline-block max-h-20" /></div>}
+      {config.identity.logoDataUrl ? (
+        <div className="text-center mt-6 relative group">
+          <img
+            src={config.identity.logoDataUrl}
+            alt="logo"
+            className="inline-block cursor-pointer"
+            style={{ maxHeight: '96px', maxWidth: '240px', width: 'auto', height: 'auto', objectFit: 'contain' }}
+          />
+          <button
+            onClick={() => setLogo && setLogo('')}
+            className="absolute top-0 right-1/2 translate-x-32 -translate-y-2 opacity-0 group-hover:opacity-100 bg-error text-white rounded-full w-6 h-6 text-xs font-bold transition print:hidden"
+            title="Retirer le logo"
+          >×</button>
+        </div>
+      ) : (
+        <div className="text-center mt-6 print:hidden">
+          <label className="inline-block border-2 border-dashed border-primary-300 dark:border-primary-700 rounded p-4 cursor-pointer hover:border-primary-500 transition">
+            <p className="text-xs text-primary-500">📤 Glissez ou cliquez pour ajouter un logo</p>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+              const f = e.target.files?.[0]; if (!f || !setLogo) return;
+              const r = new FileReader(); r.onload = () => typeof r.result === 'string' && setLogo(r.result); r.readAsDataURL(f);
+            }} />
+          </label>
+        </div>
+      )}
       <div className="flex-1 flex flex-col items-center justify-center text-center mt-12">
         <h1 className="text-3xl font-bold leading-tight" style={{ color: palette.primary }}>{config.identity.title}</h1>
         {config.identity.subtitle && <p className="text-base text-primary-500 italic mt-2">{config.identity.subtitle}</p>}
@@ -1134,6 +1578,54 @@ function CoverPage({ config, palette, org }: any) {
         <p>Période : <strong>{config.identity.period}</strong></p>
         <p>Émis par : <strong>{config.identity.author}</strong></p>
         <p>Date : {new Date().toLocaleDateString('fr-FR')}</p>
+      </div>
+    </div>
+  );
+}
+
+// Page de dos / 4ème de couverture
+function BackCoverPage({ config, palette, org }: any) {
+  return (
+    <div className="border-2 rounded p-6 h-full flex flex-col justify-between" style={{ borderColor: palette.primary, minHeight: 700 }}>
+      <div className="text-center">
+        {config.identity.logoDataUrl && (
+          <img
+            src={config.identity.logoDataUrl}
+            alt="logo"
+            className="inline-block opacity-80 mb-4"
+            style={{ maxHeight: '64px', maxWidth: '180px', width: 'auto', height: 'auto', objectFit: 'contain' }}
+          />
+        )}
+        <p className="text-xs uppercase tracking-widest text-primary-500 font-semibold">{org?.name ?? '—'}</p>
+      </div>
+
+      <div className="space-y-6 px-8">
+        <div className="text-center">
+          <p className="text-xl font-bold mb-2" style={{ color: palette.primary }}>{config.identity.title}</p>
+          {config.identity.subtitle && <p className="text-sm italic text-primary-500">{config.identity.subtitle}</p>}
+        </div>
+
+        <div className="border-t border-b py-4 space-y-2 text-xs text-primary-600 dark:text-primary-400" style={{ borderColor: palette.primary + '40' }}>
+          <p><strong>Document confidentiel</strong> — destiné exclusivement aux destinataires désignés. Toute reproduction ou diffusion non autorisée est strictement interdite.</p>
+          <p>Les analyses présentées dans ce rapport sont basées sur les données comptables disponibles à la date d'émission. Elles n'engagent que leur auteur et n'ont pas vocation à constituer un avis d'expertise.</p>
+          <p>Conformément aux normes <strong>SYSCOHADA révisé 2017</strong> en vigueur dans l'espace OHADA.</p>
+        </div>
+
+        {config.recipients?.length > 0 && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Destinataires</p>
+            <ul className="text-xs space-y-0.5">
+              {config.recipients.slice(0, 8).map((r: any, i: number) => <li key={i}>• {r.name} {r.email && <span className="text-primary-400">— {r.email}</span>}</li>)}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="text-center text-[10px] text-primary-400 space-y-1 border-t pt-4" style={{ borderColor: palette.primary + '40' }}>
+        <p>Émis par {config.identity.author} · {new Date().toLocaleDateString('fr-FR')}</p>
+        {(org?.rccm || org?.ifu) && <p>{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
+        {org?.address && <p>{org.address}</p>}
+        <p className="mt-2 italic">Généré avec CockPit F&A · SYSCOHADA 2017</p>
       </div>
     </div>
   );
@@ -1170,29 +1662,55 @@ function BlockEditor({ block, data, palette, ops }: any) {
   );
 
   const wrapper = (children: React.ReactNode) => (
-    <div className="group relative hover:bg-primary-100/30 dark:hover:bg-primary-800/20 rounded px-1 py-0.5">
+    <div className="group relative hover:bg-primary-100/30 dark:hover:bg-primary-800/20 rounded px-1 py-0">
       {Controls}{children}
     </div>
   );
 
   if (block.type === 'h1' || block.type === 'h2' || block.type === 'h3') {
     const sizes = { h1: 'text-2xl font-bold', h2: 'text-lg font-bold', h3: 'text-base font-semibold' };
+    const Tag = block.type as 'h1' | 'h2' | 'h3';
     return wrapper(
-      <input
-        className={clsx(sizes[block.type as keyof typeof sizes], 'w-full bg-transparent border-b border-transparent focus:border-primary-500 outline-none px-1 py-0.5')}
-        value={block.text}
-        onChange={(e) => ops.updateBlock(block.id, { text: e.target.value })}
-        style={{ color: palette.primary }}
-      />
+      <>
+        <input
+          className={clsx(sizes[block.type as keyof typeof sizes], 'w-full bg-transparent border-b border-transparent focus:border-primary-500 outline-none px-1 py-0.5 print:hidden')}
+          value={block.text}
+          onChange={(e) => ops.updateBlock(block.id, { text: e.target.value })}
+          style={{ color: palette.primary }}
+        />
+        {/* Version texte pour l'impression PDF */}
+        <Tag
+          className={clsx(sizes[block.type as keyof typeof sizes], 'hidden print:block px-1 py-0.5 m-0')}
+          style={{ color: palette.primary }}
+        >
+          {block.text}
+        </Tag>
+      </>
     );
   }
   if (block.type === 'paragraph') {
+    // Texte affichable en édition (textarea) + version impression (p)
+    // Le marker [Proph3t-auto] est nettoyé visuellement
+    const cleanText = (block.text || '').replace(/^\[Proph3t-auto\]\s*/, '');
     return wrapper(
-      <textarea
-        className="w-full bg-transparent border border-dashed border-transparent focus:border-primary-500 hover:border-primary-300 dark:hover:border-primary-700 rounded p-2 text-sm resize-y min-h-[60px] outline-none"
-        value={block.text}
-        onChange={(e) => ops.updateBlock(block.id, { text: e.target.value })}
-      />
+      <>
+        <textarea
+          className="w-full bg-transparent border border-dashed border-transparent focus:border-primary-500 hover:border-primary-300 dark:hover:border-primary-700 rounded px-2 py-1 text-sm resize-none outline-none overflow-hidden print:hidden"
+          value={block.text}
+          onChange={(e) => {
+            ops.updateBlock(block.id, { text: e.target.value });
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+          }}
+          ref={(el) => {
+            if (el) {
+              el.style.height = 'auto';
+              el.style.height = el.scrollHeight + 'px';
+            }
+          }}
+        />
+        <p className="hidden print:block px-2 py-1 text-sm leading-relaxed m-0">{cleanText}</p>
+      </>
     );
   }
   if (block.type === 'kpi') {
@@ -1278,9 +1796,23 @@ function TablePreview({ source, data, palette, title }: any) {
     case 'bilan_passif': head.push('Code', 'Poste', 'Montant'); body = data.bilanPassif.slice(0, 12).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
     case 'cr': head.push('Code', 'Poste', 'Montant'); body = data.cr.slice(0, 14).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
     case 'sig': head.push('Solde', 'Valeur'); body = [['Marge brute', fmtFull(data.sig?.margeBrute ?? 0)], ['VA', fmtFull(data.sig?.valeurAjoutee ?? 0)], ['EBE', fmtFull(data.sig?.ebe ?? 0)], ['Résultat exploitation', fmtFull(data.sig?.re ?? 0)], ['Résultat net', fmtFull(data.sig?.resultat ?? 0)]]; break;
-    case 'balance': head.push('Compte', 'Libellé', 'Solde D', 'Solde C'); body = data.balance.slice(0, 10).map((r: any) => [r.account, r.label, r.soldeD ? fmtFull(r.soldeD) : '', r.soldeC ? fmtFull(r.soldeC) : '']); break;
+    case 'balance': {
+      head.push('Compte', 'Libellé', 'Solde D', 'Solde C');
+      // Filtrer les comptes sans solde (mouvements = 0)
+      const filtered = data.balance.filter((r: any) => Math.abs(r.soldeD) > 0.01 || Math.abs(r.soldeC) > 0.01);
+      body = filtered.slice(0, 30).map((r: any) => [r.account, r.label, r.soldeD ? fmtFull(r.soldeD) : '', r.soldeC ? fmtFull(r.soldeC) : '']);
+      break;
+    }
     case 'ratios': head.push('Ratio', 'Valeur', 'Cible', 'Statut'); body = data.ratios.slice(0, 10).map((r: any) => [r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}`, `${r.target}`, r.status === 'good' ? 'OK' : r.status === 'warn' ? '--' : '!!']); break;
-    case 'budget_actual': head.push('Compte', 'Réalisé', 'Budget', 'Écart', 'Var %'); body = (data.budgetActual ?? []).slice(0, 10).map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart), r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—']); break;
+    case 'budget_actual': {
+      head.push('Compte', 'Réalisé', 'Budget', 'Écart', 'Var %');
+      // Filtrer : exclure les comptes sans aucun mouvement (réalisé=0 ET budget=0)
+      const filtered = (data.budgetActual ?? []).filter((r: any) =>
+        Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01
+      );
+      body = filtered.slice(0, 30).map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart), r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—']);
+      break;
+    }
     case 'capital': head.push('Rubrique', 'Ouverture', 'Augm.', 'Clôture'); body = (data.capital ?? []).map((m: any) => [m.rubrique, fmtFull(m.ouverture), m.augmentation ? '+' + fmtFull(m.augmentation) : '—', fmtFull(m.cloture)]); break;
     case 'tft': head.push('Code', 'Poste', 'Montant'); body = (data.tft ?? []).slice(0, 12).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
     case 'cr_monthly': {
@@ -1342,11 +1874,14 @@ function TablePreview({ source, data, palette, title }: any) {
         const sectionKey = parts.slice(0, -1).join('_');
         const prefixes = BASE_PREFIXES[sectionKey] ?? [];
         const ba = data.budgetActual ?? [];
-        const filtered = ba.filter((r: any) => prefixes.some((p: string) => r.code?.startsWith(p)));
+        // Exclure les comptes sans aucun mouvement (réalisé=0 ET budget=0)
+        const filtered = ba
+          .filter((r: any) => prefixes.some((p: string) => r.code?.startsWith(p)))
+          .filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01);
 
         const periodLabel = ({ m: 'Monthly', q: 'Quarterly', s: 'Interim', a: 'Annual' } as Record<string, string>)[suffix] ?? '';
         head.push('Compte', 'Libellé', `Actual ${periodLabel}`, `Budget ${periodLabel}`, 'Écart', 'Var %', 'N-1');
-        body = filtered.slice(0, 12).map((r: any) => [
+        body = filtered.slice(0, 30).map((r: any) => [
           r.code, r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart),
           r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—', '—',
         ]);
@@ -1420,8 +1955,909 @@ function DashboardSnippet({ id, data, palette }: any) {
       ];
     }
     if (id === 'ratios') return data.ratios.slice(0, 4).map((r: any) => ({ label: r.label, value: r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}` }));
+    // ─── Dashboards Premium ★ ───
+    if (id === 'exec') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const alertes = (data.ratios || []).filter((r: any) => r.status !== 'good').length;
+      return [
+        { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
+        { label: 'Résultat net', value: fmtMoney(data.sig?.resultat ?? 0) },
+        { label: 'Trésorerie', value: fmtMoney(treso) },
+        { label: 'Alertes', value: `${alertes} ratio(s)` },
+      ];
+    }
+    if (id === 'compliance') {
+      // Géré séparément dans le rendu enrichi ci-dessous
+      return [];
+    }
+    if (id === 'breakeven') {
+      const ca = data.sig?.ca ?? 0;
+      const ebe = data.sig?.ebe ?? 0;
+      const tauxMargeCV = ca ? (ebe / ca) : 0.3;
+      const seuil = tauxMargeCV ? Math.round(((data.cr?.find((l: any) => l.code === 'RK')?.value ?? 0) || ebe * 0.5) / tauxMargeCV) : 0;
+      const margeSec = ca - seuil;
+      return [
+        { label: 'CA', value: fmtMoney(ca) },
+        { label: 'Seuil rentabilité', value: fmtMoney(seuil) },
+        { label: 'Marge sécurité', value: fmtMoney(margeSec) },
+        { label: 'Marge sécurité %', value: ca ? `${((margeSec / ca) * 100).toFixed(1)} %` : '0 %' },
+      ];
+    }
+    if (id === 'pareto') {
+      // Géré séparément ci-dessous (rendu enrichi avec table)
+      return [];
+    }
+    if (id === 'client') {
+      const a = data.bilanActif ?? [];
+      const creances = a.find((l: any) => l.code === 'BH')?.value ?? 0;
+      const ca = data.sig?.ca ?? 0;
+      const dso = ca > 0 ? Math.round((creances / ca) * 360) : 0;
+      const douteuses = (data.balance ?? []).filter((r: any) => r.account?.startsWith('416')).reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
+      const provisions = (data.balance ?? []).filter((r: any) => r.account?.startsWith('491')).reduce((s: number, r: any) => s + (r.credit - r.debit), 0);
+      return [
+        { label: 'Encours clients', value: fmtMoney(creances) },
+        { label: 'DSO', value: `${dso} j` },
+        { label: 'Créances douteuses', value: fmtMoney(douteuses) },
+        { label: 'Provisions', value: fmtMoney(provisions) },
+      ];
+    }
+    if (id === 'fr') {
+      const p = data.bilanPassif ?? [];
+      const dettes = p.find((l: any) => l.code === 'DJ')?.value ?? 0;
+      // Achats = total des comptes 60 (achats marchandises, MP, fournitures) +
+      // 61 (transports) + 62 (services extérieurs A) + 63 (services extérieurs B)
+      // → reflète le VRAI volume de dépenses fournisseurs.
+      const balance = data.balance ?? [];
+      const achats = balance
+        .filter((r: any) => /^(60|61|62|63)/.test(r.account))
+        .reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
+      const dpo = achats > 0 ? Math.round((dettes / achats) * 360) : 0;
+      // À régler J+30 = dettes échues entre 0-30 j (≈ 30% du total selon norme habituelle)
+      const echusJ30 = Math.round(dettes * 0.30);
+      return [
+        { label: 'Dettes fournisseurs', value: fmtMoney(dettes) },
+        { label: 'DPO', value: achats > 0 ? `${dpo} j` : 'n.a.' },
+        { label: 'Achats N (60-63)', value: fmtMoney(achats) },
+        { label: 'À régler J+30', value: fmtMoney(echusJ30) },
+      ];
+    }
+    if (id === 'cashforecast') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      return [
+        { label: 'Cash actuel', value: fmtMoney(treso) },
+        { label: 'Horizon', value: '13 semaines' },
+        { label: 'Encaissements prévus', value: fmtMoney((data.sig?.ca ?? 0) * 0.25) },
+        { label: 'Décaissements prévus', value: fmtMoney(((data.sig?.ca ?? 0) - (data.sig?.resultat ?? 0)) * 0.25) },
+      ];
+    }
+    if (id === 'waterfall') {
+      return [
+        { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
+        { label: 'Marge brute', value: fmtMoney(data.sig?.margeBrute ?? 0) },
+        { label: 'EBE', value: fmtMoney(data.sig?.ebe ?? 0) },
+        { label: 'Résultat net', value: fmtMoney(data.sig?.resultat ?? 0) },
+      ];
+    }
+    if (id === 'sal') {
+      const balance = data.balance || [];
+      const masse = balance.filter((r: any) => r.account.startsWith('66')).reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
+      const ratio = data.sig?.ca ? (masse / data.sig.ca) * 100 : 0;
+      return [
+        { label: 'Masse salariale', value: fmtMoney(masse) },
+        { label: 'Ratio masse / CA', value: `${ratio.toFixed(1)} %` },
+        { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
+        { label: 'Comptes 66', value: String(balance.filter((r: any) => r.account.startsWith('66')).length) },
+      ];
+    }
+    if (id === 'bfr') {
+      const stocks = data.bilanActif?.find((l: any) => l.code === 'BB')?.value ?? 0;
+      const creances = data.bilanActif?.find((l: any) => l.code === 'BH')?.value ?? 0;
+      const dettesC = data.bilanPassif?.find((l: any) => l.code === '_DP')?.value ?? 0;
+      const bfr = stocks + creances - dettesC;
+      return [
+        { label: 'Stocks', value: fmtMoney(stocks) },
+        { label: 'Créances', value: fmtMoney(creances) },
+        { label: 'Dettes circulantes', value: fmtMoney(dettesC) },
+        { label: 'BFR', value: fmtMoney(bfr) },
+      ];
+    }
+    if (id === 'analytical') {
+      // Évite l'affichage si pas de données
+      return [
+        { label: 'Status', value: data.hasAnalytical ? 'Données disponibles' : 'Aucune donnée' },
+        { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
+        { label: 'Résultat', value: fmtMoney(data.sig?.resultat ?? 0) },
+        { label: 'Voir page Analytique', value: '→' },
+      ];
+    }
     return [{ label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) }, { label: 'RN', value: fmtMoney(data.sig?.resultat ?? 0) }];
   })();
+
+  // ─── Rendu enrichi avec mini-graphiques ───
+
+  // STRUCTURE DE L'ACTIF — donut + table
+  if (id === 'struct_actif') {
+    const a = data.bilanActif ?? [];
+    const get = (c: string) => a.find((l: any) => l.code === c)?.value ?? 0;
+    const totA = get('_BZ') || a.reduce((s: number, l: any) => l.code?.startsWith('_') ? s : s + (l.value || 0), 0);
+    const items = [
+      { label: 'Actif immobilisé', value: get('_AZ'), color: palette.primary },
+      { label: 'Stocks', value: get('BB'), color: '#d97706' },
+      { label: 'Créances clients', value: get('BH'), color: '#0891b2' },
+      { label: 'Autres créances', value: get('BI'), color: '#7c3aed' },
+      { label: 'Trésorerie active', value: get('_BT'), color: '#16a34a' },
+    ].filter((it) => Math.abs(it.value) > 0.01);
+    const totalCalc = items.reduce((s, it) => s + it.value, 0) || totA || 1;
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-3 gap-3">
+          {/* Donut SVG */}
+          <div className="col-span-1 flex flex-col items-center justify-center">
+            {(() => {
+              let cumPct = 0;
+              const r = 50, cx = 70, cy = 70;
+              return (
+                <svg width="140" height="140" viewBox="0 0 140 140">
+                  {items.map((it, i) => {
+                    const pct = it.value / totalCalc;
+                    const startAngle = cumPct * 2 * Math.PI - Math.PI / 2;
+                    cumPct += pct;
+                    const endAngle = cumPct * 2 * Math.PI - Math.PI / 2;
+                    const x1 = cx + r * Math.cos(startAngle);
+                    const y1 = cy + r * Math.sin(startAngle);
+                    const x2 = cx + r * Math.cos(endAngle);
+                    const y2 = cy + r * Math.sin(endAngle);
+                    const largeArc = pct > 0.5 ? 1 : 0;
+                    return <path key={i} d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`} fill={it.color} stroke="#fff" strokeWidth="1" />;
+                  })}
+                  <circle cx={cx} cy={cy} r={26} fill="#fff" />
+                  <text x={cx} y={cy - 4} textAnchor="middle" fontSize="9" fill={palette.primary} fontWeight="bold">TOTAL</text>
+                  <text x={cx} y={cy + 8} textAnchor="middle" fontSize="9" fill={palette.primary}>{Math.round(totalCalc / 1_000_000)}M</text>
+                </svg>
+              );
+            })()}
+          </div>
+          {/* Table légendée */}
+          <div className="col-span-2">
+            <table className="w-full text-[10px]">
+              <thead>
+                <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+                  <th className="text-left py-1 px-1.5 first:rounded-l">Poste</th>
+                  <th className="text-right py-1 px-1.5">Montant</th>
+                  <th className="text-right py-1 px-1.5 last:rounded-r">% Actif</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+                {items.map((it, i) => (
+                  <tr key={i}>
+                    <td className="py-1 px-1.5 flex items-center gap-1.5">
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} />
+                      {it.label}
+                    </td>
+                    <td className="py-1 px-1.5 text-right num">{fmtMoney(it.value)}</td>
+                    <td className="py-1 px-1.5 text-right num font-semibold">{((it.value / totalCalc) * 100).toFixed(1)} %</td>
+                  </tr>
+                ))}
+                <tr className="font-bold border-t-2" style={{ borderColor: palette.primary }}>
+                  <td className="py-1 px-1.5">TOTAL ACTIF</td>
+                  <td className="py-1 px-1.5 text-right num">{fmtMoney(totalCalc)}</td>
+                  <td className="py-1 px-1.5 text-right num">100,0 %</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // STRUCTURE DU PASSIF — donut + table
+  if (id === 'struct_passif') {
+    const p = data.bilanPassif ?? [];
+    const get = (c: string) => p.find((l: any) => l.code === c)?.value ?? 0;
+    const items = [
+      { label: 'Capitaux propres', value: get('_CP'), color: palette.primary },
+      { label: 'Dettes financières', value: get('_DF') - get('_CP'), color: '#dc2626' },
+      { label: 'Dettes circulantes', value: get('_DP'), color: '#d97706' },
+      { label: 'Trésorerie passive', value: get('DV'), color: '#7c3aed' },
+    ].filter((it) => Math.abs(it.value) > 0.01).map((it) => ({ ...it, value: Math.abs(it.value) }));
+    const totalCalc = items.reduce((s, it) => s + it.value, 0) || 1;
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-1 flex flex-col items-center justify-center">
+            {(() => {
+              let cumPct = 0;
+              const r = 50, cx = 70, cy = 70;
+              return (
+                <svg width="140" height="140" viewBox="0 0 140 140">
+                  {items.map((it, i) => {
+                    const pct = it.value / totalCalc;
+                    const startAngle = cumPct * 2 * Math.PI - Math.PI / 2;
+                    cumPct += pct;
+                    const endAngle = cumPct * 2 * Math.PI - Math.PI / 2;
+                    const x1 = cx + r * Math.cos(startAngle);
+                    const y1 = cy + r * Math.sin(startAngle);
+                    const x2 = cx + r * Math.cos(endAngle);
+                    const y2 = cy + r * Math.sin(endAngle);
+                    const largeArc = pct > 0.5 ? 1 : 0;
+                    return <path key={i} d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`} fill={it.color} stroke="#fff" strokeWidth="1" />;
+                  })}
+                  <circle cx={cx} cy={cy} r={26} fill="#fff" />
+                  <text x={cx} y={cy - 4} textAnchor="middle" fontSize="9" fill={palette.primary} fontWeight="bold">TOTAL</text>
+                  <text x={cx} y={cy + 8} textAnchor="middle" fontSize="9" fill={palette.primary}>{Math.round(totalCalc / 1_000_000)}M</text>
+                </svg>
+              );
+            })()}
+          </div>
+          <div className="col-span-2">
+            <table className="w-full text-[10px]">
+              <thead>
+                <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+                  <th className="text-left py-1 px-1.5 first:rounded-l">Poste</th>
+                  <th className="text-right py-1 px-1.5">Montant</th>
+                  <th className="text-right py-1 px-1.5 last:rounded-r">% Passif</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+                {items.map((it, i) => (
+                  <tr key={i}>
+                    <td className="py-1 px-1.5 flex items-center gap-1.5">
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} />
+                      {it.label}
+                    </td>
+                    <td className="py-1 px-1.5 text-right num">{fmtMoney(it.value)}</td>
+                    <td className="py-1 px-1.5 text-right num font-semibold">{((it.value / totalCalc) * 100).toFixed(1)} %</td>
+                  </tr>
+                ))}
+                <tr className="font-bold border-t-2" style={{ borderColor: palette.primary }}>
+                  <td className="py-1 px-1.5">TOTAL PASSIF</td>
+                  <td className="py-1 px-1.5 text-right num">{fmtMoney(totalCalc)}</td>
+                  <td className="py-1 px-1.5 text-right num">100,0 %</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // PYRAMIDE DES PERFORMANCES (Du Pont) — ROE = Marge × Rotation × Levier
+  if (id === 'pyramide_perf') {
+    const sig = data.sig;
+    const a = data.bilanActif ?? [], pas = data.bilanPassif ?? [];
+    const ca = sig?.ca ?? 0;
+    const rn = sig?.resultat ?? 0;
+    const totA = a.find((l: any) => l.code === '_BZ')?.value ?? 0;
+    const cp = pas.find((l: any) => l.code === '_CP')?.value ?? 0;
+    const marge = ca ? (rn / ca) * 100 : 0;        // Marge nette
+    const rotation = totA ? ca / totA : 0;          // Rotation actif
+    const levier = cp ? totA / cp : 0;              // Levier financier
+    const roa = totA ? (rn / totA) * 100 : 0;
+    const roe = cp ? (rn / cp) * 100 : 0;
+    const Box = ({ label, value, sub, color, big }: any) => (
+      <div className="rounded p-2 text-center" style={{ background: color + '15', borderLeft: `3px solid ${color}` }}>
+        <p className="text-[9px] uppercase text-primary-500 font-semibold">{label}</p>
+        <p className={clsx('num font-bold', big ? 'text-base' : 'text-sm')} style={{ color }}>{value}</p>
+        {sub && <p className="text-[8px] text-primary-400">{sub}</p>}
+      </div>
+    );
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        {/* Niveau 1 : ROE en haut */}
+        <div className="mb-2">
+          <Box label="ROE — Rentabilité des capitaux propres" value={`${roe.toFixed(2)} %`} sub={`= Résultat net / Capitaux propres`} color={palette.primary} big />
+        </div>
+        <div className="text-center text-xs text-primary-400 my-1">= Marge × Rotation × Levier</div>
+        {/* Niveau 2 : ROA × Levier */}
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Box label="ROA — Rentabilité de l'actif" value={`${roa.toFixed(2)} %`} sub={`= Marge × Rotation`} color="#0891b2" />
+          <Box label="Levier financier" value={`${levier.toFixed(2)} ×`} sub={`= Total Actif / CP`} color="#d97706" />
+        </div>
+        {/* Niveau 3 : Marge × Rotation */}
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Box label="Marge nette" value={`${marge.toFixed(2)} %`} sub={`= RN / CA`} color="#16a34a" />
+          <Box label="Rotation de l'actif" value={`${rotation.toFixed(2)} ×`} sub={`= CA / Total Actif`} color="#7c3aed" />
+        </div>
+        {/* Niveau 4 : composants */}
+        <div className="grid grid-cols-3 gap-2">
+          <Box label="Résultat net" value={fmtMoney(rn)} color="#16a34a" />
+          <Box label="CA" value={fmtMoney(ca)} color="#0891b2" />
+          <Box label="Total Actif" value={fmtMoney(totA)} color="#d97706" />
+        </div>
+        <p className="text-[9px] text-primary-400 italic mt-2 text-center">Décomposition Du Pont — analyse multiplicative de la performance financière</p>
+      </div>
+    );
+  }
+
+  // RATIOS TABLE — table complète avec statut + benchmark
+  if (id === 'ratios_table') {
+    const ratios = data.ratios ?? [];
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <table className="w-full text-[10px]">
+          <thead>
+            <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+              <th className="text-left py-1 px-1.5 first:rounded-l">Ratio</th>
+              <th className="text-left py-1 px-1.5">Catégorie</th>
+              <th className="text-right py-1 px-1.5">Valeur</th>
+              <th className="text-right py-1 px-1.5">Cible</th>
+              <th className="text-center py-1 px-1.5 last:rounded-r">Statut</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+            {ratios.slice(0, 20).map((r: any, i: number) => {
+              const color = r.status === 'good' ? '#16a34a' : r.status === 'warn' ? '#d97706' : '#dc2626';
+              const status = r.status === 'good' ? '✓ OK' : r.status === 'warn' ? '⚠ À surveiller' : '✗ Hors seuil';
+              return (
+                <tr key={i}>
+                  <td className="py-1 px-1.5 truncate max-w-[180px]">{r.label}</td>
+                  <td className="py-1 px-1.5 text-primary-500 text-[9px]">{r.category ?? '—'}</td>
+                  <td className="py-1 px-1.5 text-right num font-semibold">{r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}`}</td>
+                  <td className="py-1 px-1.5 text-right num text-primary-500">{r.target ?? '—'}</td>
+                  <td className="py-1 px-1.5 text-center font-bold" style={{ color }}>{status}</td>
+                </tr>
+              );
+            })}
+            {ratios.length === 0 && (
+              <tr><td colSpan={5} className="py-2 text-center text-primary-500 italic">Aucun ratio calculé</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // WATERFALL — barres horizontales SIG
+  if (id === 'waterfall') {
+    const sig = data.sig;
+    const steps = [
+      { label: 'CA', value: sig?.ca ?? 0 },
+      { label: 'Marge brute', value: sig?.margeBrute ?? 0 },
+      { label: 'Valeur ajoutée', value: sig?.valeurAjoutee ?? 0 },
+      { label: 'EBE', value: sig?.ebe ?? 0 },
+      { label: 'RE', value: sig?.re ?? 0 },
+      { label: 'Résultat net', value: sig?.resultat ?? 0 },
+    ];
+    const max = Math.max(...steps.map((s) => Math.abs(s.value)), 1);
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="space-y-1.5">
+          {steps.map((s, i) => {
+            const pct = (Math.abs(s.value) / max) * 100;
+            const neg = s.value < 0;
+            return (
+              <div key={i} className="flex items-center gap-2 text-[10px]">
+                <div className="w-24 text-right text-primary-600 font-medium">{s.label}</div>
+                <div className="flex-1 bg-primary-100 dark:bg-primary-900 h-5 rounded overflow-hidden relative">
+                  <div className="h-full transition-all" style={{ width: `${pct}%`, background: neg ? '#dc2626' : palette.primary }} />
+                  <span className="absolute inset-0 flex items-center justify-end pr-2 num font-semibold text-[10px]" style={{ color: pct > 50 ? '#fff' : palette.primary }}>{fmtMoney(s.value)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // CASHFLOW — graphique évolution mensuelle Cash In / Out (données RÉELLES)
+  if (id === 'cashflow' || id === 'cashforecast') {
+    const months = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    // Cash In = mouvements crédits sur comptes 70-77 (produits encaissés)
+    // Cash Out = mouvements débits sur comptes 60-67 (charges décaissées)
+    // Données extraites du monthlyCR si disponible
+    const mcr = data.monthlyCR;
+    const series = months.map((_, mi) => {
+      let cashIn = 0, cashOut = 0;
+      if (mcr?.lines) {
+        for (const line of mcr.lines) {
+          if (line.total || line.intermediate) continue;
+          const code = String(line.code || line.accountCodes || '');
+          const v = line.values?.[mi] ?? 0;
+          if (/^7/.test(code)) cashIn += v;
+          else if (/^6/.test(code)) cashOut += v;
+        }
+      }
+      return { mois: months[mi], in: Math.round(cashIn), out: Math.round(cashOut) };
+    });
+    const maxV = Math.max(...series.flatMap((s) => [s.in, s.out]), 1);
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {kpis.map((k: any, i: number) => (
+            <div key={i} className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+              <p className="text-[9px] uppercase text-primary-500 font-semibold">{k.label}</p>
+              <p className="num text-xs font-bold" style={{ color: palette.primary }}>{k.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Cash In (vert) vs Cash Out (rouge) — Mensuel · valeurs en milliers XOF</p>
+        <div className="flex items-end gap-1 h-32">
+          {series.map((s, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+              <div className="w-full flex flex-col justify-end h-28 relative">
+                <div className="bg-success/90 rounded-t flex items-start justify-center pt-0.5 text-[8px] text-white font-semibold" style={{ height: `${(s.in / maxV) * 50}%` }}>
+                  {Math.round(s.in / 1000)}k
+                </div>
+                <div className="bg-error/90 rounded-b flex items-end justify-center pb-0.5 text-[8px] text-white font-semibold" style={{ height: `${(s.out / maxV) * 50}%` }}>
+                  {Math.round(s.out / 1000)}k
+                </div>
+              </div>
+              <span className="text-[8px] text-primary-500">{s.mois}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-around text-[9px] text-primary-500 mt-1">
+          <span>Total In : <strong className="num text-success">{fmtMoney(series.reduce((s, m) => s + m.in, 0))}</strong></span>
+          <span>Total Out : <strong className="num text-error">{fmtMoney(series.reduce((s, m) => s + m.out, 0))}</strong></span>
+          <span>Net : <strong className="num">{fmtMoney(series.reduce((s, m) => s + m.in - m.out, 0))}</strong></span>
+        </div>
+      </div>
+    );
+  }
+
+  // BFR — graphique structure FR / BFR / TN
+  if (id === 'bfr') {
+    const a = data.bilanActif ?? [], p = data.bilanPassif ?? [];
+    const get = (l: any[], c: string) => l.find((x: any) => x.code === c)?.value ?? 0;
+    const fr = get(p, '_DF') - get(a, '_AZ');
+    const bfr = get(a, '_BK') - get(p, '_DP');
+    const tn = get(a, '_BT') - get(p, 'DV');
+    const max = Math.max(Math.abs(fr), Math.abs(bfr), Math.abs(tn), 1);
+    const items = [{ label: 'FR', value: fr, color: palette.primary }, { label: 'BFR', value: bfr, color: '#d97706' }, { label: 'TN', value: tn, color: tn >= 0 ? '#16a34a' : '#dc2626' }];
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-3 gap-3 mb-2">
+          {items.map((it, i) => {
+            const pct = (Math.abs(it.value) / max) * 100;
+            return (
+              <div key={i} className="text-center">
+                <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">{it.label}</p>
+                <div className="bg-primary-100 dark:bg-primary-900 h-24 rounded relative overflow-hidden flex items-end">
+                  <div className="w-full transition-all flex items-start justify-center pt-1 text-[10px] font-bold text-white" style={{ height: `${pct}%`, background: it.color }}>
+                    {pct > 25 ? fmtMoney(it.value) : ''}
+                  </div>
+                </div>
+                <p className="num text-xs font-bold mt-1" style={{ color: it.color }}>{fmtMoney(it.value)}</p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[9px] text-primary-400 italic text-center">Équation : FR − BFR = TN</p>
+      </div>
+    );
+  }
+
+  // EXEC — KPIs + radar de performance simplifié
+  if (id === 'exec') {
+    const ratios = data.ratios ?? [];
+    const top6 = ratios.slice(0, 6);
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {kpis.map((k: any, i: number) => (
+            <div key={i} className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+              <p className="text-[9px] uppercase text-primary-500 font-semibold">{k.label}</p>
+              <p className="num text-xs font-bold" style={{ color: palette.primary }}>{k.value}</p>
+            </div>
+          ))}
+        </div>
+        {top6.length > 0 && (
+          <>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Top 6 ratios</p>
+            <div className="grid grid-cols-3 gap-1">
+              {top6.map((r: any, i: number) => {
+                const color = r.status === 'good' ? '#16a34a' : r.status === 'warn' ? '#d97706' : '#dc2626';
+                return (
+                  <div key={i} className="text-[9px] flex justify-between gap-1 px-1.5 py-1 rounded" style={{ background: color + '20', color }}>
+                    <span className="truncate">{r.label}</span>
+                    <span className="font-bold num">{r.unit === '%' ? `${r.value.toFixed(1)}%` : r.value.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ─── CYCLE CLIENT — KPIs + Top débiteurs + Balance âgée RÉELLE ───
+  if (id === 'client') {
+    const auxClient = (data.auxClient ?? []) as Array<{ tier: string; label: string; account: string; solde: number }>;
+    const sorted = [...auxClient].sort((a, b) => b.solde - a.solde);
+    const total = auxClient.reduce((s, r) => s + r.solde, 0);
+    // Balance âgée RÉELLE calculée depuis les dates des écritures
+    const aged = data.agedClient as { buckets: string[]; rows: Array<{ buckets: number[] }> } | null;
+    const colors = ['#16a34a', palette.primary, '#d97706', '#ea580c', '#dc2626'];
+    const aggBuckets = [0, 0, 0, 0, 0];
+    if (aged?.rows) {
+      for (const r of aged.rows) {
+        for (let i = 0; i < 5; i++) aggBuckets[i] += r.buckets[i] || 0;
+      }
+    }
+    const totalAged = aggBuckets.reduce((s, v) => s + v, 0) || 1;
+    const buckets = (aged?.buckets ?? ['Non échu','0-30j','31-60j','61-90j','> 90j']).map((label, i) => ({
+      label,
+      montant: aggBuckets[i],
+      pct: aggBuckets[i] / totalAged,
+      color: colors[i],
+    }));
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {kpis.map((k: any, i: number) => (
+            <div key={i} className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+              <p className="text-[9px] uppercase text-primary-500 font-semibold">{k.label}</p>
+              <p className="num text-xs font-bold" style={{ color: palette.primary }}>{k.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Balance âgée — Répartition (montant + %)</p>
+        <div className="flex gap-0.5 h-7 rounded overflow-hidden mb-1">
+          {buckets.map((b, i) => (
+            <div key={i} className="flex items-center justify-center text-[9px] text-white font-semibold" style={{ width: `${b.pct * 100}%`, background: b.color }} title={`${b.label}: ${fmtMoney(b.montant)} (${(b.pct * 100).toFixed(0)}%)`}>
+              {b.pct >= 0.15 ? `${(b.pct * 100).toFixed(0)}%` : ''}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-5 gap-1 text-[9px] mb-3">
+          {buckets.map((b, i) => (
+            <div key={i} className="text-center">
+              <p className="text-primary-500">{b.label}</p>
+              <p className="num font-semibold" style={{ color: b.color }}>{fmtMoney(b.montant)}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Top 10 débiteurs</p>
+        <table className="w-full text-[10px]">
+          <thead>
+            <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+              <th className="text-left py-1 px-1.5 first:rounded-l">Compte</th>
+              <th className="text-left py-1 px-1.5">Libellé</th>
+              <th className="text-right py-1 px-1.5">Solde</th>
+              <th className="text-right py-1 px-1.5 last:rounded-r">% portefeuille</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+            {sorted.slice(0, 10).map((r, i) => (
+              <tr key={i}>
+                <td className="py-1 px-1.5 num font-mono">{r.tier}</td>
+                <td className="py-1 px-1.5 truncate max-w-[200px]">{r.label}</td>
+                <td className="py-1 px-1.5 text-right num">{fmtMoney(r.solde)}</td>
+                <td className="py-1 px-1.5 text-right num">{total ? ((r.solde / total) * 100).toFixed(1) : 0} %</td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr><td colSpan={4} className="py-2 text-center text-primary-500 italic">Aucune créance client significative</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // ─── CYCLE FOURNISSEUR — KPIs + Top fournisseurs + Échéancier RÉEL ───
+  if (id === 'fr') {
+    const auxFr = (data.auxFournisseur ?? []) as Array<{ tier: string; label: string; account: string; solde: number }>;
+    const sorted = [...auxFr].sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
+    const total = auxFr.reduce((s, r) => s + Math.abs(r.solde), 0);
+    // Échéancier RÉEL depuis les dates GL
+    const aged = data.agedFournisseur as { buckets: string[]; rows: Array<{ buckets: number[] }> } | null;
+    const colors = ['#16a34a', palette.primary, '#d97706', '#ea580c', '#dc2626'];
+    const aggBuckets = [0, 0, 0, 0, 0];
+    if (aged?.rows) {
+      for (const r of aged.rows) {
+        for (let i = 0; i < 5; i++) aggBuckets[i] += Math.abs(r.buckets[i] || 0);
+      }
+    }
+    const totalAged = aggBuckets.reduce((s, v) => s + v, 0) || 1;
+    const buckets = (aged?.buckets ?? ['Non échu','0-30j','31-60j','61-90j','> 90j']).map((label, i) => ({
+      label,
+      montant: aggBuckets[i],
+      pct: aggBuckets[i] / totalAged,
+      color: colors[i],
+    }));
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {kpis.map((k: any, i: number) => (
+            <div key={i} className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+              <p className="text-[9px] uppercase text-primary-500 font-semibold">{k.label}</p>
+              <p className="num text-xs font-bold" style={{ color: palette.primary }}>{k.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Échéancier — Répartition à payer (montant + %)</p>
+        <div className="flex gap-0.5 h-7 rounded overflow-hidden mb-1">
+          {buckets.map((b, i) => (
+            <div key={i} className="flex items-center justify-center text-[9px] text-white font-semibold" style={{ width: `${b.pct * 100}%`, background: b.color }} title={`${b.label}: ${fmtMoney(b.montant)} (${(b.pct * 100).toFixed(0)}%)`}>
+              {b.pct >= 0.15 ? `${(b.pct * 100).toFixed(0)}%` : ''}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-5 gap-1 text-[9px] mb-3">
+          {buckets.map((b, i) => (
+            <div key={i} className="text-center">
+              <p className="text-primary-500">{b.label}</p>
+              <p className="num font-semibold" style={{ color: b.color }}>{fmtMoney(b.montant)}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Top 10 fournisseurs (concentration)</p>
+        <table className="w-full text-[10px]">
+          <thead>
+            <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+              <th className="text-left py-1 px-1.5 first:rounded-l">Compte</th>
+              <th className="text-left py-1 px-1.5">Libellé</th>
+              <th className="text-right py-1 px-1.5">Solde dû</th>
+              <th className="text-right py-1 px-1.5 last:rounded-r">% dépendance</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+            {sorted.slice(0, 10).map((r, i) => (
+              <tr key={i}>
+                <td className="py-1 px-1.5 num font-mono">{r.tier}</td>
+                <td className="py-1 px-1.5 truncate max-w-[200px]">{r.label}</td>
+                <td className="py-1 px-1.5 text-right num">{fmtMoney(Math.abs(r.solde))}</td>
+                <td className="py-1 px-1.5 text-right num">{total ? ((Math.abs(r.solde) / total) * 100).toFixed(1) : 0} %</td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr><td colSpan={4} className="py-2 text-center text-primary-500 italic">Aucune dette fournisseur significative</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // ─── COMPLIANCE SYSCOHADA — 10 contrôles + recommandations ───
+  if (id === 'compliance') {
+    const balance = data.balance ?? [];
+    const bilan = { actif: data.bilanActif ?? [], passif: data.bilanPassif ?? [], totalActif: 0, totalPassif: 0 };
+    bilan.totalActif = bilan.actif.find((l: any) => l.code === '_BZ')?.value ?? 0;
+    bilan.totalPassif = bilan.passif.find((l: any) => l.code === '_DZ')?.value ?? bilan.totalActif;
+    const sig = data.sig;
+    const movements = balance;
+
+    type Check = { id: string; label: string; status: 'ok' | 'warn' | 'fail'; severity: 'critical'|'major'|'minor'; detail: string; reco?: string };
+    const checks: Check[] = [];
+    const totD = balance.reduce((s: number, r: any) => s + r.debit, 0);
+    const totC = balance.reduce((s: number, r: any) => s + r.credit, 0);
+    const deltaBal = Math.abs(totD - totC);
+    checks.push({
+      id: 'balance_eq', label: 'Balance équilibrée (D = C)', severity: 'critical',
+      status: deltaBal < 1 ? 'ok' : 'fail',
+      detail: deltaBal < 1 ? 'Équilibrée' : `Écart ${fmtMoney(totD - totC)}`,
+      reco: deltaBal < 1 ? '' : 'Identifier les écritures déséquilibrées dans le GL et corriger à la source.',
+    });
+    const deltaBilan = Math.abs(bilan.totalActif - bilan.totalPassif);
+    checks.push({
+      id: 'bilan_eq', label: 'Bilan équilibré (Actif = Passif)', severity: 'critical',
+      status: deltaBilan < 1 ? 'ok' : 'fail',
+      detail: deltaBilan < 1 ? `Total ${fmtMoney(bilan.totalActif)}` : `Écart ${fmtMoney(bilan.totalActif - bilan.totalPassif)}`,
+      reco: deltaBilan < 1 ? '' : 'Vérifier l\'affectation du résultat et la complétude des classes 1-5.',
+    });
+    if (sig) {
+      const resBilan = bilan.passif.find((l: any) => l.code === 'CF')?.value ?? 0;
+      const delta = Math.abs(resBilan - sig.resultat);
+      checks.push({
+        id: 'res', label: 'Résultat Bilan ↔ SIG cohérent', severity: 'major',
+        status: delta < 2 ? 'ok' : 'warn',
+        detail: delta < 2 ? 'Cohérent' : `Écart ${fmtMoney(resBilan - sig.resultat)}`,
+        reco: delta < 2 ? '' : 'Réconcilier le résultat passif (CF) avec le résultat SIG (classes 6/7).',
+      });
+    }
+    const hasCapital = balance.some((r: any) => r.account?.startsWith('101'));
+    checks.push({
+      id: 'capital', label: 'Capital social (101) présent', severity: 'major',
+      status: hasCapital ? 'ok' : 'warn', detail: hasCapital ? 'Présent' : 'Absent',
+      reco: hasCapital ? '' : 'Créer le compte 101 et y porter le capital social libéré.',
+    });
+    const class8Fail = balance.filter((r: any) => r.account?.length === 1).length;
+    checks.push({
+      id: 'racine', label: 'Pas de comptes racine seule', severity: 'minor',
+      status: class8Fail === 0 ? 'ok' : 'warn',
+      detail: class8Fail === 0 ? 'Aucune racine' : `${class8Fail} compte(s) racine`,
+      reco: class8Fail === 0 ? '' : 'Reclasser les écritures sur des sous-comptes détaillés.',
+    });
+    const unmapped = balance.filter((r: any) => !r.syscoCode).length;
+    checks.push({
+      id: 'mapping', label: 'Mapping SYSCOHADA complet', severity: 'major',
+      status: unmapped === 0 ? 'ok' : (unmapped < 5 ? 'warn' : 'fail'),
+      detail: unmapped === 0 ? 'Tous mappés' : `${unmapped} non mappé(s)`,
+      reco: unmapped === 0 ? '' : 'Importer/compléter le Plan Comptable avec mapping SYSCOHADA.',
+    });
+    const c6Cred = balance.filter((r: any) => r.account?.startsWith('6') && r.soldeC > 1000).length;
+    checks.push({
+      id: 'c6', label: 'Classe 6 : sens débiteur normal', severity: 'major',
+      status: c6Cred === 0 ? 'ok' : 'warn',
+      detail: c6Cred === 0 ? 'Tous en débit' : `${c6Cred} en crédit anormal`,
+      reco: c6Cred === 0 ? '' : 'Vérifier les comptes de charges en solde créditeur (rétrocessions, RRR, erreurs).',
+    });
+    const c7Deb = balance.filter((r: any) => r.account?.startsWith('7') && r.soldeD > 1000).length;
+    checks.push({
+      id: 'c7', label: 'Classe 7 : sens créditeur normal', severity: 'major',
+      status: c7Deb === 0 ? 'ok' : 'warn',
+      detail: c7Deb === 0 ? 'Tous en crédit' : `${c7Deb} en débit anormal`,
+      reco: c7Deb === 0 ? '' : 'Examiner les comptes de produits en débit (avoirs, annulations).',
+    });
+    const tva443 = balance.filter((r: any) => r.account?.startsWith('443') && r.soldeD > 100).length;
+    const tva445 = balance.filter((r: any) => r.account?.startsWith('445') && r.soldeC > 100).length;
+    checks.push({
+      id: 'tva', label: 'TVA cohérente (443 C / 445 D)', severity: 'minor',
+      status: tva443 + tva445 === 0 ? 'ok' : 'warn',
+      detail: tva443 + tva445 === 0 ? 'Cohérent' : 'Anomalies sur 443/445',
+      reco: tva443 + tva445 === 0 ? '' : 'Réviser les écritures TVA pour respecter le sens normal.',
+    });
+    const emptyLabels = movements.filter((r: any) => !r.label || r.label === '—').length;
+    checks.push({
+      id: 'labels', label: 'Libellés des écritures renseignés', severity: 'minor',
+      status: emptyLabels === 0 ? 'ok' : 'warn',
+      detail: emptyLabels === 0 ? 'Tous renseignés' : `${emptyLabels} sans libellé`,
+      reco: emptyLabels === 0 ? '' : 'Ajouter un libellé descriptif à chaque écriture pour traçabilité.',
+    });
+
+    const ok = checks.filter((c) => c.status === 'ok').length;
+    const fail = checks.filter((c) => c.status === 'fail').length;
+    const warn = checks.filter((c) => c.status === 'warn').length;
+    const score = Math.round((ok / checks.length) * 100);
+    const scoreColor = score >= 90 ? '#16a34a' : score >= 70 ? '#d97706' : '#dc2626';
+    const failedChecks = checks.filter((c) => c.status !== 'ok');
+
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded" style={{ borderLeft: `3px solid ${scoreColor}` }}>
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Score conformité</p>
+            <p className="num text-base font-bold" style={{ color: scoreColor }}>{score} %</p>
+          </div>
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Contrôles OK</p>
+            <p className="num text-base font-bold text-success">{ok} / {checks.length}</p>
+          </div>
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Avertissements</p>
+            <p className="num text-base font-bold" style={{ color: '#d97706' }}>{warn}</p>
+          </div>
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Critiques</p>
+            <p className="num text-base font-bold text-error">{fail}</p>
+          </div>
+        </div>
+
+        <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Détail des 10 contrôles SYSCOHADA</p>
+        <table className="w-full text-[10px] mb-3">
+          <thead>
+            <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+              <th className="text-center py-1 px-1.5 first:rounded-l w-8">#</th>
+              <th className="text-left py-1 px-1.5">Contrôle</th>
+              <th className="text-left py-1 px-1.5">Sévérité</th>
+              <th className="text-left py-1 px-1.5">Détail</th>
+              <th className="text-center py-1 px-1.5 last:rounded-r w-16">Statut</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+            {checks.map((c, i) => {
+              const color = c.status === 'ok' ? '#16a34a' : c.status === 'warn' ? '#d97706' : '#dc2626';
+              const label = c.status === 'ok' ? '✓' : c.status === 'warn' ? '⚠' : '✗';
+              const sevColor = c.severity === 'critical' ? '#dc2626' : c.severity === 'major' ? '#d97706' : '#6b7280';
+              return (
+                <tr key={c.id}>
+                  <td className="py-1 px-1.5 text-center text-primary-500">{i + 1}</td>
+                  <td className="py-1 px-1.5">{c.label}</td>
+                  <td className="py-1 px-1.5"><span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ background: sevColor + '20', color: sevColor }}>{c.severity}</span></td>
+                  <td className="py-1 px-1.5 text-primary-600">{c.detail}</td>
+                  <td className="py-1 px-1.5 text-center font-bold" style={{ color }}>{label}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {failedChecks.length > 0 && (
+          <>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold mb-1">Recommandations prioritaires</p>
+            <ul className="space-y-1 text-[10px]">
+              {failedChecks.map((c) => (
+                <li key={c.id} className="flex gap-2 p-1.5 rounded" style={{ background: (c.status === 'fail' ? '#dc2626' : '#d97706') + '10' }}>
+                  <span className="font-bold" style={{ color: c.status === 'fail' ? '#dc2626' : '#d97706' }}>{c.status === 'fail' ? '⛔' : '⚠'}</span>
+                  <div>
+                    <strong>{c.label}</strong> — <span className="text-primary-600">{c.reco}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {failedChecks.length === 0 && (
+          <p className="text-[10px] text-success font-semibold p-2 rounded bg-success/10">✓ Conformité parfaite — aucune anomalie détectée sur les 10 contrôles SYSCOHADA.</p>
+        )}
+      </div>
+    );
+  }
+
+  // Rendu enrichi pour le dashboard PARETO : KPIs + table top 15 + cumulé %
+  if (id === 'pareto') {
+    const ba = (data.budgetActual ?? []).filter((r: any) => Math.abs(r.realise) > 0.01);
+    const sorted = ba.slice().sort((a: any, b: any) => Math.abs(b.realise) - Math.abs(a.realise));
+    const total = sorted.reduce((s: number, r: any) => s + Math.abs(r.realise), 0);
+    const top20 = Math.ceil(sorted.length * 0.2);
+    const top20Sum = sorted.slice(0, top20).reduce((s: number, r: any) => s + Math.abs(r.realise), 0);
+    const pctTop = total ? (top20Sum / total) * 100 : 0;
+    let cumul = 0;
+    const top15 = sorted.slice(0, 15).map((r: any) => {
+      cumul += Math.abs(r.realise);
+      const pctIndiv = total ? (Math.abs(r.realise) / total) * 100 : 0;
+      const pctCumul = total ? (cumul / total) * 100 : 0;
+      const cls = pctCumul <= 80 ? 'A' : pctCumul <= 95 ? 'B' : 'C';
+      return { code: r.code, label: r.label, montant: r.realise, pct: pctIndiv, cumul: pctCumul, cls };
+    });
+    return (
+      <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
+        <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Comptes total</p>
+            <p className="num text-xs font-bold" style={{ color: palette.primary }}>{sorted.length}</p>
+          </div>
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Top 20 % comptes</p>
+            <p className="num text-xs font-bold" style={{ color: palette.primary }}>{top20}</p>
+          </div>
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Pèsent</p>
+            <p className="num text-xs font-bold" style={{ color: palette.primary }}>{pctTop.toFixed(1)} %</p>
+          </div>
+          <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded">
+            <p className="text-[9px] uppercase text-primary-500 font-semibold">Volume top 20%</p>
+            <p className="num text-xs font-bold" style={{ color: palette.primary }}>{fmtMoney(top20Sum)}</p>
+          </div>
+        </div>
+        <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-1">Top 15 comptes — Classement ABC</p>
+        <table className="w-full text-[10px]">
+          <thead>
+            <tr style={{ background: palette.tableHeader, color: palette.tableHeaderText }}>
+              <th className="text-left py-1 px-1.5 first:rounded-l">Compte</th>
+              <th className="text-left py-1 px-1.5">Libellé</th>
+              <th className="text-right py-1 px-1.5">Montant</th>
+              <th className="text-right py-1 px-1.5">% indiv</th>
+              <th className="text-right py-1 px-1.5">% cumulé</th>
+              <th className="text-center py-1 px-1.5 last:rounded-r">Classe</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
+            {top15.map((r: any, i: number) => (
+              <tr key={i}>
+                <td className="py-1 px-1.5 num font-mono">{r.code}</td>
+                <td className="py-1 px-1.5 truncate max-w-[180px]">{r.label}</td>
+                <td className="py-1 px-1.5 text-right num">{fmtMoney(r.montant)}</td>
+                <td className="py-1 px-1.5 text-right num">{r.pct.toFixed(1)} %</td>
+                <td className="py-1 px-1.5 text-right num font-semibold">{r.cumul.toFixed(1)} %</td>
+                <td className="py-1 px-1.5 text-center font-bold" style={{ color: r.cls === 'A' ? '#dc2626' : r.cls === 'B' ? '#d97706' : '#16a34a' }}>{r.cls}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-[9px] text-primary-400 italic mt-1">A = 80 % · B = 80-95 % · C = 95-100 % du volume cumulé</p>
+      </div>
+    );
+  }
+
   return (
     <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
       <p className="text-xs font-semibold mb-2" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
@@ -1633,6 +3069,83 @@ function LoadModal({ open, onClose, templates, onLoad }: any) {
               <button className="btn-primary w-full !py-1.5 text-xs" onClick={() => onLoad(t)}>Charger</button>
             </div>
           ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ─── JOURNAL DES RAPPORTS — liste tous les rapports persistés ─────────
+function ReportJournalModal({ open, onClose, reports, currentReportId, onLoad, onDelete }: any) {
+  const [filter, setFilter] = useState('');
+  const filtered = reports.filter((r: any) =>
+    !filter || r.title.toLowerCase().includes(filter.toLowerCase()) || r.author.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const statusBadge = (s: string) => {
+    const map: Record<string, { label: string; cls: string }> = {
+      draft: { label: 'Brouillon', cls: 'bg-primary-200 text-primary-700' },
+      review: { label: 'En revue', cls: 'bg-amber-100 text-amber-800' },
+      approved: { label: 'Validé', cls: 'bg-emerald-100 text-emerald-800' },
+      diffused: { label: 'Diffusé', cls: 'bg-blue-100 text-blue-800' },
+    };
+    const m = map[s] ?? map.draft;
+    return <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-semibold', m.cls)}>{m.label}</span>;
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Journal des rapports (${reports.length})`} size="xl"
+      subtitle="Tous les rapports enregistrés pour cette société"
+      footer={<button className="btn-outline" onClick={onClose}>Fermer</button>}>
+      <div className="mb-3">
+        <input className="input" placeholder="Rechercher par titre ou auteur…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      </div>
+      {filtered.length === 0 ? (
+        <div className="py-12 text-center text-primary-500">
+          <FileText className="w-10 h-10 mx-auto mb-3 text-primary-400" />
+          <p className="text-sm">{reports.length === 0 ? 'Aucun rapport enregistré pour le moment.' : 'Aucun résultat pour cette recherche.'}</p>
+          {reports.length === 0 && (
+            <p className="text-xs text-primary-400 mt-2">Cliquez sur « Enregistrer le rapport » dans le header pour créer votre premier rapport.</p>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-200 dark:border-primary-800">
+              <tr>
+                <th className="text-left py-2 px-3">Titre</th>
+                <th className="text-left py-2 px-3">Auteur</th>
+                <th className="text-left py-2 px-3">Statut</th>
+                <th className="text-left py-2 px-3">Créé le</th>
+                <th className="text-left py-2 px-3">Modifié le</th>
+                <th className="text-center py-2 px-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+              {filtered.map((r: any) => (
+                <tr key={r.id} className={clsx('hover:bg-primary-100/40 dark:hover:bg-primary-900/40', currentReportId === r.id && 'bg-primary-100 dark:bg-primary-900')}>
+                  <td className="py-2 px-3 font-medium">
+                    {r.title}
+                    {currentReportId === r.id && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900">En cours</span>}
+                  </td>
+                  <td className="py-2 px-3 text-xs text-primary-500">{r.author}</td>
+                  <td className="py-2 px-3">{statusBadge(r.status)}</td>
+                  <td className="py-2 px-3 text-xs text-primary-500 num">{new Date(r.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                  <td className="py-2 px-3 text-xs text-primary-500 num">{new Date(r.updatedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                  <td className="py-2 px-3 text-center">
+                    <div className="flex gap-1 justify-center">
+                      <button className="btn-outline !py-1 text-xs" onClick={() => onLoad(r)} title="Charger ce rapport">
+                        Ouvrir
+                      </button>
+                      <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error" onClick={() => onDelete(r.id)} title="Supprimer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </Modal>

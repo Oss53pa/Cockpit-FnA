@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, FileWarning, FolderTree, Search, Trash2, XCircle } from 'lucide-react';
 import { downloadCOATemplate } from '../engine/templates';
-import { importCOA } from '../engine/importer';
+import { importCOAv2 } from '../engine/importer';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
-import { ImportWizard } from '../components/ui/ImportWizard';
 import { SYSCOHADA_COA, SyscoAccount, findSyscoAccount } from '../syscohada/coa';
 import { db, Account, GLEntry, ImportLog } from '../db/schema';
 import { useApp } from '../store/app';
@@ -35,7 +34,7 @@ export default function COA() {
   const org = useCurrentOrg();
   const [q, setQ] = useState('');
   const [activeClass, setActiveClass] = useState<string>('all');
-  const [view, setView] = useState<'sysco' | 'imported' | 'import'>('sysco');
+  const [view, setView] = useState<'sysco' | 'imported' | 'import'>('import');
   const [selected, setSelected] = useState<{ code: string; label: string; type?: string; class?: string } | null>(null);
 
   const coaImports = useImportsHistory(currentOrgId, 'COA');
@@ -97,18 +96,47 @@ export default function COA() {
   return (
     <div>
       <PageHeader
-        title="Plan comptable"
+        title="Plan comptable [BUILD-v10]"
         subtitle="SYSCOHADA révisé 2017 — classes 1 à 8 + comptes mappés de la société"
         action={
           <div className="flex gap-2">
             <button className="btn-outline" onClick={() => downloadCOATemplate(org?.name)}>
               <FileSpreadsheet className="w-4 h-4" /> Modèle Excel
             </button>
-            <button className="btn-outline" onClick={() => setView('import')}>
+            <label className="btn-primary cursor-pointer">
               <Download className="w-4 h-4 rotate-180" /> Importer
-            </button>
+              <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  const res = await importCOAv2(f, currentOrgId);
+                  const errPreview = res.errors.slice(0, 5).join('\n');
+                  alert(`${res.imported > 0 ? '✅' : '⚠️'} Import terminé\n\n` +
+                    `Fichier : ${f.name}\n` +
+                    `Feuille lue : ${res.sheetName || '(aucune)'}\n` +
+                    `Comptes importés : ${res.imported}\n` +
+                    `Mis à jour : ${res.updated}\n` +
+                    `Erreurs : ${res.errors.length}` +
+                    (errPreview ? '\n\n' + errPreview : ''));
+                  if (res.imported > 0) window.location.reload();
+                } catch (err: any) {
+                  alert(`❌ Erreur :\n${err.message}`);
+                  console.error('[Import COA] Exception:', err);
+                }
+                e.target.value = '';
+              }} />
+            </label>
             <button className="btn-outline" onClick={exportCSV}>
               <Download className="w-4 h-4" /> Exporter CSV
+            </button>
+            <button className="btn-outline" onClick={async () => {
+              if (!confirm(`Vider le Plan Comptable de l'entreprise ?\n${accounts.length} compte(s) seront supprimés. Le Grand Livre n'est PAS impacté.`)) return;
+              const toDel = (await db.accounts.where('orgId').equals(currentOrgId).toArray()).map((a) => [a.orgId, a.code] as [string, string]);
+              await db.accounts.bulkDelete(toDel);
+              alert(`${toDel.length} compte(s) supprimés. Importez votre Plan Comptable via l'onglet "Import & Historique".`);
+              window.location.reload();
+            }}>
+              Vider PC
             </button>
           </div>
         }
@@ -127,20 +155,20 @@ export default function COA() {
       </div>
 
       <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 mb-4">
-        <button onClick={() => setView('sysco')}
+        <button onClick={() => setView('import')}
           className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px',
-            view === 'sysco' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
-          Référentiel SYSCOHADA <Badge>{SYSCOHADA_COA.length}</Badge>
+            view === 'import' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
+          Import & Historique <Badge>{coaImports.length}</Badge>
         </button>
         <button onClick={() => setView('imported')}
           className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px',
             view === 'imported' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
           Comptes de la société <Badge>{accounts.length}</Badge>
         </button>
-        <button onClick={() => setView('import')}
+        <button onClick={() => setView('sysco')}
           className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px',
-            view === 'import' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
-          Import & Historique <Badge>{coaImports.length}</Badge>
+            view === 'sysco' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
+          Référentiel SYSCOHADA <Badge>{SYSCOHADA_COA.length}</Badge>
         </button>
       </div>
 
@@ -165,6 +193,63 @@ export default function COA() {
 
       {view === 'imported' && (
         <Card padded={false}>
+          <div className="px-4 py-3 border-b border-primary-200 dark:border-primary-800 flex items-center justify-between flex-wrap gap-2">
+            <p className="text-xs text-primary-500">{accounts.length} compte(s) dans le plan entreprise</p>
+            <div className="flex gap-2 flex-wrap">
+            <button className="btn-outline !py-1.5 text-xs" onClick={async () => {
+              if (!confirm('Générer le Plan Comptable à partir des comptes mouvementés du Grand Livre ?\nLes libellés seront ceux des écritures GL (le plus fréquent par compte).')) return;
+              const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+              if (entries.length === 0) { alert('Aucune écriture GL. Importez d\'abord un Grand Livre.'); return; }
+              const freq = new Map<string, Map<string, number>>();
+              for (const e of entries) {
+                if (!e.label) continue;
+                const lbl = e.label.trim(); if (!lbl) continue;
+                let m = freq.get(e.account); if (!m) { m = new Map(); freq.set(e.account, m); }
+                m.set(lbl, (m.get(lbl) ?? 0) + 1);
+              }
+              const codes = new Set(entries.map((e) => e.account));
+              const toCreate: Account[] = [];
+              const existing = new Set(accounts.map((a) => a.code));
+              for (const code of codes) {
+                if (existing.has(code)) continue;
+                const m = freq.get(code);
+                let bestLabel = ''; let bestN = 0;
+                if (m) for (const [k, v] of m) if (v > bestN) { bestLabel = k; bestN = v; }
+                const sysco = SYSCOHADA_COA.find((a) => code.startsWith(a.code));
+                toCreate.push({
+                  orgId: currentOrgId,
+                  code,
+                  label: bestLabel || sysco?.label || 'Compte',
+                  syscoCode: sysco?.code,
+                  class: code[0],
+                  type: (sysco?.type as Account['type']) ?? 'X',
+                });
+              }
+              if (toCreate.length === 0) { alert('Tous les comptes du GL existent déjà dans le PC.'); return; }
+              await db.accounts.bulkPut(toCreate);
+              alert(`${toCreate.length} compte(s) créés depuis le Grand Livre.`);
+            }}>Générer depuis le GL</button>
+            <button className="btn-primary !py-1.5 text-xs" onClick={async () => {
+              const code = prompt('Code du nouveau compte (ex: 706111) :', '');
+              if (!code || !code.trim()) return;
+              const trimmed = code.trim();
+              const existing = await db.accounts.where({ orgId: currentOrgId, code: trimmed }).first();
+              if (existing) { alert(`Le compte ${trimmed} existe déjà.`); return; }
+              const label = prompt('Libellé du compte :', '');
+              if (!label || !label.trim()) return;
+              const sysco = SYSCOHADA_COA.find((a) => trimmed.startsWith(a.code));
+              await db.accounts.put({
+                orgId: currentOrgId,
+                code: trimmed,
+                label: label.trim(),
+                syscoCode: sysco?.code,
+                class: trimmed[0],
+                type: sysco?.type ?? 'X',
+              });
+              alert(`Compte ${trimmed} ajouté.`);
+            }}>+ Ajouter compte</button>
+            </div>
+          </div>
           <div className="max-h-[70vh] overflow-y-auto">
             <ImportedTree items={filteredImported} mouvementes={mouvementes} activeClass={activeClass} onSelect={(a) => setSelected(a)} />
           </div>
@@ -328,6 +413,26 @@ function AccountDetailModal({ orgId, account, onClose }: { orgId: string; accoun
     return await db.gl.where('orgId').equals(orgId).filter((e) => e.account === account.code || e.account.startsWith(account.code)).toArray();
   }, [orgId, account.code], [] as GLEntry[]);
 
+  // Édition du compte (uniquement pour les comptes société, pas SYSCOHADA)
+  const [editing, setEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState(account.label);
+  const [editType, setEditType] = useState(account.type ?? 'X');
+  const isCompanyAccount = useLiveQuery(async () => {
+    if (!orgId) return false;
+    const found = await db.accounts.where({ orgId, code: account.code }).first();
+    return !!found;
+  }, [orgId, account.code], false);
+  const saveEdit = async () => {
+    const existing = await db.accounts.where({ orgId, code: account.code }).first();
+    if (existing) await db.accounts.put({ ...existing, label: editLabel.trim() || existing.label, type: editType as Account['type'] });
+    setEditing(false);
+  };
+  const deleteAccount = async () => {
+    if (!confirm(`Supprimer le compte ${account.code} du Plan Comptable de l'entreprise ?\nLes écritures du Grand Livre ne sont PAS impactées.`)) return;
+    await db.accounts.where({ orgId, code: account.code }).delete();
+    onClose();
+  };
+
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => b.date.localeCompare(a.date)), [entries]);
   const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
   const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
@@ -353,6 +458,35 @@ function AccountDetailModal({ orgId, account, onClose }: { orgId: string; accoun
       title={`Compte ${account.code} — ${account.label}`}
       subtitle={sysco ? `Mappé SYSCOHADA : ${sysco.code} · ${sysco.label}` : 'Non mappé au référentiel'}>
       <div className="space-y-5">
+        {/* Barre d'actions Édition */}
+        {isCompanyAccount && (
+          <div className="flex items-center justify-between p-3 bg-primary-100 dark:bg-primary-900 rounded-lg border border-primary-200 dark:border-primary-800">
+            {editing ? (
+              <div className="flex-1 flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="text-[10px] uppercase text-primary-500 block">Libellé</label>
+                  <input className="input !py-1.5 text-sm" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} />
+                </div>
+                <div className="w-32">
+                  <label className="text-[10px] uppercase text-primary-500 block">Type</label>
+                  <select className="input !py-1.5 text-sm" value={editType} onChange={(e) => setEditType(e.target.value)}>
+                    {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <button className="btn-primary !py-1.5" onClick={saveEdit}>Enregistrer</button>
+                <button className="btn-outline !py-1.5" onClick={() => { setEditing(false); setEditLabel(account.label); setEditType(account.type ?? 'X'); }}>Annuler</button>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-primary-500">Compte du plan entreprise — vous pouvez modifier son libellé ou le supprimer.</p>
+                <div className="flex gap-2">
+                  <button className="btn-outline !py-1.5 text-xs" onClick={() => setEditing(true)}>Modifier</button>
+                  <button className="btn-outline !py-1.5 text-xs text-error" onClick={deleteAccount}>Supprimer</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="Nb écritures" value={entries.length.toLocaleString('fr-FR')} />
@@ -473,41 +607,37 @@ function COAImportTab({
 
   return (
     <div className="space-y-6">
-      <ImportWizard
-        title="Import du plan comptable"
-        subtitle="CSV · XLSX — une ligne = un compte. Les colonnes Code, Libellé et Type sont détectées automatiquement."
-        controls={[
-          'Code compte obligatoire (numérique, classes 1 à 9 SYSCOHADA)',
-          'Libellé obligatoire',
-          'Mapping SYSCOHADA auto par préfixe si non renseigné',
-          'Les comptes existants sont mis à jour, les nouveaux créés',
-        ]}
-        onDownloadTemplate={() => downloadCOATemplate(orgName)}
-        fields={[
-          { key: 'code', label: 'Code compte', required: true, patterns: [/^code$/i, /^compte$/i, /^cpte/i, /^num/i] },
-          { key: 'label', label: 'Libellé', required: true, patterns: [/^libell[éeè]/i, /^label/i, /^intitul/i, /^description/i] },
-          { key: 'class', label: 'Classe', patterns: [/^classe$/i, /^class$/i] },
-          { key: 'type', label: 'Type (A/P/C/R/X)', patterns: [/^type$/i, /^nature/i] },
-          { key: 'sysco', label: 'Compte SYSCOHADA', patterns: [/sysco/i, /mapping/i, /^ref/i] },
-        ]}
-        onImport={async (file, mapping) => {
-          const res = await importCOA(file, orgId, {
-            code: mapping.code,
-            label: mapping.label,
-            class: mapping.class || undefined,
-            type: mapping.type || undefined,
-            sysco: mapping.sysco || undefined,
-          });
-          onImported();
-          return {
-            imported: res.imported,
-            updated: res.updated,
-            rejected: 0,
-            errors: res.errors,
-            extras: { 'Nouveaux comptes': res.imported - res.updated, 'Mis à jour': res.updated },
-          };
-        }}
-      />
+      <Card title="Import du plan comptable"
+        subtitle="CSV · XLSX — une ligne = un compte. Détection automatique des colonnes Code, Libellé, Classe, Type.">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button className="btn-outline" onClick={() => downloadCOATemplate(orgName)}>
+            <FileSpreadsheet className="w-4 h-4" /> Télécharger le modèle Excel
+          </button>
+          <label className="btn-primary cursor-pointer">
+            <Download className="w-4 h-4 rotate-180" /> Importer un fichier
+            <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              try {
+                const res = await importCOAv2(f, orgId);
+                const errPreview = res.errors.slice(0, 5).join('\n');
+                alert(`${res.imported > 0 ? '✅' : '⚠️'} Import terminé\n\n` +
+                  `Fichier : ${f.name}\nFeuille lue : ${res.sheetName || '(aucune)'}\n` +
+                  `Comptes importés : ${res.imported}\nMis à jour : ${res.updated}\nErreurs : ${res.errors.length}` +
+                  (errPreview ? '\n\n' + errPreview : ''));
+                onImported();
+                if (res.imported > 0) window.location.reload();
+              } catch (err: any) {
+                alert(`❌ Erreur :\n${err.message}`);
+              }
+              e.target.value = '';
+            }} />
+          </label>
+          <p className="text-xs text-primary-500">
+            Code compte obligatoire (numérique) · Libellé obligatoire · Mapping SYSCOHADA auto par préfixe · Les comptes existants sont mis à jour
+          </p>
+        </div>
+      </Card>
 
       <Card title="Historique des imports du plan comptable" subtitle="Versionning — chaque import écrase / met à jour les comptes existants">
         <div className="overflow-x-auto">

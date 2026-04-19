@@ -3,6 +3,20 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Couleurs de statut */
+    --color-status-success: #22c55e;
+    --color-status-warning: #f59e0b;
+    --color-status-error: #ef4444;
+    --color-status-info: #3b82f6;
+
+    /* Niveaux de sévérité */
+    --color-sev-low: #6b7280;
+    --color-sev-medium: #f59e0b;
+    --color-sev-high: #ef4444;
+    --color-sev-critical: #7f1d1d;
+  }
+
   html {
     font-family: 'Exo 2', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -61,7 +75,12 @@
     @apply btn border border-primary-300 dark:border-primary-700 text-primary-900 dark:text-primary-100 hover:bg-primary-100 dark:hover:bg-primary-900 bg-primary-50 dark:bg-primary-950;
   }
   .input {
-    @apply w-full px-3 py-2 rounded-lg bg-primary-50 dark:bg-primary-900 border border-primary-300 dark:border-primary-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder:text-primary-400;
+    @apply w-full px-3 py-2 rounded-lg bg-primary-50 dark:bg-primary-900 border border-primary-300 dark:border-primary-700 text-sm text-primary-900 dark:text-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder:text-primary-400;
+  }
+  /* Selects natifs : forcer texte visible sur fond sombre + chevron lisible */
+  select.input,
+  select.input option {
+    @apply text-primary-900 dark:text-primary-50 bg-primary-50 dark:bg-primary-900;
   }
   .badge {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
@@ -69,5 +88,107 @@
   .num {
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ─── IMPRESSION DU RAPPORT ───
+   Mode "flux continu" : le contenu se déroule sans laisser de vides en bas
+   de page. Le navigateur paginate automatiquement à la hauteur A4. */
+@media print {
+  /* Marges A4 normées (norme OHADA / France pour reliure : 25mm gauche, 15mm autres) */
+  @page {
+    size: A4 portrait;
+    margin: 20mm 15mm 18mm 25mm;
+  }
+  /* Filigrane "BROUILLON" sur les rapports en draft */
+  body.report-draft::before {
+    content: "BROUILLON";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 120pt;
+    color: rgba(220, 38, 38, 0.08);
+    z-index: 9999;
+    pointer-events: none;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+  }
+  html, body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .report-print-area, .report-print-area * {
+    visibility: visible;
+  }
+  .report-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  /* Pages : pas de hauteur max forcée, pas de saut systématique → contenu fluide */
+  .report-print-area > div > div {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    page-break-after: auto !important;
+    page-break-inside: auto !important;
+  }
+  /* PAS de saut de page forcé : le contenu s'enchaîne sans vide.
+     Le navigateur paginate automatiquement quand le contenu atteint la hauteur A4. */
+  /* Supprimer l'espace entre les pages A4 et leurs marges externes */
+  .report-print-area > div {
+    gap: 0 !important;
+    margin: 0 !important;
+  }
+  /* Réduire le padding interne des pages */
+  .report-print-area .p-6 {
+    padding: 0 !important;
+  }
+  .report-print-area .pb-10 {
+    padding-bottom: 0 !important;
+  }
+  /* Éviter de couper en plein milieu d'une table ou d'un dashboard */
+  .report-print-area table,
+  .report-print-area .border-l-4 {
+    page-break-inside: avoid;
+  }
+  /* Cacher TOUS les éléments d'édition */
+  .report-print-area button,
+  .report-print-area select,
+  .report-print-area input[type="file"],
+  .report-print-area .group-hover\:opacity-100,
+  .no-print,
+  .print\:hidden {
+    display: none !important;
+  }
+  .report-print-area textarea {
+    display: none !important;
+  }
+  /* Cacher les zones de drag-drop "+" entre blocs */
+  .report-print-area [class*="InsertHere"],
+  .report-print-area .h-0\.5 {
+    display: none !important;
+  }
+  /* Sidebar, header, toolbar — caché */
+  aside, header, nav, .toolbar, .floating-ai {
+    display: none !important;
+  }
+  /* Footer de page (numéro de page) — affiché par CSS @page si possible */
+  .report-print-area .pointer-events-none {
+    display: none !important;
   }
 }

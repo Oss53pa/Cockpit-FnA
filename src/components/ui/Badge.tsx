@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import clsx from 'clsx';
+import { CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
 
 type Variant = 'default' | 'success' | 'warning' | 'error' | 'info' | 'low' | 'medium' | 'high' | 'critical';
 
@@ -15,6 +16,19 @@ const styles: Record<Variant, string> = {
   critical: 'bg-severity-critical/10 text-severity-critical',
 };
 
-export function Badge({ variant = 'default', children }: { variant?: Variant; children: ReactNode }) {
-  return <span className={clsx('badge', styles[variant])}>{children}</span>;
+const icons: Partial<Record<Variant, typeof CheckCircle2>> = {
+  success: CheckCircle2,
+  warning: AlertTriangle,
+  error: XCircle,
+  info: Info,
+};
+
+export function Badge({ variant = 'default', children, showIcon = false }: { variant?: Variant; children: ReactNode; showIcon?: boolean }) {
+  const Icon = showIcon ? icons[variant] : undefined;
+  return (
+    <span className={clsx('badge', styles[variant])}>
+      {Icon && <Icon className="w-3 h-3 shrink-0" />}
+      {children}
+    </span>
+  );
 }

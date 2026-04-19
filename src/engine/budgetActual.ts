@@ -137,10 +137,33 @@ export function getSectionDefs(orgId?: string): Record<string, { label: string; 
 export const CR_SECTIONS = DEFAULT_SECTION_DEFS;
 
 // Calcul Budget vs Réalisé sur tout le CR (classes 6 et 7)
-export async function computeBudgetActual(orgId: string, year: number, version?: string): Promise<BudgetActualRow[]> {
+export async function computeBudgetActual(
+  orgId: string,
+  year: number,
+  version?: string,
+  opts?: { fromMonth?: number; toMonth?: number },
+): Promise<BudgetActualRow[]> {
+  const fm = opts?.fromMonth ?? 1;
+  const tm = opts?.toMonth ?? 12;
   const periods = await db.periods.where('orgId').equals(orgId).toArray();
-  const ids = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
+  const ids = new Set(periods.filter((p) => p.year === year && p.month >= fm && p.month <= tm).map((p) => p.id));
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  // Libellés : db.accounts → e.label le plus fréquent → SYSCOHADA → code brut
+  const orgAccounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const orgLabelByCode = new Map(orgAccounts.map((a) => [a.code, a.label] as const));
+  const glFreq = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    if (!e.label) continue;
+    const lbl = e.label.trim(); if (!lbl) continue;
+    let m = glFreq.get(e.account); if (!m) { m = new Map(); glFreq.set(e.account, m); }
+    m.set(lbl, (m.get(lbl) ?? 0) + 1);
+  }
+  const glLabel = (code: string): string | undefined => {
+    const m = glFreq.get(code); if (!m) return undefined;
+    let best = ''; let bestN = 0;
+    for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
+    return best || undefined;
+  };
 
   // Réalisé par compte (classes 6, 7 et 8 pour HAO / Impôts)
   // BUGFIX : avant l'audit, seules les classes 6 et 7 étaient prises en compte,
@@ -169,11 +192,20 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
     realiseMap.set(e.account, (realiseMap.get(e.account) ?? 0) + v);
   }
 
-  // Budget : uniquement depuis Dexie si version fournie ; sinon vide (pas de simulation)
+  // Budget : si version fournie, depuis Dexie ; sinon utilise automatiquement la dernière version
+  // disponible pour cet exercice (pas de simulation, mais fallback intelligent).
   const budgetMap = new Map<string, number>();
-  if (version) {
-    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).toArray();
+  let resolvedVersion = version;
+  if (!resolvedVersion) {
+    const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
+    const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
+    resolvedVersion = versions[versions.length - 1]; // dernière version par ordre alphabétique
+  }
+  if (resolvedVersion) {
+    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, resolvedVersion]).toArray();
     for (const l of lines) {
+      // Filtrer le budget mensuel sur l'intervalle sélectionné
+      if (l.month < fm || l.month > tm) continue;
       budgetMap.set(l.account, (budgetMap.get(l.account) ?? 0) + l.amount);
     }
   }
@@ -200,7 +232,7 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
       isCharge ? (ecart <= 0 ? 'favorable' : 'defavorable') : (ecart >= 0 ? 'favorable' : 'defavorable');
     rows.push({
       code: account,
-      label: sysco?.label ?? 'Compte',
+      label: orgLabelByCode.get(account) ?? glLabel(account) ?? sysco?.label ?? 'Compte',
       realise, budget, ecart, ecartPct, status, isCharge,
     });
   }
@@ -249,6 +281,22 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
   const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   const periods = await db.periods.where('orgId').equals(orgId).toArray();
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const orgAccounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const orgLabelByCode = new Map(orgAccounts.map((a) => [a.code, a.label] as const));
+  // Libellé GL le plus fréquent par compte (fallback si Plan Comptable non importé)
+  const glFreqM = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    if (!e.label) continue;
+    const lbl = e.label.trim(); if (!lbl) continue;
+    let m = glFreqM.get(e.account); if (!m) { m = new Map(); glFreqM.set(e.account, m); }
+    m.set(lbl, (m.get(lbl) ?? 0) + 1);
+  }
+  const glLabelM = (code: string): string | undefined => {
+    const m = glFreqM.get(code); if (!m) return undefined;
+    let best = ''; let bestN = 0;
+    for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
+    return best || undefined;
+  };
 
   // Périodes année N et N-1
   const periodsByMonth = new Map<number, string>(); // month → periodId
@@ -286,10 +334,16 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
     }
   }
 
-  // Budget par compte × mois
+  // Budget par compte × mois — fallback sur la dernière version disponible si non spécifiée
   const budgetMonthly = new Map<string, number[]>();
-  if (version) {
-    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).toArray();
+  let resolvedVersion = version;
+  if (!resolvedVersion) {
+    const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
+    const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
+    resolvedVersion = versions[versions.length - 1];
+  }
+  if (resolvedVersion) {
+    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, resolvedVersion]).toArray();
     for (const l of lines) {
       const arr = budgetMonthly.get(l.account) ?? Array(12).fill(0);
       arr[l.month - 1] += l.amount;
@@ -317,7 +371,7 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
 
     rows.push({
       code: account,
-      label: sysco?.label ?? 'Compte',
+      label: orgLabelByCode.get(account) ?? glLabelM(account) ?? sysco?.label ?? 'Compte',
       isCharge,
       months,
       totalRealise: rN.reduce((s, v) => s + v, 0),

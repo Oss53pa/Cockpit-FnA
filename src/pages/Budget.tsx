@@ -1,21 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowDown, ArrowUp, Copy, Download, Plus, Save, Trash2, TrendingDown, TrendingUp, Wallet, Wand2, CheckCircle2, FileWarning, XCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Plus, Save, Trash2, TrendingDown, TrendingUp, Wallet, Wand2, CheckCircle2, FileWarning, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { Modal } from '../components/ui/Modal';
 import { Chart } from '../components/ui/Chart';
-import { ImportWizard } from '../components/ui/ImportWizard';
 import { useApp } from '../store/app';
 import { db, ImportLog } from '../db/schema';
 import {
-  BudgetSummary, computeVariance, distribute, duplicateVersion,
-  listBudgetVersions, loadBudget, saveBudget, deleteVersion,
+  BudgetSummary, computeVariance, distribute,
+  listBudgetVersions, loadBudget, saveBudget,
   SEASONALITY_LABELS, SeasonalityKey, VarianceRow,
 } from '../engine/budget';
-import { importBudget } from '../engine/importer';
+import { importBudgetV2 } from '../engine/importer';
 import { SYSCOHADA_COA } from '../syscohada/coa';
 import { fmtFull, fmtK, fmtMoney, fmtPct } from '../lib/format';
 import { downloadBudgetTemplate } from '../engine/templates';
@@ -23,7 +21,7 @@ import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
 
 const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 
-type Tab = 'versions' | 'saisie' | 'ecarts' | 'mensuel' | 'import';
+type Tab = 'import' | 'budget' | 'ecarts' | 'mensuel';
 
 // Comptes pertinents pour budgétisation (classes 6 et 7)
 const budgetable = SYSCOHADA_COA.filter((a) => (a.class === '6' || a.class === '7') && a.code.length <= 3);
@@ -31,13 +29,13 @@ const budgetable = SYSCOHADA_COA.filter((a) => (a.class === '6' || a.class === '
 export default function Budget() {
   const { currentOrgId, currentYear } = useApp();
   const org = useCurrentOrg();
-  const [tab, setTab] = useState<Tab>('versions');
+  const [tab, setTab] = useState<Tab>('import');
+  const [budgetYearMode, setBudgetYearMode] = useState<'N' | 'N1'>('N');
   const [viewYear, setViewYear] = useState<number>(currentYear);
   const [version, setVersion] = useState<string>('');
   const [items, setItems] = useState<BudgetSummary[]>([]);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [newVersion, setNewVersion] = useState(false);
   const [variance, setVariance] = useState<VarianceRow[]>([]);
 
   // Années disponibles : budgets existants + exercices définis + année courante
@@ -65,11 +63,10 @@ export default function Budget() {
   const budgetImports = useImportsHistory(currentOrgId, 'BUDGET');
 
   useEffect(() => {
-    if (versions.length && !version) setVersion(versions[0]);
-  }, [versions, version]);
-
-  // Si on change d'année, on reset la version
-  useEffect(() => { setVersion(''); }, [viewYear]);
+    // Toujours sélectionner automatiquement la dernière version dispo (pas d'UI)
+    if (versions.length) setVersion(versions[versions.length - 1]);
+    else setVersion('');
+  }, [versions]);
 
   useEffect(() => {
     if (!version) { setItems([]); return; }
@@ -123,12 +120,6 @@ export default function Budget() {
     } finally { setBusy(false); }
   };
 
-  const removeVer = async (v: string) => {
-    if (!confirm(`Supprimer la version « ${v} » (exercice ${viewYear}) ?`)) return;
-    await deleteVersion(currentOrgId, viewYear, v);
-    if (version === v) setVersion('');
-  };
-
   const totalBudget = items.reduce((s, i) => s + i.total, 0);
   const totalProd = items.filter((i) => i.account.startsWith('7')).reduce((s, i) => s + i.total, 0);
   const totalCharge = items.filter((i) => i.account.startsWith('6')).reduce((s, i) => s + i.total, 0);
@@ -178,44 +169,45 @@ export default function Budget() {
             <button className="btn-outline" onClick={() => downloadBudgetTemplate(org?.name, viewYear, version || 'V1_initial')}>
               <Download className="w-4 h-4" /> Modèle Excel
             </button>
-            {versions.length > 0 && (
-              <select className="input !w-auto !py-1.5" value={version} onChange={(e) => setVersion(e.target.value)}>
-                <option value="">— Version —</option>
-                {versions.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
-            )}
-            <button className="btn-primary" onClick={() => setNewVersion(true)}><Plus className="w-4 h-4" /> Nouvelle version</button>
+            <button className="btn-outline" onClick={async () => {
+              const all = await db.budgets.where('orgId').equals(currentOrgId).toArray();
+              if (all.length === 0) { alert('Aucun budget à supprimer.'); return; }
+              if (!confirm(`Vider TOUS les budgets de la société ?\n${all.length} ligne(s) seront supprimées (toutes années + versions confondues).`)) return;
+              await db.budgets.where('orgId').equals(currentOrgId).delete();
+              await db.imports.where('orgId').equals(currentOrgId).filter((i) => i.kind === 'BUDGET').delete();
+              setItems([]); setVersion('');
+              alert(`${all.length} ligne(s) supprimées.`);
+            }}>
+              <Trash2 className="w-4 h-4" /> Vider budget
+            </button>
           </div>
         }
       />
 
       <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 mb-6 flex-wrap">
-        {(['versions','saisie','ecarts','mensuel','import'] as Tab[]).map((t) => (
+        {(['import','budget','ecarts','mensuel'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition',
               tab === t ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500 hover:text-primary-900')}>
-            {{ versions: 'Versions', saisie: 'Saisie budgétaire', ecarts: 'Écarts Budget vs Réalisé', mensuel: 'Mensuel + N-1', import: 'Import & Historique' }[t]}
+            {{ import: 'Import & Historique', budget: 'Budget', ecarts: 'Écarts Budget vs Réalisé', mensuel: 'Mensuel + N-1' }[t]}
           </button>
         ))}
       </div>
 
-      {tab === 'versions' && (
-        <Versions
-          year={viewYear}
-          versions={versions}
-          onOpen={(v) => { setVersion(v); setTab('saisie'); }}
-          onDuplicate={async (from) => {
-            const name = prompt(`Nom de la nouvelle version (copie de "${from}")`, from + '_copy');
-            if (!name) return;
-            await duplicateVersion(currentOrgId, viewYear, from, name);
-            setVersion(name);
-          }}
-          onDelete={removeVer}
-          onCreate={() => setNewVersion(true)}
-        />
+      {tab === 'budget' && (
+        <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg w-fit mb-4">
+          <button onClick={() => { setBudgetYearMode('N'); setViewYear(currentYear); }}
+            className={clsx('px-4 py-1.5 text-xs rounded-md font-medium', budgetYearMode === 'N' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600')}>
+            Budget {currentYear} (N)
+          </button>
+          <button onClick={() => { setBudgetYearMode('N1'); setViewYear(currentYear - 1); }}
+            className={clsx('px-4 py-1.5 text-xs rounded-md font-medium', budgetYearMode === 'N1' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600')}>
+            Budget {currentYear - 1} (N-1)
+          </button>
+        </div>
       )}
 
-      {tab === 'saisie' && (
+      {tab === 'budget' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatBox label="Comptes budgétisés" value={items.length.toString()} />
@@ -228,14 +220,14 @@ export default function Budget() {
             <Card>
               <div className="py-12 text-center text-primary-500">
                 <Wallet className="w-10 h-10 mx-auto mb-3 text-primary-400" />
-                <p className="text-primary-700 dark:text-primary-300 font-medium">Aucune version sélectionnée</p>
-                <button className="btn-primary mt-4" onClick={() => setNewVersion(true)}>
-                  <Plus className="w-4 h-4" /> Créer une première version
+                <p className="text-primary-700 dark:text-primary-300 font-medium">Aucun budget pour {viewYear}</p>
+                <button className="btn-primary mt-4" onClick={() => setTab('import')}>
+                  <Download className="w-4 h-4 rotate-180" /> Importer un budget
                 </button>
               </div>
             </Card>
           ) : (
-            <Card title={`Saisie — Version ${version}`}
+            <Card title={`Budget ${viewYear}`}
               action={
                 <div className="flex gap-2">
                   <AddAccountDropdown onAdd={addAccount} existing={items.map((i) => i.account)} />
@@ -308,32 +300,43 @@ export default function Budget() {
       )}
 
       {tab === 'import' && (
-        <BudgetImportTab
-          orgId={currentOrgId}
-          defaultYear={viewYear}
-          onImported={(report) => {
-            setViewYear(report.year);
-            setVersion(report.version);
-            setTab('saisie');
-          }}
-          history={budgetImports}
-          orgName={org?.name}
-        />
+        <>
+          <div className="mb-4 p-4 bg-primary-100 dark:bg-primary-900 rounded-lg border border-primary-200 dark:border-primary-800">
+            <p className="text-xs uppercase tracking-wider text-primary-500 font-semibold mb-2">Année cible de l'import</p>
+            <div className="flex gap-2">
+              <button onClick={() => setViewYear(currentYear)}
+                className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition border-2',
+                  viewYear === currentYear ? 'bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 border-primary-900 dark:border-primary-100' : 'border-primary-300 dark:border-primary-700 text-primary-600')}>
+                Budget {currentYear} <span className="text-[10px] opacity-70 ml-1">(N)</span>
+              </button>
+              <button onClick={() => setViewYear(currentYear - 1)}
+                className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition border-2',
+                  viewYear === currentYear - 1 ? 'bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 border-primary-900 dark:border-primary-100' : 'border-primary-300 dark:border-primary-700 text-primary-600')}>
+                Budget {currentYear - 1} <span className="text-[10px] opacity-70 ml-1">(N-1)</span>
+              </button>
+              <select className="input !w-auto" value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))}>
+                {availableYears.map((y) => <option key={y} value={y}>Autre : {y}</option>)}
+              </select>
+            </div>
+            <p className="text-[11px] text-primary-500 mt-2">
+              Le fichier sera importé pour l'exercice <strong className="text-primary-900 dark:text-primary-100">{viewYear}</strong>.
+              Vous pouvez toujours surcharger cette valeur dans le wizard ci-dessous.
+            </p>
+          </div>
+          <BudgetImportTab
+            orgId={currentOrgId}
+            defaultYear={viewYear}
+            onImported={(report) => {
+              setViewYear(report.year);
+              setVersion(report.version);
+              setTab('budget');
+            }}
+            history={budgetImports}
+            orgName={org?.name}
+          />
+        </>
       )}
 
-      <NewVersionModal
-        open={newVersion}
-        onClose={() => setNewVersion(false)}
-        existing={versions}
-        year={viewYear}
-        onCreate={async (name) => {
-          setVersion(name);
-          await db.budgets.add({ orgId: currentOrgId, year: viewYear, version: name, account: '__init__', month: 1, amount: 0 });
-          await db.budgets.where({ orgId: currentOrgId, year: viewYear, version: name, account: '__init__' }).delete();
-          setNewVersion(false);
-          setTab('saisie');
-        }}
-      />
     </div>
   );
 }
@@ -368,60 +371,39 @@ function BudgetImportTab({
 
   return (
     <div className="space-y-6">
-      <ImportWizard
-        title="Import d'un budget"
-        subtitle="CSV, XLSX — une ligne par compte avec 12 colonnes mensuelles OU une colonne montant annuel"
-        controls={[
-          'Détection automatique des colonnes mensuelles (Janvier → Décembre)',
-          'Ignorer les lignes de total / séparateurs',
-          'Agrégation si plusieurs lignes pour le même compte',
-          'Écrase la version si elle existe déjà',
-        ]}
-        onDownloadTemplate={() => downloadBudgetTemplate(orgName, defaultYear, defaultVersion)}
-        extraFields={[
-          { key: 'year', type: 'number', label: 'Année de l\'exercice', required: true, defaultValue: defaultYear },
-          { key: 'version', type: 'text', label: 'Nom de la version', required: true, defaultValue: defaultVersion, placeholder: 'Ex : V1_initial, Forecast, Budget_N-1…' },
-        ]}
-        fields={[
-          { key: 'account', label: 'Compte', required: true, patterns: [/^compte$/i, /^code$/i, /^cpte/i, /^acc/i] },
-          { key: 'label', label: 'Libellé (optionnel)', patterns: [/^libell/i, /^label/i, /^intitul/i] },
-          { key: 'annual', label: 'Montant annuel (si pas de détail mensuel)', patterns: [/^annuel/i, /^total/i, /^year/i] },
-          { key: 'm1', label: 'Janvier', patterns: [/^janv/i, /^jan$/i] },
-          { key: 'm2', label: 'Février', patterns: [/^f[ée]vr/i, /^f[ée]v$/i] },
-          { key: 'm3', label: 'Mars', patterns: [/^mars$/i, /^mar$/i] },
-          { key: 'm4', label: 'Avril', patterns: [/^avri?l/i, /^avr/i] },
-          { key: 'm5', label: 'Mai', patterns: [/^mai$/i] },
-          { key: 'm6', label: 'Juin', patterns: [/^juin$/i, /^jun$/i] },
-          { key: 'm7', label: 'Juillet', patterns: [/^juil/i, /^jul$/i] },
-          { key: 'm8', label: 'Août', patterns: [/^ao[ûu]t/i, /^aou$/i] },
-          { key: 'm9', label: 'Septembre', patterns: [/^sept/i, /^sep$/i] },
-          { key: 'm10', label: 'Octobre', patterns: [/^octo/i, /^oct$/i] },
-          { key: 'm11', label: 'Novembre', patterns: [/^nove/i, /^nov$/i] },
-          { key: 'm12', label: 'Décembre', patterns: [/^d[ée]ce/i, /^d[ée]c$/i] },
-        ]}
-        onImport={async (file, mapping, extras) => {
-          const year = Number(extras.year) || defaultYear;
-          const version = String(extras.version || defaultVersion).trim();
-          const monthsMapping: Record<string, string> = {};
-          for (let i = 1; i <= 12; i++) {
-            const col = mapping[`m${i}`];
-            if (col) monthsMapping[`m${i}`] = col;
-          }
-          const res = await importBudget(file, orgId, {
-            account: mapping.account,
-            months: Object.keys(monthsMapping).length ? monthsMapping : undefined,
-            annual: mapping.annual,
-            label: mapping.label,
-          }, { year, version });
-          onImported({ year: res.year, version: res.version });
-          return {
-            imported: res.imported,
-            rejected: res.rejected,
-            errors: res.errors,
-            extras: { Lignes: res.lines, Version: res.version, Exercice: res.year },
-          };
-        }}
-      />
+      <Card title={`Import du budget ${defaultYear}`}
+        subtitle="CSV · XLSX — une ligne par compte. Détection automatique des 12 colonnes mensuelles.">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button className="btn-outline" onClick={() => downloadBudgetTemplate(orgName, defaultYear, defaultVersion)}>
+            <Download className="w-4 h-4" /> Télécharger le modèle Excel
+          </button>
+          <label className="btn-primary cursor-pointer">
+            <Download className="w-4 h-4 rotate-180" /> Importer un fichier
+            <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const ver = prompt(`Nom de la version pour le budget ${defaultYear} :`, defaultVersion);
+              if (!ver) return;
+              try {
+                const res = await importBudgetV2(f, orgId, defaultYear, ver.trim());
+                const errPreview = res.errors.slice(0, 5).join('\n');
+                alert(`${res.imported > 0 ? '✅' : '⚠️'} Import budget terminé\n\n` +
+                  `Fichier : ${f.name}\nFeuille lue : ${res.sheetName || '(aucune)'}\n` +
+                  `Comptes importés : ${res.imported}\nLignes insérées : ${res.lines}\nErreurs : ${res.errors.length}` +
+                  (errPreview ? '\n\n' + errPreview : ''));
+                onImported({ year: defaultYear, version: ver.trim() });
+                if (res.imported > 0) window.location.reload();
+              } catch (err: any) {
+                alert(`❌ Erreur :\n${err.message}`);
+              }
+              e.target.value = '';
+            }} />
+          </label>
+          <p className="text-xs text-primary-500">
+            Importation pour l'exercice <strong>{defaultYear}</strong>. Détection auto des colonnes mensuelles + montant annuel.
+          </p>
+        </div>
+      </Card>
 
       <Card title="Historique des imports budgétaires" subtitle="Versionning — cliquer sur une version pour la consulter">
         <div className="overflow-x-auto">
@@ -488,41 +470,6 @@ function StatBox({ label, value, icon, highlight }: { label: string; value: stri
         </div>
       </div>
     </Card>
-  );
-}
-
-function Versions({ year, versions, onOpen, onDuplicate, onDelete, onCreate }: {
-  year: number;
-  versions: string[]; onOpen: (v: string) => void; onDuplicate: (v: string) => void; onDelete: (v: string) => void; onCreate: () => void;
-}) {
-  if (versions.length === 0) {
-    return (
-      <Card>
-        <div className="py-16 text-center">
-          <Wallet className="w-12 h-12 mx-auto mb-4 text-primary-400" />
-          <p className="font-medium text-primary-700 dark:text-primary-300">Aucun budget pour l'exercice {year}</p>
-          <p className="text-xs text-primary-500 mt-1 mb-4">Créez une première version (V1 initiale, révisée, forecast…) ou importez un budget via l'onglet <strong>Import</strong>.</p>
-          <button className="btn-primary" onClick={onCreate}><Plus className="w-4 h-4" /> Créer une version</button>
-        </div>
-      </Card>
-    );
-  }
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {versions.map((v) => (
-        <Card key={v}>
-          <div className="flex items-start justify-between mb-3">
-            <Badge variant="info">Version {year}</Badge>
-            <div className="flex gap-1">
-              <button className="btn-ghost !p-1.5" title="Dupliquer" onClick={() => onDuplicate(v)}><Copy className="w-4 h-4" /></button>
-              <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error" title="Supprimer" onClick={() => onDelete(v)}><Trash2 className="w-4 h-4" /></button>
-            </div>
-          </div>
-          <p className="font-semibold text-lg">{v}</p>
-          <button className="btn-outline w-full mt-3 !py-1.5" onClick={() => onOpen(v)}>Ouvrir la saisie →</button>
-        </Card>
-      ))}
-    </div>
   );
 }
 
@@ -684,41 +631,6 @@ function Variance({ version, rows, orgId, year }: { version: string; rows: Varia
         </div>
       </Card>
     </div>
-  );
-}
-
-function NewVersionModal({ open, onClose, existing, onCreate, year }: {
-  open: boolean; onClose: () => void; existing: string[]; onCreate: (name: string) => void; year?: number;
-}) {
-  const [name, setName] = useState('V1_initial');
-  const presets = ['V1_initial', 'V2_revise', 'Forecast', 'Budget_cible'];
-  const suggestions = useMemo(() => presets.filter((p) => !existing.includes(p)), [existing]);
-  return (
-    <Modal open={open} onClose={onClose}
-      title="Nouvelle version budgétaire"
-      subtitle={year ? `Exercice ${year}` : undefined}
-      footer={<>
-        <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={() => onCreate(name)} disabled={!name.trim() || existing.includes(name)}>Créer</button>
-      </>}>
-      <div className="space-y-3">
-        <div>
-          <label className="text-xs text-primary-500 font-medium block mb-1">Nom de la version *</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : V1_initial" />
-          {existing.includes(name) && <p className="text-xs text-error mt-1">Cette version existe déjà</p>}
-        </div>
-        {suggestions.length > 0 && (
-          <div>
-            <p className="text-xs text-primary-500 mb-1">Suggestions</p>
-            <div className="flex flex-wrap gap-1">
-              {suggestions.map((s) => (
-                <button key={s} onClick={() => setName(s)} className="btn-outline !py-1 text-xs">{s}</button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </Modal>
   );
 }
 

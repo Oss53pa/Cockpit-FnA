@@ -8,7 +8,8 @@ import { db } from '../../db/schema';
 import { HelpModal } from '../ui/HelpModal';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear, amountMode, setAmountMode, currentImport, setCurrentImport } = useApp();
+  const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear, amountMode, setAmountMode, currentImport, setCurrentImport, fromMonth, toMonth, setPeriodRange } = useApp();
+  const MONTH_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   const glImports = useImportsHistory(currentOrgId, 'GL');
   const orgs = useOrganizations();
   const allPeriods = usePeriods(currentOrgId);
@@ -108,6 +109,31 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               </optgroup>
             </select>
           )}
+
+          {/* Sélecteur de période globale (intervalle de mois) */}
+          <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 border border-white/15">
+            <span className="text-[10px] uppercase tracking-wider text-white/60 mr-1">Période</span>
+            <select
+              className="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer"
+              value={fromMonth}
+              onChange={(e) => setPeriodRange(parseInt(e.target.value), toMonth)}
+              title="Mois de début"
+            >
+              {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1} className="text-primary-900">{m}</option>)}
+            </select>
+            <span className="text-white/50">→</span>
+            <select
+              className="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer"
+              value={toMonth}
+              onChange={(e) => setPeriodRange(fromMonth, parseInt(e.target.value))}
+              title="Mois de fin"
+            >
+              {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1} className="text-primary-900">{m}</option>)}
+            </select>
+            {(fromMonth !== 1 || toMonth !== 12) && (
+              <button onClick={() => setPeriodRange(1, 12)} className="ml-1 text-[9px] text-white/60 hover:text-white" title="Réinitialiser à année complète">↺</button>
+            )}
+          </div>
 
           {/* Toggle segmenté Entier / Abrégé — affichage des montants */}
           <div

@@ -1,12 +1,68 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, Send, X } from 'lucide-react';
 import { useRatios, useStatements } from '../../hooks/useFinancials';
 import { fmtMoney } from '../../lib/format';
 
+// Position persistée dans localStorage
+const POS_KEY = 'proph3t-bubble-pos';
+function loadPos(): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(POS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  // Position par défaut : bottom-right
+  return { x: window.innerWidth - 80, y: window.innerHeight - 80 };
+}
+function savePos(p: { x: number; y: number }) {
+  try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+}
+
 export function FloatingAI() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [pos, setPos] = useState(() => loadPos());
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; moved: boolean } | null>(null);
+
+  // Garder la bulle dans la fenêtre si on resize
+  useEffect(() => {
+    const onResize = () => {
+      setPos((p) => ({
+        x: Math.min(p.x, window.innerWidth - 64),
+        y: Math.min(p.y, window.innerHeight - 64),
+      }));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y, moved: false };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+  const onMouseMove = (e: MouseEvent) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragRef.current.moved = true;
+    const newX = Math.max(0, Math.min(window.innerWidth - 64, dragRef.current.startPosX + dx));
+    const newY = Math.max(0, Math.min(window.innerHeight - 64, dragRef.current.startPosY + dy));
+    setPos({ x: newX, y: newY });
+  };
+  const onMouseUp = () => {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    if (dragRef.current) {
+      if (dragRef.current.moved) {
+        savePos(pos);
+      } else {
+        setOpen(true); // Click sans drag = ouverture
+      }
+      dragRef.current = null;
+    }
+  };
+
   const [history, setHistory] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([
     { role: 'ai', text: "Bonjour, je suis Proph3t. Posez-moi une question sur vos finances." },
   ]);
@@ -40,15 +96,16 @@ export function FloatingAI() {
 
   return (
     <>
-      {/* Bulle flottante */}
+      {/* Bulle flottante draggable */}
       {!open && (
         <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 shadow-lg hover:scale-110 transition flex items-center justify-center group"
-          title="Assistant Proph3t"
+          onMouseDown={onMouseDown}
+          style={{ left: pos.x, top: pos.y }}
+          className="fixed z-40 w-14 h-14 rounded-full bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 shadow-lg hover:scale-110 transition flex items-center justify-center group cursor-grab active:cursor-grabbing select-none"
+          title="Assistant Proph3t — glissez pour déplacer"
         >
-          <Bot className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full border-2 border-white" />
+          <Bot className="w-6 h-6 group-hover:rotate-12 transition-transform pointer-events-none" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full border-2 border-white pointer-events-none" />
         </button>
       )}
 

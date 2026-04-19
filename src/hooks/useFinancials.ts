@@ -72,21 +72,22 @@ export function useResolvedImportId(): string | undefined {
  * le double-comptage si plusieurs imports coexistent.
  */
 export function useBalance() {
-  const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  const { currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth } = useApp();
   const importId = useResolvedImportId();
   return useLiveQuery(async () => {
     if (!currentOrgId) return [];
-    if (importId === undefined) return []; // en cours de résolution
+    if (importId === undefined) return [];
     const period = currentPeriodId ? await db.periods.get(currentPeriodId) : undefined;
-    const uptoMonth = period?.month;
+    const uptoMonth = period?.month ?? toMonth;
     return computeBalance({
       orgId: currentOrgId,
       year: currentYear,
+      fromMonth,
       uptoMonth,
       includeOpening: true,
       importId,
     });
-  }, [currentOrgId, currentYear, currentPeriodId, importId], []);
+  }, [currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth, importId], []);
 }
 
 /**
@@ -94,21 +95,22 @@ export function useBalance() {
  * pour le Compte de Résultat et les SIG.
  */
 export function useBalanceMovements() {
-  const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  const { currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth } = useApp();
   const importId = useResolvedImportId();
   return useLiveQuery(async () => {
     if (!currentOrgId) return [];
     if (importId === undefined) return [];
     const period = currentPeriodId ? await db.periods.get(currentPeriodId) : undefined;
-    const uptoMonth = period?.month;
+    const uptoMonth = period?.month ?? toMonth;
     return computeBalance({
       orgId: currentOrgId,
       year: currentYear,
+      fromMonth,
       uptoMonth,
       includeOpening: false,
       importId,
     });
-  }, [currentOrgId, currentYear, currentPeriodId, importId], []);
+  }, [currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth, importId], []);
 }
 
 export function useStatements() {
@@ -183,10 +185,10 @@ export function useCapitalVariation() {
 }
 
 export function useBudgetActual(version?: string): BudgetActualRow[] {
-  const { currentOrgId, currentYear } = useApp();
+  const { currentOrgId, currentYear, fromMonth, toMonth } = useApp();
   return useLiveQuery(
-    () => (currentOrgId ? computeBudgetActual(currentOrgId, currentYear, version) : Promise.resolve([] as BudgetActualRow[])),
-    [currentOrgId, currentYear, version], [] as BudgetActualRow[],
+    () => (currentOrgId ? computeBudgetActual(currentOrgId, currentYear, version, { fromMonth, toMonth }) : Promise.resolve([] as BudgetActualRow[])),
+    [currentOrgId, currentYear, version, fromMonth, toMonth], [] as BudgetActualRow[],
   );
 }
 

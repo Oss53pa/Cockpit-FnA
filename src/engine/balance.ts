@@ -21,20 +21,69 @@ export async function computeAuxBalance(opts: {
   const ids = new Set(periods.filter((p) => year === undefined || p.year === year).map((p) => p.id));
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
   const accountLabels = new Map((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => [a.code, a.label] as const));
+
+  // Filtrer une fois pour toutes les écritures du préfixe
+  const auxEntries = entries.filter((e) =>
+    ids.has(e.periodId) &&
+    e.account.startsWith(prefix) &&
+    (!importId || importId === 'all' || e.importId === importId),
+  );
+
+  // Détection du niveau de détail RÉEL disponible :
+  //   1) « tiers » : au moins une écriture a un code tiers renseigné
+  //   2) « comptes auxiliaires multiples » : il existe PLUSIEURS comptes
+  //      différents sous le préfixe (ex : 411001, 411002…). 1 seul compte
+  //      type 411100 ne compte PAS comme détail.
+  //   3) Sinon : on prend le LIBELLÉ d'écriture comme proxy de tiers
+  //      (chaque libellé distinct = un tiers présumé)
+  let hasTiers = false;
+  const distinctAccounts = new Set<string>();
+  for (const e of auxEntries) {
+    if (e.tiers) hasTiers = true;
+    distinctAccounts.add(e.account);
+  }
+  const hasMultipleAuxAccounts = distinctAccounts.size > 1;
+
   const map = new Map<string, AuxBalanceRow>();
-  for (const e of entries) {
-    if (!ids.has(e.periodId)) continue;
-    if (!e.account.startsWith(prefix)) continue;
-    if (importId && importId !== 'all' && e.importId !== importId) continue;
-    const tier = e.tiers || e.account;
-    const label = accountLabels.get(e.account) ?? e.label ?? '—';
-    const cur = map.get(tier) ?? { tier, label, account: e.account, debit: 0, credit: 0, solde: 0 };
+  for (const e of auxEntries) {
+    let key: string;
+    let label: string;
+    let tier: string;
+
+    if (hasTiers && e.tiers) {
+      // Niveau 1 : code tiers explicite
+      key = `T:${e.tiers}`;
+      label = e.label?.trim() || accountLabels.get(e.account) || '—';
+      tier = e.tiers;
+    } else if (hasMultipleAuxAccounts) {
+      // Niveau 2 : plusieurs comptes auxiliaires distincts → un par tier
+      key = `A:${e.account}`;
+      label = accountLabels.get(e.account) ?? e.label ?? '—';
+      tier = e.account;
+    } else if (e.label?.trim()) {
+      // Niveau 3 : un seul compte parent (ex: 411100) — on ventile par libellé
+      // d'écriture pour distinguer les tiers individuellement.
+      const lbl = e.label.trim();
+      key = `L:${e.account}|${lbl}`;
+      label = lbl;
+      tier = lbl;
+    } else {
+      // Cas dégénéré : tout sur un compte sans libellé
+      key = `A:${e.account}`;
+      label = accountLabels.get(e.account) ?? '—';
+      tier = e.account;
+    }
+
+    const cur = map.get(key) ?? { tier, label, account: e.account, debit: 0, credit: 0, solde: 0 };
     cur.debit += e.debit;
     cur.credit += e.credit;
     cur.solde = cur.debit - cur.credit;
-    map.set(tier, cur);
+    map.set(key, cur);
   }
-  return Array.from(map.values()).filter((r) => Math.abs(r.solde) > 0.01).sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
+
+  return Array.from(map.values())
+    .filter((r) => Math.abs(r.solde) > 0.01)
+    .sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
 }
 
 export type BalanceRow = {
@@ -80,14 +129,29 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
 
   // Aggrégation par compte
   const acc = new Map<string, { debit: number; credit: number; label: string }>();
+  // Calcul libellé GL le plus fréquent par compte
+  const glFreq = new Map<string, Map<string, number>>();
   for (const e of entries) {
     const cur = acc.get(e.account) ?? { debit: 0, credit: 0, label: e.label };
     cur.debit += e.debit;
     cur.credit += e.credit;
     acc.set(e.account, cur);
+    if (e.label) {
+      const lbl = e.label.trim();
+      if (lbl) {
+        let m = glFreq.get(e.account); if (!m) { m = new Map(); glFreq.set(e.account, m); }
+        m.set(lbl, (m.get(lbl) ?? 0) + 1);
+      }
+    }
   }
+  const glLabel = (code: string): string | undefined => {
+    const m = glFreq.get(code); if (!m) return undefined;
+    let best = ''; let bestN = 0;
+    for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
+    return best || undefined;
+  };
 
-  // Récupérer les libellés officiels
+  // Récupérer les libellés officiels (db.accounts) — peut être vide si Plan Comptable non importé
   const accMeta = await db.accounts.where('orgId').equals(orgId).toArray();
   const labelMap = new Map(accMeta.map((a) => [a.code, a]));
 
@@ -98,7 +162,7 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
     const solde = v.debit - v.credit;
     rows.push({
       account: code,
-      label: meta?.label ?? sysco?.label ?? 'Compte non identifié',
+      label: meta?.label ?? glLabel(code) ?? sysco?.label ?? 'Compte non identifié',
       syscoCode: sysco?.code,
       class: classOf(code),
       debit: v.debit,

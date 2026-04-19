@@ -1,8 +1,244 @@
 // Parser et importeur du Grand Livre (CSV / XLSX)
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { db, GLEntry, Account } from '../db/schema';
-import { findSyscoAccount, classOf } from '../syscohada/coa';
+import { findSyscoAccount, classOf, SYSCOHADA_COA } from '../syscohada/coa';
+
+// ─── IMPORT BULLETPROOF AVEC EXCELJS ────────────────────────────────────
+// Lit n'importe quel fichier Excel généré par ExcelJS sans dépendre de la
+// détection de feuille. Stratégie : scanne TOUTES les feuilles, trouve la
+// première ligne qui ressemble à un header (≥ 2 mots-clés connus), extrait
+// les données en dessous, retourne tout en objets.
+type AnyRow = Record<string, any>;
+
+async function readExcelBulletproof(file: File): Promise<{ headers: string[]; rows: AnyRow[]; sheetName: string }> {
+  const wb = new ExcelJS.Workbook();
+  const buf = await file.arrayBuffer();
+  await wb.xlsx.load(buf);
+
+  const dataKeywords = /(compte|cpte|code|num[ée]ro|date|journal|jrn|d[ée]bit|cr[ée]dit|libell[éeè]|label|intitul|description|classe|type|sysco|tiers|piece|janv|f[ée]vr|mars|avr|mai|juin|juil|ao[ûu]t|sept|octo|nov|d[ée]ce|montant|amount|solde|annuel)/i;
+  const blacklist = /^(instructions?|consignes?|aide|help|r[ée]f[ée]rentiel|reference|sysco(hada)?|notes?|intro|readme|à\s*propos|about|exemples?|samples?)$/i;
+  const preferred = /(plan\s*comptable|comptes|grand\s*livre|gl|grandlivre|budget|balance|écritures?|donn[ée]es)/i;
+
+  type Cand = { sheetName: string; headerRow: number; score: number; rowsCount: number; preferredScore: number; order: number; matrix: any[][] };
+  const cands: Cand[] = [];
+
+  let order = 0;
+  wb.eachSheet((ws, _id) => {
+    order++;
+    const name = ws.name.trim();
+    if (blacklist.test(name)) return;
+
+    // Convertir la feuille en matrice de cellules
+    const matrix: any[][] = [];
+    ws.eachRow({ includeEmpty: false }, (row) => {
+      const arr: any[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        // Prendre la valeur calculée (pour les formules), sinon la valeur brute
+        let v: any = cell.value;
+        if (v && typeof v === 'object') {
+          if ('result' in v) v = (v as any).result;        // formule avec résultat caché
+          else if ('text' in v) v = (v as any).text;        // rich text
+          else if ('richText' in v) v = (v as any).richText.map((r: any) => r.text).join('');
+          else if (v instanceof Date) v = v;                // date — conserver
+        }
+        arr[colNumber - 1] = v;
+      });
+      matrix.push(arr);
+    });
+
+    if (matrix.length === 0) return;
+
+    // Détecter la ligne d'en-tête
+    let bestRow = 0; let bestScore = 0;
+    for (let r = 0; r < Math.min(matrix.length, 15); r++) {
+      const row = matrix[r] || [];
+      const score = row.filter((h) => h !== undefined && h !== null && String(h).trim() && dataKeywords.test(String(h).trim())).length;
+      if (score > bestScore) { bestScore = score; bestRow = r; }
+    }
+    if (bestScore < 2) return;
+
+    cands.push({
+      sheetName: name,
+      headerRow: bestRow,
+      score: bestScore,
+      rowsCount: matrix.length - bestRow - 1,
+      preferredScore: preferred.test(name) ? 100 : 0,
+      order,
+      matrix,
+    });
+  });
+
+  console.log('🔵 [readExcelBulletproof v3] Feuilles candidates :', cands.map((c) => ({
+    sheet: c.sheetName, score: c.score, headerRow: c.headerRow, rows: c.rowsCount, prefScore: c.preferredScore,
+  })));
+
+  if (cands.length === 0) {
+    console.error('🔵 Aucune feuille reconnue. Toutes les feuilles :', wb.worksheets.map((w) => w.name));
+    return { headers: [], rows: [], sheetName: '' };
+  }
+
+  cands.sort((a, b) =>
+    (b.preferredScore - a.preferredScore) ||
+    (b.score - a.score) ||
+    (b.rowsCount - a.rowsCount) ||
+    (a.order - b.order)
+  );
+  const best = cands[0];
+  console.log('🔵 Feuille SÉLECTIONNÉE :', best.sheetName, '(headerRow:', best.headerRow, ')');
+
+  // Construire les objets
+  const headerArr: string[] = (best.matrix[best.headerRow] || []).map((h: any, i: number) => {
+    const s = h !== undefined && h !== null ? String(h).trim() : '';
+    return s || `Colonne ${i + 1}`;
+  });
+  const rows: AnyRow[] = [];
+  for (let r = best.headerRow + 1; r < best.matrix.length; r++) {
+    const arr = best.matrix[r] || [];
+    const allEmpty = arr.every((v: any) => v === undefined || v === null || v === '');
+    if (allEmpty) continue;
+    const obj: AnyRow = {};
+    for (let c = 0; c < headerArr.length; c++) {
+      obj[headerArr[c]] = arr[c] !== undefined ? arr[c] : '';
+    }
+    rows.push(obj);
+  }
+
+  console.log('🔵 Headers extraits :', headerArr);
+  console.log('🔵 Lignes data :', rows.length, '— premières :', rows.slice(0, 3));
+  return { headers: headerArr, rows, sheetName: best.sheetName };
+}
+
+// Wrappers simples pour PC et Budget
+export async function importCOAv2(file: File, orgId: string): Promise<{ imported: number; updated: number; errors: string[]; sheetName: string }> {
+  console.log('🟢 [importCOAv2] Start, file:', file.name);
+  const { headers, rows, sheetName } = await readExcelBulletproof(file);
+  if (rows.length === 0) {
+    return { imported: 0, updated: 0, errors: ['Aucune donnée trouvée dans le fichier (toutes feuilles testées)'], sheetName };
+  }
+  const colCode = headers.find((h) => /^(code|compte|cpte|n.?\s*compte|num.?\s*compte)$/i.test(h.trim())) || headers.find((h) => /code|compte/i.test(h));
+  const colLabel = headers.find((h) => /^(libell[éeè]|label|intitul[ée]?|description|d[ée]signation)$/i.test(h.trim())) || headers.find((h) => /libell|label|intitul/i.test(h));
+  const colClass = headers.find((h) => /classe/i.test(h));
+  const colType = headers.find((h) => /^type$/i.test(h.trim()));
+  const colSysco = headers.find((h) => /sysco/i.test(h));
+
+  console.log('🟢 [importCOAv2] Colonnes mappées:', { colCode, colLabel, colClass, colType, colSysco });
+
+  if (!colCode) return { imported: 0, updated: 0, errors: [`Colonne "Code" introuvable. Headers : ${headers.join(', ')}`], sheetName };
+  if (!colLabel) return { imported: 0, updated: 0, errors: [`Colonne "Libellé" introuvable. Headers : ${headers.join(', ')}`], sheetName };
+
+  const existing = new Set((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => a.code));
+  const toImport: Account[] = [];
+  const errors: string[] = [];
+  let updatedCount = 0;
+
+  for (const r of rows) {
+    let code = r[colCode];
+    if (code === undefined || code === null) continue;
+    code = String(code).trim();
+    if (!code || !/^\d/.test(code)) continue;
+    const label = String(r[colLabel] ?? '').trim();
+    if (!label) { errors.push(`Compte ${code} sans libellé — ignoré`); continue; }
+    const cls = colClass ? String(r[colClass] ?? '').trim() : (classOf(code) ?? code[0]);
+    const type = colType ? (String(r[colType] ?? '').trim() as Account['type']) : ((findSyscoAccount(code)?.type ?? 'X') as Account['type']);
+    const syscoCode = colSysco ? String(r[colSysco] ?? '').trim() : findSyscoAccount(code)?.code;
+    if (existing.has(code)) updatedCount++;
+    toImport.push({ orgId, code, label, class: cls || code[0], type: type || 'X', syscoCode });
+  }
+
+  console.log('🟢 [importCOAv2] Comptes à importer:', toImport.length);
+
+  if (toImport.length > 0) {
+    await db.accounts.bulkPut(toImport);
+  }
+  // Toujours enregistrer en historique (même 0 import) pour traçabilité
+  await db.imports.add({
+    orgId, date: Date.now(), user: 'Utilisateur local', fileName: file.name,
+    source: 'Excel (v2)', kind: 'COA', count: toImport.length, rejected: errors.length,
+    status: toImport.length === 0 ? 'error' : (errors.length === 0 ? 'success' : 'partial'),
+    report: JSON.stringify({ updated: updatedCount, errors, sheetName, headers, sampleRow: rows[0] }),
+  });
+
+  return { imported: toImport.length, updated: updatedCount, errors, sheetName };
+}
+
+export async function importBudgetV2(
+  file: File, orgId: string, year: number, version: string,
+): Promise<{ imported: number; lines: number; errors: string[]; sheetName: string }> {
+  console.log('🟡 [importBudgetV2] Start, file:', file.name, 'year:', year, 'version:', version);
+  const { headers, rows, sheetName } = await readExcelBulletproof(file);
+  if (rows.length === 0) {
+    return { imported: 0, lines: 0, errors: ['Aucune donnée trouvée dans le fichier'], sheetName };
+  }
+
+  const colAccount = headers.find((h) => /^(compte|code|cpte|n.?\s*compte)$/i.test(h.trim())) || headers.find((h) => /compte|code/i.test(h));
+  const monthPatterns = [/^janv/i, /^f[ée]vr/i, /^mars/i, /^avri?l/i, /^mai/i, /^juin/i, /^juil/i, /^ao[ûu]t/i, /^sept/i, /^octo/i, /^nove/i, /^d[ée]ce/i];
+  const monthCols = monthPatterns.map((p) => headers.find((h) => p.test(h.trim())));
+  const colAnnual = headers.find((h) => /annuel|total/i.test(h));
+
+  console.log('🟡 [importBudgetV2] Colonnes:', { colAccount, monthCols, colAnnual });
+
+  if (!colAccount) return { imported: 0, lines: 0, errors: [`Colonne "Compte" introuvable. Headers : ${headers.join(', ')}`], sheetName };
+
+  const perAccount = new Map<string, number[]>();
+  const errors: string[] = [];
+
+  for (const r of rows) {
+    let code = r[colAccount];
+    if (code === undefined || code === null) continue;
+    code = String(code).trim();
+    if (!code || !/^\d/.test(code)) continue;
+    if (/^total/i.test(code) || /^═/.test(code)) continue;
+
+    const monthly: number[] = monthCols.map((c, _i) => {
+      if (!c) return 0;
+      const v = r[c];
+      if (typeof v === 'number') return v;
+      return parseAmount(v);
+    });
+    const hasMonths = monthly.some((v) => v !== 0);
+    if (!hasMonths && colAnnual) {
+      const ann = typeof r[colAnnual] === 'number' ? r[colAnnual] : parseAmount(r[colAnnual]);
+      if (ann !== 0) {
+        const part = Math.round(ann / 12);
+        for (let i = 0; i < 12; i++) monthly[i] = part;
+      }
+    }
+
+    if (!perAccount.has(code)) perAccount.set(code, Array(12).fill(0));
+    const cur = perAccount.get(code)!;
+    for (let m = 0; m < 12; m++) cur[m] += monthly[m];
+  }
+
+  console.log('🟡 [importBudgetV2] Comptes trouvés:', perAccount.size);
+
+  let lines = 0;
+  await db.transaction('rw', db.budgets, async () => {
+    await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).delete();
+    const toInsert: any[] = [];
+    for (const [account, arr] of perAccount) {
+      let pushed = false;
+      for (let m = 0; m < 12; m++) {
+        if (arr[m] !== 0) { toInsert.push({ orgId, year, version, account, month: m + 1, amount: arr[m] }); pushed = true; }
+      }
+      if (!pushed) toInsert.push({ orgId, year, version, account, month: 1, amount: 0 });
+    }
+    if (toInsert.length) await db.budgets.bulkAdd(toInsert);
+    lines = toInsert.length;
+  });
+
+  await db.imports.add({
+    orgId, date: Date.now(), user: 'Utilisateur local', fileName: file.name,
+    source: 'Excel (v2)', kind: 'BUDGET', count: perAccount.size, rejected: errors.length,
+    status: errors.length === 0 ? 'success' : 'partial',
+    report: JSON.stringify({ lines, version, year, errors }),
+  });
+
+  return { imported: perAccount.size, lines, errors, sheetName };
+}
+// Empêche le tree-shaking si SYSCOHADA_COA est temporairement non utilisé
+void SYSCOHADA_COA;
 
 export type ParsedRow = Record<string, string>;
 
@@ -60,21 +296,83 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
 
-    // Chercher la feuille contenant des en-têtes reconnus
-    // Couvre : Grand Livre (date, compte, débit…), Plan comptable (code, libellé,
-    // classe), Budget (compte, janvier, février…).
-    const dataKeywords = /^(compte|code|date|journal|d[ée]bit|cr[ée]dit|libell[éeè]|label|intitul|description|classe|type|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)$/i;
-    let ws = wb.Sheets[wb.SheetNames[0]];
-    for (const name of wb.SheetNames) {
+    // Détection intelligente de la feuille de DONNÉES (vs instructions / référentiels).
+    // Stratégie :
+    //   1) Ignorer feuilles nommées "Instructions", "Consignes", "Mode d'emploi",
+    //      "Référentiel", "Référence", "Plan SYSCOHADA" (= sheets décoratives)
+    //   2) Pour chaque feuille restante : scanner 15 premières lignes, compter
+    //      les colonnes matchant des mots-clés
+    //   3) Préférer la feuille DONT LE NOM matche fortement (ex: "Plan comptable",
+    //      "Grand Livre", "Budget") + qui a un bon score d'en-têtes
+    //   4) À défaut, prendre la première feuille (ordre du workbook) avec score ≥ 2
+    const dataKeywords = /(^|[\s/_-])(compte|cpte|code|num[ée]ro|date|journal|jrn|d[ée]bit|cr[ée]dit|libell[éeè]|label|intitul|description|classe|type|sysco|tiers|ti[ée]rs|piece|pi[ée]ce|janv|f[ée]vr|mars|avr|mai|juin|juil|ao[ûu]t|sept|octo|nov|d[ée]ce|ann[ée]e|montant|amount|solde)/i;
+    // Feuilles à IGNORER (instructions, référentiels, listes auxiliaires)
+    const blacklistSheet = /^(instructions?|consignes?|mode\s*d.?emploi|aide|help|r[ée]f[ée]rentiel|r[ée]f[ée]rence|reference|sysco(hada)?|plan\s*sysco|exemples?|samples?|notes?|l[ée]gende|legend|intro|readme|à\s*propos|about)$/i;
+    // Feuilles privilégiées (notre template + variantes courantes)
+    const dataSheetPreferred = /(plan\s*comptable|comptes|grand\s*livre|gl|grandlivre|budget|balance|écritures?|ecritures?|journal|données|donnees|data)/i;
+
+    type Pick = { sheetName: string; headerRow: number; score: number; rowsCount: number; sheetScore: number; order: number };
+    const candidates: Pick[] = [];
+
+    wb.SheetNames.forEach((name, order) => {
+      if (blacklistSheet.test(name.trim())) return; // Skip instructions / référentiels
       const candidate = wb.Sheets[name];
-      const firstRow = XLSX.utils.sheet_to_json<ParsedRow>(candidate, { defval: '', raw: false, header: 1 })[0] as unknown as string[];
-      if (firstRow && Array.isArray(firstRow) && firstRow.some((h) => dataKeywords.test(String(h).trim()))) {
-        ws = candidate;
-        break;
+      const matrix = XLSX.utils.sheet_to_json<unknown>(candidate, { defval: '', raw: false, header: 1 }) as unknown as string[][];
+      if (!matrix || matrix.length === 0) return;
+
+      const scanRows = Math.min(matrix.length, 15);
+      let bestRow = 0; let bestScore = 0;
+      for (let r = 0; r < scanRows; r++) {
+        const row = matrix[r] || [];
+        const score = row.filter((h) => h !== undefined && h !== null && String(h).trim() && dataKeywords.test(String(h).trim())).length;
+        if (score > bestScore) { bestScore = score; bestRow = r; }
       }
+      if (bestScore < 2) return;
+
+      const dataRowsAfter = Math.max(0, matrix.length - bestRow - 1);
+      const sheetScore = dataSheetPreferred.test(name.trim()) ? 100 : 0; // gros bonus si nom évocateur
+      candidates.push({ sheetName: name, headerRow: bestRow, score: bestScore, rowsCount: dataRowsAfter, sheetScore, order });
+    });
+
+    // Tri : nom évocateur d'abord, puis score en-têtes max, puis plus de lignes,
+    // puis ordre du workbook (la première feuille gagne en cas d'égalité totale).
+    candidates.sort((a, b) =>
+      (b.sheetScore - a.sheetScore) ||
+      (b.score - a.score) ||
+      (b.rowsCount - a.rowsCount) ||
+      (a.order - b.order)
+    );
+
+    let best = candidates[0];
+    if (!best) {
+      // Fallback ultime : pas de feuille reconnue → prendre la 1ère feuille non-blacklistée avec le plus de lignes
+      let maxRows = 0; let fallbackName = wb.SheetNames[0];
+      for (const name of wb.SheetNames) {
+        if (blacklistSheet.test(name.trim())) continue;
+        const m = XLSX.utils.sheet_to_json<unknown>(wb.Sheets[name], { defval: '', raw: false, header: 1 }) as unknown[];
+        if (m.length > maxRows) { maxRows = m.length; fallbackName = name; }
+      }
+      best = { sheetName: fallbackName, headerRow: 0, score: 0, rowsCount: maxRows, sheetScore: 0, order: 0 };
     }
 
-    const rows = XLSX.utils.sheet_to_json<ParsedRow>(ws, { defval: '', raw: false });
+    console.log('🚀 [parseFile v2.0 BUILD] Feuilles disponibles :', wb.SheetNames);
+    console.log('🚀 [parseFile v2.0 BUILD] Candidats analysés :', candidates);
+    console.log('🚀 [parseFile v2.0 BUILD] Feuille SÉLECTIONNÉE :', best.sheetName, '(headerRow:', best.headerRow, ', score:', best.score, ')');
+
+    const ws = wb.Sheets[best.sheetName];
+    // Si le header est en ligne 1 (cas standard), on utilise sheet_to_json direct.
+    // Si le header est plus bas (consignes au-dessus), on doit décaler la plage.
+    const opts: XLSX.Sheet2JSONOpts = { defval: '', raw: true };
+    if (best.headerRow > 0) {
+      // Récupérer la dimension de la feuille et la décaler
+      const ref = ws['!ref'];
+      if (ref) {
+        const range = XLSX.utils.decode_range(ref);
+        range.s.r = best.headerRow; // nouveau début = ligne du vrai header
+        opts.range = XLSX.utils.encode_range(range);
+      }
+    }
+    const rows = XLSX.utils.sheet_to_json<ParsedRow>(ws, opts);
     const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
     return { headers, rows };
   }
@@ -85,7 +383,12 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
 function parseAmount(s: any): number {
   if (s === undefined || s === null || s === '') return 0;
   if (typeof s === 'number') return s;
-  const str = String(s).replace(/\s/g, '').replace(/\u00A0/g, '').replace(/[^\d,.-]/g, '');
+  // Supprimer TOUS les types d'espaces Unicode + tout caractère non-numérique
+  // (sauf , . -). Couvre : espace ASCII, NBSP (U+00A0), narrow NBSP (U+202F),
+  // figure space (U+2007), thin space (U+2009), em/en spaces, etc.
+  const str = String(s)
+    .replace(/[\s\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, '')
+    .replace(/[^\d,.\-]/g, '');
   // Détection virgule/point
   const hasC = str.includes(',');
   const hasP = str.includes('.');
@@ -323,18 +626,25 @@ export async function importGL(
   const periodIndex = new Map(existingPeriodsAll.map((p) => [`${p.year}-${p.month}`, p.id]));
   const existingFYs = await db.fiscalYears.where('orgId').equals(opts.orgId).toArray();
   const fyIndex = new Map(existingFYs.map((fy) => [fy.year, fy.id]));
-  const existingAccountCodes = new Set(
-    (await db.accounts.where('orgId').equals(opts.orgId).toArray()).map((a) => a.code),
-  );
-
   // Pattern de détection des écritures d'à-nouveaux (Report À Nouveau = RAN)
-  // Soit par le code journal (AN, RAN, ANO, OUV…), soit par le libellé
-  // (« à-nouveaux », « ouverture », « RAN »…)
+  // STRICT : uniquement code journal exact + libellé sur comptes BILAN (classes 1-5).
+  // Les comptes de gestion (classes 6, 7, 8) ne sont JAMAIS reportés à nouveau en
+  // SYSCOHADA — ils sont soldés à la clôture. Donc même si journal = "AN", une
+  // écriture sur 706/411/etc avec compte de gestion ne peut pas être un RAN.
+  // Cette règle évite de router des écritures de janvier (ex: 706100) vers le
+  // mois 0 « à-nouveaux » par erreur, ce qui les rendrait invisibles dans le CR.
+  const AN_JOURNALS = new Set(['AN', 'A.N', 'A.N.', 'RAN', 'R.A.N', 'R.A.N.', 'ANO', 'OUV', 'OUVERTURE', 'REPORT', 'NOUVEAUX']);
   const isAN = (e: Omit<GLEntry, 'id'>) => {
-    const jrn = (e.journal || '').toUpperCase();
-    if (/^A\.?N\.?$/.test(jrn) || jrn === 'RAN' || jrn === 'ANO' || jrn === 'OUV' || jrn === 'OUVERTURE' || /^AN\b/.test(jrn)) return true;
+    // Comptes de gestion : jamais d'à-nouveaux en SYSCOHADA
+    const c0 = (e.account || '')[0];
+    if (c0 === '6' || c0 === '7' || c0 === '8') return false;
+    const jrn = (e.journal || '').toUpperCase().trim();
+    if (AN_JOURNALS.has(jrn)) return true;
+    // Libellé : uniquement match strict de la séquence « à-nouveau » ou « report à nouveau »
     const lib = (e.label || '').toLowerCase();
-    if (/\ba[- ]?nouveau/.test(lib) || /report\s+à?\s*nouveau/.test(lib) || /\bouverture\b/.test(lib)) return true;
+    if (/\bà[- ]?nouveau/.test(lib)) return true;
+    if (/\ba[- ]nouveau/.test(lib)) return true; // « a-nouveau » sans accent
+    if (/report\s+(à|a)\s+nouveau/.test(lib)) return true;
     return false;
   };
 
@@ -366,26 +676,16 @@ export async function importGL(
     e.periodId = pId;
   }
 
-  // Comptes à créer
-  const newAccounts: Account[] = [];
-  for (const code of new Set(entries.map((e) => e.account))) {
-    if (existingAccountCodes.has(code)) continue;
-    const sysco = findSyscoAccount(code);
-    newAccounts.push({
-      orgId: opts.orgId,
-      code,
-      label: sysco?.label ?? 'Compte importé',
-      syscoCode: sysco?.code,
-      class: classOf(code) ?? 'X',
-      type: sysco?.type ?? 'X',
-    });
-  }
+  // ⚠ NE PAS auto-créer des entrées dans db.accounts (Plan Comptable) à partir
+  // du GL. Le Plan Comptable est un référentiel maître qui doit être importé
+  // explicitement via la page Plan Comptable. Les libellés des comptes mouvementés
+  // sont disponibles dans les entrées GL (e.label) et utilisés en fallback par
+  // les moteurs d'affichage (balance.ts, monthly.ts, budgetActual.ts).
 
   // ── TRANSACTION : uniquement des opérations Dexie consécutives ───────────
   await db.transaction('rw', [db.gl, db.accounts, db.imports, db.periods, db.fiscalYears], async () => {
     if (newFYs.length > 0) await db.fiscalYears.bulkPut(newFYs);
     if (newPeriods.length > 0) await db.periods.bulkPut(newPeriods);
-    if (newAccounts.length > 0) await db.accounts.bulkPut(newAccounts);
 
     const importId = await db.imports.add({
       orgId: opts.orgId,
@@ -476,8 +776,22 @@ export async function importCOA(
   const colSysco = mapping?.sysco
     || headers.find((h) => /sysco/i.test(h.trim()) || /^compte\s*sysco/i.test(h.trim()));
 
-  if (!colCode) throw new Error('Colonne "Code" ou "Compte" introuvable dans le fichier.');
-  if (!colLabel) throw new Error('Colonne "Libellé" introuvable dans le fichier.');
+  if (!colCode) {
+    const msg = `Colonne "Code" ou "Compte" introuvable. Colonnes trouvées : ${headers.join(', ')}`;
+    console.error('[importCOA]', msg);
+    throw new Error(msg);
+  }
+  if (!colLabel) {
+    const msg = `Colonne "Libellé" introuvable. Colonnes trouvées : ${headers.join(', ')}`;
+    console.error('[importCOA]', msg);
+    throw new Error(msg);
+  }
+
+  // DIAGNOSTIC : afficher en console ce que le parser voit
+  console.log('[importCOA] Headers détectés :', headers);
+  console.log('[importCOA] Colonnes mappées :', { code: colCode, label: colLabel, class: colClass, type: colType, sysco: colSysco });
+  console.log('[importCOA] Premières lignes :', rows.slice(0, 3));
+  console.log('[importCOA] Total lignes brutes :', rows.length);
 
   rows.forEach((r, idx) => {
     const code = String(r[colCode!] ?? '').trim();
@@ -491,6 +805,12 @@ export async function importCOA(
 
     toImport.push({ orgId, code, label, class: cls, type, syscoCode });
   });
+
+  console.log('[importCOA] Comptes à importer :', toImport.length);
+  if (toImport.length === 0 && rows.length > 0) {
+    console.warn('[importCOA] AUCUN compte importé alors que', rows.length, 'lignes lues. Erreurs :', errors);
+    alert(`⚠ Aucun compte importé.\nLignes lues : ${rows.length}\nColonne Code : ${colCode}\nColonne Libellé : ${colLabel}\n\nOuvrez la console (F12) pour voir le détail.`);
+  }
 
   let updated = 0;
   if (toImport.length > 0) {
@@ -567,8 +887,23 @@ export async function importBudget(
   const hasMonthly = monthCols.some((c) => !!c);
   const annualCol = mapping.annual;
 
+  // DIAGNOSTIC console
+  console.log('[importBudget] Headers détectés :', headers);
+  console.log('[importBudget] Colonne compte :', mapping.account);
+  console.log('[importBudget] Colonnes mensuelles :', monthCols);
+  console.log('[importBudget] Colonne annuelle :', annualCol);
+  console.log('[importBudget] Premières lignes :', rows.slice(0, 3));
+  console.log('[importBudget] Total lignes brutes :', rows.length);
+
   if (!hasMonthly && !annualCol) {
-    throw new Error('Impossible de localiser les 12 colonnes mensuelles ni une colonne "Montant annuel".');
+    const msg = `Impossible de localiser les 12 colonnes mensuelles ni une colonne "Montant annuel".\nHeaders trouvés : ${headers.join(', ')}`;
+    console.error('[importBudget]', msg);
+    throw new Error(msg);
+  }
+  if (!mapping.account) {
+    const msg = `Colonne "Compte" non spécifiée. Headers : ${headers.join(', ')}`;
+    console.error('[importBudget]', msg);
+    throw new Error(msg);
   }
 
   // Accumulation par compte (somme si plusieurs lignes par compte)
@@ -588,15 +923,16 @@ export async function importBudget(
       });
     } else if (annualCol) {
       const annual = parseAmount(r[annualCol]);
-      if (annual === 0) return;
-      // Répartition linéaire 1/12
-      const part = Math.round(annual / 12);
+      // Répartition linéaire 1/12 — on garde même si annual = 0
+      const part = annual === 0 ? 0 : Math.round(annual / 12);
       monthly = Array.from({ length: 12 }, () => part);
     } else {
-      return;
+      monthly = Array(12).fill(0);
     }
 
-    if (monthly.every((v) => v === 0)) return;
+    // ⚠ NE PAS skipper les lignes avec montants à 0 — l'utilisateur doit pouvoir
+    // les voir et les éditer manuellement après import. La structure du budget
+    // (liste des comptes) doit être préservée même si les valeurs sont vides.
 
     if (!perAccount.has(code)) perAccount.set(code, Array(12).fill(0));
     const current = perAccount.get(code)!;
@@ -616,6 +952,15 @@ export async function importBudget(
         if (arr[m] !== 0) {
           toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: m + 1, amount: arr[m] });
         }
+      }
+    }
+    // Si tous les montants sont à 0, insérer au moins UNE ligne par compte
+    // (mois 1, montant 0) pour que loadBudget retrouve les comptes vides
+    // et que l'utilisateur puisse les éditer manuellement.
+    for (const [account] of perAccount) {
+      const hasAny = toInsert.some((t) => t.account === account);
+      if (!hasAny) {
+        toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: 1, amount: 0 });
       }
     }
     if (toInsert.length) await db.budgets.bulkAdd(toInsert as any);
@@ -667,11 +1012,24 @@ export async function migrateGLPeriods(orgId: string): Promise<{ migrated: numbe
 
     const updates: { key: number; changes: { periodId: string } }[] = [];
 
+    // Pré-charger les périodes pour savoir si une écriture est actuellement
+    // routée vers le mois 0 (à-nouveaux). On ne touche aux comptes bilan
+    // (classes 1-5) QUE si leur periodId n'existe pas. Pour les comptes de
+    // gestion (6/7/8), on force la réaffectation sur le mois de la date — ils
+    // ne devraient JAMAIS être en mois 0 (à-nouveaux), c'est un bug d'import.
+    const periodById = new Map(periods.map((p) => [p.id, p]));
+
     for (const e of entries) {
       if (!e.date || e.date.length < 7) continue;
       const y = parseInt(e.date.substring(0, 4));
       const m = parseInt(e.date.substring(5, 7));
       if (isNaN(y) || isNaN(m) || m < 1 || m > 12) continue;
+
+      // Skip les écritures bilan déjà routées sur une période valide (préserve les RAN légitimes)
+      const c0 = e.account?.[0];
+      const isGestion = c0 === '6' || c0 === '7' || c0 === '8';
+      const currentPeriod = e.periodId ? periodById.get(e.periodId) : undefined;
+      if (!isGestion && currentPeriod && currentPeriod.year === y) continue;
 
       const key = `${y}-${m}`;
       let pId = periodIndex.get(key);
@@ -703,4 +1061,38 @@ export async function migrateGLPeriods(orgId: string): Promise<{ migrated: numbe
   });
 
   return { migrated, periodsCreated };
+}
+
+// ── Resynchroniser les libellés de db.accounts depuis les libellés réels du GL ──
+// Pour chaque compte, prend le libellé le plus fréquent dans les écritures GL
+// (= libellé du plan comptable de l'entreprise) et écrase l'ancien label
+// SYSCOHADA générique. À déclencher après import si les libellés affichés
+// ne correspondent pas au plan de l'entreprise.
+export async function resyncAccountLabels(orgId: string): Promise<{ updated: number }> {
+  let updated = 0;
+  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const accounts = await db.accounts.where('orgId').equals(orgId).toArray();
+
+  // Calculer le libellé le plus fréquent par compte
+  const freq = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    if (!e.label) continue;
+    const lbl = e.label.trim();
+    if (!lbl) continue;
+    let m = freq.get(e.account);
+    if (!m) { m = new Map(); freq.set(e.account, m); }
+    m.set(lbl, (m.get(lbl) ?? 0) + 1);
+  }
+
+  for (const acc of accounts) {
+    const m = freq.get(acc.code);
+    if (!m) continue;
+    let best = ''; let bestN = 0;
+    for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
+    if (best && best !== acc.label) {
+      await db.accounts.put({ ...acc, label: best });
+      updated++;
+    }
+  }
+  return { updated };
 }
