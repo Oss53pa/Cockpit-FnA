@@ -87,15 +87,45 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
           </select>
 
+          {/* Toggle segmenté Entier / Abrégé — affichage des montants */}
+          <div
+            className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 border border-white/15"
+            role="tablist"
+            aria-label="Mode d'affichage des montants"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={amountMode === 'full'}
+              title="Afficher les montants en entier (ex : 1 234 567 890)"
+              onClick={() => setAmountMode('full')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition flex items-center gap-1 ${amountMode === 'full' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+            >
+              <Hash className="w-3 h-3" />
+              Entier
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={amountMode === 'short'}
+              title="Afficher les montants abrégés (ex : 1,2 Md)"
+              onClick={() => setAmountMode('short')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${amountMode === 'short' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+            >
+              K/M
+            </button>
+          </div>
+
+          {/* Version mobile compacte : juste un bouton icône */}
           <button
             type="button"
-            title={amountMode === 'full' ? 'Montants en entier (cliquer pour passer en abrégé K/M)' : 'Montants abrégés K/M (cliquer pour passer en entier)'}
-            aria-label="Mode d'affichage des montants"
-            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition relative"
+            title={amountMode === 'full' ? 'Entier — cliquer pour abréger' : 'Abrégé — cliquer pour afficher en entier'}
+            aria-label="Basculer l'affichage des montants"
+            className="sm:hidden w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition relative"
             onClick={() => setAmountMode(amountMode === 'full' ? 'short' : 'full')}
           >
             <Hash className="w-4 h-4" />
-            <span className="absolute -bottom-0.5 -right-0.5 min-w-[18px] h-[14px] px-1 bg-primary-100 text-primary-900 rounded-full text-[8px] font-bold flex items-center justify-center uppercase tracking-tighter">
+            <span className="absolute -bottom-0.5 -right-0.5 min-w-[20px] h-[14px] px-1 bg-primary-100 text-primary-900 rounded-full text-[8px] font-bold flex items-center justify-center uppercase">
               {amountMode === 'full' ? '123' : 'K/M'}
             </span>
           </button>

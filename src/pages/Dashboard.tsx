@@ -16,10 +16,13 @@ import { useChartTheme } from '../lib/chartTheme';
 import { bySection, loadLabels } from '../engine/budgetActual';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
-import { fmtFull } from '../lib/format';
+import { fmtFull, fmtK } from '../lib/format';
 import { agedBalance, fiscalite, immobilisationsDetail, masseSalariale, monthlyByPrefix, topAccountsByPrefix, tresorerieMonthly, AgedTier } from '../engine/analytics';
 
-const fmtK = (v: number) => v >= 1e9 ? `${(v/1e9).toFixed(1)}Md` : v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : String(Math.round(v));
+// useApp().amountMode est lu pour déclencher un re-render de toute la page
+// quand l'utilisateur bascule Entier / Abrégé. fmtK/fmtMoney lisent ensuite
+// le mode depuis localStorage, ce qui rend le changement instantané.
+// Les pages qui appellent ce Dashboard root passent déjà par useApp.
 
 // Les gradients sont maintenant dynamiques via useChartTheme().gradient()
 // Variants alternées pour distinguer visuellement les dashboards
@@ -76,6 +79,9 @@ const catalog: Record<string, { title: string; icon: string; subtitle: string }>
 export default function Dashboard() {
   const { id = 'cp' } = useParams();
   const org = useCurrentOrg();
+  // useApp sans sélecteur : le composant se re-rend à chaque changement du
+  // store, y compris quand l'utilisateur toggle amountMode (Entier ↔ Abrégé).
+  // fmtK/fmtMoney lisent alors le mode à jour depuis localStorage.
   const { currentYear } = useApp();
   const ct = useChartTheme();
   const meta = catalog[id];
