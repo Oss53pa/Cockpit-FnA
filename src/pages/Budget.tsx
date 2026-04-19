@@ -17,7 +17,7 @@ import {
 } from '../engine/budget';
 import { importBudget } from '../engine/importer';
 import { SYSCOHADA_COA } from '../syscohada/coa';
-import { fmtFull, fmtMoney, fmtPct } from '../lib/format';
+import { fmtFull, fmtK, fmtMoney, fmtPct } from '../lib/format';
 import { downloadBudgetTemplate } from '../engine/templates';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
 
@@ -621,7 +621,7 @@ function Variance({ version, rows, orgId, year }: { version: string; rows: Varia
         <Chart height={320}
           option={{
             grid: { left: 180, right: 40 },
-            xAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v/1_000_000).toFixed(0)}M` } },
+            xAxis: { type: 'value', axisLabel: { formatter: (v: number) => fmtK(v) } },
             yAxis: { type: 'category', data: top.map((r) => `${r.account} · ${r.label.substring(0, 24)}`).reverse(), axisLabel: { fontSize: 10 } },
             series: [
               { name: 'Budget', type: 'bar', data: top.map((r) => r.budget).reverse(), itemStyle: { color: '#a3a3a3' } },

@@ -796,7 +796,7 @@ function BudgetActualView() {
                 <BarChart data={sections.map((s) => ({ name: s.label, Réalisé: s.totalRealise, Budget: s.totalBudget }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : `${(v/1e3).toFixed(0)}K`} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
@@ -812,7 +812,7 @@ function BudgetActualView() {
                 <BarChart data={sections.map((s) => ({ name: s.label, ecart: s.totalEcart, isCharge: s.isCharge }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 0 ? `+${(v/1e6).toFixed(0)}M` : `${(v/1e6).toFixed(0)}M`} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${fmtK(v)}`} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Bar dataKey="ecart" radius={[4,4,0,0]}>
                     {sections.map((s, i) => {

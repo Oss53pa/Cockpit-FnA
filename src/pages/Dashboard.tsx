@@ -877,7 +877,7 @@ function CashflowStatement() {
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
             <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v.toLocaleString('fr-FR')} />
+            <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
             <Tooltip formatter={(v: any) => fmtFull(v)} />
             <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="bottom" />
             <Bar dataKey="cashIn" name="Cash in" fill={ct.at(0)} />
@@ -1020,7 +1020,7 @@ function ReceivablesReview() {
             <BarChart data={arData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : `${v}`} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Bar dataKey="value" fill={teal}>
                 {arData.map((_, i) => <Cell key={i} fill={teal} />)}
@@ -1034,7 +1034,7 @@ function ReceivablesReview() {
             <BarChart data={apData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : `${v}`} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Bar dataKey="value" fill={red}>
                 {apData.map((_, i) => <Cell key={i} fill={red} />)}
