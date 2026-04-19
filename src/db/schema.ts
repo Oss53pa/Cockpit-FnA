@@ -178,6 +178,61 @@ export type ReportTemplate = {
   updatedAt: number;
 };
 
+// ── Comptabilité analytique multi-axes ──────────────────────────────────
+export type AnalyticAxis = {
+  id: string;
+  orgId: string;
+  number: number;           // 1 à 5
+  name: string;             // ex: "Projet", "Centre de coût"
+  codeName: string;         // ex: "Code projet"
+  required: boolean;
+  active: boolean;
+};
+
+export type AnalyticCode = {
+  id: string;
+  orgId: string;
+  axisId: string;
+  code: string;             // ex: "IB005", "P0402"
+  shortLabel: string;
+  longLabel: string;
+  parentId?: string;
+  active: boolean;
+  order: number;
+};
+
+export type AnalyticRule = {
+  id: string;
+  orgId: string;
+  name: string;
+  priority: number;
+  active: boolean;
+  conditionType: 'label_contains' | 'account_range' | 'journal_eq' | 'amount_between' | 'direct_code';
+  conditionValue: string;
+  targetAxis: number;       // axe cible (1-5)
+  analyticCodeId: string;
+  createdAt: number;
+};
+
+export type AnalyticAssignment = {
+  id?: number;
+  orgId: string;
+  glEntryId: number;
+  axisNumber: number;       // 1-5
+  codeId: string;
+  method: 'direct' | 'label' | 'account' | 'journal' | 'amount' | 'manual';
+  ruleId?: string;
+  assignedAt: number;
+};
+
+export type AnalyticBudget = {
+  id?: number;
+  orgId: string;
+  codeId: string;
+  period: string;           // "2025-01" ou "2025"
+  amount: number;
+};
+
 class CockpitDB extends Dexie {
   organizations!: Table<Organization, string>;
   fiscalYears!: Table<FiscalYear, string>;
@@ -191,6 +246,11 @@ class CockpitDB extends Dexie {
   templates!: Table<ReportTemplate, number>;
   attentionPoints!: Table<AttentionPoint, number>;
   actionPlans!: Table<ActionPlan, number>;
+  analyticAxes!: Table<AnalyticAxis, string>;
+  analyticCodes!: Table<AnalyticCode, string>;
+  analyticRules!: Table<AnalyticRule, string>;
+  analyticAssignments!: Table<AnalyticAssignment, number>;
+  analyticBudgets!: Table<AnalyticBudget, number>;
 
   constructor() {
     super('CockpitFA');
@@ -216,6 +276,13 @@ class CockpitDB extends Dexie {
       await trans.table('organizations').toCollection().modify((org: Organization) => {
         if (!org.accountingSystem) org.accountingSystem = 'Normal';
       });
+    });
+    this.version(5).stores({
+      analyticAxes: 'id, orgId, [orgId+number]',
+      analyticCodes: 'id, orgId, axisId, code, parentId, [orgId+axisId]',
+      analyticRules: 'id, orgId, priority, [orgId+active]',
+      analyticAssignments: '++id, orgId, glEntryId, axisNumber, codeId, [orgId+glEntryId], [orgId+codeId]',
+      analyticBudgets: '++id, orgId, codeId, period, [orgId+codeId]',
     });
   }
 }
