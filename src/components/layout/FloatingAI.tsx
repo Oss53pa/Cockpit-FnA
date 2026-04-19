@@ -73,6 +73,8 @@ export function FloatingAI() {
   const respond = (q: string): string => {
     if (!sig || !bilan) return 'Données en cours de chargement…';
     const low = q.toLowerCase();
+
+    // 1. Question sur les KPIs courants
     if (low.includes('ca') || low.includes('chiffre')) return `Chiffre d'affaires : ${fmtMoney(sig.ca)}`;
     if (low.includes('résultat') || low.includes('rn')) return `Résultat net : ${fmtMoney(sig.resultat)} (marge ${sig.ca ? ((sig.resultat/sig.ca)*100).toFixed(1) : 0} %)`;
     if (low.includes('ebe')) return `EBE : ${fmtMoney(sig.ebe)} · Taux : ${sig.ca ? ((sig.ebe/sig.ca)*100).toFixed(1) : 0} %`;
@@ -85,7 +87,24 @@ export function FloatingAI() {
       const alertes = ratios.filter((r) => r.status !== 'good');
       return alertes.length ? `${alertes.length} ratio(s) hors seuil :\n${alertes.slice(0, 3).map((r) => `• ${r.label} : ${r.value.toFixed(2)} ${r.unit}`).join('\n')}` : '✓ Tous les ratios sont dans les normes.';
     }
-    return "Je peux vous aider sur : CA, résultat, EBE, trésorerie, ratios, alertes. Pour plus d'options, ouvrez l'assistant complet.";
+
+    // 2. Question SYSCOHADA via base de connaissance complète (24 chunks)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { answerFromKnowledge } = require('../../engine/proph3/knowledge/search');
+      const ans = answerFromKnowledge(q);
+      if (ans) return ans;
+    } catch { /* ignore */ }
+
+    // 3. Glossaire de base (fallback)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { answerSyscohadaQuestion } = require('../../engine/proph3/syscohada-knowledge');
+      const ans = answerSyscohadaQuestion(q);
+      if (ans) return ans;
+    } catch { /* ignore */ }
+
+    return "Je suis Proph3t, expert SYSCOHADA. Je peux répondre sur :\n• KPIs : CA, résultat, EBE, trésorerie, ratios\n• Plan comptable : classes 1-9, comptes détaillés (411, 401, 521…)\n• Principes comptables (prudence, permanence, continuité…)\n• Écritures types (achats, ventes, salaires, immobilisations, TVA, crédit-bail…)\n• États financiers (bilan, CR, TFT, notes annexes)\n• Analyses (SIG, FR/BFR/TN, CAF)\n• Droit OHADA (AUDCIF, 17 pays, UEMOA, CEMAC)";
   };
 
   const send = () => {

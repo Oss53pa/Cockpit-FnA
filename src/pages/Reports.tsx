@@ -899,11 +899,15 @@ export default function Reports() {
             <button className="btn-outline" onClick={() => setOpenLoad(true)}>Charger un modèle</button>
             <button className="btn-outline" onClick={() => setOpenSave(true)}><Save className="w-4 h-4" /> Enregistrer modèle</button>
             <button className="btn-outline" onClick={async () => {
-              if (!confirm("Auto-commenter le rapport avec Proph3t ?\nGénère un commentaire sous chaque H1, H2 et H3.")) return;
+              if (!confirm("Auto-commenter le rapport avec Proph3t ?\nGénère un commentaire sous chaque H1, H2 et H3.\nL'analyse intègre l'historique mémorisé + connaissance SYSCOHADA + prédictions.")) return;
               const { autoCommentReport } = await import('../engine/proph3/reportCommentator');
-              const res = autoCommentReport(config.blocks as any, data as any);
+              const dataWithOrg = { ...data, org: { name: org?.name, sector: (org as any)?.sector } } as any;
+              const res = autoCommentReport(config.blocks as any, dataWithOrg, {
+                orgId: currentOrgId,
+                context: config.identity.period || `${currentYear}`,
+              });
               setConfig((c) => ({ ...c, blocks: res.blocks as any }));
-              alert(`✅ ${res.count} section(s) commentée(s) par Proph3t.`);
+              alert(`✅ ${res.count} section(s) commentée(s) par Proph3t.\n📚 Mémoire mise à jour pour cette société (apprentissage continu).`);
             }}><Sparkles className="w-4 h-4" /> Commenter avec Proph3t</button>
             <button className="btn-outline" onClick={async () => {
               if (!confirm("Effacer tous les commentaires générés par Proph3t ?\nLes paragraphes que vous avez écrits manuellement sont préservés.")) return;
@@ -1309,19 +1313,19 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   return (
     <>
       {config.options.includeCover && (
-        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber>
+        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber pageType="cover">
           <CoverPage config={config} palette={palette} org={ops.org} setLogo={ops.setLogo} setCoverProps={ops.setCoverProps} />
         </PageA4>
       )}
 
       {config.options.includeTOC && (
-        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette}>
+        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} pageType="toc">
           <TocPage config={config} palette={palette} />
         </PageA4>
       )}
 
       {nonEmptyPages.map((pageBlocks, pi) => (
-        <PageA4 key={pi} style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette}>
+        <PageA4 key={pi} style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} pageType="content">
           {pageBlocks.map(({ block, index }) => (
             <DraggableBlock key={block.id} block={block} index={index} ops={ops} data={data} palette={palette} />
           ))}
@@ -1330,7 +1334,7 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
       ))}
 
       {backCoverPages > 0 && (
-        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber>
+        <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber pageType="back">
           <BackCoverPage config={config} palette={palette} org={ops.org} />
         </PageA4>
       )}
@@ -1471,7 +1475,7 @@ function PopBtn({ icon, label, sub, onClick, highlight }: { icon: React.ReactNod
   );
 }
 
-function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumber }: {
+function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumber, pageType }: {
   children: React.ReactNode;
   style: React.CSSProperties;
   maxH?: number;
@@ -1479,6 +1483,7 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
   totalPages?: number;
   palette?: any;
   hideNumber?: boolean;
+  pageType?: 'cover' | 'toc' | 'content' | 'back';
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
@@ -1493,7 +1498,7 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
   }, [maxH, children]);
 
   return (
-    <div className={clsx('bg-white dark:bg-primary-900 mx-auto relative flex flex-col',
+    <div data-page-type={pageType ?? 'content'} className={clsx('bg-white dark:bg-primary-900 mx-auto relative flex flex-col page-a4',
       overflow ? 'ring-1 ring-error/30' : '')} style={style}>
       {overflow && (
         <div className="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-[9px] font-semibold bg-error/10 text-error border border-error/20 print:hidden">
