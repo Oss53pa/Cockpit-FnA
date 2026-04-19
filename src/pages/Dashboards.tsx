@@ -11,6 +11,8 @@ const dashboards = [
   { id: 'compliance', route: '/dashboard/compliance', name: 'Compliance SYSCOHADA ★', desc: '10 contrôles automatiques de conformité : équilibre balance, bilan, signes de classes, mapping…', icon: 'ShieldCheck', cat: 'Standard' },
   { id: 'breakeven', route: '/dashboard/breakeven', name: 'Seuil de rentabilité ★', desc: 'Point mort, marge de sécurité, décomposition coûts fixes/variables, courbe visuelle', icon: 'Target', cat: 'Standard' },
   { id: 'pareto', route: '/dashboard/pareto', name: 'Analyse ABC (Pareto) ★', desc: "Les 20 % de comptes qui font 80 % du CA / des charges, classés A/B/C avec courbe cumulée", icon: 'BarChart3', cat: 'Standard' },
+  { id: 'cashforecast', route: '/dashboard/cashforecast', name: 'Cashflow prévisionnel 13 semaines ★', desc: 'Projection treasurer : encaissements AR, décaissements AP, salaires, impôts. Alertes seuil critique.', icon: 'Banknote', cat: 'Standard' },
+  { id: 'waterfall', route: '/dashboard/waterfall', name: 'Waterfall ★', desc: 'Cascade SIG du CA au Résultat Net OU décomposition de l\'écart Budget/Réalisé par section', icon: 'Layers3', cat: 'Standard' },
   { id: 'home', route: '/dashboard/home', name: 'Synthèse de gestion', desc: "KPIs, alertes, structure financière, performance globale", icon: 'LayoutDashboard', cat: 'Standard' },
   { id: 'cp', route: '/dashboard/cp', name: 'Charges & Produits', desc: 'Répartition par nature, évolution mensuelle, top 10, concentration', icon: 'TrendingDown', cat: 'Standard' },
   { id: 'crblock', route: '/dashboard/crblock', name: 'CR par bloc', desc: 'Vue d\'ensemble : 7 sections du CR + résultats intermédiaires', icon: 'Layers', cat: 'Standard' },
@@ -51,6 +53,9 @@ const dashboards = [
   { id: 'sante', route: '/dashboard/sante', name: 'Santé', desc: 'Actes médicaux, recettes, personnel soignant, équipements', icon: 'HeartPulse', cat: 'Sectoriel' },
   { id: 'transp', route: '/dashboard/transp', name: 'Transport & Logistique', desc: 'CA/km, flotte, carburant, maintenance, taux de remplissage', icon: 'Truck', cat: 'Sectoriel' },
   { id: 'serv', route: '/dashboard/serv', name: 'Services & Conseil', desc: 'Honoraires, taux facturable, marge projets, staffing', icon: 'Briefcase', cat: 'Sectoriel' },
+  // ─── Pilotage & Suivi ─────────────────────────────────
+  { id: 'alerts', route: '/alerts', name: 'Points d\'attention & Alertes', desc: 'Risques détectés, anomalies comptables, seuils dépassés, suivi par sévérité et statut', icon: 'AlertTriangle', cat: 'Pilotage' },
+  { id: 'actions', route: '/actions', name: 'Plan d\'action', desc: 'Actions correctives, responsables, échéances, priorités, taux d\'avancement, actions en retard', icon: 'ClipboardCheck', cat: 'Pilotage' },
   // ─── Comptabilité analytique ───────────────────────────
   { id: 'ana_dashboard', route: '/analytical?tab=dashboard', name: 'Dashboard analytique', desc: 'KPIs couverture, répartition charges/produits par code, évolution mensuelle, budget vs réalisé', icon: 'PieChart', cat: 'Analytique' },
   { id: 'ana_axes', route: '/analytical?tab=axes', name: 'Plan analytique (Axes)', desc: 'Configuration des axes analytiques : projet, centre de coût, région, activité (jusqu\'à 5 axes)', icon: 'GitBranch', cat: 'Analytique' },
@@ -60,7 +65,7 @@ const dashboards = [
 ];
 
 export default function Dashboards() {
-  const [filter, setFilter] = useState<'Tous' | 'Standard' | 'Reporting' | 'CR — Dashboards' | 'CR — Tables' | 'Sectoriel' | 'Analytique'>('Tous');
+  const [filter, setFilter] = useState<'Tous' | 'Standard' | 'Reporting' | 'CR — Dashboards' | 'CR — Tables' | 'Sectoriel' | 'Pilotage' | 'Analytique'>('Tous');
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const navigate = useNavigate();
@@ -75,7 +80,7 @@ export default function Dashboards() {
       />
 
       <div className="flex gap-2 mb-6">
-        {(['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Analytique'] as const).map((f) => (
+        {(['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique'] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)}
             className={clsx('btn !py-1.5 text-xs',
               filter === f ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>

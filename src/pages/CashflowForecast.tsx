@@ -1,0 +1,293 @@
+// Cashflow prévisionnel 13 semaines
+// Classique treasurer view : projection semaine par semaine de la trésorerie
+// à partir des échéances clients, fournisseurs, salaires, impôts.
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, TrendingUp, TrendingDown, Wallet, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ResponsiveBar } from '@nivo/bar';
+import { ResponsiveLine } from '@nivo/line';
+import { ChartCard } from '../components/ui/ChartCard';
+import { DashHeader } from '../components/ui/DashHeader';
+import { KPICard } from '../components/ui/KPICardV2';
+import { useApp } from '../store/app';
+import { useBalance, useCurrentOrg, useStatements } from '../hooks/useFinancials';
+import { useChartTheme } from '../lib/chartTheme';
+import { fmtFull, fmtK } from '../lib/format';
+import { agedBalance, AgedTier } from '../engine/analytics';
+
+type Week = {
+  label: string;
+  weekNum: number;
+  encaissementsClients: number;
+  decaissementsFourn: number;
+  salaires: number;
+  impots: number;
+  autres: number;
+  netCashflow: number;
+  cumulatedCash: number;
+};
+
+export default function CashflowForecast() {
+  const { currentOrgId, currentYear } = useApp();
+  const org = useCurrentOrg();
+  const balance = useBalance();
+  const { sig, movements } = useStatements();
+  const ct = useChartTheme();
+
+  const [clients, setClients] = useState<AgedTier[]>([]);
+  const [fournisseurs, setFournisseurs] = useState<AgedTier[]>([]);
+  const [criticalThreshold, setCriticalThreshold] = useState(0);
+
+  useEffect(() => {
+    if (!currentOrgId) return;
+    agedBalance(currentOrgId, currentYear, 'client').then((r) => setClients(r.rows));
+    agedBalance(currentOrgId, currentYear, 'fournisseur').then((r) => setFournisseurs(r.rows));
+  }, [currentOrgId, currentYear]);
+
+  // Trésorerie de départ = solde D 50-58 − solde C 56
+  const tresoStart = useMemo(() => {
+    const actif = balance.filter((r) => r.account.match(/^5[0-4578]/) && !r.account.startsWith('56')).reduce((s, r) => s + r.soldeD, 0);
+    const passif = balance.filter((r) => r.account.startsWith('56')).reduce((s, r) => s + r.soldeC, 0);
+    return actif - passif;
+  }, [balance]);
+
+  // Salaires mensuels moyens depuis mouvements classe 66 / 12 mois
+  const salairesMensuel = useMemo(() => {
+    const src = movements.length > 0 ? movements : balance;
+    const personnel = src.filter((r) => r.account.startsWith('66')).reduce((s, r) => s + r.debit - r.credit, 0);
+    return Math.max(0, personnel / 12);
+  }, [movements, balance]);
+
+  // Impôts / taxes mensuels moyens : classe 64 / 12
+  const impotsMensuel = useMemo(() => {
+    const src = movements.length > 0 ? movements : balance;
+    const taxes = src.filter((r) => r.account.startsWith('64')).reduce((s, r) => s + r.debit - r.credit, 0);
+    return Math.max(0, taxes / 12);
+  }, [movements, balance]);
+
+  // CA moyen / semaine pour estimer les entrées futures au-delà des créances actuelles
+  const caHebdoEstime = useMemo(() => (sig?.ca ?? 0) / 52, [sig]);
+
+  // Projection 13 semaines
+  const weeks = useMemo<Week[]>(() => {
+    const out: Week[] = [];
+    let cumul = tresoStart;
+
+    // Totaux des échéances clients/fournisseurs à encaisser/décaisser
+    // On se base sur l'aging : buckets non échu (0), 0-30j (1), 31-60 (2), 61-90 (3), >90 (4)
+    const totalAR = clients.reduce((s, r) => s + Math.abs(r.total), 0);
+    const totalAP = fournisseurs.reduce((s, r) => s + Math.abs(r.total), 0);
+
+    // Hypothèse : encaissement des créances selon leur âge
+    // Semaines 1-4 : 30 % du total AR (les non-échus + 0-30j payés rapidement)
+    // Semaines 5-8 : 40 % du total AR (31-60 + 61-90)
+    // Semaines 9-13 : 20 % du total AR (> 90j, recouvrement difficile)
+    // Les 10 % restants : douteux, on n'inclut pas
+    const arPhase1 = totalAR * 0.30 / 4;  // par semaine pour S1-4
+    const arPhase2 = totalAR * 0.40 / 4;  // par semaine pour S5-8
+    const arPhase3 = totalAR * 0.20 / 5;  // par semaine pour S9-13
+
+    // Paiements fournisseurs : 40 % S1-4, 40 % S5-8, 20 % S9-13
+    const apPhase1 = totalAP * 0.40 / 4;
+    const apPhase2 = totalAP * 0.40 / 4;
+    const apPhase3 = totalAP * 0.20 / 5;
+
+    const impotsHebdo = impotsMensuel / 4.33;
+    const autresHebdo = caHebdoEstime * 0.05; // 5 % du CA = autres décaissements estimés
+
+    for (let w = 1; w <= 13; w++) {
+      let enc = 0, dec = 0;
+      if (w <= 4) { enc = arPhase1 + caHebdoEstime * 0.6; dec = apPhase1; }
+      else if (w <= 8) { enc = arPhase2 + caHebdoEstime * 0.7; dec = apPhase2; }
+      else { enc = arPhase3 + caHebdoEstime * 0.8; dec = apPhase3; }
+
+      // Salaires payés en S4, S8, S13 (fin de mois)
+      const sal = (w === 4 || w === 8 || w === 13) ? salairesMensuel : 0;
+      // Impôts trimestriels en S13
+      const imp = (w === 13) ? impotsMensuel * 3 : impotsHebdo;
+      const autres = autresHebdo;
+
+      const net = enc - dec - sal - imp - autres;
+      cumul += net;
+
+      out.push({
+        label: `S${w}`,
+        weekNum: w,
+        encaissementsClients: Math.round(enc),
+        decaissementsFourn: Math.round(dec),
+        salaires: Math.round(sal),
+        impots: Math.round(imp),
+        autres: Math.round(autres),
+        netCashflow: Math.round(net),
+        cumulatedCash: Math.round(cumul),
+      });
+    }
+    return out;
+  }, [tresoStart, clients, fournisseurs, salairesMensuel, impotsMensuel, caHebdoEstime]);
+
+  const minCash = useMemo(() => Math.min(...weeks.map((w) => w.cumulatedCash)), [weeks]);
+  const minWeek = useMemo(() => weeks.find((w) => w.cumulatedCash === minCash)?.label ?? '—', [weeks, minCash]);
+  const finalCash = weeks[weeks.length - 1]?.cumulatedCash ?? 0;
+  const totalEnc = weeks.reduce((s, w) => s + w.encaissementsClients, 0);
+  const totalDec = weeks.reduce((s, w) => s + w.decaissementsFourn + w.salaires + w.impots + w.autres, 0);
+
+  const isCritical = minCash < criticalThreshold;
+
+  const nivoTheme = {
+    background: 'transparent',
+    text: { fontSize: 10, fill: 'rgb(var(--p-600))' },
+    axis: {
+      ticks: { text: { fontSize: 9, fill: 'rgb(var(--p-500))' } },
+      legend: { text: { fontSize: 10, fill: 'rgb(var(--p-600))' } },
+      domain: { line: { stroke: 'rgb(var(--p-300))', strokeWidth: 1 } },
+    },
+    grid: { line: { stroke: 'rgb(var(--p-200))', strokeDasharray: '3 3' } },
+    legends: { text: { fontSize: 10, fill: 'rgb(var(--p-600))' } },
+    tooltip: {
+      container: { background: 'rgb(var(--p-900))', color: 'rgb(var(--p-50))', fontSize: 11, borderRadius: 8, padding: '8px 12px' },
+    },
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
+      </div>
+
+      <DashHeader
+        icon="CF"
+        title="Cashflow prévisionnel 13 semaines"
+        subtitle={`Projection hebdomadaire basée sur les échéanciers AR/AP — ${org?.name ?? '—'} · Exercice ${currentYear}`}
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <KPICard title="Trésorerie actuelle" value={fmtK(tresoStart)} unit="XOF" icon={<Wallet className="w-4 h-4" />} color={tresoStart >= 0 ? ct.at(0) : '#ef4444'} />
+        <KPICard title="Trésorerie à S+13" value={fmtK(finalCash)} unit="XOF" subValue={finalCash >= tresoStart ? 'En amélioration' : 'En dégradation'} icon={finalCash >= tresoStart ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />} color={finalCash >= 0 ? ct.at(3) : '#ef4444'} />
+        <KPICard title="Trésorerie minimale" value={fmtK(minCash)} unit="XOF" subValue={`atteinte en ${minWeek}`} icon={<AlertTriangle className="w-4 h-4" />} color={minCash >= 0 ? '#22c55e' : '#ef4444'} />
+        <KPICard title="Flux net cumulé" value={fmtK(totalEnc - totalDec)} unit="XOF" subValue={`${fmtK(totalEnc)} encaissés · ${fmtK(totalDec)} décaissés`} icon={<Wallet className="w-4 h-4" />} color={ct.at(4)} />
+      </div>
+
+      {isCritical && (
+        <div className="mb-4 p-3 rounded-lg bg-error/10 border-l-4 border-error flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-error shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-error">Alerte trésorerie critique</p>
+            <p className="text-[12px] text-primary-700 dark:text-primary-200 mt-0.5">
+              Le solde prévisionnel passe sous le seuil critique de {fmtFull(criticalThreshold)} XOF en {minWeek} ({fmtFull(minCash)} XOF). Actions recommandées : accélérer le recouvrement clients, négocier des délais fournisseurs, activer la ligne de découvert.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+        <ChartCard title="Position prévisionnelle" subtitle="Solde de trésorerie cumulé S1 → S13" accent={ct.at(0)} className="lg:col-span-2">
+          <div style={{ height: 260 }}>
+            <ResponsiveLine
+              data={[{ id: 'Trésorerie cumulée', data: weeks.map((w) => ({ x: w.label, y: w.cumulatedCash })) }]}
+              margin={{ top: 20, right: 20, bottom: 40, left: 60 }}
+              xScale={{ type: 'point' }}
+              yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
+              curve="monotoneX"
+              colors={[ct.at(0)]}
+              lineWidth={2.5}
+              enablePoints
+              pointSize={5}
+              pointBorderWidth={2}
+              pointBorderColor={{ theme: 'background' }}
+              enableArea
+              areaOpacity={0.12}
+              enableGridY
+              axisLeft={{ format: (v: number) => fmtK(v) }}
+              theme={nivoTheme}
+              animate
+              markers={[
+                { axis: 'y', value: criticalThreshold, lineStyle: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 5' }, legend: `Seuil critique`, legendOrientation: 'horizontal', textStyle: { fill: '#ef4444', fontSize: 9 } },
+                { axis: 'y', value: 0, lineStyle: { stroke: 'rgb(var(--p-400))', strokeWidth: 1 } },
+              ]}
+            />
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-[11px]">
+            <label className="text-primary-500 font-semibold uppercase tracking-wider">Seuil critique :</label>
+            <input
+              type="number"
+              className="input !py-1 !text-[11px] !w-32 num"
+              value={criticalThreshold}
+              onChange={(e) => setCriticalThreshold(Number(e.target.value) || 0)}
+            />
+            <span className="text-primary-400">XOF — niveau en dessous duquel vous voulez être alerté</span>
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Flux net hebdo" subtitle="Encaissements − décaissements" accent={ct.at(1)} className="lg:col-span-1">
+          <div style={{ height: 260 }}>
+            <ResponsiveBar
+              data={weeks.map((w) => ({ week: w.label, value: w.netCashflow }))}
+              keys={['value']}
+              indexBy="week"
+              margin={{ top: 10, right: 10, bottom: 40, left: 50 }}
+              padding={0.25}
+              colors={({ data }) => ((data as any).value >= 0 ? '#22c55e' : '#ef4444')}
+              colorBy="indexValue"
+              axisBottom={{ tickRotation: -45 }}
+              axisLeft={{ format: (v: number) => fmtK(v) }}
+              enableLabel={false}
+              borderRadius={2}
+              theme={nivoTheme}
+              animate
+            />
+          </div>
+        </ChartCard>
+      </div>
+
+      <ChartCard title="Détail hebdomadaire" subtitle="Encaissements et décaissements ligne par ligne" accent={ct.at(3)}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead className="text-[9px] uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
+              <tr>
+                <th className="text-left py-2 px-2 sticky left-0 bg-primary-100 dark:bg-primary-900 z-10">Semaine</th>
+                <th className="text-right py-2 px-2 text-success">↑ Clients</th>
+                <th className="text-right py-2 px-2 text-error">↓ Fournisseurs</th>
+                <th className="text-right py-2 px-2 text-error">↓ Salaires</th>
+                <th className="text-right py-2 px-2 text-error">↓ Impôts</th>
+                <th className="text-right py-2 px-2 text-error">↓ Autres</th>
+                <th className="text-right py-2 px-2 font-bold border-l border-primary-300 dark:border-primary-700">Net</th>
+                <th className="text-right py-2 px-2 font-bold">Cumul</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+              {weeks.map((w) => (
+                <tr key={w.weekNum} className={`hover:bg-primary-100/40 dark:hover:bg-primary-900/40 ${w.cumulatedCash < criticalThreshold ? 'bg-error/5' : ''}`}>
+                  <td className="py-1.5 px-2 font-semibold sticky left-0 bg-white dark:bg-primary-900">{w.label}</td>
+                  <td className="py-1.5 px-2 text-right num text-success">{fmtFull(w.encaissementsClients)}</td>
+                  <td className="py-1.5 px-2 text-right num">{fmtFull(w.decaissementsFourn)}</td>
+                  <td className="py-1.5 px-2 text-right num">{w.salaires ? fmtFull(w.salaires) : <span className="text-primary-300">—</span>}</td>
+                  <td className="py-1.5 px-2 text-right num">{fmtFull(w.impots)}</td>
+                  <td className="py-1.5 px-2 text-right num">{fmtFull(w.autres)}</td>
+                  <td className={`py-1.5 px-2 text-right num font-bold border-l border-primary-200 dark:border-primary-800 ${w.netCashflow >= 0 ? 'text-success' : 'text-error'}`}>{w.netCashflow >= 0 ? '+' : ''}{fmtFull(w.netCashflow)}</td>
+                  <td className={`py-1.5 px-2 text-right num font-bold ${w.cumulatedCash < 0 ? 'text-error' : w.cumulatedCash < criticalThreshold ? 'text-warning' : ''}`}>{fmtFull(w.cumulatedCash)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-primary-300 dark:border-primary-700 bg-primary-100 dark:bg-primary-900 font-bold">
+              <tr>
+                <td className="py-2 px-2 sticky left-0 bg-primary-100 dark:bg-primary-900">TOTAUX</td>
+                <td className="py-2 px-2 text-right num text-success">{fmtFull(weeks.reduce((s, w) => s + w.encaissementsClients, 0))}</td>
+                <td className="py-2 px-2 text-right num">{fmtFull(weeks.reduce((s, w) => s + w.decaissementsFourn, 0))}</td>
+                <td className="py-2 px-2 text-right num">{fmtFull(weeks.reduce((s, w) => s + w.salaires, 0))}</td>
+                <td className="py-2 px-2 text-right num">{fmtFull(weeks.reduce((s, w) => s + w.impots, 0))}</td>
+                <td className="py-2 px-2 text-right num">{fmtFull(weeks.reduce((s, w) => s + w.autres, 0))}</td>
+                <td className={`py-2 px-2 text-right num border-l border-primary-200 dark:border-primary-800 ${finalCash >= tresoStart ? 'text-success' : 'text-error'}`}>
+                  {(totalEnc - totalDec) >= 0 ? '+' : ''}{fmtFull(totalEnc - totalDec)}
+                </td>
+                <td className={`py-2 px-2 text-right num ${finalCash < 0 ? 'text-error' : ''}`}>{fmtFull(finalCash)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p className="text-[10px] text-primary-400 italic mt-2">
+          Hypothèses&nbsp;: les encaissements clients suivent un profil d'âge des créances (30 % en S1-4, 40 % en S5-8, 20 % en S9-13, 10 % considérés comme douteux). Les salaires sont versés en fin de mois (S4, S8, S13). Les impôts trimestriels passent en S13.
+        </p>
+      </ChartCard>
+    </div>
+  );
+}
