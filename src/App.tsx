@@ -23,6 +23,7 @@ const GrandLivre     = lazyWithRetry(() => import('./pages/GrandLivre'));
 const Analytical     = lazyWithRetry(() => import('./pages/Analytical'));
 const AuditTrail     = lazyWithRetry(() => import('./pages/AuditTrail'));
 const Settings       = lazyWithRetry(() => import('./pages/Settings'));
+const ExecutiveSummary = lazyWithRetry(() => import('./pages/ExecutiveSummary'));
 
 function PageFallback() {
   return <div className="py-20 text-center text-primary-500">Chargement...</div>;
@@ -79,6 +80,7 @@ function App() {
         <Route path="/analytical" element={<AppLayout><Analytical /></AppLayout>} />
         <Route path="/audit" element={<AppLayout><AuditTrail /></AppLayout>} />
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
+        <Route path="/dashboard/exec" element={<AppLayout><ExecutiveSummary /></AppLayout>} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>

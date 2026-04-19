@@ -18,6 +18,8 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-recharts': ['recharts'],
           'vendor-echarts': ['echarts', 'echarts-for-react'],
+          'vendor-nivo': ['@nivo/core', '@nivo/bar', '@nivo/line', '@nivo/pie', '@nivo/radar', '@nivo/sankey'],
+          'vendor-tremor': ['@tremor/react'],
           'vendor-xlsx': ['xlsx'],
           'vendor-exceljs': ['exceljs'],
           'vendor-pdf': ['jspdf', 'jspdf-autotable'],

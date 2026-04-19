@@ -2,6 +2,27 @@
 import { db } from '../db/schema';
 import { findSyscoAccount } from '../syscohada/coa';
 
+// Classification SYSCOHADA des sous-classes 8 (HAO & Impôts)
+// — 81, 83, 85, 87, 89 : charges (solde débiteur)
+// — 82, 84, 86, 88     : produits (solde créditeur)
+const CHARGE_CLASS8 = new Set(['81', '83', '85', '87', '89']);
+const PRODUIT_CLASS8 = new Set(['82', '84', '86', '88']);
+
+function isChargeAccount(account: string): boolean {
+  const c0 = account[0];
+  if (c0 === '6') return true;
+  if (c0 === '7') return false;
+  if (c0 === '8') return CHARGE_CLASS8.has(account.substring(0, 2));
+  return false;
+}
+function isProduitAccount(account: string): boolean {
+  const c0 = account[0];
+  if (c0 === '7') return true;
+  if (c0 === '6') return false;
+  if (c0 === '8') return PRODUIT_CLASS8.has(account.substring(0, 2));
+  return false;
+}
+
 // ─── Évolution mensuelle par préfixe ────────────────────────────────────────
 export async function monthlyByPrefix(orgId: string, year: number, prefixes: string[]) {
   const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
@@ -12,9 +33,16 @@ export async function monthlyByPrefix(orgId: string, year: number, prefixes: str
     const entries = await db.gl.where('periodId').equals(p.id).toArray();
     for (const e of entries) {
       if (!prefixes.some((pfx) => e.account.startsWith(pfx))) continue;
-      // classe 6 = débit positif, classe 7 = crédit positif
-      const isCharge = e.account[0] === '6';
-      values[p.month - 1] += isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
+      // charges (6, 81, 83, 85, 87, 89) = positif en débit net
+      // produits (7, 82, 84, 86, 88) = positif en crédit net
+      if (isChargeAccount(e.account)) {
+        values[p.month - 1] += (e.debit - e.credit);
+      } else if (isProduitAccount(e.account)) {
+        values[p.month - 1] += (e.credit - e.debit);
+      } else {
+        // Classes 1-5 (bilan) : on prend le débit - crédit brut
+        values[p.month - 1] += (e.debit - e.credit);
+      }
     }
   }
   return { labels: MONTHS, values };
@@ -29,8 +57,10 @@ export async function topAccountsByPrefix(orgId: string, year: number, prefixes:
   for (const e of entries) {
     if (!ids.has(e.periodId)) continue;
     if (!prefixes.some((p) => e.account.startsWith(p))) continue;
-    const isCharge = e.account[0] === '6';
-    const v = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
+    let v: number;
+    if (isChargeAccount(e.account)) v = e.debit - e.credit;
+    else if (isProduitAccount(e.account)) v = e.credit - e.debit;
+    else v = e.debit - e.credit;
     map.set(e.account, (map.get(e.account) ?? 0) + v);
   }
   return Array.from(map, ([code, value]) => ({

@@ -3,11 +3,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
-import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 
 const dashboards = [
+  { id: 'exec', route: '/dashboard/exec', name: 'Executive Summary ★', desc: 'Vue exécutive one-pager : KPIs, radar de performance, cascade SIG, structure bilan, alertes', icon: 'Sparkles', cat: 'Standard' },
   { id: 'home', route: '/dashboard/home', name: 'Synthèse de gestion', desc: "KPIs, alertes, structure financière, performance globale", icon: 'LayoutDashboard', cat: 'Standard' },
   { id: 'cp', route: '/dashboard/cp', name: 'Charges & Produits', desc: 'Répartition par nature, évolution mensuelle, top 10, concentration', icon: 'TrendingDown', cat: 'Standard' },
   { id: 'crblock', route: '/dashboard/crblock', name: 'CR par bloc', desc: 'Vue d\'ensemble : 7 sections du CR + résultats intermédiaires', icon: 'Layers', cat: 'Standard' },
@@ -83,17 +83,24 @@ export default function Dashboards() {
         {list.map((d) => {
           const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
           return (
-            <button key={d.id} onClick={() => navigate(d.route)} className="text-left">
-              <Card className="h-full hover:border-primary-400 dark:hover:border-primary-600 transition group">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary-200 dark:bg-primary-800 flex items-center justify-center group-hover:bg-primary-900 dark:group-hover:bg-primary-100 group-hover:text-primary-50 dark:group-hover:text-primary-900 transition">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <Badge>{d.cat}</Badge>
+            <button key={d.id} onClick={() => navigate(d.route)}
+              className="group relative text-left card-premium p-5 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-primary-400 dark:hover:border-primary-600">
+              {/* Accent lumineux au survol */}
+              <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-primary-900/40 dark:via-primary-100/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-200/70 to-primary-300/40 dark:from-primary-800/70 dark:to-primary-700/40 flex items-center justify-center ring-1 ring-inset ring-primary-300/30 dark:ring-primary-700/30 text-primary-800 dark:text-primary-200 group-hover:from-primary-900 group-hover:to-primary-800 dark:group-hover:from-primary-100 dark:group-hover:to-primary-200 group-hover:text-primary-50 dark:group-hover:text-primary-900 transition-all duration-300">
+                  <Icon className="w-5 h-5" strokeWidth={1.75} />
                 </div>
-                <p className="font-semibold text-sm">{d.name}</p>
-                <p className="text-xs text-primary-500 mt-1">{d.desc}</p>
-              </Card>
+                <Badge>{d.cat}</Badge>
+              </div>
+              <p className="font-semibold text-[13px] text-primary-900 dark:text-primary-100 tracking-tight leading-snug">{d.name}</p>
+              <p className="text-[11px] text-primary-500 mt-1.5 leading-relaxed">{d.desc}</p>
+
+              {/* Chevron discret au survol */}
+              <span aria-hidden className="absolute bottom-4 right-4 text-primary-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
+                <Icons.ArrowUpRight className="w-4 h-4" strokeWidth={2} />
+              </span>
             </button>
           );
         })}
