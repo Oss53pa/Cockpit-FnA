@@ -226,6 +226,12 @@ export type ImportReport = {
   unknownAccounts: string[];
   errors: { row: number; reason: string }[];
   unbalancedPieces: UnbalancedPiece[];
+  /** Années rencontrées dans les écritures, triées par nb d'écritures décroissant */
+  yearsDetected: Array<{ year: number; count: number }>;
+  /** Année dominante (celle qui a le plus d'écritures) */
+  dominantYear?: number;
+  /** Nombre d'écritures d'à-nouveaux (RAN) détectées et routées vers la période d'ouverture */
+  openingEntries: number;
 };
 
 export async function importGL(
@@ -321,12 +327,28 @@ export async function importGL(
     (await db.accounts.where('orgId').equals(opts.orgId).toArray()).map((a) => a.code),
   );
 
-  // Périodes et exercices à créer (calcul pur JS)
+  // Pattern de détection des écritures d'à-nouveaux (Report À Nouveau = RAN)
+  // Soit par le code journal (AN, RAN, ANO, OUV…), soit par le libellé
+  // (« à-nouveaux », « ouverture », « RAN »…)
+  const isAN = (e: Omit<GLEntry, 'id'>) => {
+    const jrn = (e.journal || '').toUpperCase();
+    if (/^A\.?N\.?$/.test(jrn) || jrn === 'RAN' || jrn === 'ANO' || jrn === 'OUV' || jrn === 'OUVERTURE' || /^AN\b/.test(jrn)) return true;
+    const lib = (e.label || '').toLowerCase();
+    if (/\ba[- ]?nouveau/.test(lib) || /report\s+à?\s*nouveau/.test(lib) || /\bouverture\b/.test(lib)) return true;
+    return false;
+  };
+
+  // Périodes et exercices à créer (calcul pur JS).
+  // Les écritures d'à-nouveaux (RAN) sont routées vers une période spéciale
+  // « mois 0 » de leur exercice, utilisée par computeBalance.includeOpening.
+  let anCount = 0;
   const newFYs: typeof existingFYs = [];
   const newPeriods: typeof existingPeriodsAll = [];
   for (const e of entries) {
     const y = parseInt(e.date.substring(0, 4));
-    const m = parseInt(e.date.substring(5, 7));
+    const an = isAN(e);
+    if (an) anCount++;
+    const m = an ? 0 : parseInt(e.date.substring(5, 7));
     const key = `${y}-${m}`;
     let pId = periodIndex.get(key);
     if (!pId) {
@@ -338,7 +360,8 @@ export async function importGL(
       }
       pId = `p-${opts.orgId}-${y}-${m}`;
       periodIndex.set(key, pId);
-      newPeriods.push({ id: pId, orgId: opts.orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
+      const label = m === 0 ? `À-nouveaux ${y}` : `${MONTH_LABELS[m]} ${y}`;
+      newPeriods.push({ id: pId, orgId: opts.orgId, fiscalYearId: fyId, year: y, month: m, label, closed: false });
     }
     e.periodId = pId;
   }
@@ -383,6 +406,16 @@ export async function importGL(
     }
   });
 
+  // Statistique des années présentes dans les écritures
+  const yearMap = new Map<number, number>();
+  for (const e of entries) {
+    const y = parseInt(e.date.substring(0, 4), 10);
+    if (!isNaN(y)) yearMap.set(y, (yearMap.get(y) ?? 0) + 1);
+  }
+  const yearsDetected = Array.from(yearMap.entries())
+    .map(([year, count]) => ({ year, count }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     totalRows: rows.length,
     imported: entries.length,
@@ -391,6 +424,9 @@ export async function importGL(
     unknownAccounts: [...unknownAccounts],
     errors,
     unbalancedPieces,
+    yearsDetected,
+    dominantYear: yearsDetected[0]?.year,
+    openingEntries: anCount,
   };
 }
 

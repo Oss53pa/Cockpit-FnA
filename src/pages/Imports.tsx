@@ -24,9 +24,9 @@ const controls = [
 // Les balances (générale, auxiliaire, âgée) sont DÉRIVÉES automatiquement du GL,
 // elles ne s'importent jamais séparément.
 export default function Imports() {
-  const { currentOrgId, currentYear } = useApp();
+  const { currentOrgId, currentYear, setCurrentYear } = useApp();
   const org = useCurrentOrg();
-  const history = useImportsHistory(currentOrgId);
+  const history = useImportsHistory(currentOrgId, 'GL');
   const periods = usePeriods(currentOrgId).filter((p) => p.year === currentYear && p.month >= 1);
 
   const [step, setStep] = useState<'idle' | 'mapping' | 'result'>('idle');
@@ -174,12 +174,74 @@ export default function Imports() {
 
       {step === 'result' && report && (
         <Card title="Résultat de l'import">
+          {/* Alerte si l'année dominante des écritures ne matche pas l'exercice actif */}
+          {report.dominantYear !== undefined && report.dominantYear !== currentYear && (
+            <div className="mb-6 p-4 rounded-lg bg-warning/10 border-l-4 border-warning">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">
+                    ⚠️ Exercice actif différent des écritures importées
+                  </p>
+                  <p className="text-xs text-primary-600 dark:text-primary-300 mt-1">
+                    Tu as importé {report.yearsDetected.map((y) => `${y.count.toLocaleString('fr-FR')} écritures en ${y.year}`).join(', ')}.
+                    L'application affiche actuellement <strong>l'exercice {currentYear}</strong> — tes balances, bilans, ratios et dashboards
+                    seront donc vides ou incohérents tant que tu ne basculeras pas sur l'exercice <strong>{report.dominantYear}</strong>.
+                  </p>
+                </div>
+                <button
+                  className="btn-primary shrink-0"
+                  onClick={() => setCurrentYear(report.dominantYear!)}
+                >
+                  Basculer sur {report.dominantYear}
+                </button>
+              </div>
+            </div>
+          )}
+          {report.dominantYear !== undefined && report.dominantYear === currentYear && report.imported > 0 && (
+            <div className="mb-6 p-3 rounded-lg bg-success/10 border-l-4 border-success">
+              <p className="text-sm text-primary-900 dark:text-primary-100">
+                ✓ {report.imported.toLocaleString('fr-FR')} écritures importées sur l'exercice {currentYear} — les tableaux de bord sont à jour.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <Stat label="Lignes lues" value={report.totalRows} />
             <Stat label="Importées" value={report.imported} good />
             <Stat label="Rejetées" value={report.rejected} bad={report.rejected > 0} />
             <Stat label="Comptes inconnus" value={report.unknownAccounts.length} />
           </div>
+
+          {report.openingEntries > 0 && (
+            <div className="mb-6 p-3 rounded-lg bg-primary-100 dark:bg-primary-900/40 text-xs">
+              <p className="font-semibold text-primary-700 dark:text-primary-300">
+                📌 {report.openingEntries.toLocaleString('fr-FR')} écriture(s) d'à-nouveaux (RAN) détectée(s)
+              </p>
+              <p className="text-primary-500 mt-0.5">
+                Les écritures avec un code journal <strong>AN</strong> / <strong>RAN</strong> ou un libellé contenant
+                "à-nouveau" / "ouverture" sont automatiquement rattachées à la période d'ouverture de leur exercice.
+                Elles alimentent les soldes d'ouverture du bilan (Actif/Passif) et sont incluses dans les
+                calculs de balance avec <em>includeOpening = true</em>.
+              </p>
+            </div>
+          )}
+
+          {report.yearsDetected.length > 1 && (
+            <div className="mb-6 text-xs text-primary-500 bg-primary-100 dark:bg-primary-900/40 rounded p-3">
+              <p className="font-semibold text-primary-700 dark:text-primary-300 mb-1">Répartition par exercice&nbsp;:</p>
+              <div className="flex flex-wrap gap-2">
+                {report.yearsDetected.map((y) => (
+                  <button
+                    key={y.year}
+                    className={`px-2 py-1 rounded border text-xs ${y.year === currentYear ? 'bg-primary-900 text-primary-50 border-primary-900' : 'border-primary-300 dark:border-primary-700 hover:bg-primary-200 dark:hover:bg-primary-800'}`}
+                    onClick={() => setCurrentYear(y.year)}
+                  >
+                    {y.year} <span className="num opacity-70">({y.count.toLocaleString('fr-FR')})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-sm">
             <div className="card p-4">
               <p className="text-xs text-primary-500">Total Débit</p>
