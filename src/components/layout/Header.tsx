@@ -1,16 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { Bell, HelpCircle, LogOut, Menu, Settings } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
+import { db } from '../../db/schema';
 import { HelpModal } from '../ui/HelpModal';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear } = useApp();
   const orgs = useOrganizations();
   const allPeriods = usePeriods(currentOrgId);
+  const fiscalYears = useLiveQuery(
+    () => (currentOrgId ? db.fiscalYears.where('orgId').equals(currentOrgId).toArray() : Promise.resolve([] as Array<{ year: number }>)),
+    [currentOrgId], [] as Array<{ year: number }>,
+  ) ?? [];
   const periods = allPeriods.filter((p) => p.year === currentYear && p.month >= 1);
-  const years = Array.from(new Set(allPeriods.map((p) => p.year))).sort((a, b) => b - a);
+  // Union des années : celles ayant des périodes + celles définies comme exercices
+  const yearsSet = new Set<number>([
+    ...allPeriods.map((p) => p.year),
+    ...fiscalYears.map((fy) => fy.year),
+    currentYear,
+  ]);
+  const years = Array.from(yearsSet).sort((a, b) => b - a);
 
   const balance = useBalance();
   const ratios = useRatios();

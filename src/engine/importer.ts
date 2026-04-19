@@ -306,40 +306,61 @@ export async function importGL(
   const MONTH_LABELS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
-  // Enregistrement
-  await db.transaction('rw', [db.gl, db.accounts, db.imports, db.periods, db.fiscalYears], async () => {
-    // Charger les périodes existantes et les exercices
-    const existingPeriods = await db.periods.where('orgId').equals(opts.orgId).toArray();
-    const periodIndex = new Map(existingPeriods.map((p) => [`${p.year}-${p.month}`, p.id]));
-    const fiscalYears = await db.fiscalYears.where('orgId').equals(opts.orgId).toArray();
-    const fyIndex = new Map(fiscalYears.map((fy) => [fy.year, fy.id]));
+  // ── PRÉ-CALCUL HORS TRANSACTION ──────────────────────────────────────────
+  // On fait toute la résolution des périodes/exercices AVANT d'ouvrir la
+  // transaction Dexie. Les awaits sur des valeurs non-Dexie ou les itérations
+  // longues à l'intérieur d'une transaction provoquent "Transaction committed
+  // too early".
+  const existingPeriodsAll = await db.periods.where('orgId').equals(opts.orgId).toArray();
+  const periodIndex = new Map(existingPeriodsAll.map((p) => [`${p.year}-${p.month}`, p.id]));
+  const existingFYs = await db.fiscalYears.where('orgId').equals(opts.orgId).toArray();
+  const fyIndex = new Map(existingFYs.map((fy) => [fy.year, fy.id]));
+  const existingAccountCodes = new Set(
+    (await db.accounts.where('orgId').equals(opts.orgId).toArray()).map((a) => a.code),
+  );
 
-    // Résoudre ou créer la période pour chaque écriture
-    const resolvePeriodId = async (date: string): Promise<string> => {
-      const y = parseInt(date.substring(0, 4));
-      const m = parseInt(date.substring(5, 7));
-      const key = `${y}-${m}`;
-      const cached = periodIndex.get(key);
-      if (cached) return cached;
-
-      // Créer l'exercice si besoin
+  // Périodes et exercices à créer (calcul pur JS)
+  const newFYs: typeof existingFYs = [];
+  const newPeriods: typeof existingPeriodsAll = [];
+  for (const e of entries) {
+    const y = parseInt(e.date.substring(0, 4));
+    const m = parseInt(e.date.substring(5, 7));
+    const key = `${y}-${m}`;
+    let pId = periodIndex.get(key);
+    if (!pId) {
       let fyId = fyIndex.get(y);
       if (!fyId) {
         fyId = `fy-${opts.orgId}-${y}`;
-        await db.fiscalYears.put({ id: fyId, orgId: opts.orgId, year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31`, closed: false });
         fyIndex.set(y, fyId);
+        newFYs.push({ id: fyId, orgId: opts.orgId, year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31`, closed: false });
       }
-      // Créer la période
-      const pId = `p-${opts.orgId}-${y}-${m}`;
-      await db.periods.put({ id: pId, orgId: opts.orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
+      pId = `p-${opts.orgId}-${y}-${m}`;
       periodIndex.set(key, pId);
-      return pId;
-    };
-
-    // Affecter chaque écriture à sa bonne période
-    for (const e of entries) {
-      e.periodId = await resolvePeriodId(e.date);
+      newPeriods.push({ id: pId, orgId: opts.orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
     }
+    e.periodId = pId;
+  }
+
+  // Comptes à créer
+  const newAccounts: Account[] = [];
+  for (const code of new Set(entries.map((e) => e.account))) {
+    if (existingAccountCodes.has(code)) continue;
+    const sysco = findSyscoAccount(code);
+    newAccounts.push({
+      orgId: opts.orgId,
+      code,
+      label: sysco?.label ?? 'Compte importé',
+      syscoCode: sysco?.code,
+      class: classOf(code) ?? 'X',
+      type: sysco?.type ?? 'X',
+    });
+  }
+
+  // ── TRANSACTION : uniquement des opérations Dexie consécutives ───────────
+  await db.transaction('rw', [db.gl, db.accounts, db.imports, db.periods, db.fiscalYears], async () => {
+    if (newFYs.length > 0) await db.fiscalYears.bulkPut(newFYs);
+    if (newPeriods.length > 0) await db.periods.bulkPut(newPeriods);
+    if (newAccounts.length > 0) await db.accounts.bulkPut(newAccounts);
 
     const importId = await db.imports.add({
       orgId: opts.orgId,
@@ -358,23 +379,6 @@ export async function importGL(
       const tagged = entries.map((e) => ({ ...e, importId: String(importId) })) as GLEntry[];
       await db.gl.bulkAdd(tagged);
     }
-
-    // Créer les comptes inconnus avec mapping SYSCOHADA automatique
-    const existing = new Set((await db.accounts.where('orgId').equals(opts.orgId).toArray()).map((a) => a.code));
-    const newAccounts: Account[] = [];
-    for (const code of new Set(entries.map((e) => e.account))) {
-      if (existing.has(code)) continue;
-      const sysco = findSyscoAccount(code);
-      newAccounts.push({
-        orgId: opts.orgId,
-        code,
-        label: sysco?.label ?? 'Compte importé',
-        syscoCode: sysco?.code,
-        class: classOf(code) ?? 'X',
-        type: sysco?.type ?? 'X',
-      });
-    }
-    if (newAccounts.length > 0) await db.accounts.bulkPut(newAccounts);
   });
 
   return {
@@ -441,4 +445,60 @@ export async function importCOA(
     updated,
     errors,
   };
+}
+
+// ── Migration des écritures GL existantes vers les bonnes périodes ────────
+// Réaffecte chaque écriture à la période correspondant à sa date
+export async function migrateGLPeriods(orgId: string): Promise<{ migrated: number; periodsCreated: number }> {
+  const MONTH_LABELS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+  let migrated = 0;
+  let periodsCreated = 0;
+
+  await db.transaction('rw', [db.gl, db.periods, db.fiscalYears], async () => {
+    const entries = await db.gl.where('orgId').equals(orgId).toArray();
+    const periods = await db.periods.where('orgId').equals(orgId).toArray();
+    const periodIndex = new Map(periods.map((p) => [`${p.year}-${p.month}`, p.id]));
+    const fiscalYears = await db.fiscalYears.where('orgId').equals(orgId).toArray();
+    const fyIndex = new Map(fiscalYears.map((fy) => [fy.year, fy.id]));
+
+    const updates: { key: number; changes: { periodId: string } }[] = [];
+
+    for (const e of entries) {
+      if (!e.date || e.date.length < 7) continue;
+      const y = parseInt(e.date.substring(0, 4));
+      const m = parseInt(e.date.substring(5, 7));
+      if (isNaN(y) || isNaN(m) || m < 1 || m > 12) continue;
+
+      const key = `${y}-${m}`;
+      let pId = periodIndex.get(key);
+
+      if (!pId) {
+        // Créer l'exercice si besoin
+        let fyId = fyIndex.get(y);
+        if (!fyId) {
+          fyId = `fy-${orgId}-${y}`;
+          await db.fiscalYears.put({ id: fyId, orgId, year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31`, closed: false });
+          fyIndex.set(y, fyId);
+        }
+        pId = `p-${orgId}-${y}-${m}`;
+        await db.periods.put({ id: pId, orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
+        periodIndex.set(key, pId);
+        periodsCreated++;
+      }
+
+      if (e.periodId !== pId) {
+        updates.push({ key: e.id!, changes: { periodId: pId } });
+      }
+    }
+
+    // Appliquer les mises à jour par lots
+    for (const u of updates) {
+      await db.gl.update(u.key, u.changes);
+    }
+    migrated = updates.length;
+  });
+
+  return { migrated, periodsCreated };
 }

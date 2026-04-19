@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { CheckCircle2, Download, FileWarning, Trash2, UploadCloud, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, UploadCloud, XCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
-import { detectColumns, importGL, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
+import { detectColumns, importGL, migrateGLPeriods, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 
@@ -87,13 +87,26 @@ export default function Imports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-xs text-primary-500 italic">
           Importez le <strong>Grand Livre</strong> ; toutes les balances (générale, auxiliaire, âgée) sont calculées automatiquement.
         </p>
-        <button className="btn-outline" onClick={() => downloadGLTemplate(org?.name, currentYear)}>
-          <Download className="w-4 h-4" /> Télécharger le modèle Excel
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-outline" onClick={async () => {
+            if (!confirm('Recalculer les périodes de toutes les écritures selon leurs dates ?\nCela corrige les états financiers si les écritures étaient mal affectées.')) return;
+            setLoading(true);
+            try {
+              const res = await migrateGLPeriods(currentOrgId);
+              alert(`${res.migrated} écriture(s) réaffectée(s), ${res.periodsCreated} période(s) créée(s).`);
+            } catch (e: any) { alert(e.message); }
+            finally { setLoading(false); }
+          }}>
+            <RefreshCw className="w-4 h-4" /> Recalculer les périodes
+          </button>
+          <button className="btn-outline" onClick={() => downloadGLTemplate(org?.name, currentYear)}>
+            <Download className="w-4 h-4" /> Télécharger le modèle Excel
+          </button>
+        </div>
       </div>
 
       {step === 'idle' && (

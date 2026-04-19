@@ -1,15 +1,39 @@
-// Global error boundary — évite qu'un crash d'une page casse l'app entière
+// Global error boundary — évite qu'un crash d'une page casse l'app entière.
+// Cas particulier : "Failed to fetch dynamically imported module" après un
+// redéploiement (chunks hashés renommés) — on reload automatiquement pour
+// récupérer le nouveau index.html.
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 type Props = { children: ReactNode };
-type State = { error: Error | null };
+type State = { error: Error | null; reloading: boolean };
+
+const RELOAD_KEY = 'error-boundary-reload';
+
+function isChunkLoadError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /Loading chunk [\d]+ failed/i.test(msg) ||
+    /Importing a module script failed/i.test(msg) ||
+    /ChunkLoadError/i.test(msg)
+  );
+}
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, reloading: false };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    // Si c'est un chunk load error et qu'on n'a pas encore tenté de reload
+    // dans cette session, on déclenche le reload dans un effet post-render.
+    if (isChunkLoadError(error)) {
+      const already = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(RELOAD_KEY);
+      if (!already) {
+        return { error, reloading: true };
+      }
+    }
+    return { error, reloading: false };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -17,11 +41,34 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 
-  handleReset = () => this.setState({ error: null });
-  handleReload = () => window.location.reload();
+  componentDidUpdate() {
+    if (this.state.reloading) {
+      try { sessionStorage.setItem(RELOAD_KEY, '1'); } catch { /* ignore */ }
+      window.location.reload();
+    }
+  }
+
+  handleReset = () => this.setState({ error: null, reloading: false });
+  handleReload = () => {
+    try { sessionStorage.removeItem(RELOAD_KEY); } catch { /* ignore */ }
+    window.location.reload();
+  };
 
   render() {
     if (!this.state.error) return this.props.children;
+
+    // Si on est en train de recharger, on affiche juste un placeholder sobre
+    if (this.state.reloading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-primary-50 dark:bg-primary-950">
+          <div className="flex items-center gap-3 text-primary-500 text-sm">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            Mise à jour de l'application…
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-primary-50 dark:bg-primary-950">
         <div className="max-w-lg w-full bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl p-6">
