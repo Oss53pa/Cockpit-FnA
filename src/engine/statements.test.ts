@@ -52,4 +52,44 @@ describe('computeSIG', () => {
     // résultat = produits − charges (signe dépendant du calcul interne)
     expect(Number.isFinite(s.sig.resultat)).toBe(true);
   });
+
+  it('computes a positive résultat when revenue > expenses', () => {
+    const rows = [
+      row('701', 0, 10000),   // Ventes 10 000
+      row('601', 4000, 0),    // Achats 4 000
+      row('661', 2000, 0),    // Personnel 2 000
+    ];
+    const s = computeSIG(rows);
+    // CA = 10 000 | Charges = 4 000 + 2 000 = 6 000 | Résultat net = 4 000
+    expect(s.sig.ca).toBe(10000);
+    expect(s.sig.resultat).toBe(4000);
+    expect(s.sig.resultat).toBeGreaterThan(0);
+  });
+
+  it('computes a negative résultat when expenses > revenue', () => {
+    const rows = [
+      row('701', 0, 3000),
+      row('601', 5000, 0),
+    ];
+    const s = computeSIG(rows);
+    expect(s.sig.resultat).toBeLessThan(0);
+  });
+});
+
+describe('cohérence Bilan vs SIG', () => {
+  it('le résultat du Bilan et le résultat net du SIG sont identiques sur un dataset balanced', () => {
+    const rows = [
+      row('101', 0, 10000),   // Capital
+      row('411', 3000, 0),    // Clients
+      row('521', 2000, 0),    // Banque
+      row('401', 0, 2000),    // Fournisseurs
+      row('701', 0, 8000),    // Ventes
+      row('601', 5000, 0),    // Achats
+      row('661', 1500, 0),    // Personnel
+    ];
+    const bilan = computeBilan(rows);
+    const { sig } = computeSIG(rows);
+    const bilanResultat = bilan.passif.find((l) => l.code === 'CF')?.value ?? 0;
+    expect(Math.abs(bilanResultat - sig.resultat)).toBeLessThan(1);
+  });
 });

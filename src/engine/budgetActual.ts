@@ -33,7 +33,7 @@ export type CustomSection = { id: string; label: string; prefixes: string[]; isC
 // - Charges HAO           : 81, 83, 85
 // - Impôts sur résultat   : 87 (participation) + 89 (impôt)
 const DEFAULT_SECTION_DEFS: Record<CRDefaultSection, { label: string; prefixes: string[]; isCharge: boolean }> = {
-  produits_expl: { label: "Produits d'exploitation",  prefixes: ['70','71','72','73','74','75','781'], isCharge: false },
+  produits_expl: { label: "Produits d'exploitation",  prefixes: ['70','71','72','73','74','75','781','791'], isCharge: false },
   charges_expl:  { label: "Charges d'exploitation",   prefixes: ['60','61','62','63','64','65','66','681','691'], isCharge: true },
   produits_fin:  { label: 'Produits financiers',       prefixes: ['77','786','797'], isCharge: false },
   charges_fin:   { label: 'Charges financières',       prefixes: ['67','687','697'], isCharge: true },
@@ -142,13 +142,30 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
   const ids = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
 
-  // Réalisé par compte (classes 6 et 7)
+  // Réalisé par compte (classes 6, 7 et 8 pour HAO / Impôts)
+  // BUGFIX : avant l'audit, seules les classes 6 et 7 étaient prises en compte,
+  // ce qui faisait apparaître les sections « Produits HAO » (82/84/86/88),
+  // « Charges HAO » (81/83/85) et « Impôts » (87/89) avec 0 comptes.
+  // SYSCOHADA — classification charge/produit par sous-classe 8 :
+  //   81, 83, 85, 87, 89 → charges (solde débiteur normal)
+  //   82, 84, 86, 88      → produits (solde créditeur normal)
+  const chargeClass8 = new Set(['81', '83', '85', '87', '89']);
+  const produitClass8 = new Set(['82', '84', '86', '88']);
   const realiseMap = new Map<string, number>();
   for (const e of entries) {
     if (!ids.has(e.periodId)) continue;
-    const c = e.account[0];
-    if (c !== '6' && c !== '7') continue;
-    const v = c === '6' ? e.debit - e.credit : e.credit - e.debit;
+    const c0 = e.account[0];
+    if (c0 !== '6' && c0 !== '7' && c0 !== '8') continue;
+    let isCharge: boolean;
+    if (c0 === '6') isCharge = true;
+    else if (c0 === '7') isCharge = false;
+    else {
+      const sub = e.account.substring(0, 2);
+      if (chargeClass8.has(sub)) isCharge = true;
+      else if (produitClass8.has(sub)) isCharge = false;
+      else continue; // 80, compte de liaison — ignoré
+    }
+    const v = isCharge ? e.debit - e.credit : e.credit - e.debit;
     realiseMap.set(e.account, (realiseMap.get(e.account) ?? 0) + v);
   }
 
@@ -171,7 +188,15 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
     const ecart = realise - budget;
     const ecartPct = budget !== 0 ? (ecart / Math.abs(budget)) * 100 : 0;
     const sysco = findSyscoAccount(account);
-    const isCharge = account.startsWith('6');
+    // Classification charge/produit cohérente avec le calcul du réalisé
+    // (classes 6 + 81/83/85/87/89 = charges, classes 7 + 82/84/86/88 = produits)
+    const c0 = account[0];
+    const sub = account.substring(0, 2);
+    const isCharge =
+      c0 === '6' ? true :
+      c0 === '7' ? false :
+      c0 === '8' ? chargeClass8.has(sub) :
+      false;
     const status: BudgetActualRow['status'] =
       Math.abs(ecart) < 1 ? 'neutral' :
       isCharge ? (ecart <= 0 ? 'favorable' : 'defavorable') : (ecart >= 0 ? 'favorable' : 'defavorable');

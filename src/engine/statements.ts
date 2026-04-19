@@ -55,14 +55,16 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   const stocks = soldeD('31', '32', '33', '34', '35', '36', '37', '38') - soldeC('39');
   const creancesClients = soldeD('411', '412', '413', '414', '415', '416', '417', '418')
                         - soldeC('49');
+  // BUGFIX : auparavant autresCreances prenait tout le 44 et on ajoutait aussi
+  // soldeD('445') via tvaRec → double-comptage de la TVA déductible.
+  // Maintenant on prend explicitement 44 SANS 443 et 447 (déjà déduits) et on
+  // ne double-compte plus 445 (qui est déjà couvert par le préfixe '44').
   const autresCreances = soldeD('409', '421', '425', '428', '43', '44', '45', '46', '47', '48') - soldeD('443', '447');
-  // TVA à récupérer (445) en autres créances
-  const tvaRec = soldeD('445');
 
   const tresoActive = soldeD('50', '51', '52', '53', '54', '57', '58') - soldeC('59');
 
   const totalActifImmo = immoNet;
-  const totalActifCirc = stocks + creancesClients + autresCreances + tvaRec;
+  const totalActifCirc = stocks + creancesClients + autresCreances;
   const totalTreso = tresoActive;
   const totalActif = totalActifImmo + totalActifCirc + totalTreso;
 
@@ -75,7 +77,7 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
     { code: 'BA', label: 'Actif circulant HAO', value: soldeD('485'), indent: 1, accountCodes: '485' },
     { code: 'BB', label: 'Stocks et en-cours', value: stocks, indent: 1, accountCodes: '31-38 − 39' },
     { code: 'BH', label: 'Créances clients et comptes rattachés', value: creancesClients, indent: 1, accountCodes: '411-418 − 49' },
-    { code: 'BI', label: 'Autres créances', value: autresCreances + tvaRec, indent: 1, accountCodes: '40-48 (hors 411-418)' },
+    { code: 'BI', label: 'Autres créances', value: autresCreances, indent: 1, accountCodes: '40-48 (hors 411-418 et hors 443/447)' },
     { code: '_BK', label: 'TOTAL ACTIF CIRCULANT', value: totalActifCirc, total: true, accountCodes: '31 à 49' },
     { code: 'BQ', label: 'Trésorerie - Actif (banques, caisse)', value: tresoActive, indent: 1, accountCodes: '50-58 − 59' },
     { code: '_BT', label: 'TOTAL TRÉSORERIE - ACTIF', value: totalTreso, total: true, accountCodes: '50 à 59' },
@@ -164,7 +166,10 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const impotsTaxes = soldeD('64') - soldeC('64');
   const autresCharges = soldeD('65') - soldeC('65');
   const personnel = soldeD('66') - soldeC('66');
-  const dotations = soldeD('68', '69') - soldeC('79');
+  // Dotations nettes = (D−C) des classes 68 & 69 d'exploitation, diminuées des
+  // reprises nettes sur la classe 79. On utilise le NET (soldeD − soldeC) pour
+  // chaque classe pour gérer correctement les éventuels soldes inversés.
+  const dotations = (soldeD('68', '69') - soldeC('68', '69')) - (soldeC('79') - soldeD('79'));
 
   // SIG
   const margeMarch = venteMarch - (achatMarch + varStockMarch);
