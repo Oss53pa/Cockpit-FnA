@@ -150,44 +150,79 @@ function ChargesProduits() {
     value: balance.filter((r) => c.prefix.some((p) => r.account.startsWith(p))).reduce((s, r) => s + r.debit - r.credit, 0),
   })).filter((c) => c.value > 0).map((c) => ({ ...c, pct: Math.round((c.value / Math.max(totalCharges, 1)) * 100) }));
 
+  // Répartition SYSCOHADA EXHAUSTIVE des produits de classe 7.
+  // Chaque compte 7x n'apparaît QUE dans une seule catégorie (pas de chevauchement).
+  // Total de la répartition == totalProduits (somme classe 7 nette).
   const repartitionProduits = [
-    { name: 'Ventes marchandises', prefix: ['701'], color: ct.at(0) },
-    { name: 'Ventes produits', prefix: ['702','703','704'], color: ct.at(1) },
+    { name: 'Ventes marchandises',  prefix: ['701'], color: ct.at(0) },
+    { name: 'Ventes produits',      prefix: ['702','703','704','708'], color: ct.at(1) },
     { name: 'Prestations services', prefix: ['705','706','707'], color: ct.at(2) },
-    { name: 'Subventions', prefix: ['71'], color: ct.at(3) },
-    { name: 'Autres produits', prefix: ['75','77','78'], color: ct.at(4) },
+    { name: 'Subventions',          prefix: ['71','74'], color: ct.at(3) },
+    { name: 'Production (stockée / immobilisée)', prefix: ['72','73'], color: ct.at(4) },
+    { name: 'Autres produits / Transferts',       prefix: ['75','78'], color: ct.at(5) },
+    { name: 'Produits financiers',  prefix: ['77'], color: ct.at(6) },
+    { name: 'Reprises',             prefix: ['79'], color: ct.at(0) + 'aa' },
   ].map((c) => ({
     name: c.name,
     color: c.color,
     value: balance.filter((r) => c.prefix.some((p) => r.account.startsWith(p))).reduce((s, r) => s + r.credit - r.debit, 0),
   })).filter((c) => c.value > 0).map((c) => ({ ...c, pct: Math.round((c.value / Math.max(totalProduits, 1)) * 100) }));
 
-  // Evolution empilée par nature (12 mois)
+  // Evolution empilée par nature (12 mois) — 7 buckets exhaustifs couvrant 60-69.
+  // Chaque classe n'apparaît que dans UN seul bucket (pas de chevauchement).
+  const chargeShare = (prefixes: string[]) =>
+    totalCharges > 0
+      ? balance.filter((r) => prefixes.some((p) => r.account.startsWith(p))).reduce((s, r) => s + r.debit - r.credit, 0) / totalCharges
+      : 0;
+  const shAchats = chargeShare(['60']);
+  const shServices = chargeShare(['61','62','63']);
+  const shImpots = chargeShare(['64']);
+  const shAutresCh = chargeShare(['65']);
+  const shPersonnel = chargeShare(['66']);
+  const shFin = chargeShare(['67']);
+  const shAmort = chargeShare(['68','69']);
   const chargesEvol = chargesMonthly.labels.map((m, i) => {
     const row: any = { mois: m };
-    ['achats','personnel','services','amortissements','impots','financiers','autres'].forEach((k) => {
-      row[k] = 0;
-    });
-    // Approximation : répartir le total mensuel selon la proportion annuelle
     const totMonth = chargesMonthly.values[i];
-    if (totalCharges > 0 && totMonth > 0) {
-      row.achats = Math.round(totMonth * (balance.filter(r => r.account.startsWith('60')).reduce((s, r) => s + r.debit - r.credit, 0) / totalCharges));
-      row.personnel = Math.round(totMonth * (balance.filter(r => r.account.startsWith('66')).reduce((s, r) => s + r.debit - r.credit, 0) / totalCharges));
-      row.services = Math.round(totMonth * (balance.filter(r => r.account.startsWith('61') || r.account.startsWith('62') || r.account.startsWith('63')).reduce((s, r) => s + r.debit - r.credit, 0) / totalCharges));
-      row.amortissements = Math.round(totMonth * (balance.filter(r => r.account.startsWith('68') || r.account.startsWith('69')).reduce((s, r) => s + r.debit - r.credit, 0) / totalCharges));
-      row.autres = Math.round(totMonth * (balance.filter(r => r.account.startsWith('64') || r.account.startsWith('65') || r.account.startsWith('67')).reduce((s, r) => s + r.debit - r.credit, 0) / totalCharges));
-    }
+    row.achats = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shAchats) : 0;
+    row.services = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shServices) : 0;
+    row.impots = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shImpots) : 0;
+    row.autres = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shAutresCh) : 0;
+    row.personnel = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shPersonnel) : 0;
+    row.financiers = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shFin) : 0;
+    row.amortissements = totalCharges > 0 && totMonth > 0 ? Math.round(totMonth * shAmort) : 0;
     return row;
   });
 
+  // Évolution mensuelle empilée — composition exhaustive sans chevauchement.
+  // 'ventes' = ventes marchandises (701) + ventes produits (702-704, 708)
+  // 'services' = prestations (705, 706, 707)
+  // 'subventions' = 71 + 74
+  // 'prodImmob' = 72 + 73 (production immobilisée / stockée)
+  // 'financiers' = 77
+  // 'autres' = 75 + 78 + 79 (autres produits, transferts, reprises)
+  const prodShare = (prefixes: string[]) =>
+    totalProduits > 0
+      ? balance.filter((r) => prefixes.some((p) => r.account.startsWith(p))).reduce((s, r) => s + r.credit - r.debit, 0) / totalProduits
+      : 0;
+  const shareVentes = prodShare(['701','702','703','704','708']);
+  const shareServices = prodShare(['705','706','707']);
+  const shareSubv = prodShare(['71','74']);
+  const shareProdImmob = prodShare(['72','73']);
+  const shareFin = prodShare(['77']);
+  const shareAutres = prodShare(['75','78','79']);
   const produitsEvol = produitsMonthly.labels.map((m, i) => {
     const row: any = { mois: m };
     const totMonth = produitsMonthly.values[i];
     if (totalProduits > 0 && totMonth > 0) {
-      row.ventes = Math.round(totMonth * (balance.filter(r => r.account.startsWith('70')).reduce((s, r) => s + r.credit - r.debit, 0) / totalProduits));
-      row.services = Math.round(totMonth * (balance.filter(r => r.account.startsWith('706') || r.account.startsWith('707')).reduce((s, r) => s + r.credit - r.debit, 0) / totalProduits));
-      row.subventions = Math.round(totMonth * (balance.filter(r => r.account.startsWith('71')).reduce((s, r) => s + r.credit - r.debit, 0) / totalProduits));
-      row.autres = Math.round(totMonth * (balance.filter(r => r.account.startsWith('75') || r.account.startsWith('78')).reduce((s, r) => s + r.credit - r.debit, 0) / totalProduits));
+      row.ventes = Math.round(totMonth * shareVentes);
+      row.services = Math.round(totMonth * shareServices);
+      row.subventions = Math.round(totMonth * shareSubv);
+      row.prodImmob = Math.round(totMonth * shareProdImmob);
+      row.financiers = Math.round(totMonth * shareFin);
+      row.autres = Math.round(totMonth * shareAutres);
+    } else {
+      row.ventes = 0; row.services = 0; row.subventions = 0; row.prodImmob = 0; row.financiers = 0; row.autres = 0;
     }
     return row;
   });
