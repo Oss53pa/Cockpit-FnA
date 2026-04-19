@@ -643,8 +643,24 @@ function BudgetActualView() {
   const ct = useChartTheme();
   const [view, setView] = useState<'table' | 'dashboard' | 'monthly'>('table');
   const sections = bySection(rows);
+  const intermediates = computeIntermediates(sections);
   const totalRealise = rows.reduce((s, r) => s + r.realise, 0);
   const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
+
+  // Flux SYSCOHADA : sections entrelacées avec les résultats intermédiaires
+  const secMap = new Map(sections.map((s) => [s.section, s]));
+  const flow: Array<
+    | { kind: 'section'; sec: (typeof sections)[number] }
+    | { kind: 'inter'; key: keyof typeof intermediates; label: string }
+  > = [];
+  for (const item of CR_FLOW) {
+    if (item.kind === 'section') {
+      const sec = secMap.get(item.key);
+      if (sec) flow.push({ kind: 'section', sec });
+    } else {
+      flow.push({ kind: 'inter', key: item.key, label: INTERMEDIATE_LABELS[item.key] });
+    }
+  }
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(sections.map((s) => [s.section, true]))
@@ -698,48 +714,73 @@ function BudgetActualView() {
               </tr>
             </thead>
             <tbody>
-              {sections.map((sec) => (
-                <>
-                  <tr key={`s-${sec.section}`} className="bg-primary-200 dark:bg-primary-800 font-semibold">
-                    <td className="py-2 pl-2 w-8 text-center">
-                      <button onClick={() => setExpanded((e) => ({ ...e, [sec.section]: !e[sec.section] }))}
-                        className="w-5 h-5 rounded hover:bg-primary-300 dark:hover:bg-primary-700 text-xs font-bold">
-                        {expanded[sec.section] ? '−' : '+'}
-                      </button>
-                    </td>
-                    <td className="py-2 px-3" colSpan={3}>{sec.label} <span className="text-[10px] text-primary-500 font-normal">({sec.rows.length} comptes)</span></td>
-                    <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
-                    <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
-                    <td className={clsx('py-2 px-3 text-right num',
-                      sec.totalEcart > 0 ? (sec.isCharge ? 'text-error' : 'text-success') : (sec.isCharge ? 'text-success' : 'text-error'))}>
-                      {sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}
-                    </td>
-                    <td className="py-2 px-3 text-right num text-xs">{sec.ecartPct >= 0 ? '+' : ''}{sec.ecartPct.toFixed(1)} %</td>
-                    <td></td>
-                  </tr>
-                  {expanded[sec.section] && sec.rows.map((r) => (
-                    <tr key={r.code} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30 hover:bg-primary-100 dark:hover:bg-primary-900">
+              {flow.map((item, idx) => {
+                if (item.kind === 'inter') {
+                  const data = intermediates[item.key];
+                  const ecart = data.realise - data.budget;
+                  const ecartPct = data.budget ? (ecart / Math.abs(data.budget)) * 100 : 0;
+                  const isFinal = item.key === 'res_net';
+                  return (
+                    <tr key={`i-${item.key}`}
+                      className={clsx('font-bold',
+                        isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
                       <td></td>
+                      <td className="py-2.5 px-3 uppercase text-xs tracking-wider" colSpan={3}>= {item.label}</td>
+                      <td className="py-2.5 px-3 text-right num">{fmtFull(data.realise)}</td>
+                      <td className="py-2.5 px-3 text-right num">{fmtFull(data.budget)}</td>
+                      <td className="py-2.5 px-3 text-right num">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                      <td className="py-2.5 px-3 text-right num text-xs">{ecartPct >= 0 ? '+' : ''}{ecartPct.toFixed(1)} %</td>
                       <td></td>
-                      <td className="py-1.5 px-3 num font-mono text-xs">{r.code}</td>
-                      <td className="py-1.5 px-3 text-xs">{r.label}</td>
-                      <td className="py-1.5 px-3 text-right num">{fmtFull(r.realise)}</td>
-                      <td className="py-1.5 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
-                      <td className={clsx('py-1.5 px-3 text-right num',
-                        r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
-                        {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
-                      </td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{r.ecartPct >= 0 ? '+' : ''}{r.ecartPct.toFixed(1)} %</td>
-                      <td className="py-1.5 px-3 text-center">
-                        <span className={clsx('text-xs font-semibold',
-                          r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : 'text-primary-400')}>
-                          {r.status === 'favorable' ? '✓' : r.status === 'defavorable' ? '⚠' : '—'}
-                        </span>
-                      </td>
                     </tr>
-                  ))}
-                </>
-              ))}
+                  );
+                }
+                const sec = item.sec;
+                return (
+                  <React.Fragment key={`s-${sec.section}-${idx}`}>
+                    <tr className="bg-primary-200 dark:bg-primary-800 font-semibold">
+                      <td className="py-2 pl-2 w-8 text-center">
+                        <button onClick={() => setExpanded((e) => ({ ...e, [sec.section]: !e[sec.section] }))}
+                          className="w-5 h-5 rounded hover:bg-primary-300 dark:hover:bg-primary-700 text-xs font-bold">
+                          {expanded[sec.section] ? '−' : '+'}
+                        </button>
+                      </td>
+                      <td className="py-2 px-3" colSpan={3}>
+                        <span className={clsx('mr-2 font-bold text-base', sec.isCharge ? 'text-error' : 'text-success')}>{sec.isCharge ? '−' : '+'}</span>
+                        {sec.label} <span className="text-[10px] text-primary-500 font-normal">({sec.rows.length} comptes)</span>
+                      </td>
+                      <td className="py-2 px-3 text-right num">{fmtFull(sec.totalRealise)}</td>
+                      <td className="py-2 px-3 text-right num">{fmtFull(sec.totalBudget)}</td>
+                      <td className={clsx('py-2 px-3 text-right num',
+                        sec.totalEcart > 0 ? (sec.isCharge ? 'text-error' : 'text-success') : (sec.isCharge ? 'text-success' : 'text-error'))}>
+                        {sec.totalEcart >= 0 ? '+' : ''}{fmtFull(sec.totalEcart)}
+                      </td>
+                      <td className="py-2 px-3 text-right num text-xs">{sec.ecartPct >= 0 ? '+' : ''}{sec.ecartPct.toFixed(1)} %</td>
+                      <td></td>
+                    </tr>
+                    {expanded[sec.section] && sec.rows.map((r) => (
+                      <tr key={r.code} className="border-b border-primary-100 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-950/30 hover:bg-primary-100 dark:hover:bg-primary-900">
+                        <td></td>
+                        <td></td>
+                        <td className="py-1.5 px-3 num font-mono text-xs">{r.code}</td>
+                        <td className="py-1.5 px-3 text-xs">{r.label}</td>
+                        <td className="py-1.5 px-3 text-right num">{fmtFull(r.realise)}</td>
+                        <td className="py-1.5 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
+                        <td className={clsx('py-1.5 px-3 text-right num',
+                          r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
+                          {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
+                        </td>
+                        <td className="py-1.5 px-3 text-right num text-xs">{r.ecartPct >= 0 ? '+' : ''}{r.ecartPct.toFixed(1)} %</td>
+                        <td className="py-1.5 px-3 text-center">
+                          <span className={clsx('text-xs font-semibold',
+                            r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : 'text-primary-400')}>
+                            {r.status === 'favorable' ? '✓' : r.status === 'defavorable' ? '⚠' : '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </Card>

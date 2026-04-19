@@ -140,13 +140,37 @@ export default function Budget() {
         subtitle={`Exercice consulté : ${viewYear}${viewYear !== currentYear ? ` · (courant = ${currentYear})` : ''} · Versions · Saisonnalisation · Suivi des écarts`}
         action={
           <div className="flex gap-2 flex-wrap items-center">
+            {/* Switcher rapide N / N-1 / N-2 pour alterner entre budgets */}
+            <div className="flex items-center gap-0.5 bg-primary-100 dark:bg-primary-900 rounded-lg p-0.5 border border-primary-200 dark:border-primary-800">
+              <button
+                title={`Exercice courant (${currentYear})`}
+                onClick={() => setViewYear(currentYear)}
+                className={clsx('px-2 py-1 text-xs font-semibold rounded', viewYear === currentYear ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600 hover:bg-primary-200 dark:hover:bg-primary-800')}
+              >
+                N ({currentYear})
+              </button>
+              <button
+                title={`Exercice N-1 (${currentYear - 1})`}
+                onClick={() => setViewYear(currentYear - 1)}
+                className={clsx('px-2 py-1 text-xs font-semibold rounded', viewYear === currentYear - 1 ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600 hover:bg-primary-200 dark:hover:bg-primary-800')}
+              >
+                N-1 ({currentYear - 1})
+              </button>
+              <button
+                title={`Exercice N-2 (${currentYear - 2})`}
+                onClick={() => setViewYear(currentYear - 2)}
+                className={clsx('px-2 py-1 text-xs font-semibold rounded', viewYear === currentYear - 2 ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600 hover:bg-primary-200 dark:hover:bg-primary-800')}
+              >
+                N-2
+              </button>
+            </div>
             <div className="flex items-center gap-1 bg-primary-100 dark:bg-primary-900 rounded-lg px-2 py-1 border border-primary-200 dark:border-primary-800">
-              <span className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold px-1">Exercice</span>
+              <span className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold px-1">Autre</span>
               <select
                 className="bg-transparent text-sm font-semibold num focus:outline-none"
                 value={viewYear}
                 onChange={(e) => setViewYear(Number(e.target.value))}
-                title="Année consultée (change aussi les versions affichées)"
+                title="Choisir n'importe quel exercice"
               >
                 {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>

@@ -16,7 +16,17 @@ export type Line = {
 // Les comptes de charges/produits (classe 6,7,8) et de capitaux propres (10-15)
 // doivent être retraités pour le résultat.
 // ─────────────────────────────────────────────────────────────────────────────
-export function computeBilan(rows: BalanceRow[]): { actif: Line[]; passif: Line[]; totalActif: number; totalPassif: number } {
+/**
+ * @param rows        Balance cumulée (avec à-nouveaux) — donne les soldes
+ *                    corrects des classes 1 à 5.
+ * @param movements   Optionnel. Balance SANS à-nouveaux (mouvements de
+ *                    l'exercice seulement). Si fournie, le résultat de
+ *                    l'exercice (classes 6/7/8) est calculé à partir des
+ *                    mouvements — ce qui évite de double-compter les
+ *                    reports à nouveau déjà passés en réserves.
+ *                    Si absent, le résultat est calculé sur `rows`.
+ */
+export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { actif: Line[]; passif: Line[]; totalActif: number; totalPassif: number } {
   // Fonctions d'aide : solde D positif pour actif, solde C positif pour passif
   const soldeD = (...prefixes: string[]) => {
     let s = 0;
@@ -29,9 +39,10 @@ export function computeBilan(rows: BalanceRow[]): { actif: Line[]; passif: Line[
     return s;
   };
 
-  // Résultat de l'exercice (pour bilan : on le calcule)
-  const charges = sumBy(rows, ['6', '81', '83', '85', '87', '89']); // débiteurs
-  const produits = -sumBy(rows, ['7', '82', '84', '86']);           // créditeurs (on inverse)
+  // Résultat de l'exercice : calculé sur les MOUVEMENTS (sans AN) si fournis
+  const resSource = movements && movements.length > 0 ? movements : rows;
+  const charges = sumBy(resSource, ['6', '81', '83', '85', '87', '89']); // débiteurs
+  const produits = -sumBy(resSource, ['7', '82', '84', '86']);           // créditeurs (on inverse)
   const resultat = produits - charges;
 
   // ── ACTIF ──────────────────────────────────────────────────────────

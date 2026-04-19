@@ -37,6 +37,11 @@ export function useImportsHistory(orgId: string, kind?: ImportLog['kind'] | Impo
   }, [orgId, Array.isArray(kind) ? kind.join(',') : kind], [] as ImportLog[]);
 }
 
+/**
+ * Balance cumulée (avec à-nouveaux) — pour Bilan et vues d'état cumulé.
+ * includeOpening:true ⇒ inclut la période "mois 0" qui contient les
+ * écritures d'ouverture/report à nouveau de l'exercice.
+ */
 export function useBalance() {
   const { currentOrgId, currentYear, currentPeriodId } = useApp();
   return useLiveQuery(async () => {
@@ -52,14 +57,40 @@ export function useBalance() {
   }, [currentOrgId, currentYear, currentPeriodId], []);
 }
 
+/**
+ * Balance des MOUVEMENTS de l'exercice (sans à-nouveaux) — indispensable
+ * pour le Compte de Résultat et les SIG. Si on inclut les AN dans les
+ * classes 6 et 7, le CA et les charges sont faussés.
+ */
+export function useBalanceMovements() {
+  const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  return useLiveQuery(async () => {
+    if (!currentOrgId) return [];
+    const period = currentPeriodId ? await db.periods.get(currentPeriodId) : undefined;
+    const uptoMonth = period?.month;
+    return computeBalance({
+      orgId: currentOrgId,
+      year: currentYear,
+      uptoMonth,
+      includeOpening: false,
+    });
+  }, [currentOrgId, currentYear, currentPeriodId], []);
+}
+
 export function useStatements() {
-  const balance = useBalance();
+  const balance = useBalance();             // avec AN (pour Bilan et solde des classes 1-5)
+  const movements = useBalanceMovements();  // sans AN (pour CR/SIG — classes 6,7,8)
   if (!balance || balance.length === 0) {
-    return { balance: [], bilan: null, cr: [], sig: null };
+    return { balance: [], movements: [], bilan: null, cr: [], sig: null };
   }
-  const bilan = computeBilan(balance);
-  const { sig, cr } = computeSIG(balance);
-  return { balance, bilan, cr, sig };
+  // Bilan : soldes classes 1-5 depuis la balance cumulée (avec AN),
+  // mais résultat de l'exercice calculé sur les mouvements (sans AN).
+  const bilan = computeBilan(balance, movements);
+  // Pour SIG, on utilise les mouvements de l'année. Si `movements` est vide
+  // (cas rare : pas de périodes 1-12 encore créées), on retombe sur `balance`.
+  const src = movements.length > 0 ? movements : balance;
+  const { sig, cr } = computeSIG(src);
+  return { balance, movements, bilan, cr, sig };
 }
 
 export function useRatios() {

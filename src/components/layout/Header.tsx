@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { Bell, HelpCircle, LogOut, Menu, Settings } from 'lucide-react';
+import { Bell, Hash, HelpCircle, LogOut, Menu, Settings } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
 import { HelpModal } from '../ui/HelpModal';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear } = useApp();
+  const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear, amountMode, setAmountMode } = useApp();
   const orgs = useOrganizations();
   const allPeriods = usePeriods(currentOrgId);
   const fiscalYears = useLiveQuery(
@@ -86,6 +86,19 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <option value="">YTD</option>
             {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
           </select>
+
+          <button
+            type="button"
+            title={amountMode === 'full' ? 'Montants en entier (cliquer pour passer en abrégé K/M)' : 'Montants abrégés K/M (cliquer pour passer en entier)'}
+            aria-label="Mode d'affichage des montants"
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition relative"
+            onClick={() => setAmountMode(amountMode === 'full' ? 'short' : 'full')}
+          >
+            <Hash className="w-4 h-4" />
+            <span className="absolute -bottom-0.5 -right-0.5 min-w-[18px] h-[14px] px-1 bg-primary-100 text-primary-900 rounded-full text-[8px] font-bold flex items-center justify-center uppercase tracking-tighter">
+              {amountMode === 'full' ? '123' : 'K/M'}
+            </span>
+          </button>
 
           <button
             type="button"

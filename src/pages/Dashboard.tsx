@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useParams } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -14,6 +15,7 @@ import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } 
 import { useChartTheme } from '../lib/chartTheme';
 import { bySection, loadLabels } from '../engine/budgetActual';
 import { useApp } from '../store/app';
+import { db } from '../db/schema';
 import { fmtFull } from '../lib/format';
 import { agedBalance, fiscalite, immobilisationsDetail, masseSalariale, monthlyByPrefix, topAccountsByPrefix, tresorerieMonthly, AgedTier } from '../engine/analytics';
 
@@ -862,32 +864,51 @@ function KPIBox({ label, value }: { label: string; value: string }) {
 function ReceivablesReview() {
   const { currentOrgId, currentYear } = useApp();
   const ct = useChartTheme();
-  const balance = useBalance();
+  // Balance cumulée (avec AN) pour les SOLDES clients/fournisseurs.
+  // Mouvements (sans AN) pour les TOTAUX ventes/achats de l'exercice.
+  const { balance, movements } = useStatements();
   const [monthlyAR, setMonthlyAR] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
   const [monthlyAP, setMonthlyAP] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
 
   useEffect(() => {
     if (!currentOrgId) return;
-    // Placeholder : on prend le CA / Achats mensuels comme proxy de l'évolution AR/AP
+    // Évolution mensuelle des VENTES (70) et ACHATS opérationnels (60-63)
     monthlyByPrefix(currentOrgId, currentYear, ['70']).then((d) => {
       let cum = 0;
       const cumValues = d.values.map((v) => (cum += v));
       setMonthlyAR({ labels: d.labels, values: cumValues });
     });
-    monthlyByPrefix(currentOrgId, currentYear, ['60']).then((d) => {
+    monthlyByPrefix(currentOrgId, currentYear, ['60', '61', '62', '63']).then((d) => {
       let cum = 0;
       const cumValues = d.values.map((v) => (cum += v));
       setMonthlyAP({ labels: d.labels, values: cumValues });
     });
   }, [currentOrgId, currentYear]);
 
-  const totalSales = balance.filter((r) => r.account.startsWith('70')).reduce((s, r) => s + r.credit - r.debit, 0);
+  // Chiffre d'affaires & achats : sur les MOUVEMENTS (sans à-nouveaux)
+  const mvSource = movements && movements.length > 0 ? movements : balance;
+  const totalSales = mvSource.filter((r) => r.account.startsWith('70')).reduce((s, r) => s + r.credit - r.debit, 0);
+  // « Total Purchases » = achats larges = 60 (marchandises/MP) + 61 (transports)
+  // + 62 (services ext.) + 63 (autres services ext.). C'est la base réelle
+  // qui alimente les dettes fournisseurs (40x).
+  const totalPurchases = mvSource
+    .filter((r) => r.account.startsWith('60') || r.account.startsWith('61') || r.account.startsWith('62') || r.account.startsWith('63'))
+    .reduce((s, r) => s + r.debit - r.credit, 0);
+
+  // Soldes clients / fournisseurs : sur la balance cumulée (inclut AN = dettes
+  // reportées de l'exercice précédent) — c'est bien l'encours à date.
   const accountReceivable = balance.filter((r) => r.account.startsWith('41')).reduce((s, r) => s + r.soldeD, 0);
-  const totalPurchases = balance.filter((r) => r.account.startsWith('60')).reduce((s, r) => s + r.debit - r.credit, 0);
   const accountPayable = balance.filter((r) => r.account.startsWith('40')).reduce((s, r) => s + r.soldeC, 0);
 
   const pctReceivable = totalSales ? Math.round((accountReceivable / totalSales) * 100) : 0;
   const pctPayable = totalPurchases ? Math.round((accountPayable / totalPurchases) * 100) : 0;
+  // Un ratio > 100 % indique un encours fournisseurs qui excède les achats
+  // de l'exercice — typiquement parce que le solde inclut les à-nouveaux
+  // (dettes N-1 non payées) ou que les achats sont concentrés au-delà de
+  // la classe 60-63. On plafonne l'affichage visuel à 100 % mais on garde
+  // la vraie valeur pour la lecture numérique.
+  const pctReceivableBar = Math.min(pctReceivable, 100);
+  const pctPayableBar = Math.min(pctPayable, 100);
 
   const arData = monthlyAR.labels.slice(0, 3).map((m, i) => ({ mois: m, value: monthlyAR.values[i] || 0 }));
   const apData = monthlyAP.labels.slice(0, 3).map((m, i) => ({ mois: m, value: monthlyAP.values[i] || 0 }));
@@ -915,10 +936,13 @@ function ReceivablesReview() {
       {/* 2 donuts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4">
         <div className="border border-primary-200 dark:border-primary-800 p-4">
-          <p className="text-xs font-semibold mb-2">% Receivable</p>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-xs font-semibold">% Receivable = AR / Ventes</p>
+            {pctReceivable > 100 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning font-semibold">&gt; 100 % — inclut AN</span>}
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={[{ name: 'AR', value: pctReceivable }, { name: 'Reste', value: Math.max(100 - pctReceivable, 0) }]}
+              <Pie data={[{ name: 'AR', value: pctReceivableBar }, { name: 'Reste', value: Math.max(100 - pctReceivableBar, 0) }]}
                 cx="50%" cy="50%" innerRadius={60} outerRadius={85} dataKey="value" startAngle={90} endAngle={-270}>
                 <Cell fill={teal} /><Cell fill={ct.at(5)} />
               </Pie>
@@ -929,10 +953,13 @@ function ReceivablesReview() {
           </ResponsiveContainer>
         </div>
         <div className="border border-primary-200 dark:border-primary-800 p-4">
-          <p className="text-xs font-semibold mb-2">% Payable</p>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-xs font-semibold">% Payable = AP / Achats larges (60-63)</p>
+            {pctPayable > 100 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning font-semibold">&gt; 100 % — inclut AN ou autres classes</span>}
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={[{ name: 'AP', value: pctPayable }, { name: 'Reste', value: Math.max(100 - pctPayable, 0) }]}
+              <Pie data={[{ name: 'AP', value: pctPayableBar }, { name: 'Reste', value: Math.max(100 - pctPayableBar, 0) }]}
                 cx="50%" cy="50%" innerRadius={60} outerRadius={85} dataKey="value" startAngle={90} endAngle={-270}>
                 <Cell fill={red} /><Cell fill={ct.at(5)} />
               </Pie>
@@ -1474,6 +1501,47 @@ function CycleFournisseur() {
     monthlyByPrefix(currentOrgId, currentYear, ['7']).then(setCA);
   }, [currentOrgId, currentYear]);
 
+  // Nombre de fournisseurs : distinct par DÉTAIL (tiers ou sous-compte auxiliaire,
+  // PAS le compte parent 401/402/408).
+  const nbFournisseurs = useLiveQuery(async () => {
+    if (!currentOrgId) return 0;
+    const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
+    const ids = new Set(periods.filter((p) => p.year === currentYear).map((p) => p.id));
+    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+    const keys = new Set<string>();
+    for (const e of entries) {
+      if (!ids.has(e.periodId)) continue;
+      if (!(e.account.startsWith('401') || e.account.startsWith('402') || e.account.startsWith('408'))) continue;
+      // 1) Code tiers si renseigné, 2) sous-compte auxiliaire (len > 3), 3) ignoré
+      if (e.tiers && e.tiers.trim()) keys.add(e.tiers.trim());
+      else if (e.account.length > 3) keys.add(e.account);
+    }
+    return keys.size;
+  }, [currentOrgId, currentYear], 0) ?? 0;
+
+  // Évolution mensuelle RÉELLE des dettes fournisseurs via le cumul des
+  // soldes créditeurs 40x mois par mois, plutôt qu'une simulation.
+  const dettesMonthly = useLiveQuery(async () => {
+    if (!currentOrgId) return { total: Array(12).fill(0), echues: Array(12).fill(0) };
+    const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
+    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+    const total: number[] = Array(12).fill(0);
+    let running = 0;
+    for (let m = 1; m <= 12; m++) {
+      const p = periods.find((x) => x.year === currentYear && x.month === m);
+      if (!p) { total[m - 1] = running; continue; }
+      for (const e of entries) {
+        if (e.periodId !== p.id) continue;
+        if (!e.account.startsWith('40')) continue;
+        running += (e.credit - e.debit);
+      }
+      total[m - 1] = running;
+    }
+    // Échues = approximation (30 % de la dette à partir de M+3)
+    const echues = total.map((v, i) => i < 3 ? 0 : Math.max(0, Math.round(v * 0.3)));
+    return { total, echues };
+  }, [currentOrgId, currentYear], { total: Array(12).fill(0), echues: Array(12).fill(0) }) ?? { total: Array(12).fill(0), echues: Array(12).fill(0) };
+
   const dettes = balance.filter((r) => r.account.startsWith('40')).reduce((s, r) => s + r.soldeC, 0);
   const dpo = ratios.find((r) => r.code === 'DPO')?.value ?? 0;
   const dsoRatio = ratios.find((r) => r.code === 'DSO')?.value ?? 0;
@@ -1481,23 +1549,23 @@ function CycleFournisseur() {
   const bucketTotals = aged.buckets.map((b, i) => ({ tranche: b, montant: aged.rows.reduce((s, r) => s + r.buckets[i], 0),
     color: [ct.at(4), ct.at(0), ct.at(3), ct.at(5), ct.at(1)][i] }));
 
-  const dpoEvol = ca.labels.map((m, i) => ({
+  const dpoEvol = ca.labels.map((m) => ({
     mois: m,
-    dpo: Math.round(dpo + Math.sin(i/2)*5 + i*0.3),
-    dso: Math.round(dsoRatio + Math.sin(i/2)*10 + i*0.5),
+    dpo: Math.round(dpo),
+    dso: Math.round(dsoRatio),
     objectif: 60,
   }));
 
   const dettesEvol = ca.labels.map((m, i) => ({
     mois: m,
-    total: Math.round(dettes * (0.8 + (i / 11) * 0.4)),
-    echues: Math.round(echues * (0.5 + (i / 11) * 0.8)),
+    total: dettesMonthly.total[i] ?? 0,
+    echues: dettesMonthly.echues[i] ?? 0,
   }));
 
-  // Échéancier (8 bi-mensuelles)
+  // Échéancier (8 bi-mensuelles) — fondé sur les dettes réelles
   const echeancier = Array.from({ length: 8 }, (_, i) => ({
     periode: ['S1 Jan','S2 Jan','S1 Fév','S2 Fév','S1 Mar','S2 Mar','S1 Avr','S2 Avr'][i],
-    montant: Math.round(dettes / 10 * (0.7 + Math.random() * 0.6)),
+    montant: Math.round(dettes / 8),
   }));
 
   const top3 = aged.rows.slice(0, 3).reduce((s, r) => s + r.total, 0);
@@ -1515,7 +1583,7 @@ function CycleFournisseur() {
         <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" variation={-3.5} color={ct.at(0)} icon="FO" subValue="Total encours" />
         <KPICard title="DPO" value={`${Math.round(dpo)} j`} variation={-2} color={ct.at(0)} icon="⏱️" subValue="Objectif : 60 jours" />
         <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" variation={8} color={ct.at(1)} icon="90" inverse />
-        <KPICard title="Nb fournisseurs" value={String(aged.rows.length)} color={ct.at(2)} icon="📅" subValue="Actifs" />
+        <KPICard title="Nb fournisseurs" value={String(nbFournisseurs)} color={ct.at(2)} icon="📅" subValue="distincts par tiers / sous-compte" />
         <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} variation={3} color={ct.at(3)} icon="CY" subValue="DSO + Stocks − DPO" inverse />
       </div>
 

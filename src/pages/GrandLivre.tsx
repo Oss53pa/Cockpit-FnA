@@ -194,8 +194,22 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
   const [classFilter, setClassFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<BalanceRow[]>([]);
+  const [diagEntries, setDiagEntries] = useState<GLEntry[]>([]);
+  const [diagOpen, setDiagOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ '1': true, '2': true, '3': true, '4': true, '5': true, '6': true, '7': true, '8': true });
   useEffect(() => { if (orgId) computeBalance({ orgId, year, importId }).then(setRows); }, [orgId, year, importId]);
+
+  // Charge les écritures pour le diagnostic (pièces déséquilibrées)
+  useEffect(() => {
+    if (!orgId) return;
+    (async () => {
+      const periods = await db.periods.where('orgId').equals(orgId).toArray();
+      const periodIds = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
+      const all = await db.gl.where('orgId').equals(orgId).toArray();
+      const filtered = all.filter((e) => periodIds.has(e.periodId) && (!importId || importId === 'all' || e.importId === importId));
+      setDiagEntries(filtered);
+    })();
+  }, [orgId, year, importId]);
 
   const filtered = rows
     .filter((r) => classFilter === 'all' || r.account[0] === classFilter)
@@ -230,9 +244,14 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
           <span className="text-primary-300">·</span>
           <button onClick={collapseAll} className="text-[11px] text-primary-500 hover:text-primary-900 px-2">Tout replier</button>
           <span className="ml-auto text-xs text-primary-500"><span className="num font-semibold">{filtered.length}</span> compte(s) sur <span className="num">{rows.length}</span></span>
-          <EquilibreBadge balanced={Math.abs(totD - totC) < 1} delta={totD - totC} />
+          <EquilibreBadge
+            balanced={Math.abs(totD - totC) < 1}
+            delta={totD - totC}
+            onOpen={() => setDiagOpen(true)}
+          />
         </div>
       </Card>
+      <DiscrepancyModal open={diagOpen} onClose={() => setDiagOpen(false)} rows={rows} entries={diagEntries} />
 
       <Card padded={false}>
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
@@ -352,10 +371,156 @@ function AuxView({ orgId, year, importId, kind }: { orgId: string; year: number;
 }
 
 // ─── Badge équilibre — réutilisé partout ─────────────────────────
-function EquilibreBadge({ balanced, delta }: { balanced: boolean; delta: number }) {
-  return balanced
-    ? <span className="text-xs font-semibold text-success bg-success/10 px-2 py-1 rounded-full">✓ Équilibré</span>
-    : <span className="text-xs font-semibold text-error bg-error/10 px-2 py-1 rounded-full">⚠ Écart : {fmtFull(delta)}</span>;
+function EquilibreBadge({ balanced, delta, onOpen }: { balanced: boolean; delta: number; onOpen?: () => void }) {
+  if (balanced) {
+    return <span className="text-xs font-semibold text-success bg-success/10 px-2 py-1 rounded-full">✓ Équilibré</span>;
+  }
+  if (!onOpen) {
+    return <span className="text-xs font-semibold text-error bg-error/10 px-2 py-1 rounded-full">⚠ Écart : {fmtFull(delta)}</span>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="text-xs font-semibold text-error bg-error/10 hover:bg-error/20 px-2 py-1 rounded-full transition cursor-pointer"
+      title="Cliquer pour voir les comptes & pièces à l'origine de l'écart"
+    >
+      ⚠ Écart : {fmtFull(delta)} — diagnostiquer
+    </button>
+  );
+}
+
+// ─── Modale : comptes et pièces contribuant à l'écart ────────────
+function DiscrepancyModal({ open, onClose, rows, entries }: {
+  open: boolean;
+  onClose: () => void;
+  rows: BalanceRow[];
+  entries: GLEntry[];
+}) {
+  if (!open) return null;
+
+  // Top 20 comptes contribuant à l'écart (net D-C)
+  const topContrib = [...rows]
+    .map((r) => ({ account: r.account, label: r.label, debit: r.debit, credit: r.credit, delta: r.debit - r.credit }))
+    .filter((r) => Math.abs(r.delta) > 0.5)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 50);
+
+  // Pièces déséquilibrées (journal + piece doit avoir D = C)
+  const pieceMap = new Map<string, { journal: string; piece: string; debit: number; credit: number; accounts: Set<string>; count: number; dates: Set<string> }>();
+  for (const e of entries) {
+    const key = `${e.journal}||${e.piece}`;
+    let p = pieceMap.get(key);
+    if (!p) {
+      p = { journal: e.journal, piece: e.piece, debit: 0, credit: 0, accounts: new Set(), count: 0, dates: new Set() };
+      pieceMap.set(key, p);
+    }
+    p.debit += e.debit;
+    p.credit += e.credit;
+    p.accounts.add(e.account);
+    p.dates.add(e.date);
+    p.count++;
+  }
+  const unbalanced = Array.from(pieceMap.values())
+    .map((p) => ({ ...p, gap: p.debit - p.credit }))
+    .filter((p) => Math.abs(p.gap) > 0.5)
+    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
+    .slice(0, 30);
+  const totalPiecesUnbalanced = Array.from(pieceMap.values()).filter((p) => Math.abs(p.debit - p.credit) > 0.5).length;
+
+  const totalDelta = rows.reduce((s, r) => s + r.debit - r.credit, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-primary-950/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-5xl bg-primary-50 dark:bg-primary-900 rounded-xl border border-primary-200 dark:border-primary-800 shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-primary-200 dark:border-primary-800">
+          <div>
+            <h3 className="font-semibold text-primary-900 dark:text-primary-100">Diagnostic de l'écart de balance</h3>
+            <p className="text-xs text-primary-500 mt-0.5">Écart total Débit − Crédit&nbsp;: <span className="font-semibold text-error num">{fmtFull(totalDelta)}</span> · {totalPiecesUnbalanced} pièce(s) déséquilibrée(s)</p>
+          </div>
+          <button onClick={onClose} className="btn-ghost !p-1.5">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+          <div>
+            <h4 className="text-xs uppercase tracking-wider font-semibold text-primary-500 mb-2">Top comptes avec écart D − C ≠ 0</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-300 dark:border-primary-700">
+                  <tr>
+                    <th className="text-left py-1.5 px-2">Compte</th>
+                    <th className="text-left py-1.5 px-2">Libellé</th>
+                    <th className="text-right py-1.5 px-2">Débit</th>
+                    <th className="text-right py-1.5 px-2">Crédit</th>
+                    <th className="text-right py-1.5 px-2">Δ (D − C)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                  {topContrib.map((r) => (
+                    <tr key={r.account} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                      <td className="py-1 px-2 num font-mono">{r.account}</td>
+                      <td className="py-1 px-2">{r.label}</td>
+                      <td className="py-1 px-2 text-right num">{fmtFull(r.debit)}</td>
+                      <td className="py-1 px-2 text-right num">{fmtFull(r.credit)}</td>
+                      <td className={clsx('py-1 px-2 text-right num font-semibold', r.delta > 0 ? 'text-primary-700 dark:text-primary-200' : 'text-error')}>{fmtFull(r.delta)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-primary-400 mt-2">
+              En comptabilité équilibrée, chaque compte peut avoir un solde (D − C), mais la <strong>somme globale</strong> doit être zéro. Si ce n'est pas le cas, ce sont souvent des pièces déséquilibrées à l'import (ci-dessous).
+            </p>
+          </div>
+
+          <div>
+            <h4 className="text-xs uppercase tracking-wider font-semibold text-primary-500 mb-2">Pièces déséquilibrées (journal + n° pièce)</h4>
+            {unbalanced.length === 0 ? (
+              <p className="text-xs text-primary-500 py-4">Aucune pièce déséquilibrée détectée — l'écart provient uniquement des soldes d'ouverture / comptes non-balancés individuellement.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-300 dark:border-primary-700">
+                    <tr>
+                      <th className="text-left py-1.5 px-2">Journal</th>
+                      <th className="text-left py-1.5 px-2">Pièce</th>
+                      <th className="text-left py-1.5 px-2">Dates</th>
+                      <th className="text-right py-1.5 px-2">Nb lignes</th>
+                      <th className="text-right py-1.5 px-2">Débit</th>
+                      <th className="text-right py-1.5 px-2">Crédit</th>
+                      <th className="text-right py-1.5 px-2">Écart</th>
+                      <th className="text-left py-1.5 px-2">Comptes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                    {unbalanced.map((p, i) => (
+                      <tr key={i} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                        <td className="py-1 px-2"><span className="inline-block bg-primary-200 dark:bg-primary-800 rounded px-1.5 py-0.5 font-mono text-[10px]">{p.journal}</span></td>
+                        <td className="py-1 px-2 num font-mono">{p.piece || '—'}</td>
+                        <td className="py-1 px-2 text-[10px]">{Array.from(p.dates).slice(0, 2).join(', ')}{p.dates.size > 2 ? '…' : ''}</td>
+                        <td className="py-1 px-2 text-right num">{p.count}</td>
+                        <td className="py-1 px-2 text-right num">{fmtFull(p.debit)}</td>
+                        <td className="py-1 px-2 text-right num">{fmtFull(p.credit)}</td>
+                        <td className="py-1 px-2 text-right num font-semibold text-error">{fmtFull(p.gap)}</td>
+                        <td className="py-1 px-2">
+                          <div className="flex flex-wrap gap-0.5">
+                            {Array.from(p.accounts).slice(0, 5).map((a) => (
+                              <span key={a} className="inline-block bg-primary-100 dark:bg-primary-800 rounded px-1 py-0.5 font-mono text-[9px]">{a}</span>
+                            ))}
+                            {p.accounts.size > 5 && <span className="text-[9px] text-primary-400">+{p.accounts.size - 5}</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── 4. BALANCE ÂGÉE (Clients ou Fournisseurs) ────────────────────
