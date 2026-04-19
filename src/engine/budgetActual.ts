@@ -169,15 +169,13 @@ export async function computeBudgetActual(orgId: string, year: number, version?:
     realiseMap.set(e.account, (realiseMap.get(e.account) ?? 0) + v);
   }
 
-  // Budget : si version fournie, depuis Dexie ; sinon = réalisé × 0.95 (simulation)
+  // Budget : uniquement depuis Dexie si version fournie ; sinon vide (pas de simulation)
   const budgetMap = new Map<string, number>();
   if (version) {
     const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).toArray();
     for (const l of lines) {
       budgetMap.set(l.account, (budgetMap.get(l.account) ?? 0) + l.amount);
     }
-  } else {
-    realiseMap.forEach((v, k) => budgetMap.set(k, Math.round(v * 0.95)));
   }
 
   const all = new Set<string>([...realiseMap.keys(), ...budgetMap.keys()]);
@@ -306,7 +304,7 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
   for (const account of allAccounts) {
     const rN = realise.get(account) ?? Array(12).fill(0);
     const rN1 = realiseN1.get(account) ?? Array(12).fill(0);
-    const bud = budgetMonthly.get(account) ?? (version ? Array(12).fill(0) : rN.map((v) => Math.round(v * 0.95)));
+    const bud = budgetMonthly.get(account) ?? Array(12).fill(0);
     const sysco = findSyscoAccount(account);
     const isCharge = account.startsWith('6');
 

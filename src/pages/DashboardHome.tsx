@@ -94,10 +94,10 @@ export default function DashboardHome() {
               const depenses = balance.filter((r) => r.account.startsWith('6')).reduce((s, r) => s + r.debit - r.credit, 0);
               const soldeNet = recettes - depenses;
               return <>
-                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} variation={0} vsLabel="" icon="R" color={C.primary} />
-                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} variation={0} vsLabel="" icon="D" color={C.secondary} />
-                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} variation={0} vsLabel="" icon="S" color={C.accent1} />
-                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} variation={0} vsLabel="" icon="T" color={C.accent2} />
+                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} icon="R" color={C.primary} />
+                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} icon="D" color={C.secondary} />
+                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} icon="S" color={C.accent1} />
+                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} icon="T" color={C.accent2} />
               </>;
             })()}
           </div>
@@ -118,10 +118,10 @@ export default function DashboardHome() {
       {system !== 'SMT' && tab === 'perf' && <>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-5">
           <KPICard title="Chiffre d'Affaires" value={fmtK(ca)} unit={currency} variation={variationCA} vsLabel="vs N-1" icon="CA" color={C.primary} subValue={`Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} %)`} />
-          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} variation={0} vsLabel="vs N-1" icon="RN" color={C.secondary} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
-          <KPICard title="EBE" value={fmtK(sig.ebe)} unit={currency} variation={0} vsLabel="vs Budget" icon="⚡" color={C.warning} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
-          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} variation={0} vsLabel="vs M-1" icon="TN" color={C.accent1} subValue={`FR : ${fmtK(frV)} · BFR : ${fmtK(bfrV)}`} />
-          <KPICard title="BFR" value={fmtK(bfrV)} unit={currency} variation={0} vsLabel="vs N-1" icon="BF" color={C.accent4} subValue={`${jCA.toFixed(1)} jours de CA`} inverse />
+          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} icon="RN" color={C.secondary} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
+          <KPICard title="EBE" value={fmtK(sig.ebe)} unit={currency} icon="EB" color={C.warning} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
+          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} icon="TN" color={C.accent1} subValue={`FR : ${fmtK(frV)} · BFR : ${fmtK(bfrV)}`} />
+          <KPICard title="BFR" value={fmtK(bfrV)} unit={currency} icon="BF" color={C.accent4} subValue={`${jCA.toFixed(1)} jours de CA`} inverse />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">

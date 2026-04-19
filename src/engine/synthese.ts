@@ -39,12 +39,12 @@ export function computeFRBFRMonthly(mb: MonthlyBilan): FRBFRRow[] {
   });
 }
 
-export function computeCaData(monthly: MonthlyCA[]): CARow[] {
+export function computeCaData(monthly: MonthlyCA[], budget?: number[], n1?: number[]): CARow[] {
   return monthly.map((m, i) => ({
     mois: m.mois,
     realise: m.realise,
-    budget: Math.round(m.realise * (0.92 + Math.sin(i / 2) * 0.1)),
-    n1: Math.round(m.realise * (0.85 + (Math.sin(i) + 1) * 0.08)),
+    budget: budget?.[i] ?? 0,
+    n1: n1?.[i] ?? 0,
   }));
 }
 

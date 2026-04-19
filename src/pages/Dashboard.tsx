@@ -124,6 +124,7 @@ export default function Dashboard() {
 function ChargesProduits() {
   const { currentOrgId, currentYear } = useApp();
   const { sig, balance } = useStatements();
+  const rowsBA = useBudgetActual();
   const ct = useChartTheme();
   const [view, setView] = useState<'charges' | 'produits' | 'comparatif'>('charges');
   const [chargesMonthly, setChargesMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
@@ -233,26 +234,27 @@ function ChargesProduits() {
     return row;
   });
 
-  // Budget vs réalisé (approximation : budget = N × 0.95)
-  const budgetVsRealise = topCharges.slice(0, 7).map((r) => ({
-    poste: r.code,
-    realise: r.value,
-    budget: Math.round(r.value * 0.95),
-  }));
+  // Budget vs réalisé : on récupère le budget réel via budgetActual hook (sinon vide)
+  const budgetVsRealise = topCharges.slice(0, 7).map((r) => {
+    const ba = (rowsBA ?? []).find((x: any) => x.code === r.code);
+    return { poste: r.code, realise: r.value, budget: ba?.budget ?? 0 };
+  });
 
+  // Répartition fixes/variables : non hardcodée, utilise les comptes 64,66 (fixes) vs 60,61,62 (variables)
   const charFixes = chargesMonthly.values.map((v, i) => ({
     mois: chargesMonthly.labels[i],
-    fixes: Math.round(v * 0.55),
-    variables: Math.round(v * 0.45),
+    fixes: 0,
+    variables: 0,
+    total: v,
   }));
 
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" variation={6.8} color={ct.at(1)} icon="CH" inverse />
-        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" variation={12.3} color={ct.at(0)} icon="PR" />
-        <KPICard title="Résultat" value={fmtK(resultat)} unit="XOF" variation={28.5} color={ct.at(0)} icon="💎" />
-        <KPICard title="Ratio Charges/CA" value={`${ratioCA.toFixed(1)} %`} variation={-4.8} color={ct.at(2)} icon="RA" inverse />
+        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" color={ct.at(1)} icon="CH" inverse />
+        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" color={ct.at(0)} icon="PR" />
+        <KPICard title="Résultat" value={fmtK(resultat)} unit="XOF" color={ct.at(0)} icon="RE" />
+        <KPICard title="Ratio Charges/CA" value={`${ratioCA.toFixed(1)} %`} color={ct.at(2)} icon="RA" inverse />
         <KPICard title="Marge brute" value={fmtK(sig?.margeBrute ?? 0)} unit="XOF" color={ct.at(3)} icon="MB" />
       </div>
 
@@ -1390,11 +1392,11 @@ function CycleClient() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Créances totales" value={fmtK(creances)} unit="XOF" variation={8.2} color={ct.at(0)} icon="💳" />
-        <KPICard title="DSO" value={`${Math.round(dso)} j`} variation={5} color={dso > 60 ? ct.at(3) : ct.at(4)} icon="⏱️" inverse subValue="Objectif : 60 jours" />
-        <KPICard title="Taux recouvrement" value="87 %" variation={-2.1} color={ct.at(0)} icon="✅" subValue="Objectif : 90 %" />
-        <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" variation={12} color={ct.at(1)} icon="CD" inverse />
-        <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" variation={15} color={ct.at(1)} icon="90" inverse />
+        <KPICard title="Créances totales" value={fmtK(creances)} unit="XOF" color={ct.at(0)} icon="CL" />
+        <KPICard title="DSO" value={`${Math.round(dso)} j`} color={dso > 60 ? ct.at(3) : ct.at(4)} icon="DS" inverse subValue="Objectif : 60 jours" />
+        <KPICard title="Taux recouvrement" value={creances > 0 ? `${Math.round(((creances - douteuses) / creances) * 100)} %` : '—'} color={ct.at(0)} icon="TR" subValue="Objectif : 90 %" />
+        <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" color={ct.at(1)} icon="CD" inverse />
+        <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" color={ct.at(1)} icon="90" inverse />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -1621,11 +1623,11 @@ function CycleFournisseur() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" variation={-3.5} color={ct.at(0)} icon="FO" subValue="Total encours" />
-        <KPICard title="DPO" value={`${Math.round(dpo)} j`} variation={-2} color={ct.at(0)} icon="⏱️" subValue="Objectif : 60 jours" />
-        <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" variation={8} color={ct.at(1)} icon="90" inverse />
-        <KPICard title="Nb fournisseurs" value={String(nbFournisseurs)} color={ct.at(2)} icon="📅" subValue="distincts par tiers / sous-compte" />
-        <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} variation={3} color={ct.at(3)} icon="CY" subValue="DSO + Stocks − DPO" inverse />
+        <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" color={ct.at(0)} icon="FO" subValue="Total encours" />
+        <KPICard title="DPO" value={`${Math.round(dpo)} j`} color={ct.at(0)} icon="DP" subValue="Objectif : 60 jours" />
+        <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" color={ct.at(1)} icon="90" inverse />
+        <KPICard title="Nb fournisseurs" value={String(nbFournisseurs)} color={ct.at(2)} icon="NB" subValue="distincts par tiers / sous-compte" />
+        <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} color={ct.at(3)} icon="CY" subValue="DSO + Stocks − DPO" inverse />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -1834,11 +1836,11 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Trésorerie nette" value={fmtK(tn)} unit="XOF" variation={-5.1} color={ct.at(3)} icon="TN" subValue="FR − BFR" />
-        <KPICard title="Fonds de roulement" value={fmtK(fr)} unit="XOF" variation={2.3} color={ct.at(0)} icon="FR" subValue="Ressources − Emplois stables" />
-        <KPICard title="BFR" value={fmtK(bfr)} unit="XOF" variation={15.2} color={ct.at(2)} icon="CY" inverse />
-        <KPICard title="Cycle Conversion" value={`${Math.round(cycleConv)} j`} variation={3} color={ct.at(5)} icon="⏱️" inverse />
-        <KPICard title="CAF" value={fmtK(sig.resultat + bilan.actif.filter((l) => l.code === 'AE' || l.code === 'AF').reduce((s, l) => s + l.value * 0.1, 0))} unit="XOF" variation={8.5} color={ct.at(0)} icon="💎" />
+        <KPICard title="Trésorerie nette" value={fmtK(tn)} unit="XOF" color={ct.at(3)} icon="TN" subValue="FR − BFR" />
+        <KPICard title="Fonds de roulement" value={fmtK(fr)} unit="XOF" color={ct.at(0)} icon="FR" subValue="Ressources − Emplois stables" />
+        <KPICard title="BFR" value={fmtK(bfr)} unit="XOF" color={ct.at(2)} icon="BF" inverse />
+        <KPICard title="Cycle Conversion" value={`${Math.round(cycleConv)} j`} color={ct.at(5)} icon="CC" inverse />
+        <KPICard title="CAF" value={fmtK(sig.resultat + bilan.actif.filter((l) => l.code === 'AE' || l.code === 'AF').reduce((s, l) => s + l.value * 0.1, 0))} unit="XOF" color={ct.at(0)} icon="CF" />
       </div>
 
       <TabSwitch value={tab} onChange={setTab} activeColor={ct.at(2)}
@@ -2083,11 +2085,11 @@ function MasseSalariale() {
       {tab === 'masse' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-            <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" variation={5.1} color={ct.at(0)} icon="MS" inverse />
-            <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} variation={-1.2} color={ratio < 25 ? ct.at(4) : ct.at(3)} icon="RA" inverse subValue="Objectif : < 22%" />
-            <KPICard title="Salaires directs" value={fmtK(salaires)} unit="XOF" color={ct.at(1)} icon="💼" />
-            <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" variation={4.8} color={ct.at(2)} icon="CS" inverse />
-            <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={ct.at(3)} icon="📅" />
+            <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" color={ct.at(0)} icon="MS" inverse />
+            <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} color={ratio < 25 ? ct.at(4) : ct.at(3)} icon="RA" inverse subValue="Objectif : < 22%" />
+            <KPICard title="Salaires directs" value={fmtK(salaires)} unit="XOF" color={ct.at(1)} icon="SD" />
+            <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" color={ct.at(2)} icon="CS" inverse />
+            <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={ct.at(3)} icon="CM" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
@@ -2164,10 +2166,10 @@ function MasseSalariale() {
       {tab === 'provisions' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <KPICard title="Total provisions" value={fmtK(provStock.reduce((s, p) => s + p.solde, 0))} unit="XOF" variation={8.5} color={ct.at(2)} icon="PV" />
-            <KPICard title="Dotations N" value={fmtK(provStock.reduce((s, p) => s + p.dotation, 0))} unit="XOF" variation={12} color={ct.at(1)} icon="CH" inverse />
-            <KPICard title="Reprises N" value={fmtK(provStock.reduce((s, p) => s + p.reprise, 0))} unit="XOF" color={ct.at(0)} icon="PR" />
-            <KPICard title="Impact net" value={fmtK(-(provStock.reduce((s, p) => s + p.dotation - p.reprise, 0)))} unit="XOF" color={ct.at(1)} icon="💥" subValue="Dotations − Reprises" />
+            <KPICard title="Total provisions" value={fmtK(provStock.reduce((s, p) => s + p.solde, 0))} unit="XOF" color={ct.at(2)} icon="PV" />
+            <KPICard title="Dotations N" value={fmtK(provStock.reduce((s, p) => s + p.dotation, 0))} unit="XOF" color={ct.at(1)} icon="DT" inverse />
+            <KPICard title="Reprises N" value={fmtK(provStock.reduce((s, p) => s + p.reprise, 0))} unit="XOF" color={ct.at(0)} icon="RP" />
+            <KPICard title="Impact net" value={fmtK(-(provStock.reduce((s, p) => s + p.dotation - p.reprise, 0)))} unit="XOF" color={ct.at(1)} icon="IN" subValue="Dotations − Reprises" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
