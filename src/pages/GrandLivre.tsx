@@ -219,6 +219,31 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
   const totSD = filtered.reduce((s, r) => s + r.soldeD, 0);
   const totSC = filtered.reduce((s, r) => s + r.soldeC, 0);
 
+  // ─── Diagnostic de l'écart — identification des pièces problématiques ──
+  const { topUnbalancedPieces, problematicAccounts, globalDelta } = useMemo(() => {
+    const pieceMap = new Map<string, { journal: string; piece: string; debit: number; credit: number; accounts: Set<string>; dates: Set<string>; count: number }>();
+    for (const e of diagEntries) {
+      const key = `${e.journal}||${e.piece}`;
+      let p = pieceMap.get(key);
+      if (!p) { p = { journal: e.journal, piece: e.piece, debit: 0, credit: 0, accounts: new Set(), dates: new Set(), count: 0 }; pieceMap.set(key, p); }
+      p.debit += e.debit;
+      p.credit += e.credit;
+      p.accounts.add(e.account);
+      p.dates.add(e.date);
+      p.count++;
+    }
+    const unbalanced = Array.from(pieceMap.values())
+      .map((p) => ({ ...p, gap: p.debit - p.credit }))
+      .filter((p) => Math.abs(p.gap) > 0.5)
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+    // Comptes touchés par au moins une pièce déséquilibrée = suspects
+    const suspects = new Set<string>();
+    for (const p of unbalanced) for (const a of p.accounts) suspects.add(a);
+    return { topUnbalancedPieces: unbalanced.slice(0, 5), problematicAccounts: suspects, globalDelta: totD - totC };
+  }, [diagEntries, totD, totC]);
+
+  const isDiscrepancy = Math.abs(globalDelta) >= 1;
+
   // Groupement par classe
   const byClass = new Map<string, BalanceRow[]>();
   filtered.forEach((r) => {
@@ -251,6 +276,69 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
           />
         </div>
       </Card>
+
+      {/* Bannière de diagnostic : affichée automatiquement quand la balance est déséquilibrée */}
+      {isDiscrepancy && (
+        <div className="card border-l-4 !border-l-error bg-error/5 p-4">
+          <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+            <div>
+              <p className="text-sm font-bold text-error">⚠ Balance déséquilibrée — écart de {fmtFull(globalDelta)} XOF</p>
+              <p className="text-[11px] text-primary-600 dark:text-primary-300 mt-0.5">
+                {topUnbalancedPieces.length > 0
+                  ? <><strong>{topUnbalancedPieces.length}</strong> pièce(s) à l'origine de l'écart · <strong>{problematicAccounts.size}</strong> compte(s) impliqué(s) (surlignés ci-dessous)</>
+                  : "Aucune pièce déséquilibrée détectée — l'écart vient d'un import incomplet ou d'un cumul d'imports."}
+              </p>
+            </div>
+            <button className="btn-outline !py-1 text-xs" onClick={() => setDiagOpen(true)}>
+              Voir tout le diagnostic →
+            </button>
+          </div>
+
+          {topUnbalancedPieces.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead className="text-[9px] uppercase tracking-wider text-primary-500 border-b border-primary-300 dark:border-primary-700">
+                  <tr>
+                    <th className="text-left py-1.5 px-2">#</th>
+                    <th className="text-left py-1.5 px-2">Journal</th>
+                    <th className="text-left py-1.5 px-2">N° pièce</th>
+                    <th className="text-left py-1.5 px-2">Date</th>
+                    <th className="text-right py-1.5 px-2">Débit</th>
+                    <th className="text-right py-1.5 px-2">Crédit</th>
+                    <th className="text-right py-1.5 px-2">Écart</th>
+                    <th className="text-left py-1.5 px-2">Comptes impliqués</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topUnbalancedPieces.map((p, i) => (
+                    <tr key={i} className="border-b border-primary-200/40 dark:border-primary-800/40 hover:bg-error/5">
+                      <td className="py-1 px-2 num text-primary-500">{i + 1}</td>
+                      <td className="py-1 px-2"><span className="inline-block bg-primary-200 dark:bg-primary-800 rounded px-1.5 py-0.5 font-mono text-[10px]">{p.journal}</span></td>
+                      <td className="py-1 px-2 num font-mono font-semibold">{p.piece || '—'}</td>
+                      <td className="py-1 px-2 text-[10px] text-primary-500 num">{Array.from(p.dates).slice(0, 1).join('')}{p.dates.size > 1 ? ` (+${p.dates.size - 1})` : ''}</td>
+                      <td className="py-1 px-2 text-right num">{fmtFull(p.debit)}</td>
+                      <td className="py-1 px-2 text-right num">{fmtFull(p.credit)}</td>
+                      <td className="py-1 px-2 text-right num font-bold text-error">{p.gap > 0 ? '+' : ''}{fmtFull(p.gap)}</td>
+                      <td className="py-1 px-2">
+                        <div className="flex flex-wrap gap-1">
+                          {Array.from(p.accounts).slice(0, 6).map((a) => (
+                            <span key={a} className="inline-block bg-error/15 text-error rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold">{a}</span>
+                          ))}
+                          {p.accounts.size > 6 && <span className="text-[10px] text-primary-400">+{p.accounts.size - 6}</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[10px] text-primary-400 italic mt-2">
+                💡 <strong>Ces écritures doivent être corrigées dans votre logiciel comptable source</strong> puis le fichier réimporté. Les comptes surlignés en rouge dans le tableau ci-dessous sont impactés.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <DiscrepancyModal open={diagOpen} onClose={() => setDiagOpen(false)} rows={rows} entries={diagEntries} />
 
       <Card padded={false}>
@@ -289,17 +377,29 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
                     <td className="py-2 px-3 text-right num">{fmtFull(cSD)}</td>
                     <td className="py-2 px-3 text-right num">{fmtFull(cSC)}</td>
                   </tr>,
-                  ...(isOpen ? cRows.map((r) => (
-                    <tr key={r.account} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
-                      <td></td>
-                      <td className="py-1.5 px-3 num font-mono text-xs">{r.account}</td>
-                      <td className="py-1.5 px-3 text-xs">{r.label}</td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.debit)}</td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.credit)}</td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{r.soldeD ? fmtFull(r.soldeD) : ''}</td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{r.soldeC ? fmtFull(r.soldeC) : ''}</td>
-                    </tr>
-                  )) : []),
+                  ...(isOpen ? cRows.map((r) => {
+                    const isSuspect = problematicAccounts.has(r.account);
+                    return (
+                      <tr
+                        key={r.account}
+                        className={clsx(
+                          'hover:bg-primary-100/50 dark:hover:bg-primary-900/50',
+                          isSuspect && 'bg-error/5 border-l-2 border-error',
+                        )}
+                        title={isSuspect ? "⚠ Ce compte est impliqué dans une pièce déséquilibrée — voir la bannière rouge en haut" : undefined}
+                      >
+                        <td className="text-center">
+                          {isSuspect && <span className="text-error text-xs font-bold" aria-label="Compte suspect">⚠</span>}
+                        </td>
+                        <td className={clsx('py-1.5 px-3 num font-mono text-xs', isSuspect && 'font-bold text-error')}>{r.account}</td>
+                        <td className="py-1.5 px-3 text-xs">{r.label}</td>
+                        <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.debit)}</td>
+                        <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.credit)}</td>
+                        <td className="py-1.5 px-3 text-right num text-xs">{r.soldeD ? fmtFull(r.soldeD) : ''}</td>
+                        <td className="py-1.5 px-3 text-right num text-xs">{r.soldeC ? fmtFull(r.soldeC) : ''}</td>
+                      </tr>
+                    );
+                  }) : []),
                 ];
               })}
             </tbody>
