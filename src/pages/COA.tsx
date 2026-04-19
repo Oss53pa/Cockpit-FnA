@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderTree, Search, Upload } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, FileWarning, FolderTree, Search, Trash2, XCircle } from 'lucide-react';
 import { downloadCOATemplate } from '../engine/templates';
-import { importCOA, COAImportReport } from '../engine/importer';
-import { useCurrentOrg } from '../hooks/useFinancials';
+import { importCOA } from '../engine/importer';
+import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { ImportWizard } from '../components/ui/ImportWizard';
 import { SYSCOHADA_COA, SyscoAccount, findSyscoAccount } from '../syscohada/coa';
-import { db, Account, GLEntry } from '../db/schema';
+import { db, Account, GLEntry, ImportLog } from '../db/schema';
 import { useApp } from '../store/app';
 import { fmtFull } from '../lib/format';
 
@@ -34,19 +35,10 @@ export default function COA() {
   const org = useCurrentOrg();
   const [q, setQ] = useState('');
   const [activeClass, setActiveClass] = useState<string>('all');
-  const [view, setView] = useState<'sysco' | 'imported'>('sysco');
+  const [view, setView] = useState<'sysco' | 'imported' | 'import'>('sysco');
   const [selected, setSelected] = useState<{ code: string; label: string; type?: string; class?: string } | null>(null);
-  const [coaReport, setCoaReport] = useState<COAImportReport | null>(null);
 
-  const onImportCOA = async (file: File) => {
-    if (!currentOrgId) return;
-    try {
-      const report = await importCOA(file, currentOrgId);
-      setCoaReport(report);
-    } catch (e: any) {
-      alert(`Erreur import : ${e.message}`);
-    }
-  };
+  const coaImports = useImportsHistory(currentOrgId, 'COA');
 
   const accounts = useLiveQuery(
     () => (currentOrgId ? db.accounts.where('orgId').equals(currentOrgId).toArray() : Promise.resolve([] as Account[])),
@@ -112,37 +104,15 @@ export default function COA() {
             <button className="btn-outline" onClick={() => downloadCOATemplate(org?.name)}>
               <FileSpreadsheet className="w-4 h-4" /> Modèle Excel
             </button>
-            <label className="btn-outline cursor-pointer">
-              <Upload className="w-4 h-4" /> Importer
-              <input type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden"
-                onChange={(e) => e.target.files?.[0] && onImportCOA(e.target.files[0])} />
-            </label>
+            <button className="btn-outline" onClick={() => setView('import')}>
+              <Download className="w-4 h-4 rotate-180" /> Importer
+            </button>
             <button className="btn-outline" onClick={exportCSV}>
               <Download className="w-4 h-4" /> Exporter CSV
             </button>
           </div>
         }
       />
-
-      {coaReport && (
-        <div className="mb-6 p-4 rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/30">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold">Résultat de l'import</h4>
-            <button className="text-xs text-primary-500 hover:text-primary-700" onClick={() => setCoaReport(null)}>Fermer</button>
-          </div>
-          <div className="flex gap-4 text-sm">
-            <span>{coaReport.imported} compte(s) importé(s)</span>
-            <span>{coaReport.updated} mis à jour</span>
-            <span>{coaReport.imported - coaReport.updated} nouveau(x)</span>
-            {coaReport.errors.length > 0 && <span className="text-error">{coaReport.errors.length} erreur(s)</span>}
-          </div>
-          {coaReport.errors.length > 0 && (
-            <div className="mt-2 text-xs font-mono max-h-20 overflow-y-auto">
-              {coaReport.errors.map((e, i) => <div key={i}>Ligne {e.row} : {e.reason}</div>)}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-6">
         {['1','2','3','4','5','6','7','8'].map((c) => (
@@ -166,6 +136,11 @@ export default function COA() {
           className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px',
             view === 'imported' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
           Comptes de la société <Badge>{accounts.length}</Badge>
+        </button>
+        <button onClick={() => setView('import')}
+          className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px',
+            view === 'import' ? 'border-primary-900 dark:border-primary-100' : 'border-transparent text-primary-500')}>
+          Import & Historique <Badge>{coaImports.length}</Badge>
         </button>
       </div>
 
@@ -194,6 +169,10 @@ export default function COA() {
             <ImportedTree items={filteredImported} mouvementes={mouvementes} activeClass={activeClass} onSelect={(a) => setSelected(a)} />
           </div>
         </Card>
+      )}
+
+      {view === 'import' && (
+        <COAImportTab orgId={currentOrgId} orgName={org?.name} history={coaImports} onImported={() => setView('imported')} />
       )}
 
       {selected && (
@@ -476,6 +455,105 @@ function Meta({ label, children }: { label: string; children: React.ReactNode })
     <div>
       <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-0.5">{label}</p>
       <p>{children}</p>
+    </div>
+  );
+}
+
+// ─── ONGLET IMPORT + HISTORIQUE (VERSIONNING) ──────────────────────
+function COAImportTab({
+  orgId, orgName, history, onImported,
+}: {
+  orgId: string; orgName?: string; history: ImportLog[]; onImported: () => void;
+}) {
+  const deleteImport = async (imp: ImportLog) => {
+    if (!imp.id) return;
+    if (!confirm("Supprimer cet import de l'historique ? (les comptes ne sont pas supprimés)")) return;
+    await db.imports.delete(imp.id);
+  };
+
+  return (
+    <div className="space-y-6">
+      <ImportWizard
+        title="Import du plan comptable"
+        subtitle="CSV · XLSX — une ligne = un compte. Les colonnes Code, Libellé et Type sont détectées automatiquement."
+        controls={[
+          'Code compte obligatoire (numérique, classes 1 à 9 SYSCOHADA)',
+          'Libellé obligatoire',
+          'Mapping SYSCOHADA auto par préfixe si non renseigné',
+          'Les comptes existants sont mis à jour, les nouveaux créés',
+        ]}
+        onDownloadTemplate={() => downloadCOATemplate(orgName)}
+        fields={[
+          { key: 'code', label: 'Code compte', required: true, patterns: [/^code$/i, /^compte$/i, /^cpte/i, /^num/i] },
+          { key: 'label', label: 'Libellé', required: true, patterns: [/^libell[éeè]/i, /^label/i, /^intitul/i, /^description/i] },
+          { key: 'class', label: 'Classe', patterns: [/^classe$/i, /^class$/i] },
+          { key: 'type', label: 'Type (A/P/C/R/X)', patterns: [/^type$/i, /^nature/i] },
+          { key: 'sysco', label: 'Compte SYSCOHADA', patterns: [/sysco/i, /mapping/i, /^ref/i] },
+        ]}
+        onImport={async (file, mapping) => {
+          const res = await importCOA(file, orgId, {
+            code: mapping.code,
+            label: mapping.label,
+            class: mapping.class || undefined,
+            type: mapping.type || undefined,
+            sysco: mapping.sysco || undefined,
+          });
+          onImported();
+          return {
+            imported: res.imported,
+            updated: res.updated,
+            rejected: 0,
+            errors: res.errors,
+            extras: { 'Nouveaux comptes': res.imported - res.updated, 'Mis à jour': res.updated },
+          };
+        }}
+      />
+
+      <Card title="Historique des imports du plan comptable" subtitle="Versionning — chaque import écrase / met à jour les comptes existants">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+              <tr>
+                <th className="text-left py-2 px-3">Date</th>
+                <th className="text-left py-2 px-3">Utilisateur</th>
+                <th className="text-left py-2 px-3">Fichier</th>
+                <th className="text-left py-2 px-3">Source</th>
+                <th className="text-right py-2 px-3">Comptes</th>
+                <th className="text-right py-2 px-3">Rejetés</th>
+                <th className="text-left py-2 px-3">Statut</th>
+                <th className="text-center py-2 px-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+              {history.length === 0 && (
+                <tr><td colSpan={8} className="py-6 text-center text-primary-500 text-xs">Aucun import</td></tr>
+              )}
+              {history.map((i) => (
+                <tr key={i.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                  <td className="py-2 px-3 num text-xs">{new Date(i.date).toLocaleString('fr-FR')}</td>
+                  <td className="py-2 px-3">{i.user}</td>
+                  <td className="py-2 px-3 font-mono text-xs">{i.fileName}</td>
+                  <td className="py-2 px-3"><Badge>{i.source}</Badge></td>
+                  <td className="py-2 px-3 text-right num">{i.count.toLocaleString('fr-FR')}</td>
+                  <td className="py-2 px-3 text-right num">{i.rejected}</td>
+                  <td className="py-2 px-3">
+                    {i.status === 'success' && <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Succès</Badge>}
+                    {i.status === 'partial' && <Badge variant="warning"><FileWarning className="w-3 h-3" /> Partiel</Badge>}
+                    {i.status === 'error' && <Badge variant="error"><XCircle className="w-3 h-3" /> Échec</Badge>}
+                  </td>
+                  <td className="py-2 px-3 text-center">
+                    <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10"
+                      onClick={() => deleteImport(i)}
+                      title="Supprimer de l'historique">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

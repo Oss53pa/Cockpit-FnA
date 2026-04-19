@@ -60,8 +60,10 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
 
-    // Chercher la feuille contenant des en-têtes reconnus (COMPTE, DATE, DEBIT…)
-    const dataKeywords = /^(compte|date|journal|debit|crédit|credit|libelle|description)$/i;
+    // Chercher la feuille contenant des en-têtes reconnus
+    // Couvre : Grand Livre (date, compte, débit…), Plan comptable (code, libellé,
+    // classe), Budget (compte, janvier, février…).
+    const dataKeywords = /^(compte|code|date|journal|d[ée]bit|cr[ée]dit|libell[éeè]|label|intitul|description|classe|type|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)$/i;
     let ws = wb.Sheets[wb.SheetNames[0]];
     for (const name of wb.SheetNames) {
       const candidate = wb.Sheets[name];
@@ -400,21 +402,43 @@ export type COAImportReport = {
   errors: { row: number; reason: string }[];
 };
 
+export type COAMapping = {
+  code: string;
+  label: string;
+  class?: string;
+  type?: string;
+  sysco?: string;
+};
+
+/**
+ * Import du plan comptable.
+ * - Signature historique : (file, orgId) => détection automatique des colonnes
+ * - Signature étendue    : (file, orgId, mapping, opts)
+ *   Le mapping permet au wizard de fournir les colonnes explicites.
+ *   Les opts permettent de tracer l'import dans db.imports (user, source).
+ */
 export async function importCOA(
   file: File,
   orgId: string,
+  mapping?: Partial<COAMapping>,
+  opts?: { user?: string; source?: string },
 ): Promise<COAImportReport> {
   const { rows } = await parseFile(file);
   const errors: COAImportReport['errors'] = [];
   const toImport: Account[] = [];
 
-  // Détection des colonnes
+  // Détection des colonnes (si mapping partiel, on complète avec l'auto-détection)
   const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
-  const colCode = headers.find((h) => /^code$/i.test(h.trim()) || /^compte$/i.test(h.trim()));
-  const colLabel = headers.find((h) => /^libell[éeè]/i.test(h.trim()) || /^label/i.test(h.trim()) || /^intitul/i.test(h.trim()));
-  const colClass = headers.find((h) => /^classe$/i.test(h.trim()));
-  const colType = headers.find((h) => /^type$/i.test(h.trim()));
-  const colSysco = headers.find((h) => /sysco/i.test(h.trim()) || /^compte\s*sysco/i.test(h.trim()));
+  const colCode = mapping?.code
+    || headers.find((h) => /^code$/i.test(h.trim()) || /^compte$/i.test(h.trim()));
+  const colLabel = mapping?.label
+    || headers.find((h) => /^libell[éeè]/i.test(h.trim()) || /^label/i.test(h.trim()) || /^intitul/i.test(h.trim()));
+  const colClass = mapping?.class
+    || headers.find((h) => /^classe$/i.test(h.trim()));
+  const colType = mapping?.type
+    || headers.find((h) => /^type$/i.test(h.trim()));
+  const colSysco = mapping?.sysco
+    || headers.find((h) => /sysco/i.test(h.trim()) || /^compte\s*sysco/i.test(h.trim()));
 
   if (!colCode) throw new Error('Colonne "Code" ou "Compte" introuvable dans le fichier.');
   if (!colLabel) throw new Error('Colonne "Libellé" introuvable dans le fichier.');
@@ -439,11 +463,153 @@ export async function importCOA(
     await db.accounts.bulkPut(toImport);
   }
 
+  // Trace l'import dans la table "imports" pour le versionning
+  await db.imports.add({
+    orgId,
+    date: Date.now(),
+    user: opts?.user ?? 'Utilisateur local',
+    fileName: file.name,
+    source: opts?.source ?? 'Excel',
+    kind: 'COA',
+    count: toImport.length,
+    rejected: errors.length,
+    status: errors.length === 0 ? 'success' : (toImport.length > 0 ? 'partial' : 'error'),
+    report: JSON.stringify({ updated, errors: errors.slice(0, 100) }),
+  });
+
   return {
     totalRows: rows.length,
     imported: toImport.length,
     updated,
     errors,
+  };
+}
+
+// ── Import Budget ──────────────────────────────────────────────────────────
+export type BudgetMapping = {
+  account: string;             // colonne code compte (obligatoire)
+  months?: Record<string, string>; // { m1: '01', m2: '02', ... } — optionnel
+  annual?: string;             // colonne montant annuel (si pas de détail mensuel)
+  label?: string;              // colonne libellé (optionnel, ignoré pour l'import)
+};
+
+export type BudgetImportReport = {
+  totalRows: number;
+  imported: number;  // nb de comptes importés
+  lines: number;     // nb de lignes budgetaires crées (≈ comptes × 12)
+  rejected: number;
+  errors: { row: number; reason: string }[];
+  version: string;
+  year: number;
+};
+
+const FRENCH_MONTH_COLS = [
+  /^janv/i, /^f[ée]vr/i, /^mars/i, /^avri?l/i, /^mai/i, /^juin/i,
+  /^juil/i, /^ao[ûu]t/i, /^sept/i, /^octo/i, /^nove/i, /^d[ée]ce/i,
+];
+
+export async function importBudget(
+  file: File,
+  orgId: string,
+  mapping: BudgetMapping,
+  opts: { year: number; version: string; user?: string; source?: string },
+): Promise<BudgetImportReport> {
+  const { rows } = await parseFile(file);
+  const errors: BudgetImportReport['errors'] = [];
+
+  // Détermine les colonnes mensuelles : soit via mapping.months fourni par le wizard,
+  // soit auto-détection sur les en-têtes.
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const monthCols: (string | undefined)[] = [];
+  if (mapping.months) {
+    for (let i = 1; i <= 12; i++) monthCols.push(mapping.months[`m${i}`]);
+  } else {
+    for (const re of FRENCH_MONTH_COLS) {
+      monthCols.push(headers.find((h) => re.test(h.trim())));
+    }
+  }
+  const hasMonthly = monthCols.some((c) => !!c);
+  const annualCol = mapping.annual;
+
+  if (!hasMonthly && !annualCol) {
+    throw new Error('Impossible de localiser les 12 colonnes mensuelles ni une colonne "Montant annuel".');
+  }
+
+  // Accumulation par compte (somme si plusieurs lignes par compte)
+  const perAccount = new Map<string, number[]>();
+
+  rows.forEach((r) => {
+    const code = String(r[mapping.account] ?? '').trim();
+    if (!code || !/^\d/.test(code)) return;
+    // Skip totaux/séparateurs
+    if (/^total/i.test(code) || /^═/.test(code)) return;
+
+    let monthly: number[];
+    if (hasMonthly) {
+      monthly = monthCols.map((c) => {
+        if (!c) return 0;
+        return parseAmount(r[c]);
+      });
+    } else if (annualCol) {
+      const annual = parseAmount(r[annualCol]);
+      if (annual === 0) return;
+      // Répartition linéaire 1/12
+      const part = Math.round(annual / 12);
+      monthly = Array.from({ length: 12 }, () => part);
+    } else {
+      return;
+    }
+
+    if (monthly.every((v) => v === 0)) return;
+
+    if (!perAccount.has(code)) perAccount.set(code, Array(12).fill(0));
+    const current = perAccount.get(code)!;
+    for (let m = 0; m < 12; m++) current[m] += monthly[m];
+  });
+
+  // Enregistrement : écrase la version cible (semantique "load or replace")
+  let lines = 0;
+  await db.transaction('rw', db.budgets, async () => {
+    await db.budgets
+      .where('[orgId+year+version]')
+      .equals([orgId, opts.year, opts.version])
+      .delete();
+    const toInsert: Array<{ orgId: string; year: number; version: string; account: string; month: number; amount: number }> = [];
+    for (const [account, arr] of perAccount) {
+      for (let m = 0; m < 12; m++) {
+        if (arr[m] !== 0) {
+          toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: m + 1, amount: arr[m] });
+        }
+      }
+    }
+    if (toInsert.length) await db.budgets.bulkAdd(toInsert as any);
+    lines = toInsert.length;
+  });
+
+  // Trace dans db.imports
+  await db.imports.add({
+    orgId,
+    date: Date.now(),
+    user: opts.user ?? 'Utilisateur local',
+    fileName: file.name,
+    source: opts.source ?? 'Excel',
+    kind: 'BUDGET',
+    count: perAccount.size,
+    rejected: errors.length,
+    status: errors.length === 0 ? 'success' : (perAccount.size > 0 ? 'partial' : 'error'),
+    report: JSON.stringify({ lines, errors: errors.slice(0, 100) }),
+    year: opts.year,
+    version: opts.version,
+  });
+
+  return {
+    totalRows: rows.length,
+    imported: perAccount.size,
+    lines,
+    rejected: errors.length,
+    errors,
+    version: opts.version,
+    year: opts.year,
   };
 }
 

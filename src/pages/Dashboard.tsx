@@ -20,29 +20,13 @@ import { agedBalance, fiscalite, immobilisationsDetail, masseSalariale, monthlyB
 
 const fmtK = (v: number) => v >= 1e9 ? `${(v/1e9).toFixed(1)}Md` : v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : String(Math.round(v));
 
-const gradients: Record<string, string> = {
-  cp:     'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
-  client: 'linear-gradient(135deg, #171717 0%, #525252 100%)',
-  fr:     'linear-gradient(135deg, #262626 0%, #737373 100%)',
-  tre:    'linear-gradient(135deg, #0a0a0a 0%, #525252 100%)',
-  bfr:    'linear-gradient(135deg, #171717 0%, #737373 100%)',
-  sal:    'linear-gradient(135deg, #262626 0%, #a3a3a3 100%)',
-  fis:    'linear-gradient(135deg, #404040 0%, #a3a3a3 100%)',
-  stk:    'linear-gradient(135deg, #0a0a0a 0%, #737373 100%)',
-  immo:   'linear-gradient(135deg, #404040 0%, #737373 100%)',
-  ind:    'linear-gradient(135deg, #262626 0%, #525252 100%)',
-  btp:    'linear-gradient(135deg, #171717 0%, #404040 100%)',
-  com:    'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
-  mfi:    'linear-gradient(135deg, #262626 0%, #737373 100%)',
-  imco:   'linear-gradient(135deg, #171717 0%, #525252 100%)',
-  hot:    'linear-gradient(135deg, #262626 0%, #737373 100%)',
-  agri:   'linear-gradient(135deg, #0a0a0a 0%, #525252 100%)',
-  sante:  'linear-gradient(135deg, #171717 0%, #737373 100%)',
-  transp:       'linear-gradient(135deg, #262626 0%, #404040 100%)',
-  serv:         'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
-  ana_centres:  'linear-gradient(135deg, #171717 0%, #525252 100%)',
-  ana_projets:  'linear-gradient(135deg, #262626 0%, #525252 100%)',
-  ana_axes:     'linear-gradient(135deg, #0a0a0a 0%, #404040 100%)',
+// Les gradients sont maintenant dynamiques via useChartTheme().gradient()
+// Variants alternées pour distinguer visuellement les dashboards
+const gradientVariants: Record<string, 'a' | 'b' | 'c'> = {
+  cp: 'a', client: 'b', fr: 'c', tre: 'a', bfr: 'b', sal: 'c',
+  fis: 'a', stk: 'b', immo: 'c', ind: 'a', btp: 'b', com: 'a',
+  mfi: 'c', imco: 'b', hot: 'c', agri: 'a', sante: 'b',
+  transp: 'c', serv: 'a', ana_centres: 'b', ana_projets: 'c', ana_axes: 'a',
 };
 
 const catalog: Record<string, { title: string; icon: string; subtitle: string }> = {
@@ -92,6 +76,7 @@ export default function Dashboard() {
   const { id = 'cp' } = useParams();
   const org = useCurrentOrg();
   const { currentYear } = useApp();
+  const ct = useChartTheme();
   const meta = catalog[id];
   if (!meta) return <div className="py-20 text-center text-primary-500">Dashboard introuvable</div>;
 
@@ -103,7 +88,7 @@ export default function Dashboard() {
         <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
         <button className="btn-primary text-sm"><Download className="w-4 h-4" /> Exporter</button>
       </div>
-      <DashHeader icon={meta.icon} title={meta.title} subtitle={subtitle} gradient={gradients[id]} />
+      <DashHeader icon={meta.icon} title={meta.title} subtitle={subtitle} gradient={ct.gradient(gradientVariants[id ?? 'cp'] ?? 'a')} />
 
       {id === 'cp' && <ChargesProduits />}
       {id === 'crblock' && <CRBlock />}
@@ -132,6 +117,7 @@ export default function Dashboard() {
 function ChargesProduits() {
   const { currentOrgId, currentYear } = useApp();
   const { sig, balance } = useStatements();
+  const ct = useChartTheme();
   const [view, setView] = useState<'charges' | 'produits' | 'comparatif'>('charges');
   const [chargesMonthly, setChargesMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
   const [produitsMonthly, setProduitsMonthly] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
@@ -221,14 +207,14 @@ function ChargesProduits() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" variation={6.8} color={C.secondary} icon="CH" inverse />
-        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" variation={12.3} color={C.primary} icon="PR" />
-        <KPICard title="Résultat" value={fmtK(resultat)} unit="XOF" variation={28.5} color={C.primary} icon="💎" />
-        <KPICard title="Ratio Charges/CA" value={`${ratioCA.toFixed(1)} %`} variation={-4.8} color={C.accent1} icon="RA" inverse />
-        <KPICard title="Marge brute" value={fmtK(sig?.margeBrute ?? 0)} unit="XOF" color={C.accent2} icon="MB" />
+        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" variation={6.8} color={ct.at(1)} icon="CH" inverse />
+        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" variation={12.3} color={ct.at(0)} icon="PR" />
+        <KPICard title="Résultat" value={fmtK(resultat)} unit="XOF" variation={28.5} color={ct.at(0)} icon="💎" />
+        <KPICard title="Ratio Charges/CA" value={`${ratioCA.toFixed(1)} %`} variation={-4.8} color={ct.at(2)} icon="RA" inverse />
+        <KPICard title="Marge brute" value={fmtK(sig?.margeBrute ?? 0)} unit="XOF" color={ct.at(3)} icon="MB" />
       </div>
 
-      <TabSwitch value={view} onChange={setView} activeColor={C.primary}
+      <TabSwitch value={view} onChange={setView} activeColor={ct.at(0)}
         tabs={[{ key: 'charges', label: 'Charges' }, { key: 'produits', label: 'Produits' }, { key: 'comparatif', label: 'Comparatif Budget' }]} />
 
       {view === 'charges' && (
@@ -236,16 +222,16 @@ function ChargesProduits() {
           <ChartCard title="Évolution mensuelle des charges par nature" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chargesEvol}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="achats" name="Achats" stackId="1" fill={C.primary} stroke={C.primary} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="personnel" name="Personnel" stackId="1" fill={C.secondary} stroke={C.secondary} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="services" name="Services ext." stackId="1" fill={C.accent1} stroke={C.accent1} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="amortissements" name="Amortiss." stackId="1" fill={C.accent3} stroke={C.accent3} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={C.warning} stroke={C.warning} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="achats" name="Achats" stackId="1" fill={ct.at(0)} stroke={ct.at(0)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="personnel" name="Personnel" stackId="1" fill={ct.at(1)} stroke={ct.at(1)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="services" name="Services ext." stackId="1" fill={ct.at(2)} stroke={ct.at(2)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="amortissements" name="Amortiss." stackId="1" fill={ct.at(3)} stroke={ct.at(3)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={ct.at(4)} stroke={ct.at(4)} fillOpacity={0.8} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -272,13 +258,13 @@ function ChargesProduits() {
           <ChartCard title="📌 Charges Fixes vs Variables">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={charFixes}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="fixes" name="Charges fixes" stackId="a" fill={C.info} />
-                <Bar dataKey="variables" name="Variables" stackId="a" fill={C.accent4} radius={[3,3,0,0]} />
+                <Bar dataKey="fixes" name="Charges fixes" stackId="a" fill={ct.at(0)} />
+                <Bar dataKey="variables" name="Variables" stackId="a" fill={ct.at(1)} radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -320,15 +306,15 @@ function ChargesProduits() {
           <ChartCard title="Évolution mensuelle des produits par nature" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={produitsEvol}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="ventes" name="Ventes" stackId="1" fill={C.success} stroke={C.success} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="services" name="Services" stackId="1" fill={C.primary} stroke={C.primary} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="subventions" name="Subventions" stackId="1" fill={C.accent1} stroke={C.accent1} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={C.warning} stroke={C.warning} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="ventes" name="Ventes" stackId="1" fill={ct.at(0)} stroke={ct.at(0)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="services" name="Services" stackId="1" fill={ct.at(1)} stroke={ct.at(1)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="subventions" name="Subventions" stackId="1" fill={ct.at(2)} stroke={ct.at(2)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={ct.at(3)} stroke={ct.at(3)} fillOpacity={0.8} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -359,13 +345,13 @@ function ChargesProduits() {
           <ChartCard title="Budget vs Réalisé par poste" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={budgetVsRealise} layout="vertical" barGap={4}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <YAxis type="category" dataKey="poste" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="realise" name="Réalisé" fill={C.primary} radius={[0,3,3,0]} />
-                <Bar dataKey="budget" name="Budget" fill={C.warning} radius={[0,3,3,0]} />
+                <Bar dataKey="realise" name="Réalisé" fill={ct.at(0)} radius={[0,3,3,0]} />
+                <Bar dataKey="budget" name="Budget" fill={ct.at(3)} radius={[0,3,3,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -479,7 +465,7 @@ function CRBlock() {
           <ChartCard title="Top 10 comptes de la section">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={[...sec.rows].sort((a, b) => b.realise - a.realise).slice(0, 10)} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={70} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -490,7 +476,7 @@ function CRBlock() {
           <ChartCard title="Réalisé vs Budget par compte">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={[...sec.rows].sort((a, b) => b.realise - a.realise).slice(0, 10)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="code" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -847,7 +833,7 @@ function CashflowStatement() {
       <div className="p-4">
         <ResponsiveContainer width="100%" height={380}>
           <ComposedChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
             <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v.toLocaleString('fr-FR')} />
             <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -965,7 +951,7 @@ function ReceivablesReview() {
           <p className="text-xs font-semibold mb-2">Account receivable per month</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={arData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : `${v}`} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -979,7 +965,7 @@ function ReceivablesReview() {
           <p className="text-xs font-semibold mb-2">Account payable per month</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={apData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : `${v}`} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -1233,7 +1219,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         <ChartCard title="Évolution mensuelle de la section" className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={evolMensuelle}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -1262,7 +1248,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         <ChartCard title="Top 10 comptes">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={top10} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="code" tick={{ fontSize: 9 }} width={80} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -1274,7 +1260,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         <ChartCard title="Réalisé vs Budget — Top 10">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={top10}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="code" tick={{ fontSize: 9 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -1298,6 +1284,7 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
 // ══════════════════════════════════════════════════════════════════════
 function CycleClient() {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const ratios = useRatios();
   const balance = useBalance();
   const [aged, setAged] = useState<{ buckets: string[]; rows: AgedTier[] }>({ buckets: [], rows: [] });
@@ -1336,18 +1323,18 @@ function CycleClient() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Créances totales" value={fmtK(creances)} unit="XOF" variation={8.2} color={C.primary} icon="💳" />
+        <KPICard title="Créances totales" value={fmtK(creances)} unit="XOF" variation={8.2} color={ct.at(0)} icon="💳" />
         <KPICard title="DSO" value={`${Math.round(dso)} j`} variation={5} color={dso > 60 ? C.warning : C.success} icon="⏱️" inverse subValue="Objectif : 60 jours" />
-        <KPICard title="Taux recouvrement" value="87 %" variation={-2.1} color={C.primary} icon="✅" subValue="Objectif : 90 %" />
-        <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" variation={12} color={C.secondary} icon="CD" inverse />
-        <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" variation={15} color={C.secondary} icon="90" inverse />
+        <KPICard title="Taux recouvrement" value="87 %" variation={-2.1} color={ct.at(0)} icon="✅" subValue="Objectif : 90 %" />
+        <KPICard title="Créances douteuses" value={fmtK(douteuses)} unit="XOF" variation={12} color={ct.at(1)} icon="CD" inverse />
+        <KPICard title="Créances > 90j" value={fmtK(top90)} unit="XOF" variation={15} color={ct.at(1)} icon="90" inverse />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ChartCard title="Balance âgée clients">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bucketTotals}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="tranche" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -1361,13 +1348,13 @@ function CycleClient() {
         <ChartCard title="⏱️ Évolution du DSO (jours)">
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={dsoEvol}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={[30, 80]} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Line type="monotone" dataKey="dso" name="DSO réel" stroke={C.primary} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="objectif" name="Objectif" stroke={C.danger} strokeDasharray="5 5" dot={false} />
+              <Line type="monotone" dataKey="dso" name="DSO réel" stroke={ct.at(0)} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="objectif" name="Objectif" stroke={ct.at(1)} strokeDasharray="5 5" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1375,13 +1362,13 @@ function CycleClient() {
         <ChartCard title="Évolution des créances">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={creancesEvol}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Area type="monotone" dataKey="total" name="Créances totales" fill={C.primary + '30'} stroke={C.primary} strokeWidth={2} />
-              <Area type="monotone" dataKey="douteuses" name="Douteuses" fill={C.danger + '30'} stroke={C.danger} strokeWidth={2} />
+              <Area type="monotone" dataKey="total" name="Créances totales" fill={ct.at(0) + '30'} stroke={ct.at(0)} strokeWidth={2} />
+              <Area type="monotone" dataKey="douteuses" name="Douteuses" fill={ct.at(1) + '30'} stroke={ct.at(1)} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1389,7 +1376,7 @@ function CycleClient() {
         <ChartCard title="✅ Taux de recouvrement mensuel (%)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={recouv}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={[60, 100]} />
               <Tooltip />
@@ -1476,6 +1463,7 @@ function CycleClient() {
 // ══════════════════════════════════════════════════════════════════════
 function CycleFournisseur() {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const ratios = useRatios();
   const balance = useBalance();
   const [aged, setAged] = useState<{ buckets: string[]; rows: AgedTier[] }>({ buckets: [], rows: [] });
@@ -1525,18 +1513,18 @@ function CycleFournisseur() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" variation={-3.5} color={C.primary} icon="FO" subValue="Total encours" />
-        <KPICard title="DPO" value={`${Math.round(dpo)} j`} variation={-2} color={C.primary} icon="⏱️" subValue="Objectif : 60 jours" />
-        <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" variation={8} color={C.secondary} icon="90" inverse />
-        <KPICard title="Nb fournisseurs" value={String(aged.rows.length)} color={C.accent1} icon="📅" subValue="Actifs" />
-        <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} variation={3} color={C.accent2} icon="CY" subValue="DSO + Stocks − DPO" inverse />
+        <KPICard title="Dettes fournisseurs" value={fmtK(dettes)} unit="XOF" variation={-3.5} color={ct.at(0)} icon="FO" subValue="Total encours" />
+        <KPICard title="DPO" value={`${Math.round(dpo)} j`} variation={-2} color={ct.at(0)} icon="⏱️" subValue="Objectif : 60 jours" />
+        <KPICard title="Dettes échues" value={fmtK(echues)} unit="XOF" variation={8} color={ct.at(1)} icon="90" inverse />
+        <KPICard title="Nb fournisseurs" value={String(aged.rows.length)} color={ct.at(2)} icon="📅" subValue="Actifs" />
+        <KPICard title="Cycle conversion" value={`${Math.round(dsoRatio + 35 - dpo)} j`} variation={3} color={ct.at(3)} icon="CY" subValue="DSO + Stocks − DPO" inverse />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ChartCard title="Balance âgée fournisseurs">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bucketTotals}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="tranche" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -1550,14 +1538,14 @@ function CycleFournisseur() {
         <ChartCard title="⏱️ DPO vs DSO — évolution comparée">
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={dpoEvol}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={[20, 90]} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Line type="monotone" dataKey="dpo" name="DPO (fournisseurs)" stroke={C.accent4} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="dso" name="DSO (clients)" stroke={C.primary} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="objectif" name="Cible DPO" stroke={C.danger} strokeDasharray="5 5" dot={false} />
+              <Line type="monotone" dataKey="dpo" name="DPO (fournisseurs)" stroke={ct.at(5)} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="dso" name="DSO (clients)" stroke={ct.at(0)} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="objectif" name="Cible DPO" stroke={ct.at(1)} strokeDasharray="5 5" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1565,13 +1553,13 @@ function CycleFournisseur() {
         <ChartCard title="Évolution des dettes fournisseurs">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={dettesEvol}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Area type="monotone" dataKey="total" name="Total dettes" fill={C.accent4 + '30'} stroke={C.accent4} strokeWidth={2} />
-              <Area type="monotone" dataKey="echues" name="Échues" fill={C.danger + '30'} stroke={C.danger} strokeWidth={2} />
+              <Area type="monotone" dataKey="total" name="Total dettes" fill={ct.at(5) + '30'} stroke={ct.at(5)} strokeWidth={2} />
+              <Area type="monotone" dataKey="echues" name="Échues" fill={ct.at(1) + '30'} stroke={ct.at(1)} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1579,11 +1567,11 @@ function CycleFournisseur() {
         <ChartCard title="📅 Échéancier de paiement (prévisionnel)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={echeancier}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="periode" tick={{ fontSize: 9 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="montant" name="Décaissements prévus" fill={C.info} radius={[4,4,0,0]} />
+              <Bar dataKey="montant" name="Décaissements prévus" fill={ct.at(2)} radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1663,6 +1651,7 @@ function CycleFournisseur() {
 // ══════════════════════════════════════════════════════════════════════
 function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'previsionnel' }) {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const { sig, bilan } = useStatements();
   const [tab, setTab] = useState<typeof initialTab>(initialTab);
   const [tre, setTre] = useState<{ labels: string[]; cumul: number[]; encaissements: number[]; decaissements: number[] }>({ labels: [], cumul: [], encaissements: [], decaissements: [] });
@@ -1737,14 +1726,14 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-        <KPICard title="Trésorerie nette" value={fmtK(tn)} unit="XOF" variation={-5.1} color={C.accent2} icon="TN" subValue="FR − BFR" />
-        <KPICard title="Fonds de roulement" value={fmtK(fr)} unit="XOF" variation={2.3} color={C.primary} icon="FR" subValue="Ressources − Emplois stables" />
-        <KPICard title="BFR" value={fmtK(bfr)} unit="XOF" variation={15.2} color={C.accent1} icon="CY" inverse />
-        <KPICard title="Cycle Conversion" value={`${Math.round(cycleConv)} j`} variation={3} color={C.accent4} icon="⏱️" inverse />
-        <KPICard title="CAF" value={fmtK(sig.resultat + bilan.actif.filter((l) => l.code === 'AE' || l.code === 'AF').reduce((s, l) => s + l.value * 0.1, 0))} unit="XOF" variation={8.5} color={C.primary} icon="💎" />
+        <KPICard title="Trésorerie nette" value={fmtK(tn)} unit="XOF" variation={-5.1} color={ct.at(3)} icon="TN" subValue="FR − BFR" />
+        <KPICard title="Fonds de roulement" value={fmtK(fr)} unit="XOF" variation={2.3} color={ct.at(0)} icon="FR" subValue="Ressources − Emplois stables" />
+        <KPICard title="BFR" value={fmtK(bfr)} unit="XOF" variation={15.2} color={ct.at(2)} icon="CY" inverse />
+        <KPICard title="Cycle Conversion" value={`${Math.round(cycleConv)} j`} variation={3} color={ct.at(5)} icon="⏱️" inverse />
+        <KPICard title="CAF" value={fmtK(sig.resultat + bilan.actif.filter((l) => l.code === 'AE' || l.code === 'AF').reduce((s, l) => s + l.value * 0.1, 0))} unit="XOF" variation={8.5} color={ct.at(0)} icon="💎" />
       </div>
 
-      <TabSwitch value={tab} onChange={setTab} activeColor={C.info}
+      <TabSwitch value={tab} onChange={setTab} activeColor={ct.at(2)}
         tabs={[{ key: 'tresorerie', label: 'Trésorerie' }, { key: 'bfr', label: 'BFR' }, { key: 'previsionnel', label: 'Prévisionnel' }]} />
 
       {tab === 'tresorerie' && (
@@ -1752,14 +1741,14 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="Encaissements vs Décaissements" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <ComposedChart data={tresorerieEvol}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="encaissements" name="Encaissements" fill={C.success} radius={[3,3,0,0]} />
-                <Bar dataKey="decaissements" name="Décaissements" fill={C.danger} radius={[3,3,0,0]} />
-                <Line type="monotone" dataKey="solde" name="Solde trésorerie" stroke={C.info} strokeWidth={2.5} dot={{ r: 4 }} />
+                <Bar dataKey="encaissements" name="Encaissements" fill={ct.at(4)} radius={[3,3,0,0]} />
+                <Bar dataKey="decaissements" name="Décaissements" fill={ct.at(1)} radius={[3,3,0,0]} />
+                <Line type="monotone" dataKey="solde" name="Solde trésorerie" stroke={ct.at(2)} strokeWidth={2.5} dot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -1767,14 +1756,14 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="Flux par catégorie">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={fluxData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="exploitation" name="Exploitation" fill={C.success} radius={[3,3,0,0]} />
-                <Bar dataKey="investissement" name="Investissement" fill={C.primary} radius={[3,3,0,0]} />
-                <Bar dataKey="financement" name="Financement" fill={C.accent1} radius={[3,3,0,0]} />
+                <Bar dataKey="exploitation" name="Exploitation" fill={ct.at(4)} radius={[3,3,0,0]} />
+                <Bar dataKey="investissement" name="Investissement" fill={ct.at(0)} radius={[3,3,0,0]} />
+                <Bar dataKey="financement" name="Financement" fill={ct.at(2)} radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -1809,14 +1798,14 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="FR / BFR / Trésorerie nette — évolution" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={frBfrTn}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Line type="monotone" dataKey="fr" name="Fonds de Roulement" stroke={C.success} strokeWidth={2.5} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="bfr" name="BFR" stroke={C.warning} strokeWidth={2.5} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="tn" name="Trésorerie nette" stroke={C.info} strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="fr" name="Fonds de Roulement" stroke={ct.at(4)} strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="bfr" name="BFR" stroke={ct.at(3)} strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="tn" name="Trésorerie nette" stroke={ct.at(2)} strokeWidth={2.5} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -1869,14 +1858,14 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="Prévisionnel de trésorerie — 6 mois (3 scénarios)">
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={previsionnel}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="optimiste" name="Scénario optimiste" fill={C.success + '20'} stroke={C.success} strokeWidth={2} />
-                <Area type="monotone" dataKey="base" name="Scénario base" fill={C.primary + '20'} stroke={C.primary} strokeWidth={2.5} />
-                <Area type="monotone" dataKey="pessimiste" name="Scénario pessimiste" fill={C.danger + '20'} stroke={C.danger} strokeWidth={2} />
+                <Area type="monotone" dataKey="optimiste" name="Scénario optimiste" fill={C.success + '20'} stroke={ct.at(4)} strokeWidth={2} />
+                <Area type="monotone" dataKey="base" name="Scénario base" fill={C.primary + '20'} stroke={ct.at(0)} strokeWidth={2.5} />
+                <Area type="monotone" dataKey="pessimiste" name="Scénario pessimiste" fill={C.danger + '20'} stroke={ct.at(1)} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -1922,6 +1911,7 @@ function MasseSalariale() {
   const { currentOrgId, currentYear } = useApp();
   const { sig } = useStatements();
   const balance = useBalance();
+  const ct = useChartTheme();
   const [tab, setTab] = useState<'masse' | 'provisions'>('masse');
   const [data, setData] = useState<{ labels: string[]; values: number[] }>({ labels: [], values: [] });
 
@@ -1979,32 +1969,32 @@ function MasseSalariale() {
 
   return (
     <>
-      <TabSwitch value={tab} onChange={setTab} activeColor={C.accent3}
+      <TabSwitch value={tab} onChange={setTab} activeColor={ct.at(4)}
         tabs={[{ key: 'masse', label: 'Masse salariale' }, { key: 'provisions', label: 'Provisions' }]} />
 
       {tab === 'masse' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-            <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" variation={5.1} color={C.primary} icon="MS" inverse />
+            <KPICard title="Masse salariale totale" value={fmtK(totMasse)} unit="XOF" variation={5.1} color={ct.at(0)} icon="MS" inverse />
             <KPICard title="Ratio MS / CA" value={`${ratio.toFixed(1)} %`} variation={-1.2} color={ratio < 25 ? C.success : C.warning} icon="RA" inverse subValue="Objectif : < 22%" />
-            <KPICard title="Salaires directs" value={fmtK(salaires)} unit="XOF" color={C.secondary} icon="💼" />
-            <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" variation={4.8} color={C.accent1} icon="CS" inverse />
-            <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={C.accent2} icon="📅" />
+            <KPICard title="Salaires directs" value={fmtK(salaires)} unit="XOF" color={ct.at(1)} icon="💼" />
+            <KPICard title="Charges sociales" value={fmtK(charges)} unit="XOF" variation={4.8} color={ct.at(2)} icon="CS" inverse />
+            <KPICard title="Coût moyen / mois" value={fmtK(totMasse / 12)} unit="XOF" color={ct.at(3)} icon="📅" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <ChartCard title="Évolution mensuelle de la masse salariale" className="lg:col-span-2">
               <ResponsiveContainer width="100%" height={240}>
                 <ComposedChart data={msEvol}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                   <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Bar dataKey="salaires" name="Salaires" stackId="a" fill={C.primary} />
-                  <Bar dataKey="charges" name="Charges sociales" stackId="a" fill={C.secondary} />
-                  <Bar dataKey="primes" name="Primes" stackId="a" fill={C.accent1} radius={[3,3,0,0]} />
-                  <Line type="monotone" dataKey="budget" name="Budget" stroke={C.danger} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                  <Bar dataKey="salaires" name="Salaires" stackId="a" fill={ct.at(0)} />
+                  <Bar dataKey="charges" name="Charges sociales" stackId="a" fill={ct.at(1)} />
+                  <Bar dataKey="primes" name="Primes" stackId="a" fill={ct.at(2)} radius={[3,3,0,0]} />
+                  <Line type="monotone" dataKey="budget" name="Budget" stroke={ct.at(1)} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -2049,13 +2039,13 @@ function MasseSalariale() {
             <ChartCard title="Ratio Masse salariale / CA (%)">
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={ratioMs}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                   <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} domain={[10, 30]} />
                   <Tooltip formatter={(v: any) => `${v}%`} />
                   <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Line type="monotone" dataKey="ratio" name="Ratio MS/CA" stroke={C.primary} strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="objectif" name="Seuil max 22%" stroke={C.danger} strokeDasharray="5 5" dot={false} />
+                  <Line type="monotone" dataKey="ratio" name="Ratio MS/CA" stroke={ct.at(0)} strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="objectif" name="Seuil max 22%" stroke={ct.at(1)} strokeDasharray="5 5" dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -2066,25 +2056,25 @@ function MasseSalariale() {
       {tab === 'provisions' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <KPICard title="Total provisions" value={fmtK(provStock.reduce((s, p) => s + p.solde, 0))} unit="XOF" variation={8.5} color={C.accent1} icon="PV" />
-            <KPICard title="Dotations N" value={fmtK(provStock.reduce((s, p) => s + p.dotation, 0))} unit="XOF" variation={12} color={C.secondary} icon="CH" inverse />
-            <KPICard title="Reprises N" value={fmtK(provStock.reduce((s, p) => s + p.reprise, 0))} unit="XOF" color={C.primary} icon="PR" />
-            <KPICard title="Impact net" value={fmtK(-(provStock.reduce((s, p) => s + p.dotation - p.reprise, 0)))} unit="XOF" color={C.secondary} icon="💥" subValue="Dotations − Reprises" />
+            <KPICard title="Total provisions" value={fmtK(provStock.reduce((s, p) => s + p.solde, 0))} unit="XOF" variation={8.5} color={ct.at(2)} icon="PV" />
+            <KPICard title="Dotations N" value={fmtK(provStock.reduce((s, p) => s + p.dotation, 0))} unit="XOF" variation={12} color={ct.at(1)} icon="CH" inverse />
+            <KPICard title="Reprises N" value={fmtK(provStock.reduce((s, p) => s + p.reprise, 0))} unit="XOF" color={ct.at(0)} icon="PR" />
+            <KPICard title="Impact net" value={fmtK(-(provStock.reduce((s, p) => s + p.dotation - p.reprise, 0)))} unit="XOF" color={ct.at(1)} icon="💥" subValue="Dotations − Reprises" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ChartCard title="Dotations vs Reprises — évolution mensuelle">
               <ResponsiveContainer width="100%" height={230}>
                 <ComposedChart data={provEvol}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                   <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                   <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Bar yAxisId="left" dataKey="dotations" name="Dotations" fill={C.danger} radius={[3,3,0,0]} />
-                  <Bar yAxisId="left" dataKey="reprises" name="Reprises" fill={C.success} radius={[3,3,0,0]} />
-                  <Line yAxisId="right" type="monotone" dataKey="solde" name="Solde provisions" stroke={C.info} strokeWidth={2} dot={{ r: 3 }} />
+                  <Bar yAxisId="left" dataKey="dotations" name="Dotations" fill={ct.at(1)} radius={[3,3,0,0]} />
+                  <Bar yAxisId="left" dataKey="reprises" name="Reprises" fill={ct.at(4)} radius={[3,3,0,0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="solde" name="Solde provisions" stroke={ct.at(2)} strokeWidth={2} dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -2153,10 +2143,10 @@ function Fiscalite() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="TVA collectée" value={fmtK(data.tvaCollectee)} unit="XOF" color={C.accent2} icon="MB" />
-        <KPICard title="TVA déductible" value={fmtK(data.tvaDeductible)} unit="XOF" color={C.primary} icon="TD" />
+        <KPICard title="TVA collectée" value={fmtK(data.tvaCollectee)} unit="XOF" color={ct.at(3)} icon="MB" />
+        <KPICard title="TVA déductible" value={fmtK(data.tvaDeductible)} unit="XOF" color={ct.at(0)} icon="TD" />
         <KPICard title="TVA nette à payer" value={fmtK(Math.max(data.tvaAPayer, 0))} unit="XOF" color={data.tvaAPayer > 0 ? C.warning : C.success} icon="TV" />
-        <KPICard title="IS estimé" value={fmtK(data.is)} unit="XOF" color={C.secondary} icon="CS" />
+        <KPICard title="IS estimé" value={fmtK(data.is)} unit="XOF" color={ct.at(1)} icon="CS" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Décomposition fiscale">
@@ -2216,10 +2206,10 @@ function Stocks() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Stock brut" value={fmtK(total)} unit="XOF" color={C.primary} icon="ST" />
+        <KPICard title="Stock brut" value={fmtK(total)} unit="XOF" color={ct.at(0)} icon="ST" />
         <KPICard title="Dépréciations" value={fmtK(deprec)} unit="XOF" color={deprec > 0 ? C.warning : C.success} icon="CH" inverse />
-        <KPICard title="Stock net" value={fmtK(total - deprec)} unit="XOF" color={C.primary} icon="✅" />
-        <KPICard title="Catégories" value={String(stocks.length)} color={C.accent2} icon="📂" />
+        <KPICard title="Stock net" value={fmtK(total - deprec)} unit="XOF" color={ct.at(0)} icon="✅" />
+        <KPICard title="Catégories" value={String(stocks.length)} color={ct.at(3)} icon="📂" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="🍩 Répartition des stocks par nature">
@@ -2236,7 +2226,7 @@ function Stocks() {
         <ChartCard title="Valorisation par catégorie">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={stocks} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="label" tick={{ fontSize: 10 }} width={140} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2256,6 +2246,7 @@ function Stocks() {
 // ══════════════════════════════════════════════════════════════════════
 function Immobilisations() {
   const { currentOrgId, currentYear } = useApp();
+  const ct = useChartTheme();
   const [data, setData] = useState<Array<{ label: string; brute: number; amort: number; vnc: number }>>([]);
 
   useEffect(() => {
@@ -2271,22 +2262,22 @@ function Immobilisations() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Valeur brute" value={fmtK(totBrute)} unit="XOF" color={C.accent2} icon="FR" />
-        <KPICard title="Amortissements" value={fmtK(totAmort)} unit="XOF" color={C.accent1} icon="CH" />
-        <KPICard title="Valeur nette" value={fmtK(totVNC)} unit="XOF" color={C.primary} icon="💎" />
+        <KPICard title="Valeur brute" value={fmtK(totBrute)} unit="XOF" color={ct.at(3)} icon="FR" />
+        <KPICard title="Amortissements" value={fmtK(totAmort)} unit="XOF" color={ct.at(2)} icon="CH" />
+        <KPICard title="Valeur nette" value={fmtK(totVNC)} unit="XOF" color={ct.at(0)} icon="💎" />
         <KPICard title="Taux de vétusté" value={`${vetuste.toFixed(1)} %`} color={vetuste < 50 ? C.success : vetuste < 75 ? C.warning : C.danger} icon="⏳" inverse />
       </div>
       <ChartCard title="Décomposition par catégorie">
         <ResponsiveContainer width="100%" height={340}>
           <BarChart data={data} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
             <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
             <YAxis type="category" dataKey="label" tick={{ fontSize: 10 }} width={140} />
             <Tooltip formatter={(v: any) => fmtFull(v)} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="brute" name="Valeur brute" fill={C.primary} radius={[0,3,3,0]} />
-            <Bar dataKey="amort" name="Amortissements" fill={C.warning} radius={[0,3,3,0]} />
-            <Bar dataKey="vnc" name="VNC" fill={C.success} radius={[0,3,3,0]} />
+            <Bar dataKey="brute" name="Valeur brute" fill={ct.at(0)} radius={[0,3,3,0]} />
+            <Bar dataKey="amort" name="Amortissements" fill={ct.at(3)} radius={[0,3,3,0]} />
+            <Bar dataKey="vnc" name="VNC" fill={ct.at(4)} radius={[0,3,3,0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -2372,7 +2363,7 @@ function SecIndustrie() {
         <ChartCard title="Production mensuelle vs objectif">
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2453,7 +2444,7 @@ function SecBTP() {
         <ChartCard title="Évolution des travaux facturés">
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={monthly.labels.map((m, i) => ({ mois: m, travaux: monthly.values[i] }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2470,7 +2461,7 @@ function SecBTP() {
               { cat: 'Main-d\'œuvre', montant: mainoeuvre * 0.7 },
               { cat: 'Locations', montant: locations },
             ]}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="cat" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2567,7 +2558,7 @@ function SecCommerce() {
         <ChartCard title="Évolution des ventes et de la marge">
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2581,7 +2572,7 @@ function SecCommerce() {
         <ChartCard title="Ventilation du CA par famille">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={familles} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={100} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2661,7 +2652,7 @@ function SecMicrofinance() {
         <ChartCard title="Qualité du portefeuille de crédit">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={portfolio}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="tranche" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2774,7 +2765,7 @@ function SecImmobilierCom() {
         <ChartCard title="Loyers par site">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={lots} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={140} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2924,7 +2915,7 @@ function SecAgriculture() {
         <ChartCard title="Marge par spéculation">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={cultures}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="nom" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -2969,7 +2960,7 @@ function SecSante() {
         <ChartCard title="Recettes par service">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={services} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={120} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
@@ -3161,7 +3152,7 @@ function Analytique({ id: _id }: { id: string }) {
         <ChartCard title="Produits vs Charges par centre">
           <ResponsiveContainer width="100%" height={Math.max(260, data.length * 35)}>
             <BarChart data={data.slice(0, 15)} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={120} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />

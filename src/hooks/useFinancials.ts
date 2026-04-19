@@ -27,11 +27,14 @@ export function useCurrentOrg() {
   return orgs?.find((o) => o.id === orgId);
 }
 
-export function useImportsHistory(orgId: string): ImportLog[] {
-  return useLiveQuery(
-    () => db.imports.where('orgId').equals(orgId).reverse().sortBy('date'),
-    [orgId], [] as ImportLog[],
-  );
+export function useImportsHistory(orgId: string, kind?: ImportLog['kind'] | ImportLog['kind'][]): ImportLog[] {
+  return useLiveQuery(async () => {
+    if (!orgId) return [] as ImportLog[];
+    const all = await db.imports.where('orgId').equals(orgId).reverse().sortBy('date');
+    if (!kind) return all;
+    const kinds = Array.isArray(kind) ? new Set(kind) : new Set([kind]);
+    return all.filter((i) => kinds.has(i.kind));
+  }, [orgId, Array.isArray(kind) ? kind.join(',') : kind], [] as ImportLog[]);
 }
 
 export function useBalance() {
