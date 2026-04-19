@@ -38,14 +38,45 @@ export function useImportsHistory(orgId: string, kind?: ImportLog['kind'] | Impo
 }
 
 /**
+ * Résout la sélection d'import courante (store) en un importId concret
+ * à passer à computeBalance :
+ * - 'latest' → l'id du dernier ImportLog GL pour la société (le plus récent)
+ * - 'all'    → 'all' (computeBalance bypass le filtre)
+ * - autre    → l'id tel quel
+ * Retourne undefined pendant le chargement (évite d'afficher des données
+ * obsolètes avant d'avoir la résolution).
+ */
+export function useResolvedImportId(): string | undefined {
+  const currentOrgId = useApp((s) => s.currentOrgId);
+  const currentImport = useApp((s) => s.currentImport);
+  return useLiveQuery(async () => {
+    if (!currentOrgId) return 'all';
+    if (currentImport === 'all') return 'all';
+    if (currentImport === 'latest') {
+      const imports = await db.imports
+        .where('orgId').equals(currentOrgId)
+        .filter((i) => i.kind === 'GL')
+        .reverse().sortBy('date');
+      if (!imports.length) return 'all'; // pas d'import : rien à filtrer
+      return String(imports[0].id);
+    }
+    return currentImport; // id spécifique
+  }, [currentOrgId, currentImport], undefined);
+}
+
+/**
  * Balance cumulée (avec à-nouveaux) — pour Bilan et vues d'état cumulé.
  * includeOpening:true ⇒ inclut la période "mois 0" qui contient les
  * écritures d'ouverture/report à nouveau de l'exercice.
+ * Utilise la sélection d'import courante (dernier par défaut) pour éviter
+ * le double-comptage si plusieurs imports coexistent.
  */
 export function useBalance() {
   const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  const importId = useResolvedImportId();
   return useLiveQuery(async () => {
     if (!currentOrgId) return [];
+    if (importId === undefined) return []; // en cours de résolution
     const period = currentPeriodId ? await db.periods.get(currentPeriodId) : undefined;
     const uptoMonth = period?.month;
     return computeBalance({
@@ -53,19 +84,21 @@ export function useBalance() {
       year: currentYear,
       uptoMonth,
       includeOpening: true,
+      importId,
     });
-  }, [currentOrgId, currentYear, currentPeriodId], []);
+  }, [currentOrgId, currentYear, currentPeriodId, importId], []);
 }
 
 /**
  * Balance des MOUVEMENTS de l'exercice (sans à-nouveaux) — indispensable
- * pour le Compte de Résultat et les SIG. Si on inclut les AN dans les
- * classes 6 et 7, le CA et les charges sont faussés.
+ * pour le Compte de Résultat et les SIG.
  */
 export function useBalanceMovements() {
   const { currentOrgId, currentYear, currentPeriodId } = useApp();
+  const importId = useResolvedImportId();
   return useLiveQuery(async () => {
     if (!currentOrgId) return [];
+    if (importId === undefined) return [];
     const period = currentPeriodId ? await db.periods.get(currentPeriodId) : undefined;
     const uptoMonth = period?.month;
     return computeBalance({
@@ -73,8 +106,9 @@ export function useBalanceMovements() {
       year: currentYear,
       uptoMonth,
       includeOpening: false,
+      importId,
     });
-  }, [currentOrgId, currentYear, currentPeriodId], []);
+  }, [currentOrgId, currentYear, currentPeriodId, importId], []);
 }
 
 export function useStatements() {

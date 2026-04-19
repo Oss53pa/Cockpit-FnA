@@ -7,6 +7,16 @@ import { create } from 'zustand';
  */
 export type AmountDisplayMode = 'full' | 'short';
 
+/**
+ * Mode de sélection de l'import GL à utiliser pour les calculs.
+ * - 'latest' : (défaut) n'utilise QUE le dernier import du GL — évite le
+ *   double-comptage quand plusieurs imports existent pour la même période.
+ * - 'all'    : cumule tous les imports (comportement legacy).
+ * - une string : l'id d'un ImportLog spécifique (pour consulter une version
+ *   historique).
+ */
+export type ImportSelection = 'latest' | 'all' | string;
+
 type AppState = {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -18,6 +28,8 @@ type AppState = {
   setCurrentYear: (y: number) => void;
   amountMode: AmountDisplayMode;
   setAmountMode: (m: AmountDisplayMode) => void;
+  currentImport: ImportSelection;
+  setCurrentImport: (s: ImportSelection) => void;
 };
 
 const DEFAULT_CURRENT_YEAR = (() => {
@@ -54,6 +66,11 @@ export const useApp = create<AppState>((set) => ({
   setAmountMode: (m) => {
     localStorage.setItem('amount-mode', m);
     set({ amountMode: m });
+  },
+  currentImport: (localStorage.getItem('current-import') as ImportSelection) || 'latest',
+  setCurrentImport: (s) => {
+    localStorage.setItem('current-import', s);
+    set({ currentImport: s });
   },
 }));
 

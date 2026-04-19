@@ -3,12 +3,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Hash, HelpCircle, LogOut, Menu, Settings } from 'lucide-react';
 import { useApp } from '../../store/app';
-import { useBalance, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
+import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
 import { HelpModal } from '../ui/HelpModal';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear, amountMode, setAmountMode } = useApp();
+  const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear, amountMode, setAmountMode, currentImport, setCurrentImport } = useApp();
+  const glImports = useImportsHistory(currentOrgId, 'GL');
   const orgs = useOrganizations();
   const allPeriods = usePeriods(currentOrgId);
   const fiscalYears = useLiveQuery(
@@ -86,6 +87,27 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <option value="">YTD</option>
             {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
           </select>
+
+          {/* Sélecteur d'import GL : par défaut « dernier » (évite le cumul
+              des imports historiques qui fausse les totaux). */}
+          {glImports.length > 0 && (
+            <select
+              value={currentImport}
+              onChange={(e) => setCurrentImport(e.target.value)}
+              title="Import GL utilisé pour les calculs"
+              className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900 max-w-[200px]"
+            >
+              <option value="latest">🆕 Dernier import ({glImports.length})</option>
+              <option value="all">∑ Tous les imports (cumul)</option>
+              <optgroup label="— Versions historiques —">
+                {glImports.map((i) => (
+                  <option key={i.id} value={String(i.id)}>
+                    {new Date(i.date).toLocaleDateString('fr-FR')} · {i.fileName.substring(0, 30)}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          )}
 
           {/* Toggle segmenté Entier / Abrégé — affichage des montants */}
           <div
