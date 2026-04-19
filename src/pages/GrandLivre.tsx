@@ -219,13 +219,26 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
   const totSD = filtered.reduce((s, r) => s + r.soldeD, 0);
   const totSC = filtered.reduce((s, r) => s + r.soldeC, 0);
 
-  // ─── Diagnostic de l'écart — identification des pièces problématiques ──
-  const { topUnbalancedPieces, problematicAccounts, globalDelta } = useMemo(() => {
+  // ─── Diagnostic de l'écart ───────────────────────────────────
+  // On calcule TOUJOURS sur les données brutes (rows, pas filtered) — l'écart
+  // est une propriété de l'import, pas de la vue filtrée.
+  const globalDelta = useMemo(() => {
+    return rows.reduce((s, r) => s + r.debit - r.credit, 0);
+  }, [rows]);
+
+  const isDiscrepancy = Math.abs(globalDelta) >= 1;
+
+  // Identification des pièces et comptes suspects
+  const { topUnbalancedPieces, problematicAccounts, fallbackAccounts } = useMemo(() => {
     const pieceMap = new Map<string, { journal: string; piece: string; debit: number; credit: number; accounts: Set<string>; dates: Set<string>; count: number }>();
     for (const e of diagEntries) {
-      const key = `${e.journal}||${e.piece}`;
+      // Clé : journal||piece. Entrées sans piece/journal groupées sous "∅||∅"
+      const key = `${e.journal || '∅'}||${e.piece || '∅'}`;
       let p = pieceMap.get(key);
-      if (!p) { p = { journal: e.journal, piece: e.piece, debit: 0, credit: 0, accounts: new Set(), dates: new Set(), count: 0 }; pieceMap.set(key, p); }
+      if (!p) {
+        p = { journal: e.journal || '(sans journal)', piece: e.piece || '(sans n°)', debit: 0, credit: 0, accounts: new Set(), dates: new Set(), count: 0 };
+        pieceMap.set(key, p);
+      }
       p.debit += e.debit;
       p.credit += e.credit;
       p.accounts.add(e.account);
@@ -236,13 +249,35 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
       .map((p) => ({ ...p, gap: p.debit - p.credit }))
       .filter((p) => Math.abs(p.gap) > 0.5)
       .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
-    // Comptes touchés par au moins une pièce déséquilibrée = suspects
+
+    // Comptes touchés par au moins une pièce déséquilibrée
     const suspects = new Set<string>();
     for (const p of unbalanced) for (const a of p.accounts) suspects.add(a);
-    return { topUnbalancedPieces: unbalanced.slice(0, 5), problematicAccounts: suspects, globalDelta: totD - totC };
-  }, [diagEntries, totD, totC]);
+    // Si aucune pièce n'est déséquilibrée mais qu'il y a un écart, on marque
+    // comme suspects les comptes avec le plus grand écart D-C (fallback).
+    if (suspects.size === 0 && Math.abs(totD - totC) >= 1) {
+      [...rows]
+        .filter((r) => Math.abs(r.debit - r.credit) > 0.5)
+        .sort((a, b) => Math.abs(b.debit - b.credit) - Math.abs(a.debit - a.credit))
+        .slice(0, 10)
+        .forEach((r) => suspects.add(r.account));
+    }
 
-  const isDiscrepancy = Math.abs(globalDelta) >= 1;
+    // FALLBACK : si AUCUNE pièce n'est détectée comme déséquilibrée mais qu'il
+    // y a un écart global, on expose les comptes qui contribuent le plus à
+    // l'écart (D-C net non nul qui ne se compense pas).
+    const fallback = [...rows]
+      .map((r) => ({ account: r.account, label: r.label, debit: r.debit, credit: r.credit, delta: r.debit - r.credit }))
+      .filter((r) => Math.abs(r.delta) > 0.5)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+      .slice(0, 10);
+
+    return {
+      topUnbalancedPieces: unbalanced.slice(0, 10),
+      problematicAccounts: suspects,
+      fallbackAccounts: fallback,
+    };
+  }, [diagEntries, rows]);
 
   // Groupement par classe
   const byClass = new Map<string, BalanceRow[]>();
@@ -285,8 +320,8 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
               <p className="text-sm font-bold text-error">⚠ Balance déséquilibrée — écart de {fmtFull(globalDelta)} XOF</p>
               <p className="text-[11px] text-primary-600 dark:text-primary-300 mt-0.5">
                 {topUnbalancedPieces.length > 0
-                  ? <><strong>{topUnbalancedPieces.length}</strong> pièce(s) à l'origine de l'écart · <strong>{problematicAccounts.size}</strong> compte(s) impliqué(s) (surlignés ci-dessous)</>
-                  : "Aucune pièce déséquilibrée détectée — l'écart vient d'un import incomplet ou d'un cumul d'imports."}
+                  ? <><strong>{topUnbalancedPieces.length}</strong> pièce(s) à l'origine de l'écart · <strong>{problematicAccounts.size}</strong> compte(s) impliqué(s) (surlignés en rouge ci-dessous)</>
+                  : <>Aucune pièce déséquilibrée individuellement détectée — l'écart résulte d'un import incomplet. <strong>Voici les {fallbackAccounts.length} comptes</strong> qui contribuent le plus à l'écart :</>}
               </p>
             </div>
             <button className="btn-outline !py-1 text-xs" onClick={() => setDiagOpen(true)}>
@@ -294,6 +329,7 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
             </button>
           </div>
 
+          {/* TABLEAU A : pièces déséquilibrées (quand détectées) */}
           {topUnbalancedPieces.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
@@ -310,11 +346,11 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
                   </tr>
                 </thead>
                 <tbody>
-                  {topUnbalancedPieces.map((p, i) => (
-                    <tr key={i} className="border-b border-primary-200/40 dark:border-primary-800/40 hover:bg-error/5">
+                  {topUnbalancedPieces.slice(0, 5).map((p, i) => (
+                    <tr key={i} className="border-b border-primary-200/40 dark:border-primary-800/40 hover:bg-error/10">
                       <td className="py-1 px-2 num text-primary-500">{i + 1}</td>
                       <td className="py-1 px-2"><span className="inline-block bg-primary-200 dark:bg-primary-800 rounded px-1.5 py-0.5 font-mono text-[10px]">{p.journal}</span></td>
-                      <td className="py-1 px-2 num font-mono font-semibold">{p.piece || '—'}</td>
+                      <td className="py-1 px-2 num font-mono font-semibold">{p.piece}</td>
                       <td className="py-1 px-2 text-[10px] text-primary-500 num">{Array.from(p.dates).slice(0, 1).join('')}{p.dates.size > 1 ? ` (+${p.dates.size - 1})` : ''}</td>
                       <td className="py-1 px-2 text-right num">{fmtFull(p.debit)}</td>
                       <td className="py-1 px-2 text-right num">{fmtFull(p.credit)}</td>
@@ -332,7 +368,42 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
                 </tbody>
               </table>
               <p className="text-[10px] text-primary-400 italic mt-2">
-                💡 <strong>Ces écritures doivent être corrigées dans votre logiciel comptable source</strong> puis le fichier réimporté. Les comptes surlignés en rouge dans le tableau ci-dessous sont impactés.
+                💡 Ces écritures doivent être corrigées dans votre logiciel source (Sage / Cegid / etc.) puis le fichier réimporté. Les comptes surlignés en rouge dans le tableau ci-dessous sont impactés.
+              </p>
+            </div>
+          )}
+
+          {/* TABLEAU B (fallback) : comptes qui contribuent à l'écart quand aucune pièce n'est déséquilibrée */}
+          {topUnbalancedPieces.length === 0 && fallbackAccounts.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead className="text-[9px] uppercase tracking-wider text-primary-500 border-b border-primary-300 dark:border-primary-700">
+                  <tr>
+                    <th className="text-left py-1.5 px-2">#</th>
+                    <th className="text-left py-1.5 px-2">Compte</th>
+                    <th className="text-left py-1.5 px-2">Libellé</th>
+                    <th className="text-right py-1.5 px-2">Débit</th>
+                    <th className="text-right py-1.5 px-2">Crédit</th>
+                    <th className="text-right py-1.5 px-2">Δ (D − C)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fallbackAccounts.map((r, i) => (
+                    <tr key={r.account} className="border-b border-primary-200/40 dark:border-primary-800/40 hover:bg-error/10">
+                      <td className="py-1 px-2 num text-primary-500">{i + 1}</td>
+                      <td className="py-1 px-2 num font-mono font-semibold text-error">{r.account}</td>
+                      <td className="py-1 px-2">{r.label}</td>
+                      <td className="py-1 px-2 text-right num">{fmtFull(r.debit)}</td>
+                      <td className="py-1 px-2 text-right num">{fmtFull(r.credit)}</td>
+                      <td className={clsx('py-1 px-2 text-right num font-bold', r.delta > 0 ? 'text-primary-700 dark:text-primary-200' : 'text-error')}>
+                        {r.delta > 0 ? '+' : ''}{fmtFull(r.delta)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[10px] text-primary-400 italic mt-2">
+                💡 Causes possibles : écritures importées sans contrepartie, fichier GL partiel, ou comptes d'opening balance (AN) mal équilibrés. Vérifiez votre fichier source.
               </p>
             </div>
           )}
