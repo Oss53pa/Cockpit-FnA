@@ -1,0 +1,60 @@
+appId: com.cockpit-fna.app
+productName: Cockpit FnA
+copyright: Copyright (c) 2026 Cockpit FnA
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*.js
+  - package.json
+
+extraMetadata:
+  main: electron/main.js
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: public/favicon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: public/favicon.ico
+  uninstallerIcon: public/favicon.ico
+  license: LICENSE
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: public/icon.icns
+  category: public.app-category.finance
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: public/icon.png
+  category: Office
+
+publish:
+  provider: github
+  owner: cockpit-fna
+  repo: cockpit-fna

@@ -4,11 +4,19 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
 import Home from './pages/Home';
 
+// Auth pages
+const Login          = lazyWithRetry(() => import('./pages/auth/Login'));
+const Register       = lazyWithRetry(() => import('./pages/auth/Register'));
+const ForgotPassword = lazyWithRetry(() => import('./pages/auth/ForgotPassword'));
+const AuthCallback   = lazyWithRetry(() => import('./pages/auth/Callback'));
+
+const Landing        = lazyWithRetry(() => import('./pages/Landing'));
 const Imports        = lazyWithRetry(() => import('./pages/Imports'));
 const States         = lazyWithRetry(() => import('./pages/States'));
 const Ratios         = lazyWithRetry(() => import('./pages/Ratios'));
@@ -81,29 +89,39 @@ function App() {
     <ErrorBoundary>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<><Home /><FloatingAI /></>} />
-        <Route path="/dashboards" element={<AppLayout><Dashboards /></AppLayout>} />
-        <Route path="/dashboard/home" element={<AppLayout><DashboardHome /></AppLayout>} />
-        <Route path="/dashboard/:id" element={<AppLayout><Dashboard /></AppLayout>} />
-        <Route path="/alerts" element={<AppLayout><Alerts /></AppLayout>} />
-        <Route path="/actions" element={<AppLayout><Actions /></AppLayout>} />
-        <Route path="/imports" element={<AppLayout><Imports /></AppLayout>} />
-        <Route path="/budget" element={<AppLayout><Budget /></AppLayout>} />
-        <Route path="/coa" element={<AppLayout><COA /></AppLayout>} />
-        <Route path="/grand-livre" element={<AppLayout><GrandLivre /></AppLayout>} />
-        <Route path="/states" element={<AppLayout><States /></AppLayout>} />
-        <Route path="/ratios" element={<AppLayout><Ratios /></AppLayout>} />
-        <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />
-        <Route path="/ai" element={<AppLayout><AI /></AppLayout>} />
-        <Route path="/analytical" element={<AppLayout><Analytical /></AppLayout>} />
-        <Route path="/audit" element={<AppLayout><AuditTrail /></AppLayout>} />
-        <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
-        <Route path="/dashboard/exec" element={<AppLayout><ExecutiveSummary /></AppLayout>} />
-        <Route path="/dashboard/compliance" element={<AppLayout><ComplianceSyscohada /></AppLayout>} />
-        <Route path="/dashboard/breakeven" element={<AppLayout><BreakEven /></AppLayout>} />
-        <Route path="/dashboard/pareto" element={<AppLayout><ParetoAccounts /></AppLayout>} />
-        <Route path="/dashboard/cashforecast" element={<AppLayout><CashflowForecast /></AppLayout>} />
-        <Route path="/dashboard/waterfall" element={<AppLayout><Waterfall /></AppLayout>} />
+        {/* Auth pages — publiques */}
+        <Route path="/login" element={<Suspense fallback={<PageFallback />}><Login /></Suspense>} />
+        <Route path="/register" element={<Suspense fallback={<PageFallback />}><Register /></Suspense>} />
+        <Route path="/forgot-password" element={<Suspense fallback={<PageFallback />}><ForgotPassword /></Suspense>} />
+        <Route path="/auth/callback" element={<Suspense fallback={<PageFallback />}><AuthCallback /></Suspense>} />
+
+        {/* Landing publique */}
+        <Route path="/" element={<Suspense fallback={<PageFallback />}><Landing /></Suspense>} />
+
+        {/* Routes protégées */}
+        <Route path="/home" element={<ProtectedRoute><Home /><FloatingAI /></ProtectedRoute>} />
+        <Route path="/dashboards" element={<ProtectedRoute><AppLayout><Dashboards /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/home" element={<ProtectedRoute><AppLayout><DashboardHome /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/:id" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
+        <Route path="/alerts" element={<ProtectedRoute><AppLayout><Alerts /></AppLayout></ProtectedRoute>} />
+        <Route path="/actions" element={<ProtectedRoute><AppLayout><Actions /></AppLayout></ProtectedRoute>} />
+        <Route path="/imports" element={<ProtectedRoute><AppLayout><Imports /></AppLayout></ProtectedRoute>} />
+        <Route path="/budget" element={<ProtectedRoute><AppLayout><Budget /></AppLayout></ProtectedRoute>} />
+        <Route path="/coa" element={<ProtectedRoute><AppLayout><COA /></AppLayout></ProtectedRoute>} />
+        <Route path="/grand-livre" element={<ProtectedRoute><AppLayout><GrandLivre /></AppLayout></ProtectedRoute>} />
+        <Route path="/states" element={<ProtectedRoute><AppLayout><States /></AppLayout></ProtectedRoute>} />
+        <Route path="/ratios" element={<ProtectedRoute><AppLayout><Ratios /></AppLayout></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
+        <Route path="/ai" element={<ProtectedRoute><AppLayout><AI /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical" element={<ProtectedRoute><AppLayout><Analytical /></AppLayout></ProtectedRoute>} />
+        <Route path="/audit" element={<ProtectedRoute><AppLayout><AuditTrail /></AppLayout></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/exec" element={<ProtectedRoute><AppLayout><ExecutiveSummary /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/compliance" element={<ProtectedRoute><AppLayout><ComplianceSyscohada /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/breakeven" element={<ProtectedRoute><AppLayout><BreakEven /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/pareto" element={<ProtectedRoute><AppLayout><ParetoAccounts /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/cashforecast" element={<ProtectedRoute><AppLayout><CashflowForecast /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/waterfall" element={<ProtectedRoute><AppLayout><Waterfall /></AppLayout></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>

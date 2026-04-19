@@ -10,7 +10,7 @@ const sections = [
   {
     label: 'Pilotage',
     items: [
-      { to: '/', icon: Home, label: 'Accueil' },
+      { to: '/home', icon: Home, label: 'Accueil' },
       { to: '/dashboard/home', icon: LayoutDashboard, label: 'Synthèse' },
       { to: '/dashboards', icon: BarChart3, label: 'Catalogue' },
       { to: '/alerts', icon: Bell, label: 'Alertes' },
