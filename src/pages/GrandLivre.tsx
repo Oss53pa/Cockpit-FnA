@@ -29,6 +29,23 @@ export default function GrandLivre() {
   const { currentOrgId, currentYear } = useApp();
   const [tab, setTab] = useState<Tab>('import');
   const [importId, setImportId] = useState<string>('all');
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditReport, setAuditReport] = useState<any | null>(null);
+  const [auditing, setAuditing] = useState(false);
+
+  const runAudit = async () => {
+    setAuditing(true);
+    try {
+      const { auditGL } = await import('../engine/glAudit');
+      const report = await auditGL(currentOrgId, currentYear);
+      setAuditReport(report);
+      setAuditOpen(true);
+    } catch (e: any) {
+      alert(`Erreur audit : ${e.message}`);
+    } finally {
+      setAuditing(false);
+    }
+  };
 
   const imports = useLiveQuery(async () => {
     if (!currentOrgId) return [] as ImportLog[];
@@ -43,20 +60,30 @@ export default function GrandLivre() {
       <PageHeader
         title="Grand Livre"
         subtitle="Source unique : le Grand Livre — toutes les balances en sont calculées automatiquement"
-        action={showVersionPicker && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-primary-500 font-semibold">Version :</label>
-            <select className="input !w-auto !py-1.5 text-xs" value={importId} onChange={(e) => setImportId(e.target.value)}>
-              <option value="all">Toutes les versions ({imports.reduce((s, i) => s + i.count, 0).toLocaleString('fr-FR')} écr.)</option>
-              {imports.map((i) => (
-                <option key={i.id} value={String(i.id)}>
-                  {new Date(i.date).toLocaleDateString('fr-FR')} · {i.fileName} · {i.count.toLocaleString('fr-FR')} écr.
-                </option>
-              ))}
-            </select>
+        action={
+          <div className="flex items-center gap-2 flex-wrap">
+            {imports.length > 0 && (
+              <button className="btn-primary" onClick={runAudit} disabled={auditing} title="Audit complet du Grand Livre : intégrité, cohérence, qualité, risques">
+                🔍 {auditing ? 'Analyse…' : 'Auditer le GL'}
+              </button>
+            )}
+            {showVersionPicker && (
+              <>
+                <label className="text-xs text-primary-500 font-semibold">Version :</label>
+                <select className="input !w-auto !py-1.5 text-xs" value={importId} onChange={(e) => setImportId(e.target.value)}>
+                  <option value="all">Toutes les versions ({imports.reduce((s, i) => s + i.count, 0).toLocaleString('fr-FR')} écr.)</option>
+                  {imports.map((i) => (
+                    <option key={i.id} value={String(i.id)}>
+                      {new Date(i.date).toLocaleDateString('fr-FR')} · {i.fileName} · {i.count.toLocaleString('fr-FR')} écr.
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
-        )}
+        }
       />
+      {auditOpen && auditReport && <AuditModal report={auditReport} onClose={() => setAuditOpen(false)} />}
 
       <TabSwitch tabs={TABS} value={tab} onChange={setTab} />
 
@@ -75,6 +102,156 @@ export default function GrandLivre() {
       {tab === 'baF'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" />}
       {tab === 'ageeC'  && imports.length > 0 && <AgedView    orgId={currentOrgId} year={currentYear} importId={importId} kind="client" />}
       {tab === 'ageeF'  && imports.length > 0 && <AgedView    orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" />}
+    </div>
+  );
+}
+
+// ─── AUDIT GL — modale de rapport complet ─────────────────────────
+function AuditModal({ report, onClose }: { report: any; onClose: () => void }) {
+  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const findings = report.findings.filter((f: any) => filterSeverity === 'all' || f.severity === filterSeverity);
+
+  const sevColor = (s: string) => s === 'critical' ? '#dc2626' : s === 'major' ? '#d97706' : s === 'minor' ? '#0891b2' : '#6b7280';
+  const sevLabel = (s: string) => s === 'critical' ? '⛔ Critique' : s === 'major' ? '⚠ Majeur' : s === 'minor' ? '· Mineur' : 'ℹ Info';
+  const scoreColor = report.scoreGlobal >= 90 ? '#16a34a' : report.scoreGlobal >= 70 ? '#d97706' : '#dc2626';
+
+  const exportReport = () => {
+    const lines = [
+      `RAPPORT D'AUDIT — GRAND LIVRE`,
+      `Généré le : ${new Date(report.generatedAt).toLocaleString('fr-FR')}`,
+      `Score global : ${report.scoreGlobal} / 100`,
+      `Écritures analysées : ${report.totalEntries.toLocaleString('fr-FR')}`,
+      `Total Débit : ${report.totalDebit.toLocaleString('fr-FR')} XOF`,
+      `Total Crédit : ${report.totalCredit.toLocaleString('fr-FR')} XOF`,
+      `Écart : ${report.delta.toLocaleString('fr-FR')} XOF`,
+      ``,
+      `═══ ANOMALIES (${report.findings.length}) ═══`,
+      ``,
+    ];
+    for (const f of report.findings) {
+      lines.push(`[${f.severity.toUpperCase()}] ${f.title}`);
+      lines.push(`  Catégorie : ${f.category}`);
+      lines.push(`  Description : ${f.description}`);
+      if (f.total) lines.push(`  Montant impacté : ${f.total.toLocaleString('fr-FR')} XOF`);
+      lines.push(`  Recommandation : ${f.recommendation}`);
+      if (f.examples?.length) {
+        lines.push(`  Exemples :`);
+        for (const ex of f.examples) {
+          const parts = [];
+          if (ex.date) parts.push(`Date: ${ex.date}`);
+          if (ex.account) parts.push(`Compte: ${ex.account}`);
+          if (ex.label) parts.push(`Libellé: ${ex.label}`);
+          if (ex.amount) parts.push(`Montant: ${ex.amount.toLocaleString('fr-FR')}`);
+          lines.push(`    - ${parts.join(' | ')}`);
+        }
+      }
+      lines.push(``);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `audit-gl-${new Date().toISOString().substring(0, 10)}.txt`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-primary-900 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* HEADER */}
+        <div className="p-5 border-b border-primary-200 dark:border-primary-800 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold">🔍 Rapport d'audit Grand Livre</h2>
+            <p className="text-xs text-primary-500 mt-1">Généré le {new Date(report.generatedAt).toLocaleString('fr-FR')} · {report.totalEntries.toLocaleString('fr-FR')} écritures analysées</p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-outline" onClick={exportReport}>📥 Exporter TXT</button>
+            <button className="btn-ghost" onClick={onClose}>✕</button>
+          </div>
+        </div>
+
+        {/* SCORECARD */}
+        <div className="p-5 border-b border-primary-200 dark:border-primary-800 grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="card p-3" style={{ borderLeft: `4px solid ${scoreColor}` }}>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold">Score global</p>
+            <p className="num text-2xl font-bold" style={{ color: scoreColor }}>{report.scoreGlobal} / 100</p>
+            <p className="text-[10px] text-primary-500">{report.scoreGlobal >= 90 ? 'Excellent' : report.scoreGlobal >= 70 ? 'À améliorer' : 'Critique'}</p>
+          </div>
+          <div className="card p-3" style={{ borderLeft: `4px solid ${sevColor('critical')}` }}>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold">Critique</p>
+            <p className="num text-2xl font-bold" style={{ color: sevColor('critical') }}>{report.byseverity.critical}</p>
+          </div>
+          <div className="card p-3" style={{ borderLeft: `4px solid ${sevColor('major')}` }}>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold">Majeur</p>
+            <p className="num text-2xl font-bold" style={{ color: sevColor('major') }}>{report.byseverity.major}</p>
+          </div>
+          <div className="card p-3" style={{ borderLeft: `4px solid ${sevColor('minor')}` }}>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold">Mineur</p>
+            <p className="num text-2xl font-bold" style={{ color: sevColor('minor') }}>{report.byseverity.minor}</p>
+          </div>
+          <div className="card p-3" style={{ borderLeft: `4px solid ${sevColor('info')}` }}>
+            <p className="text-[10px] uppercase text-primary-500 font-semibold">Info</p>
+            <p className="num text-2xl font-bold" style={{ color: sevColor('info') }}>{report.byseverity.info}</p>
+          </div>
+        </div>
+
+        {/* FILTRES */}
+        <div className="px-5 py-3 border-b border-primary-200 dark:border-primary-800 flex gap-2 items-center">
+          <span className="text-xs uppercase text-primary-500 font-semibold">Filtrer :</span>
+          {['all', 'critical', 'major', 'minor', 'info'].map((s) => (
+            <button key={s} onClick={() => setFilterSeverity(s)}
+              className={clsx('px-2 py-1 rounded text-xs font-semibold transition',
+                filterSeverity === s ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800')}>
+              {s === 'all' ? 'Tous' : sevLabel(s).split(' ')[1]}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-primary-500">{findings.length} anomalie(s)</span>
+        </div>
+
+        {/* FINDINGS */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {findings.length === 0 ? (
+            <div className="text-center py-12 text-success">
+              <p className="text-3xl">✓</p>
+              <p className="font-semibold mt-2">Aucune anomalie détectée pour ce filtre.</p>
+            </div>
+          ) : findings.map((f: any) => (
+            <div key={f.id} className="card p-4" style={{ borderLeft: `4px solid ${sevColor(f.severity)}` }}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: sevColor(f.severity) + '20', color: sevColor(f.severity) }}>
+                      {sevLabel(f.severity)}
+                    </span>
+                    <span className="text-[10px] text-primary-500 uppercase tracking-wider">{f.category}</span>
+                  </div>
+                  <h3 className="font-semibold text-sm">{f.title}</h3>
+                </div>
+                {f.total && <span className="num text-xs text-primary-500">{f.total.toLocaleString('fr-FR')} XOF</span>}
+              </div>
+              <p className="text-xs text-primary-700 dark:text-primary-300 mb-2">{f.description}</p>
+              {f.examples && f.examples.length > 0 && (
+                <details className="mb-2">
+                  <summary className="text-[10px] text-primary-500 cursor-pointer hover:text-primary-900 dark:hover:text-primary-100">Voir {f.examples.length} exemple(s)</summary>
+                  <div className="mt-2 space-y-1 pl-3 border-l-2 border-primary-200 dark:border-primary-800">
+                    {f.examples.map((ex: any, i: number) => (
+                      <div key={i} className="text-[10px] text-primary-600 dark:text-primary-400 font-mono">
+                        {ex.date && `${ex.date} · `}
+                        {ex.account && <strong>{ex.account}</strong>}
+                        {ex.label && ` · ${ex.label}`}
+                        {ex.piece && ` · #${ex.piece}`}
+                        {ex.amount !== undefined && ` · ${ex.amount.toLocaleString('fr-FR')}`}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <div className="bg-primary-50 dark:bg-primary-950 p-2 rounded text-[11px] text-primary-700 dark:text-primary-300">
+                <strong>💡 Recommandation :</strong> {f.recommendation}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
