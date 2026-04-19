@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Download, Eye, FileText, Mail, Plus, Save, Send, Sparkles, Trash2, Type, Hash, BarChart3, Table as TableIcon, MoveDown } from 'lucide-react';
+import { Download, Eye, FileText, Mail, Plus, Save, Send, Settings as SettingsIcon, Sparkles, Trash2, Type, Hash, BarChart3, Table as TableIcon, MoveDown } from 'lucide-react';
+import { Link as RouterLink } from 'react-router-dom';
 import clsx from 'clsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -892,6 +893,9 @@ export default function Reports() {
             <button className="btn-outline" onClick={() => setOpenJournal(true)}>
               <FileText className="w-4 h-4" /> Journal des rapports ({savedReports.length})
             </button>
+            <RouterLink to="/settings" className="btn-outline" title="Modifier les informations société (nom, RCCM, IFU, adresse, devise)">
+              <SettingsIcon className="w-4 h-4" /> Paramètres société
+            </RouterLink>
             <button className="btn-outline" onClick={() => setOpenLoad(true)}>Charger un modèle</button>
             <button className="btn-outline" onClick={() => setOpenSave(true)}><Save className="w-4 h-4" /> Enregistrer modèle</button>
             <button className="btn-outline" onClick={async () => {
@@ -1068,13 +1072,16 @@ export default function Reports() {
         )}
 
         {/* ════════════════ CENTRE — VISUALISEUR ════════════════ */}
-        <main className="space-y-3 report-print-area">
+        <main className="space-y-1 report-print-area">
           {renderPages(config, data, palette, {
             updateBlock, removeBlock, moveBlock, insertBlockAt, reorderBlock, moveBlockToIndex,
             openTablesCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('tables'); },
             openDashCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('dashboards'); },
             org,
             setLogo: (dataUrl: string) => setIdentity('logoDataUrl', dataUrl),
+            setCoverProps: (props: Record<string, any>) => {
+              setConfig((c) => ({ ...c, identity: { ...c.identity, ...props } }));
+            },
           })}
         </main>
 
@@ -1265,25 +1272,22 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
     }
   };
 
-  // Pagination : respecte les pageBreaks manuels ET ajoute des sauts auto si on dépasse maxH
-  const PAGE_BUDGET = maxH - 80; // marge de sécurité (padding p-6 = 48px + safety)
-  const blocksWithIndex = config.blocks.map((b, i) => ({ block: b, index: i }));
+  // Pagination AUTO uniquement (pas de pageBreak forcé) : on remplit chaque
+  // page jusqu'à atteindre la limite, puis on passe à la suivante. Évite tout
+  // espace vide au bas des pages courtes.
+  const PAGE_BUDGET = maxH - 60; // marge de sécurité (padding p-4 = 32px + safety 28px)
+  const blocksWithIndex = config.blocks
+    .filter((b) => b.type !== 'pageBreak') // on IGNORE les pageBreak manuels
+    .map((b, i) => ({ block: b, index: i }));
   const pages: Array<Array<{ block: Block; index: number }>> = [[]];
   let currentHeight = 0;
   for (const item of blocksWithIndex) {
-    if (item.block.type === 'pageBreak') {
-      pages.push([]);
-      currentHeight = 0;
-      continue;
-    }
     const h = estimateHeight(item.block);
-    // Si le bloc seul dépasse, on l'isole sur sa propre page
     if (h > PAGE_BUDGET && pages[pages.length - 1].length > 0) {
       pages.push([item]);
       currentHeight = h;
       continue;
     }
-    // Si l'ajout dépasse, on commence une nouvelle page
     if (currentHeight + h > PAGE_BUDGET && pages[pages.length - 1].length > 0) {
       pages.push([item]);
       currentHeight = h;
@@ -1292,19 +1296,21 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
       currentHeight += h;
     }
   }
+  // Élimine les pages vides éventuelles
+  const nonEmptyPages = pages.filter((p) => p.length > 0);
 
   // Calcul du nombre total de pages pour la pagination
   const coverPages = config.options.includeCover ? 1 : 0;
   const tocPages = config.options.includeTOC ? 1 : 0;
   const backCoverPages = (config.options as any).includeBackCover !== false ? 1 : 0; // activé par défaut
-  const totalPages = coverPages + tocPages + pages.length + backCoverPages;
+  const totalPages = coverPages + tocPages + nonEmptyPages.length + backCoverPages;
   let pageNum = 0;
 
   return (
     <>
       {config.options.includeCover && (
         <PageA4 style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette} hideNumber>
-          <CoverPage config={config} palette={palette} org={ops.org} setLogo={ops.setLogo} />
+          <CoverPage config={config} palette={palette} org={ops.org} setLogo={ops.setLogo} setCoverProps={ops.setCoverProps} />
         </PageA4>
       )}
 
@@ -1314,11 +1320,8 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
         </PageA4>
       )}
 
-      {pages.map((pageBlocks, pi) => (
+      {nonEmptyPages.map((pageBlocks, pi) => (
         <PageA4 key={pi} style={pageStyle} maxH={maxH} pageNum={++pageNum} totalPages={totalPages} palette={palette}>
-          {pageBlocks.length === 0 && (
-            <InsertHere index={config.blocks.length} ops={ops} alwaysOpen />
-          )}
           {pageBlocks.map(({ block, index }) => (
             <DraggableBlock key={block.id} block={block} index={index} ops={ops} data={data} palette={palette} />
           ))}
@@ -1490,17 +1493,18 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
   }, [maxH, children]);
 
   return (
-    <div className={clsx('bg-white dark:bg-primary-900 border rounded mx-auto relative flex flex-col',
-      overflow ? 'border-error/50 ring-1 ring-error/20' : 'border-primary-300 dark:border-primary-700')} style={style}>
+    <div className={clsx('bg-white dark:bg-primary-900 mx-auto relative flex flex-col',
+      overflow ? 'ring-1 ring-error/30' : '')} style={style}>
       {overflow && (
-        <div className="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-[9px] font-semibold bg-error/10 text-error border border-error/20">
+        <div className="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-[9px] font-semibold bg-error/10 text-error border border-error/20 print:hidden">
           Hors marge — créez un nouveau saut de page
         </div>
       )}
-      <div ref={ref} className="break-words flex-1 flex flex-col gap-1 p-6 pb-10">{children}</div>
+      {/* Padding intérieur réduit de p-6 à p-4 pour gagner de la place */}
+      <div ref={ref} className="break-words flex-1 flex flex-col gap-1 p-4 pb-8">{children}</div>
       {/* Footer avec numéro de page */}
       {!hideNumber && pageNum && totalPages && (
-        <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
+        <div className="absolute bottom-1 left-0 right-0 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
           <span style={{ color: palette?.primary ?? undefined }}>Page {pageNum} / {totalPages}</span>
         </div>
       )}
@@ -1508,77 +1512,217 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
   );
 }
 
-function CoverPage({ config, palette, org, setLogo }: any) {
+function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   const [dragOver, setDragOver] = useState(false);
+  const id = config.identity || {};
+  const titleColor = id.titleColor || palette.primary;
+  const subtitleColor = id.subtitleColor || palette.primary;
+  const bgColor = id.coverBgColor || '#ffffff';
+  const bgImage = id.coverBgImageUrl;
+  const bgOpacity = typeof id.coverBgOpacity === 'number' ? id.coverBgOpacity : 0.15;
+  const style = (id.coverStyle as 'classic' | 'modern' | 'banner') || 'classic';
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (!file || !file.type.startsWith('image/')) {
-      alert('Glissez une image (PNG, JPG, SVG)');
-      return;
-    }
+    if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string' && setLogo) setLogo(reader.result);
-    };
+    reader.onload = () => { if (typeof reader.result === 'string' && setLogo) setLogo(reader.result); };
+    reader.readAsDataURL(file);
+  };
+  const setBgImage = async (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string' && setCoverProps) setCoverProps({ coverBgImageUrl: reader.result }); };
     reader.readAsDataURL(file);
   };
 
+  // Style MODERN — bandeau gauche coloré
+  if (style === 'modern') {
+    return (
+      <div className="h-full relative overflow-hidden flex" style={{ minHeight: 700, background: bgColor }}>
+        {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
+        <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
+        <div className="w-2/5 flex flex-col justify-between p-10 relative z-10" style={{ background: titleColor, color: '#fff' }}>
+          {id.logoDataUrl ? (
+            <div className="bg-white/10 backdrop-blur p-3 rounded inline-block self-start">
+              <img src={id.logoDataUrl} alt="logo" style={{ maxHeight: '72px', maxWidth: '180px', objectFit: 'contain' }} />
+            </div>
+          ) : <div className="opacity-50 text-xs uppercase tracking-widest">Logo</div>}
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] opacity-80 mb-2">Document {id.confidentiality}</p>
+            <p className="text-xs opacity-90">Période : <strong>{id.period}</strong></p>
+            <p className="text-xs opacity-90">Date : {new Date().toLocaleDateString('fr-FR')}</p>
+            <p className="text-xs opacity-90 mt-3">Émis par {id.author}</p>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col justify-center p-12 relative z-10">
+          <p className="text-[11px] uppercase tracking-[0.25em] mb-4" style={{ color: titleColor, opacity: 0.7 }}>{org?.name ?? 'Société'}</p>
+          <h1 className="text-5xl font-bold leading-tight mb-3" style={{ color: titleColor }}>{id.title}</h1>
+          {id.subtitle && <p className="text-lg italic" style={{ color: subtitleColor, opacity: 0.85 }}>{id.subtitle}</p>}
+          <div className="mt-12 pt-6 border-t-2" style={{ borderColor: titleColor + '40' }}>
+            {(org?.rccm || org?.ifu) && <p className="text-xs text-primary-500">{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
+            {org?.address && <p className="text-xs text-primary-500 mt-1">{org.address}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Style BANNER — bandeau horizontal en haut
+  if (style === 'banner') {
+    return (
+      <div className="h-full relative overflow-hidden flex flex-col" style={{ minHeight: 700, background: bgColor }}>
+        {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
+        <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
+        <div className="h-44 flex items-center justify-between px-12 relative z-10" style={{ background: titleColor, color: '#fff' }}>
+          {id.logoDataUrl ? (
+            <img src={id.logoDataUrl} alt="logo" className="bg-white/10 p-2 rounded backdrop-blur" style={{ maxHeight: '90px', maxWidth: '200px', objectFit: 'contain' }} />
+          ) : <div className="opacity-50">Logo</div>}
+          <div className="text-right">
+            <p className="text-xs uppercase tracking-widest opacity-90">{org?.name ?? '—'}</p>
+            <p className="text-[10px] opacity-70 mt-1">Document {id.confidentiality}</p>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-10 relative z-10">
+          <h1 className="text-5xl font-bold leading-tight mb-4" style={{ color: titleColor }}>{id.title}</h1>
+          {id.subtitle && <p className="text-xl italic mb-12" style={{ color: subtitleColor }}>{id.subtitle}</p>}
+          <div className="inline-block px-8 py-4 border-2 rounded-lg" style={{ borderColor: titleColor }}>
+            <p className="text-2xl font-bold" style={{ color: titleColor }}>{id.period}</p>
+          </div>
+        </div>
+        <div className="px-10 py-6 text-center text-xs text-primary-500 border-t relative z-10" style={{ borderColor: titleColor + '40' }}>
+          <p>Émis par <strong>{id.author}</strong> · {new Date().toLocaleDateString('fr-FR')}</p>
+          {(org?.rccm || org?.ifu) && <p className="mt-1">{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // Style CLASSIC (par défaut) — centré épuré et élégant
   return (
     <div
-      className={clsx('border-2 rounded p-6 h-full flex flex-col relative transition-colors', dragOver && 'bg-primary-100 dark:bg-primary-900')}
-      style={{ borderColor: palette.primary, minHeight: 700 }}
+      className="h-full flex flex-col relative overflow-hidden"
+      style={{ minHeight: 700, background: bgColor }}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
     >
+      {bgImage && <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
+      <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
       {dragOver && (
-        <div className="absolute inset-0 flex items-center justify-center bg-primary-100/80 dark:bg-primary-900/80 z-10 rounded">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-20 print:hidden">
           <div className="text-center">
-            <p className="text-2xl font-bold" style={{ color: palette.primary }}>📥 Déposez votre logo</p>
-            <p className="text-xs text-primary-500 mt-2">Format PNG, JPG ou SVG</p>
+            <p className="text-3xl font-bold" style={{ color: palette.primary }}>📥 Déposez votre logo</p>
+            <p className="text-sm text-primary-500 mt-2">PNG · JPG · SVG</p>
           </div>
         </div>
       )}
-      <p className="text-center text-[10px] uppercase tracking-widest text-primary-500 font-semibold">{config.identity.confidentiality}</p>
-      {config.identity.logoDataUrl ? (
-        <div className="text-center mt-6 relative group">
-          <img
-            src={config.identity.logoDataUrl}
-            alt="logo"
-            className="inline-block cursor-pointer"
-            style={{ maxHeight: '96px', maxWidth: '240px', width: 'auto', height: 'auto', objectFit: 'contain' }}
-          />
-          <button
-            onClick={() => setLogo && setLogo('')}
-            className="absolute top-0 right-1/2 translate-x-32 -translate-y-2 opacity-0 group-hover:opacity-100 bg-error text-white rounded-full w-6 h-6 text-xs font-bold transition print:hidden"
-            title="Retirer le logo"
-          >×</button>
+      <div className="h-3" style={{ background: titleColor }} />
+      <div className="h-1 mt-1 mx-12" style={{ background: titleColor + '60' }} />
+
+      <div className="flex-1 flex flex-col p-12 relative z-10">
+        <p className="text-center text-[10px] uppercase tracking-[0.25em] text-primary-500 font-semibold">Document {id.confidentiality}</p>
+
+        {id.logoDataUrl ? (
+          <div className="text-center mt-8 relative group">
+            <img src={id.logoDataUrl} alt="logo" className="inline-block" style={{ maxHeight: '110px', maxWidth: '260px', objectFit: 'contain' }} />
+            <button onClick={() => setLogo && setLogo('')} className="absolute top-0 right-1/2 translate-x-32 -translate-y-2 opacity-0 group-hover:opacity-100 bg-error text-white rounded-full w-6 h-6 text-xs font-bold transition print:hidden" title="Retirer le logo">×</button>
+          </div>
+        ) : (
+          <div className="text-center mt-8 print:hidden">
+            <label className="inline-block border-2 border-dashed border-primary-300 rounded p-4 cursor-pointer hover:border-primary-500 transition">
+              <p className="text-xs text-primary-500">📤 Cliquez ou glissez un logo</p>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                const f = e.target.files?.[0]; if (!f || !setLogo) return;
+                const r = new FileReader(); r.onload = () => typeof r.result === 'string' && setLogo(r.result); r.readAsDataURL(f);
+              }} />
+            </label>
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col items-center justify-center text-center">
+          <div className="w-16 h-px mb-6" style={{ background: titleColor }} />
+          <h1 className="text-4xl font-bold leading-tight tracking-tight" style={{ color: titleColor }}>{id.title}</h1>
+          {id.subtitle && <p className="text-lg italic mt-3" style={{ color: subtitleColor, opacity: 0.85 }}>{id.subtitle}</p>}
+          <div className="w-16 h-px mt-6" style={{ background: titleColor }} />
+
+          <p className="text-2xl font-bold mt-12" style={{ color: titleColor + 'cc' }}>{org?.name ?? '—'}</p>
+          {(org?.rccm || org?.ifu) && <p className="text-xs text-primary-500 mt-2">{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
         </div>
-      ) : (
-        <div className="text-center mt-6 print:hidden">
-          <label className="inline-block border-2 border-dashed border-primary-300 dark:border-primary-700 rounded p-4 cursor-pointer hover:border-primary-500 transition">
-            <p className="text-xs text-primary-500">📤 Glissez ou cliquez pour ajouter un logo</p>
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-              const f = e.target.files?.[0]; if (!f || !setLogo) return;
-              const r = new FileReader(); r.onload = () => typeof r.result === 'string' && setLogo(r.result); r.readAsDataURL(f);
-            }} />
-          </label>
+
+        <div className="text-center text-sm space-y-1.5 mt-8 pt-6 border-t" style={{ borderColor: titleColor + '40' }}>
+          <p className="text-primary-700"><span className="text-primary-500 text-xs uppercase tracking-wider">Période</span><br /><strong className="text-base">{id.period}</strong></p>
+          <p className="text-primary-500 text-xs">Émis par <strong className="text-primary-700">{id.author}</strong> · {new Date().toLocaleDateString('fr-FR')}</p>
+        </div>
+      </div>
+
+      <div className="h-1 mb-1 mx-12" style={{ background: titleColor + '60' }} />
+      <div className="h-3" style={{ background: titleColor }} />
+    </div>
+  );
+}
+
+// Panneau d'édition flottant pour personnaliser la couverture
+function CoverEditPanel({ id, setCoverProps, setBgImage }: any) {
+  const [open, setOpen] = useState(false);
+  if (!setCoverProps) return null;
+  return (
+    <div className="absolute top-2 right-2 z-30 print:hidden">
+      <button onClick={() => setOpen(!open)} className="bg-primary-900/90 dark:bg-primary-100/90 text-primary-50 dark:text-primary-900 rounded-full px-3 py-1.5 text-[10px] font-semibold shadow-lg hover:scale-105 transition">
+        🎨 Personnaliser
+      </button>
+      {open && (
+        <div className="absolute top-10 right-0 w-72 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-lg shadow-2xl p-3 space-y-3">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Style</label>
+            <select className="input !py-1 text-xs" value={id.coverStyle || 'classic'} onChange={(e) => setCoverProps({ coverStyle: e.target.value })}>
+              <option value="classic">Classique (centré)</option>
+              <option value="modern">Moderne (bandeau gauche)</option>
+              <option value="banner">Banner (bandeau haut)</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Couleur de fond</label>
+            <div className="flex gap-2 items-center">
+              <input type="color" className="w-10 h-8 rounded cursor-pointer border-0" value={id.coverBgColor || '#ffffff'} onChange={(e) => setCoverProps({ coverBgColor: e.target.value })} />
+              <input type="text" className="input !py-1 text-xs flex-1" value={id.coverBgColor || '#ffffff'} onChange={(e) => setCoverProps({ coverBgColor: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Couleur du titre</label>
+            <div className="flex gap-2 items-center">
+              <input type="color" className="w-10 h-8 rounded cursor-pointer border-0" value={id.titleColor || '#171717'} onChange={(e) => setCoverProps({ titleColor: e.target.value })} />
+              <input type="text" className="input !py-1 text-xs flex-1" value={id.titleColor || ''} placeholder="palette défaut" onChange={(e) => setCoverProps({ titleColor: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Couleur sous-titre</label>
+            <div className="flex gap-2 items-center">
+              <input type="color" className="w-10 h-8 rounded cursor-pointer border-0" value={id.subtitleColor || '#737373'} onChange={(e) => setCoverProps({ subtitleColor: e.target.value })} />
+              <input type="text" className="input !py-1 text-xs flex-1" value={id.subtitleColor || ''} placeholder="défaut" onChange={(e) => setCoverProps({ subtitleColor: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Image de fond</label>
+            <input type="file" accept="image/*" className="text-[10px] w-full" onChange={(e) => { const f = e.target.files?.[0]; if (f) setBgImage(f); }} />
+            {id.coverBgImageUrl && (
+              <>
+                <div className="mt-2 flex gap-2 items-center">
+                  <img src={id.coverBgImageUrl} alt="bg" className="h-8 rounded object-cover w-16" />
+                  <button className="btn-outline !py-1 text-[10px]" onClick={() => setCoverProps({ coverBgImageUrl: '' })}>Retirer</button>
+                </div>
+                <label className="text-[9px] text-primary-500 block mt-1">Opacité : {Math.round((id.coverBgOpacity ?? 0.15) * 100)} %</label>
+                <input type="range" min={0.05} max={1} step={0.05} value={id.coverBgOpacity ?? 0.15} onChange={(e) => setCoverProps({ coverBgOpacity: parseFloat(e.target.value) })} className="w-full" />
+              </>
+            )}
+          </div>
+          <div className="flex justify-between pt-2 border-t border-primary-200 dark:border-primary-800">
+            <button className="btn-outline !py-1 text-[10px]" onClick={() => setCoverProps({ coverBgColor: '', coverBgImageUrl: '', titleColor: '', subtitleColor: '', coverStyle: 'classic' })}>Réinitialiser</button>
+            <button className="btn-primary !py-1 text-[10px]" onClick={() => setOpen(false)}>Fermer</button>
+          </div>
         </div>
       )}
-      <div className="flex-1 flex flex-col items-center justify-center text-center mt-12">
-        <h1 className="text-3xl font-bold leading-tight" style={{ color: palette.primary }}>{config.identity.title}</h1>
-        {config.identity.subtitle && <p className="text-base text-primary-500 italic mt-2">{config.identity.subtitle}</p>}
-        <p className="text-xl font-bold mt-12">{org?.name ?? '—'}</p>
-        {(org?.rccm || org?.ifu) && <p className="text-xs text-primary-500 mt-1">{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
-      </div>
-      <div className="text-center text-xs text-primary-500 mt-6 space-y-1">
-        <p>Période : <strong>{config.identity.period}</strong></p>
-        <p>Émis par : <strong>{config.identity.author}</strong></p>
-        <p>Date : {new Date().toLocaleDateString('fr-FR')}</p>
-      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Unlock, Moon, Plus, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -113,8 +113,43 @@ function TabSocietes() {
   const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
   const { currentOrgId, setCurrentOrg } = useApp();
   const [openNew, setOpenNew] = useState(false);
-  const [form, setForm] = useState({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '' });
+  const [editingOrg, setEditingOrg] = useState<any | null>(null);
+  const [form, setForm] = useState({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
   const [saving, setSaving] = useState(false);
+
+  const openEdit = (org: any) => {
+    setEditingOrg(org);
+    setForm({
+      name: org.name || '',
+      sector: org.sector || 'Industrie',
+      currency: org.currency || 'XOF',
+      rccm: org.rccm || '',
+      ifu: org.ifu || '',
+      address: org.address || '',
+      phone: org.phone || '',
+      email: org.email || '',
+      website: org.website || '',
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingOrg || !form.name.trim()) return;
+    setSaving(true);
+    try {
+      await db.organizations.update(editingOrg.id, {
+        name: form.name.trim(),
+        sector: form.sector,
+        currency: form.currency,
+        rccm: form.rccm || undefined,
+        ifu: form.ifu || undefined,
+        address: form.address || undefined,
+        phone: form.phone || undefined,
+        email: form.email || undefined,
+        website: form.website || undefined,
+      } as any);
+      setEditingOrg(null);
+    } finally { setSaving(false); }
+  };
 
   const create = async () => {
     if (!form.name.trim()) return;
@@ -134,7 +169,7 @@ function TabSocietes() {
       }));
       await db.periods.bulkPut(periods);
       setOpenNew(false);
-      setForm({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '' });
+      setForm({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
       setCurrentOrg(id);
     } finally { setSaving(false); }
   };
@@ -179,14 +214,53 @@ function TabSocietes() {
                       : <button className="badge bg-primary-200 dark:bg-primary-800 hover:bg-primary-300 dark:hover:bg-primary-700" onClick={() => setCurrentOrg(o.id)}>Sélectionner</button>}
                   </div>
                 </div>
-                <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex flex-col gap-1">
+                  <button className="btn-ghost !p-1.5 text-primary-500 hover:text-primary-900 dark:hover:text-primary-100" onClick={() => openEdit(o)} title="Modifier">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       </Card>
+
+      {/* Modale d'édition */}
+      <Modal open={!!editingOrg} onClose={() => setEditingOrg(null)} title={`Modifier ${editingOrg?.name ?? ''}`} subtitle="Identité, fiscalité et coordonnées de la société"
+        footer={<>
+          <button className="btn-outline" onClick={() => setEditingOrg(null)}>Annuler</button>
+          <button className="btn-primary" onClick={saveEdit} disabled={saving || !form.name.trim()}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </>}>
+        <div className="space-y-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Identité</p>
+            <Field label="Raison sociale *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Ex : SOCIÉTÉ ALPHA SA" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField label="Secteur" value={form.sector} options={SECTORS} onChange={(v) => setForm({ ...form, sector: v })} />
+            <SelectField label="Devise" value={form.currency} options={CURRENCIES} onChange={(v) => setForm({ ...form, currency: v })} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2 mt-2">Fiscalité</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="RCCM" value={form.rccm} onChange={(v) => setForm({ ...form, rccm: v })} placeholder="CI-ABJ-YYYY-B-XXXX" />
+              <Field label="IFU / NIF" value={form.ifu} onChange={(v) => setForm({ ...form, ifu: v })} placeholder="Numéro fiscal" />
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2 mt-2">Coordonnées</p>
+            <Field label="Adresse" value={form.address} onChange={(v) => setForm({ ...form, address: v })} placeholder="Adresse postale complète" />
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <Field label="Téléphone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+225 XX XX XX XX XX" />
+              <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="contact@societe.com" />
+            </div>
+            <Field label="Site web" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="https://www.societe.com" />
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={openNew} onClose={() => setOpenNew(false)} title="Ajouter une société" subtitle="Création d'un nouveau tenant"
         footer={<>

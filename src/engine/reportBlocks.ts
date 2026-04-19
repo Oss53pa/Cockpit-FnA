@@ -51,6 +51,18 @@ export type ReportConfig = {
     author: string;
     confidentiality: 'public' | 'interne' | 'confidentiel' | 'strict';
     logoDataUrl?: string;
+    /** Couleur de fond de la couverture (hex ou rgba) — optionnel, défaut blanc */
+    coverBgColor?: string;
+    /** Image de fond couverture (data URL) — optionnel */
+    coverBgImageUrl?: string;
+    /** Opacité de l'image de fond (0-1) — défaut 0.15 */
+    coverBgOpacity?: number;
+    /** Couleur du titre principal — défaut palette.primary */
+    titleColor?: string;
+    /** Couleur du sous-titre — défaut palette.primary */
+    subtitleColor?: string;
+    /** Style de couverture : 'classic' (centré), 'modern' (côté gauche), 'banner' (large bandeau) */
+    coverStyle?: 'classic' | 'modern' | 'banner';
   };
   format: 'A4_portrait' | 'A4_landscape' | 'pptx';
   palette: PaletteKey;
