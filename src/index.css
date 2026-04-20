@@ -188,19 +188,42 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  /* Cache tout SAUF la zone rapport. visibility:hidden (et NON position:absolute)
+     pour préserver le flux de pagination du navigateur. Le contenu masqué garde
+     son espace mais n'apparaît pas — Chromium paginate correctement le rapport. */
   body * {
     visibility: hidden;
   }
   .report-print-area, .report-print-area * {
     visibility: visible;
   }
+  /* Réinitialise marges/largeur sur la zone rapport pour qu'elle prenne tout
+     l'espace de la page A4 (sans la SORTIR du flux — pas de position:absolute). */
   .report-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  /* Force tous les ancêtres de la zone rapport à passer en bloc bord-à-bord
+     pour éviter qu'un container parent (sidebar, layout flex) ne réserve un
+     espace blanc à gauche du rapport. */
+  body > div, body > main, body > div > div, body > div > main {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Tables longues : autoriser la coupure entre lignes pour éviter la
+     troncature silencieuse de Chromium quand une table dépasse une page A4. */
+  .report-print-area table {
+    page-break-inside: auto;
+  }
+  .report-print-area table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  .report-print-area thead {
+    display: table-header-group; /* répète l'en-tête sur chaque page */
   }
   /* Pages : pas de hauteur max forcée, pas de saut systématique → contenu fluide */
   .report-print-area > div > div {
@@ -244,8 +267,8 @@
   .report-print-area .pb-10 {
     padding-bottom: 0 !important;
   }
-  /* Éviter de couper en plein milieu d'une table ou d'un dashboard */
-  .report-print-area table,
+  /* Éviter de couper en plein milieu d'un dashboard (les tables sont gérées
+     plus haut avec `auto` pour autoriser la coupure entre lignes). */
   .report-print-area .border-l-4 {
     page-break-inside: avoid;
   }

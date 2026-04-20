@@ -1,10 +1,29 @@
 // TFT, TAFIRE, Variation des capitaux propres — SYSCOHADA révisé 2017
 import { computeBalance } from './balance';
 import { computeBilan, computeSIG, Line } from './statements';
+import { db } from '../db/schema';
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function get(lines: Line[], code: string): number {
   return lines.find((l) => l.code === code)?.value ?? 0;
+}
+
+// Lit les mouvements GL bruts (D et C séparés) pour un ou plusieurs préfixes.
+// Indispensable pour distinguer les vraies augmentations / diminutions /
+// affectations sur les comptes de capitaux et de tiers, là où le simple
+// solde net masque ces flux.
+async function getMovementsByPrefix(orgId: string, year: number, prefixes: string[]): Promise<{ debit: number; credit: number }> {
+  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const ids = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
+  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  let d = 0, c = 0;
+  for (const e of entries) {
+    if (!ids.has(e.periodId)) continue;
+    if (!prefixes.some((p) => e.account.startsWith(p))) continue;
+    d += e.debit;
+    c += e.credit;
+  }
+  return { debit: d, credit: c };
 }
 
 async function buildSnapshots(orgId: string, year: number) {
@@ -52,22 +71,32 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
   // Résultat net de l'exercice
   const resultat = sig.resultat;
 
-  // Dotations aux amortissements & provisions de l'exercice
-  // = soldes débiteurs des comptes 68 + 69 (charges) - soldes créditeurs 78 + 79 (reprises)
-  const dotations = closingBal
+  // Dotations TOTALES (pour CAFG) = 68 + 69 nets de 78 + 79
+  const dotationsTot = closingBal
     .filter((r) => r.account.startsWith('68') || r.account.startsWith('69'))
     .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
   const reprises = closingBal
     .filter((r) => r.account.startsWith('78') || r.account.startsWith('79'))
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
-  const dotationsNettes = dotations - reprises;
+  const dotationsNettes = dotationsTot - reprises;
+
+  // Dotations sur IMMOBILISATIONS uniquement (pour le calcul des acquisitions)
+  // = 681 (DAP exploitation hors 6817 actif circulant) + 687 (DAP HAO immo)
+  // EXCLUT 691 (provisions risques exploitation) et 6817 (provisions actif circulant)
+  // qui ne se rattachent PAS aux immobilisations.
+  const dotationsImmo = closingBal
+    .filter((r) =>
+      (r.account.startsWith('681') && !r.account.startsWith('6817'))
+      || r.account.startsWith('687')
+    )
+    .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
 
   // Plus / moins values sur cessions
   const vnc = closingBal.filter((r) => r.account.startsWith('81')).reduce((s, r) => s + r.soldeD, 0);
   const pxCess = closingBal.filter((r) => r.account.startsWith('82')).reduce((s, r) => s + r.soldeC, 0);
   const plusValueCession = pxCess - vnc;
 
-  // CAFG = Résultat + dotations nettes - plus-values cessions
+  // CAFG = Résultat + dotations nettes − plus-values cessions
   const cafg = resultat + dotationsNettes - plusValueCession;
 
   // Variations du BFR d'exploitation (N − N-1)
@@ -92,32 +121,38 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
   const fluxOperationnels = cafg + varBFR;
 
   // Flux d'investissement
-  // Acquisitions = augmentation brute des immobilisations
-  // On se base sur les comptes 20-27 soldes D
+  // Acquisitions = ΔImmo nette + dotations IMMO (réintégration de l'amortissement)
+  // → ΔBrut = ΔNet + Δamortissement = ΔNet + dotImmo (on suppose pas de cession majeure)
   const immoO = bilanO.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
   const immoC = bilanC.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
-  // variation nette + dotations = acquisitions brutes approximées
-  const acquisitions = -(immoC - immoO + dotations);
+  const acquisitions = -(immoC - immoO + dotationsImmo);
   const cessions = pxCess; // prix des cessions (82)
   const fluxInvestissement = acquisitions + cessions;
 
-  // Flux de financement
-  // Capital : variation
-  const capO = get(bilanO.passif, 'CA');
-  const capC = get(bilanC.passif, 'CA');
-  const primesResO = get(bilanO.passif, 'CD');
-  const primesResC = get(bilanC.passif, 'CD');
-  const augCapital = (capC + primesResC) - (capO + primesResO);
+  // ── Flux de financement — VRAIS mouvements GL ──
+  // Augmentations de capital = mouvements CRÉDIT sur 101, 104, 105
+  // Réductions de capital   = mouvements DÉBIT sur 101, 104, 105
+  const movCapital = await getMovementsByPrefix(orgId, year, ['101', '102', '103', '104', '105']);
+  const augCapital = movCapital.credit;
+  const reducCapital = movCapital.debit;
 
-  const empruntsO = get(bilanO.passif, 'DA');
-  const empruntsC = get(bilanC.passif, 'DA');
-  const varEmprunts = empruntsC - empruntsO;
+  // Subventions d'investissement reçues = mouvements CRÉDIT sur 14
+  const movSubv = await getMovementsByPrefix(orgId, year, ['14']);
+  const augSubv = movSubv.credit;
 
-  // Distribution de dividendes : approximation = résultat N-1 non conservé (non reporté)
-  // Simplifié : considéré nul si pas d'info spécifique
-  const distributions = 0;
+  // Emprunts nouveaux  = mouvements CRÉDIT sur 16, 17, 18
+  // Remboursements     = mouvements DÉBIT  sur 16, 17, 18
+  const movEmprunts = await getMovementsByPrefix(orgId, year, ['16', '17', '18']);
+  const newEmprunts = movEmprunts.credit;
+  const remboursementsEmprunts = movEmprunts.debit;
 
-  const fluxFinancement = augCapital + varEmprunts - distributions;
+  // Distributions de dividendes = mouvements CRÉDIT sur 457 (Associés - dividendes à payer)
+  // À défaut, on prend les mouvements DÉBIT sur 121 (RAN créditeur) qui matérialisent
+  // l'affectation du résultat (la part non reportée = distribuée).
+  const movDistrib = await getMovementsByPrefix(orgId, year, ['457']);
+  const distributions = movDistrib.credit;
+
+  const fluxFinancement = augCapital - reducCapital + augSubv + newEmprunts - remboursementsEmprunts - distributions;
 
   const variationTreso = fluxOperationnels + fluxInvestissement + fluxFinancement;
 
@@ -128,7 +163,7 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
   const lines: Line[] = [
     // Activités opérationnelles
     { code: 'FA', label: "Résultat net de l'exercice", value: resultat, indent: 1 },
-    { code: 'FB', label: '+ Dotations aux amortissements & provisions', value: dotations, indent: 1 },
+    { code: 'FB', label: '+ Dotations aux amortissements & provisions', value: dotationsTot, indent: 1 },
     { code: 'FC', label: '− Reprises sur amortissements & provisions', value: -reprises, indent: 1 },
     { code: 'FD', label: '− Plus-values nettes sur cessions', value: -plusValueCession, indent: 1 },
     { code: '_ZA', label: 'CAPACITÉ D\'AUTOFINANCEMENT GLOBALE (CAFG)', value: cafg, total: true },
@@ -142,15 +177,18 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
     { code: 'FI', label: 'Encaissements liés aux cessions d\'immobilisations', value: cessions, indent: 1 },
     { code: '_ZD', label: 'FLUX DE TRÉSORERIE DES ACTIVITÉS D\'INVESTISSEMENT', value: fluxInvestissement, total: true, grand: true },
     // Financement
-    { code: 'FJ', label: 'Augmentations de capital (propres + primes)', value: augCapital, indent: 1 },
-    { code: 'FK', label: 'Variation des emprunts & dettes financières', value: varEmprunts, indent: 1 },
-    { code: 'FL', label: 'Distributions de dividendes', value: -distributions, indent: 1 },
+    { code: 'FJ', label: 'Augmentations de capital', value: augCapital, indent: 1, accountCodes: '101-105 (crédit)' },
+    { code: 'FJ2', label: 'Réductions de capital', value: -reducCapital, indent: 1, accountCodes: '101-105 (débit)' },
+    { code: 'FJ3', label: "Subventions d'investissement reçues", value: augSubv, indent: 1, accountCodes: '14 (crédit)' },
+    { code: 'FK', label: 'Emprunts nouveaux', value: newEmprunts, indent: 1, accountCodes: '16-18 (crédit)' },
+    { code: 'FK2', label: "Remboursements d'emprunts", value: -remboursementsEmprunts, indent: 1, accountCodes: '16-18 (débit)' },
+    { code: 'FL', label: 'Distributions de dividendes', value: -distributions, indent: 1, accountCodes: '457 (crédit)' },
     { code: '_ZE', label: 'FLUX DE TRÉSORERIE DES ACTIVITÉS DE FINANCEMENT', value: fluxFinancement, total: true, grand: true },
     // Synthèse
     { code: '_ZF', label: 'VARIATION DE LA TRÉSORERIE NETTE', value: variationTreso, total: true, grand: true },
     { code: 'FM', label: 'Trésorerie nette à l\'ouverture', value: tresoO, indent: 1 },
     { code: 'FN', label: 'Trésorerie nette à la clôture', value: tresoC, indent: 1 },
-    { code: '_ZG', label: 'CONTRÔLE : Clôture − Ouverture', value: tresoC - tresoO, total: true },
+    { code: '_ZG', label: 'CONTRÔLE : Clôture − Ouverture (doit = ZF)', value: tresoC - tresoO, total: true },
   ];
 
   return {
@@ -379,35 +417,53 @@ export async function computeCapitalVariation(orgId: string, year: number): Prom
 
   const g = (lines: Line[], code: string) => lines.find((l) => l.code === code)?.value ?? 0;
 
+  // Définition des rubriques avec préfixes pour lire les vrais mouvements GL
+  // (pas de simple `max(diff, 0)` qui mélangerait augm + dim sur la même ligne).
   const rubriques = [
-    { key: 'capital',  label: 'Capital social',                accountCodes: '101',         codeO: g(bilanO.passif, 'CA'), codeC: g(bilanC.passif, 'CA') },
-    { key: 'primes',   label: 'Primes & réserves',             accountCodes: '104-118',     codeO: g(bilanO.passif, 'CD'), codeC: g(bilanC.passif, 'CD') },
-    { key: 'subv',     label: "Subventions d'investissement",  accountCodes: '14',          codeO: g(bilanO.passif, 'CL'), codeC: g(bilanC.passif, 'CL') },
-    { key: 'provRegl', label: 'Provisions réglementées',       accountCodes: '15',          codeO: g(bilanO.passif, 'CM'), codeC: g(bilanC.passif, 'CM') },
+    { key: 'capital',  label: 'Capital social',                accountCodes: '101-104',  bilanCode: 'CA', prefixes: ['101', '102', '103', '104'] },
+    { key: 'primes',   label: 'Primes & réserves',             accountCodes: '105, 11, 12, 13', bilanCode: 'CD', prefixes: ['105', '106', '11', '12', '13'] },
+    { key: 'subv',     label: "Subventions d'investissement",  accountCodes: '14',       bilanCode: 'CL', prefixes: ['14'] },
+    { key: 'provRegl', label: 'Provisions réglementées',       accountCodes: '15',       bilanCode: 'CM', prefixes: ['15'] },
   ];
 
-  const movements: CapitalMovement[] = rubriques.map((r) => {
-    const diff = r.codeC - r.codeO;
-    return {
+  const movements: CapitalMovement[] = [];
+  for (const r of rubriques) {
+    const codeO = g(bilanO.passif, r.bilanCode);
+    const codeC = g(bilanC.passif, r.bilanCode);
+    // Capitaux propres = comptes à solde C normal :
+    //   AUGMENTATION = mouvements CRÉDIT bruts de la période
+    //   DIMINUTION   = mouvements DÉBIT bruts de la période
+    const mvt = await getMovementsByPrefix(orgId, year, r.prefixes);
+    // Affectation N-1 spécifique : mouvements croisés entre 121/13 (RAN) et 11x (réserves)
+    // → débit 121 + crédit 11x. On l'isole pour la rubrique "primes & réserves".
+    let affectationResN1 = 0;
+    if (r.key === 'primes') {
+      const mvtRAN = await getMovementsByPrefix(orgId, year, ['121', '129', '13']);
+      affectationResN1 = mvtRAN.debit; // affectation = sortie du RAN vers les réserves/dividendes
+    }
+    movements.push({
       rubrique: r.label,
       accountCodes: r.accountCodes,
-      ouverture: r.codeO,
-      augmentation: Math.max(diff, 0),
-      diminution: Math.max(-diff, 0),
-      affectationResN1: 0,
+      ouverture: codeO,
+      augmentation: mvt.credit,
+      diminution: mvt.debit,
+      affectationResN1,
       resultatExercice: 0,
-      cloture: r.codeC,
-    };
-  });
+      cloture: codeC,
+    });
+  }
 
-  // Résultat de l'exercice
+  // ── Résultat de l'exercice (compte 130/131) ──
+  // Ouverture = résultat N-1 (= bilan ouverture passif "Résultat" CF si présent,
+  // sinon 0 si l'affectation N-1 a déjà été passée). Clôture = résultat N.
+  const resultatOuverture = g(bilanO.passif, 'CF');
   movements.push({
     rubrique: "Résultat net de l'exercice",
-    accountCodes: '12',
-    ouverture: 0,
-    augmentation: 0,
-    diminution: 0,
-    affectationResN1: 0,
+    accountCodes: '130, 131',
+    ouverture: resultatOuverture,
+    augmentation: sig.resultat > 0 ? sig.resultat : 0,
+    diminution: sig.resultat < 0 ? -sig.resultat : 0,
+    affectationResN1: -resultatOuverture, // le N-1 est sorti vers réserves/dividendes
     resultatExercice: sig.resultat,
     cloture: sig.resultat,
   });

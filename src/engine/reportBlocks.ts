@@ -10,6 +10,8 @@ import { Ratio } from './ratios';
 export type PaletteKey = string;
 
 export const PALETTES: Record<string, { name: string; primary: string; secondary: string; accent: string; success: string; danger: string; neutral: string; tableHeader: string; tableHeaderText: string; chartColors: string[] }> = {
+  // Palette officielle Atlas Studio : anthracite + or mat (par défaut sur les nouveaux rapports)
+  atlas:     { name: 'Atlas Studio', primary: '#1F1F23', secondary: '#332915', accent: '#B8954A', success: '#22c55e', danger: '#ef4444', neutral: '#9C7D3E', tableHeader: '#1F1F23', tableHeaderText: '#D4B870', chartColors: ['#B8954A','#1F1F23','#D4B870','#9C7D3E','#6E5A2D','#E8D5A0','#4D3F20'] },
   graphite:  { name: 'Graphite',   primary: '#171717', secondary: '#404040', accent: '#737373', success: '#22c55e', danger: '#ef4444', neutral: '#a3a3a3', tableHeader: '#171717', tableHeaderText: '#fafafa', chartColors: ['#374151','#dc2626','#2563eb','#d97706','#059669','#7c3aed','#db2777'] },
   ardoise:   { name: 'Ardoise',    primary: '#0f172a', secondary: '#334155', accent: '#64748b', success: '#22c55e', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#0f172a', tableHeaderText: '#f8fafc', chartColors: ['#475569','#0ea5e9','#f59e0b','#10b981','#8b5cf6','#f43f5e','#06b6d4'] },
   marine:    { name: 'Marine',     primary: '#122a52', secondary: '#2f5285', accent: '#456da0', success: '#22c55e', danger: '#ef4444', neutral: '#9bb5e0', tableHeader: '#122a52', tableHeaderText: '#f0f5ff', chartColors: ['#1e40af','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#06b6d4'] },
@@ -85,7 +87,7 @@ export const DEFAULT_CONFIG = (period: string): ReportConfig => ({
     confidentiality: 'interne',
   },
   format: 'A4_portrait',
-  palette: 'graphite',
+  palette: 'atlas',
   options: { includeCover: true, includeTOC: true, includeFooter: true, includePageNumbers: true },
   blocks: [],
   recipients: [],

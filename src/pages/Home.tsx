@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Bot, LayoutDashboard, FileSpreadsheet, FileText, Upload, Wallet } from 'lucide-react';
+import { AlertTriangle, Bot, ExternalLink, LayoutDashboard, FileSpreadsheet, FileText, Upload, Wallet } from 'lucide-react';
 import { useBalance, useCurrentOrg, useRatios, useStatements } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { fmtMoney } from '../lib/format';
@@ -61,6 +61,11 @@ export default function Home() {
           <span className="text-xs text-primary-500">
             Exercice : <span className="font-bold text-primary-900 dark:text-primary-50 num">{currentYear}</span>
           </span>
+          {/* Bouton retour vers la Landing (page de présentation produit) */}
+          <Link to="/" title="Découvrir le produit"
+            className="inline-flex items-center gap-1.5 border border-primary-300 dark:border-primary-700 px-3 py-1.5 rounded-full text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900 transition">
+            <ExternalLink className="w-3 h-3" /> Découvrir
+          </Link>
           <Link to="/dashboard/home"
             className="inline-flex items-center gap-2 bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 px-4 py-1.5 rounded-full text-xs font-semibold hover:opacity-90 transition">
             Dashboard →

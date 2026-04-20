@@ -1,11 +1,20 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
+// Bypass d'accès temporaire (le temps de finaliser la migration Supabase).
+// Activé via le bouton bouclier discret du footer Landing.
+function isAccessBypassed(): boolean {
+  try { return localStorage.getItem('app-bypass') === '1'; } catch { return false; }
+}
+
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading, isLocalMode } = useAuth();
 
   // Mode local : pas d'auth, accès direct
   if (isLocalMode) return <>{children}</>;
+
+  // Bypass temporaire (clic sur l'icône bouclier de la Landing)
+  if (isAccessBypassed()) return <>{children}</>;
 
   // Chargement de la session
   if (loading) {

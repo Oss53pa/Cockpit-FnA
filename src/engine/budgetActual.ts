@@ -210,6 +210,54 @@ export async function computeBudgetActual(
     }
   }
 
+  // ── Roll-up parent ↔ enfants ──────────────────────────────────────
+  // Cas typique : le budget est saisi sur le code SYSCOHADA court (ex: 622)
+  // alors que le réalisé tombe sur les sous-comptes détaillés du plan
+  // analytique (ex: 6221001, 6221002...). Sans rapprochement, on voit deux
+  // séries de lignes : parents (Budget X, Réalisé 0) et enfants (Réalisé Y,
+  // Budget 0). On regroupe : pour chaque code budgété sans réalisé exact,
+  // on agrège tous les sous-comptes du réalisé qui commencent par ce code.
+  const budgetCodes = Array.from(budgetMap.keys());
+  const realiseCodes = Array.from(realiseMap.keys());
+  const absorbedChildren = new Set<string>();
+  // Tri par longueur croissante : on traite les codes parents (courts) d'abord
+  const sortedBudgetCodes = [...budgetCodes].sort((a, b) => a.length - b.length);
+  for (const budCode of sortedBudgetCodes) {
+    const exactRealise = realiseMap.get(budCode) ?? 0;
+    // Cherche les sous-comptes (codes plus longs commençant par budCode)
+    const children = realiseCodes.filter(
+      (c) => c !== budCode && c.startsWith(budCode) && c.length > budCode.length && !absorbedChildren.has(c),
+    );
+    if (children.length === 0) continue;
+    let childRealise = 0;
+    for (const c of children) childRealise += realiseMap.get(c) ?? 0;
+    if (childRealise !== 0 || exactRealise === 0) {
+      // Agrège : le budget reste sur le compte parent, le réalisé est la
+      // somme exact + enfants. On supprime les enfants (déjà comptés).
+      realiseMap.set(budCode, exactRealise + childRealise);
+      for (const c of children) absorbedChildren.add(c);
+    }
+  }
+  // Idem dans le sens inverse : si un réalisé existe sur un parent court mais
+  // que le budget est sur des enfants (rare mais possible), on agrège budget.
+  const realiseOrphans = realiseCodes.filter(
+    (c) => !budgetMap.has(c) && !absorbedChildren.has(c),
+  );
+  for (const realCode of realiseOrphans) {
+    const childBudgets = budgetCodes.filter(
+      (b) => b !== realCode && b.startsWith(realCode) && b.length > realCode.length,
+    );
+    if (childBudgets.length === 0) continue;
+    let agg = budgetMap.get(realCode) ?? 0;
+    for (const cb of childBudgets) agg += budgetMap.get(cb) ?? 0;
+    if (agg !== 0) {
+      budgetMap.set(realCode, agg);
+      for (const cb of childBudgets) budgetMap.delete(cb);
+    }
+  }
+  // Supprime les sous-comptes absorbés du réalisé final
+  for (const c of absorbedChildren) realiseMap.delete(c);
+
   const all = new Set<string>([...realiseMap.keys(), ...budgetMap.keys()]);
   const rows: BudgetActualRow[] = [];
   for (const account of all) {

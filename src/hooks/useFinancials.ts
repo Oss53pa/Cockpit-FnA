@@ -132,8 +132,18 @@ export function useStatements() {
 export function useRatios() {
   const balance = useBalance();
   const customTargets = useSettings((s) => s.ratioTargets);
+  const fromMonth = useApp((s) => s.fromMonth);
+  const toMonth = useApp((s) => s.toMonth);
+  const currentYear = useApp((s) => s.currentYear);
   if (!balance || balance.length === 0) return [];
-  return computeRatios(balance, customTargets);
+  // Calcule le nb de jours réels de la période sélectionnée pour annualiser
+  // correctement DSO/DPO. Sans ça, sur Q1 (3 mois) DSO est multiplié par 4.
+  let periodDays = 0;
+  for (let m = fromMonth; m <= toMonth; m++) {
+    periodDays += new Date(currentYear, m, 0).getDate();
+  }
+  if (periodDays <= 0) periodDays = 360;
+  return computeRatios(balance, customTargets, { periodDays });
 }
 
 export function useMonthlyCR() {

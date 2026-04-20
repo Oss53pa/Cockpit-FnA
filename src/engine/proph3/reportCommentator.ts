@@ -22,7 +22,8 @@ export function feedMemory(orgId: string, data: any, context?: string) {
     rn: sig?.resultat ?? 0,
     treso: get(data.bilanActif, '_BT') - get(data.bilanPassif, 'DV'),
     bfr: get(data.bilanActif, '_BK') - get(data.bilanPassif, '_DP'),
-    dso: ca > 0 ? Math.round((get(data.bilanActif, 'BH') / ca) * 360) : 0,
+    // DSO sur CA TTC (1.18) — aligné avec dashboard Cycle Client
+    dso: ca > 0 ? Math.round((get(data.bilanActif, 'BH') / (ca * 1.18)) * 360) : 0,
     capPropres: get(data.bilanPassif, '_CP'),
     totActif: get(data.bilanActif, '_BZ'),
     ratiosAlertes: (data.ratios ?? []).filter((r: any) => r.status !== 'good').length,
@@ -400,20 +401,35 @@ function generateForSection(title: string, data: ReportData, ctx?: { orgId?: str
   // ─── Seuil de rentabilité ───
   if (/seuil|point\s*mort|break.?even/i.test(t)) {
     if (!sig) return null;
-    const ebe = sig.ebe ?? 0;
-    const margeContrib = ca > 0 ? ebe / ca : 0.3;
-    const seuil = margeContrib > 0 ? Math.round(ca * 0.7) : 0;
+    // Calcul ALIGNÉ avec le dashboard breakeven : vraies charges fixes + vraies CV
+    const balance = data.balance ?? [];
+    const sumDC = (regex: RegExp) => balance.filter((r: any) => regex.test(r.account || '')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+    const personnel  = sumDC(/^66/);
+    const loyers     = sumDC(/^622/);
+    const assurances = sumDC(/^625/);
+    const dotations  = sumDC(/^68/);
+    const chFin      = sumDC(/^67/);
+    const chargesFixes = personnel + loyers + assurances + dotations + chFin;
+    const achatsCV   = sumDC(/^60(?!3)/) + sumDC(/^603/);
+    const transports = sumDC(/^61/);
+    const servExtA   = sumDC(/^62/) - loyers - assurances;
+    const servExtB   = sumDC(/^63/);
+    const chargesVariables = achatsCV + transports + servExtA + servExtB;
+    const margeCV = ca - chargesVariables;
+    const tauxMargeCV = ca > 0 ? margeCV / ca : 0;
+    const seuil = tauxMargeCV > 0 ? Math.round(chargesFixes / tauxMargeCV) : 0;
     const margeSec = ca - seuil;
     const margeSecPct = ca ? (margeSec / ca) * 100 : 0;
-    return `Le seuil de rentabilité (point mort) est le niveau de chiffre d'affaires à partir duquel l'entreprise commence à générer un profit. Il est calculé comme : Charges fixes / Taux de marge sur coûts variables. ` +
-      `\n\nSur la base d'un taux de marge sur coûts variables estimé à ${(margeContrib * 100).toFixed(0)} % (approximé via le ratio EBE/CA), le seuil de rentabilité ressort à ${fmtMoney(seuil)}. La marge de sécurité, c'est-à-dire l'écart entre le CA réalisé et le seuil, atteint ${fmtMoney(margeSec)} soit ${margeSecPct.toFixed(1)} % du CA. ${margeSecPct > 30 ? 'Cette marge de sécurité confortable permet d\'absorber une baisse d\'activité jusqu\'à ce niveau sans tomber en perte.' : margeSecPct > 15 ? 'Marge acceptable mais à surveiller — un retournement conjoncturel pourrait être problématique.' : 'Marge faible — l\'entreprise est vulnérable à toute baisse de CA.'} ` +
-      `\n\nLe levier opérationnel (variation du résultat / variation du CA) est inversement proportionnel à la marge de sécurité : plus elle est faible, plus une baisse de CA dégrade rapidement le résultat. Actions pour améliorer la position : (1) augmenter le taux de marge sur coûts variables (prix de vente, mix produit), (2) réduire les charges fixes (optimisation des structures, externalisation sélective).`;
+    return `Le seuil de rentabilité (point mort) est le niveau de chiffre d'affaires à partir duquel l'entreprise commence à générer un profit. Formule SYSCOHADA : Charges fixes / Taux de marge sur coûts variables. ` +
+      `\n\nLes charges fixes (personnel ${fmtMoney(personnel)} + loyers ${fmtMoney(loyers)} + assurances ${fmtMoney(assurances)} + dotations ${fmtMoney(dotations)} + charges financières ${fmtMoney(chFin)}) totalisent ${fmtMoney(chargesFixes)}. Avec un taux de marge sur coûts variables de ${(tauxMargeCV * 100).toFixed(1)} %, le seuil de rentabilité ressort à ${fmtMoney(seuil)}. La marge de sécurité atteint ${fmtMoney(margeSec)} soit ${margeSecPct.toFixed(1)} % du CA. ${margeSecPct > 30 ? 'Cette marge de sécurité confortable permet d\'absorber une baisse d\'activité jusqu\'à ce niveau sans tomber en perte.' : margeSecPct > 15 ? 'Marge acceptable mais à surveiller — un retournement conjoncturel pourrait être problématique.' : margeSecPct > 0 ? 'Marge faible — l\'entreprise est vulnérable à toute baisse de CA.' : 'CA actuel sous le seuil — l\'entreprise est en perte structurelle. Actions urgentes requises.'} ` +
+      `\n\nLeviers d'amélioration : (1) augmenter le taux de marge sur coûts variables (prix de vente, mix produit, négociation achats), (2) réduire les charges fixes (renégocier loyers, externaliser certaines fonctions), (3) augmenter le volume sans accroître les charges fixes (effet d'échelle).`;
   }
 
   // ─── Masse salariale ───
   if (/masse\s*salariale|charges?\s*de\s*personnel|salaires?/i.test(t)) {
     const balance = data.balance ?? [];
-    const masse = balance.filter((r: any) => r.account.startsWith('66')).reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
+    // Aligné avec le dashboard sal : utilise soldeD-soldeC (cohérent moteur)
+    const masse = balance.filter((r: any) => r.account?.startsWith('66')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
     const ratio = ca > 0 ? (masse / ca) * 100 : 0;
     return `La masse salariale (charges de personnel — comptes 66 SYSCOHADA) regroupe les rémunérations directes et indirectes (salaires bruts, primes, indemnités, charges sociales patronales). Sur la période, elle totalise ${fmtMoney(masse)}, soit ${ratio.toFixed(1)} % du chiffre d'affaires. ` +
       `\n\nLe ratio Masse / CA de ${ratio.toFixed(1)} % ${ratio < 20 ? 'est très bas, typique des activités à faible intensité de main-d\'œuvre (négoce, distribution)' : ratio < 35 ? 'est dans la norme des activités industrielles et commerciales' : ratio < 50 ? 'est élevé, courant dans les services à forte valeur ajoutée (conseil, ingénierie)' : 'est très élevé, à analyser : sureffectifs ? sous-productivité ? activité saisonnière ? À comparer aux benchmarks sectoriels.'}. ` +

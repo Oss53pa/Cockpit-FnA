@@ -68,39 +68,65 @@ export default function CashflowForecast() {
   // CA moyen / semaine pour estimer les entrées futures au-delà des créances actuelles
   const caHebdoEstime = useMemo(() => (sig?.ca ?? 0) / 52, [sig]);
 
-  // Projection 13 semaines
+  // Projection 13 semaines — basée sur les BUCKETS RÉELS de la balance âgée
   const weeks = useMemo<Week[]>(() => {
     const out: Week[] = [];
     let cumul = tresoStart;
 
-    // Totaux des échéances clients/fournisseurs à encaisser/décaisser
-    // On se base sur l'aging : buckets non échu (0), 0-30j (1), 31-60 (2), 61-90 (3), >90 (4)
-    const totalAR = clients.reduce((s, r) => s + Math.abs(r.total), 0);
-    const totalAP = fournisseurs.reduce((s, r) => s + Math.abs(r.total), 0);
+    // Agrégation des buckets clients & fournisseurs
+    // index : 0=Non échu, 1=0-30j, 2=31-60j, 3=61-90j, 4=> 90j
+    // On ne compte que les soldes positifs (créances/dettes ouvertes), les soldes
+    // négatifs (avoirs) ne sont pas des encaissements/décaissements à venir.
+    const arBuckets = [0, 0, 0, 0, 0];
+    for (const r of clients) {
+      if (r.total <= 0) continue;
+      for (let i = 0; i < 5; i++) arBuckets[i] += Math.max(0, r.buckets[i] || 0);
+    }
+    const apBuckets = [0, 0, 0, 0, 0];
+    for (const r of fournisseurs) {
+      if (r.total <= 0) continue;
+      for (let i = 0; i < 5; i++) apBuckets[i] += Math.max(0, r.buckets[i] || 0);
+    }
 
-    // Hypothèse : encaissement des créances selon leur âge
-    // Semaines 1-4 : 30 % du total AR (les non-échus + 0-30j payés rapidement)
-    // Semaines 5-8 : 40 % du total AR (31-60 + 61-90)
-    // Semaines 9-13 : 20 % du total AR (> 90j, recouvrement difficile)
-    // Les 10 % restants : douteux, on n'inclut pas
-    const arPhase1 = totalAR * 0.30 / 4;  // par semaine pour S1-4
-    const arPhase2 = totalAR * 0.40 / 4;  // par semaine pour S5-8
-    const arPhase3 = totalAR * 0.20 / 5;  // par semaine pour S9-13
+    // Hypothèse de timing d'encaissement réaliste :
+    //  - Non échu (B0)   → encaissé entre S5 et S8 (4 semaines)
+    //  - 0-30j (B1)      → encaissé entre S1 et S4 (4 semaines)
+    //  - 31-60j (B2)     → encaissé entre S1 et S2 (échus, à recouvrer vite)
+    //  - 61-90j (B3)     → 70 % entre S1-S4 (recouvrement actif), 30 % perdu
+    //  - > 90j (B4)      → 40 % entre S5-S13 (recouvrement difficile), 60 % considéré douteux
+    // Pour les paiements fournisseurs, hypothèse symétrique mais l'entreprise
+    // paye les échus en priorité (B2/B3 en S1-S4), les non-échus à terme.
+    const arWeekly: number[] = Array(13).fill(0);
+    const apWeekly: number[] = Array(13).fill(0);
+    const distribute = (amount: number, fromWeek: number, toWeek: number, target: number[]) => {
+      const span = toWeek - fromWeek + 1;
+      if (span <= 0 || amount <= 0) return;
+      const per = amount / span;
+      for (let w = fromWeek; w <= toWeek; w++) target[w - 1] += per;
+    };
 
-    // Paiements fournisseurs : 40 % S1-4, 40 % S5-8, 20 % S9-13
-    const apPhase1 = totalAP * 0.40 / 4;
-    const apPhase2 = totalAP * 0.40 / 4;
-    const apPhase3 = totalAP * 0.20 / 5;
+    // Encaissements clients
+    distribute(arBuckets[2], 1, 2, arWeekly);          // 31-60j → S1-S2
+    distribute(arBuckets[3] * 0.7, 1, 4, arWeekly);    // 61-90j → S1-S4 (70 %)
+    distribute(arBuckets[1], 1, 4, arWeekly);          // 0-30j → S1-S4
+    distribute(arBuckets[0], 5, 8, arWeekly);          // Non échu → S5-S8
+    distribute(arBuckets[4] * 0.4, 5, 13, arWeekly);   // > 90j → S5-S13 (40 %)
+
+    // Décaissements fournisseurs
+    distribute(apBuckets[2], 1, 2, apWeekly);
+    distribute(apBuckets[3], 1, 4, apWeekly);
+    distribute(apBuckets[4], 1, 4, apWeekly);          // payer les très en retard d'abord
+    distribute(apBuckets[1], 1, 4, apWeekly);
+    distribute(apBuckets[0], 5, 8, apWeekly);
 
     const impotsHebdo = impotsMensuel / 4.33;
-    const autresHebdo = caHebdoEstime * 0.05; // 5 % du CA = autres décaissements estimés
+    const autresHebdo = caHebdoEstime * 0.05;
 
     for (let w = 1; w <= 13; w++) {
-      let enc = 0, dec = 0;
-      if (w <= 4) { enc = arPhase1 + caHebdoEstime * 0.6; dec = apPhase1; }
-      else if (w <= 8) { enc = arPhase2 + caHebdoEstime * 0.7; dec = apPhase2; }
-      else { enc = arPhase3 + caHebdoEstime * 0.8; dec = apPhase3; }
-
+      // Encaissements = recouvrement des créances + nouvelles ventes (CA hebdo)
+      const enc = arWeekly[w - 1] + caHebdoEstime;
+      // Décaissements fournisseurs = paiement échéancier + nouveaux achats (≈ 60 % CA)
+      const dec = apWeekly[w - 1] + caHebdoEstime * 0.60;
       // Salaires payés en S4, S8, S13 (fin de mois)
       const sal = (w === 4 || w === 8 || w === 13) ? salairesMensuel : 0;
       // Impôts trimestriels en S13

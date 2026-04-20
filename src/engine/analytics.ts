@@ -70,50 +70,99 @@ export async function topAccountsByPrefix(orgId: string, year: number, prefixes:
   })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, limit);
 }
 
-// ─── Balance âgée (clients ou fournisseurs) ─────────────────────────────────
+// ─── Balance âgée (clients ou fournisseurs) — algo FIFO correct ─────────────
+// Principe : on lettre les règlements FIFO sur les factures les plus anciennes.
+// Ce qui RESTE non lettré est ventilé dans les buckets selon l'âge de la facture.
+// Sans ça, un règlement récent pour une vieille facture créerait des montants
+// négatifs dans 0-30j et un solde nul globalement alors qu'il y a en réalité
+// des créances ouvertes ailleurs → bug "0-30j à 0 mais % non zéro".
 export type AgedTier = { tier: string; label: string; total: number; buckets: number[] };
 const BUCKETS = ['Non échu', '0-30j', '31-60j', '61-90j', '> 90j'];
 
+// Délai de paiement standard (en jours) appliqué par défaut aux factures
+// quand le GL ne porte pas de date d'échéance distincte de la date d'émission.
+// 30 j est la norme commerciale OHADA (clients / fournisseurs).
+const DEFAULT_PAYMENT_TERM_DAYS = 30;
+
+function bucketFromDays(daysSinceInvoice: number, paymentTermDays = DEFAULT_PAYMENT_TERM_DAYS): number {
+  // Décale l'âge depuis la date d'émission vers l'âge depuis l'échéance :
+  //   facture émise il y a 10 j (échéance dans 20 j)  → overdue = -20 → Non échu
+  //   facture émise il y a 45 j (échue depuis 15 j)   → overdue =  15 → 0-30j
+  //   facture émise il y a 95 j (échue depuis 65 j)   → overdue =  65 → 61-90j
+  const overdue = daysSinceInvoice - paymentTermDays;
+  if (overdue < 0) return 0;       // pas encore échue
+  if (overdue <= 30) return 1;
+  if (overdue <= 60) return 2;
+  if (overdue <= 90) return 3;
+  return 4;
+}
+
 export async function agedBalance(orgId: string, year: number, kind: 'client' | 'fournisseur', importId?: string): Promise<{ buckets: string[]; rows: AgedTier[] }> {
   const prefix = kind === 'client' ? '411' : '401';
-  const sign = kind === 'client' ? 1 : -1; // clients = solde débiteur, fournisseurs = solde créditeur
+  // Côté client : débits = factures (créances), crédits = encaissements (lettrés)
+  // Côté fournisseur : crédits = factures (dettes),  débits   = paiements   (lettrés)
   const today = new Date();
   const periods = await db.periods.where('orgId').equals(orgId).toArray();
   const ids = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
 
-  // Regrouper par tiers (+ libellé associé)
   const accountLabels = new Map((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => [a.code, a.label] as const));
-  const perTiers = new Map<string, { date: string; amount: number; account: string; label: string }[]>();
+
+  type Mvt = { date: string; amount: number; isInvoice: boolean; account: string; label: string };
+  const perTiers = new Map<string, Mvt[]>();
+
   for (const e of entries) {
     if (!ids.has(e.periodId)) continue;
     if (!e.account.startsWith(prefix)) continue;
     if (importId && importId !== 'all' && e.importId !== importId) continue;
-    const amt = (e.debit - e.credit) * sign;
     const tier = e.tiers || e.account;
     const label = accountLabels.get(e.account) ?? e.label ?? '—';
     const arr = perTiers.get(tier) ?? [];
-    arr.push({ date: e.date, amount: amt, account: e.account, label });
+    if (kind === 'client') {
+      // débit = facture, crédit = règlement
+      if (e.debit > 0) arr.push({ date: e.date, amount: e.debit, isInvoice: true, account: e.account, label });
+      if (e.credit > 0) arr.push({ date: e.date, amount: e.credit, isInvoice: false, account: e.account, label });
+    } else {
+      // fournisseur : crédit = facture, débit = règlement
+      if (e.credit > 0) arr.push({ date: e.date, amount: e.credit, isInvoice: true, account: e.account, label });
+      if (e.debit > 0) arr.push({ date: e.date, amount: e.debit, isInvoice: false, account: e.account, label });
+    }
     perTiers.set(tier, arr);
   }
 
   const rows: AgedTier[] = [];
   for (const [tier, movements] of perTiers) {
-    const buckets = [0, 0, 0, 0, 0];
-    const total = movements.reduce((s, m) => s + m.amount, 0);
-    if (Math.abs(total) < 1) continue;
-    // Répartition approximée par date moyenne
-    for (const m of movements) {
-      const d = new Date(m.date);
-      const days = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-      let idx = 0;
-      if (days < 0) idx = 0;
-      else if (days <= 30) idx = 1;
-      else if (days <= 60) idx = 2;
-      else if (days <= 90) idx = 3;
-      else idx = 4;
-      buckets[idx] += m.amount;
+    // Tri chronologique
+    movements.sort((a, b) => a.date.localeCompare(b.date));
+    // Liste des factures avec montant ouvert résiduel (mutable)
+    const openInvoices = movements.filter((m) => m.isInvoice).map((m) => ({ date: m.date, open: m.amount }));
+    // Cumul des règlements
+    let totalPayments = movements.filter((m) => !m.isInvoice).reduce((s, m) => s + m.amount, 0);
+    // Imputation FIFO : règlements appliqués aux factures les plus anciennes
+    for (const inv of openInvoices) {
+      if (totalPayments <= 0) break;
+      const applied = Math.min(inv.open, totalPayments);
+      inv.open -= applied;
+      totalPayments -= applied;
     }
+    // Si paiements > factures (avoir / surpaiement) : crédit en faveur du tier
+    // → on l'enregistre dans "Non échu" en valeur négative
+    const surplus = totalPayments > 0 ? -totalPayments : 0;
+
+    const buckets = [0, 0, 0, 0, 0];
+    let total = surplus;
+    buckets[0] += surplus;
+
+    for (const inv of openInvoices) {
+      if (inv.open < 0.01) continue;
+      const d = new Date(inv.date);
+      const days = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+      const idx = bucketFromDays(days);
+      buckets[idx] += inv.open;
+      total += inv.open;
+    }
+
+    if (Math.abs(total) < 1) continue;
     const label = movements[0]?.label ?? '—';
     rows.push({ tier, label, total, buckets });
   }

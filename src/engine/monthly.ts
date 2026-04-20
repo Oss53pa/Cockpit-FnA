@@ -14,8 +14,12 @@ export type MonthlyLine = {
   isCharge?: boolean;
   indent?: number;
   accountCodes?: string;
-  values: number[];         // 12 valeurs mensuelles (non cumulées)
+  values: number[];         // 12 valeurs mensuelles RÉALISÉ (non cumulées)
+  budgets?: number[];       // 12 valeurs mensuelles BUDGET (dernière version)
+  previousYear?: number[];  // 12 valeurs mensuelles N-1 (réalisé année précédente)
   ytd: number;
+  ytdBudget?: number;
+  ytdPreviousYear?: number;
 };
 
 export type MonthlySerie = {
@@ -81,6 +85,39 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     }
   }
 
+  // ── Budget mensuel par compte (dernière version) ──
+  const budgetByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
+  const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
+  const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
+  const lastVersion = versions[versions.length - 1];
+  if (lastVersion) {
+    const lines = allBudgets.filter((b) => b.version === lastVersion);
+    for (const l of lines) {
+      if (l.month < 1 || l.month > 12) continue;
+      const map = budgetByMonthAccount[l.month - 1];
+      map.set(l.account, (map.get(l.account) ?? 0) + l.amount);
+    }
+  }
+
+  // ── Réalisé N-1 par mois (mêmes périodes, année year-1) ──
+  const n1ByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
+  const periodsN1 = periods.filter((p) => p.year === year - 1 && p.month >= 1 && p.month <= 12);
+  if (periodsN1.length > 0) {
+    const periodMapN1 = new Map(periodsN1.map((p) => [p.id, p.month] as const));
+    const periodIdsN1 = new Set(periodsN1.map((p) => p.id));
+    for (const e of allEntries) {
+      if (!periodIdsN1.has(e.periodId)) continue;
+      const c = e.account[0];
+      if (c !== '6' && c !== '7' && c !== '8') continue;
+      const isCharge = c === '6' || e.account.startsWith('81') || e.account.startsWith('83') || e.account.startsWith('85') || e.account.startsWith('87') || e.account.startsWith('89');
+      const net = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
+      const m = periodMapN1.get(e.periodId);
+      if (m === undefined) continue;
+      const map = n1ByMonthAccount[m - 1];
+      map.set(e.account, (map.get(e.account) ?? 0) + net);
+    }
+  }
+
   // 2) Collecter tous les comptes mouvementés par section
   const accountsBySection = new Map<CRSection, Set<string>>();
   for (const sec of Object.keys(sectionDefs) as CRSection[]) {
@@ -111,7 +148,14 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   };
   const accountValues = (account: string) => {
     const values = Array.from({ length: 12 }, (_, m) => netByMonthAccount[m].get(account) ?? 0);
-    return { values, ytd: values.reduce((s, v) => s + v, 0) };
+    const budgets = Array.from({ length: 12 }, (_, m) => budgetByMonthAccount[m].get(account) ?? 0);
+    const previousYear = Array.from({ length: 12 }, (_, m) => n1ByMonthAccount[m].get(account) ?? 0);
+    return {
+      values, budgets, previousYear,
+      ytd: values.reduce((s, v) => s + v, 0),
+      ytdBudget: budgets.reduce((s, v) => s + v, 0),
+      ytdPreviousYear: previousYear.reduce((s, v) => s + v, 0),
+    };
   };
 
   // Pour calculer les intermédiaires par mois
@@ -147,15 +191,16 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
 
       // Lignes de détail (un compte par ligne)
       for (const account of accounts) {
-        const { values, ytd } = accountValues(account);
-        if (Math.abs(ytd) < 0.01) continue;
+        const { values, budgets, previousYear, ytd, ytdBudget, ytdPreviousYear } = accountValues(account);
+        if (Math.abs(ytd) < 0.01 && Math.abs(ytdBudget) < 0.01 && Math.abs(ytdPreviousYear) < 0.01) continue;
         lines.push({
           code: account,
           label: resolveLabel(account),
           indent: 1,
           isCharge: def.isCharge,
           accountCodes: account,
-          values, ytd,
+          values, budgets, previousYear,
+          ytd, ytdBudget, ytdPreviousYear,
         });
       }
 

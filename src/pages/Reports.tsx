@@ -9,6 +9,8 @@ import { Modal } from '../components/ui/Modal';
 import { Collapsible } from '../components/ui/Collapsible';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
+import { useSettings } from '../store/settings';
+import { computeRatios } from '../engine/ratios';
 import { db, ReportDoc } from '../db/schema';
 import { Block, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
 import { computeBilan, computeSIG } from '../engine/statements';
@@ -320,17 +322,71 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'dashboard', dashboardId: 'compliance', title: 'Compliance SYSCOHADA' },
       { id: uid(), type: 'pageBreak' },
 
-      // ═══ X. NOTES ANNEXES (obligatoire SYSCOHADA art. 38) ═══
+      // ═══ X. NOTES ANNEXES SYSCOHADA — 18 notes obligatoires AUDCIF Art. 33-39 ═══
       { id: uid(), type: 'h1', text: '22. Notes annexes', inToc: true },
-      { id: uid(), type: 'paragraph', text: "Notes complémentaires aux états financiers, conformément à l'article 38 du règlement SYSCOHADA. À compléter par les notes spécifiques de l'entreprise." },
-      { id: uid(), type: 'h2', text: "22.1 Méthodes comptables", inToc: true },
-      { id: uid(), type: 'paragraph', text: "Les états financiers sont établis selon les principes comptables SYSCOHADA révisé 2017. Les méthodes appliquées sont : amortissement linéaire des immobilisations, valorisation des stocks au CMP (coût moyen pondéré), conversion des opérations en devises au cours du jour. À détailler selon les spécificités de l'entreprise." },
-      { id: uid(), type: 'h2', text: "22.2 Engagements hors bilan", inToc: true },
-      { id: uid(), type: 'paragraph', text: "À compléter : cautions et garanties données/reçues, contrats de location-financement non comptabilisés, litiges en cours, options et engagements de retraite." },
-      { id: uid(), type: 'h2', text: "22.3 Événements postérieurs à la clôture", inToc: true },
-      { id: uid(), type: 'paragraph', text: "À compléter : événements significatifs survenus entre la date de clôture et la date d'établissement du présent rapport." },
-      { id: uid(), type: 'h2', text: "22.4 Parties liées", inToc: true },
-      { id: uid(), type: 'paragraph', text: "À compléter : transactions avec les parties liées (filiales, dirigeants, actionnaires majoritaires), conformément à l'IAS 24." },
+      { id: uid(), type: 'paragraph', text: "Notes complémentaires aux états financiers, conformément aux articles 33 à 39 du règlement SYSCOHADA révisé 2017 (AUDCIF). Les 18 notes ci-dessous couvrent l'ensemble des informations obligatoires." },
+
+      { id: uid(), type: 'h2', text: "22.1 Référentiel et méthodes comptables (Note 1)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Les états financiers sont établis conformément au Système Comptable OHADA révisé 2017. Méthodes appliquées : amortissement linéaire des immobilisations selon leur durée d'utilité économique, valorisation des stocks au CMP (Coût Moyen Pondéré), conversion des opérations en devises au cours du jour, comptabilisation des produits à l'avancement pour les contrats long terme. Continuité d'exploitation présumée." },
+
+      { id: uid(), type: 'h2', text: "22.2 Tableau des immobilisations (Note 3)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Tableau de variation des valeurs brutes des immobilisations : ouverture, acquisitions de l'exercice, cessions, virements de poste à poste, valeur brute clôture. Détail par catégorie : incorporelles, terrains, bâtiments, matériel & outillage, mobilier, matériel de transport, immobilisations financières." },
+      { id: uid(), type: 'dashboard', dashboardId: 'immo', title: 'Synthèse immobilisations' },
+
+      { id: uid(), type: 'h2', text: "22.3 Tableau des amortissements (Note 3-bis)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Tableau des amortissements cumulés : ouverture, dotations de l'exercice (compte 681), reprises sur cessions, clôture. Calcul de la valeur nette comptable (VNC) = Valeur brute − Amortissements − Provisions." },
+
+      { id: uid(), type: 'h2', text: "22.4 Tableau des provisions (Note 4)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Tableau de variation des provisions pour risques et charges (compte 19), provisions sur stocks (39), provisions sur tiers (49) et provisions sur trésorerie (59). Pour chaque catégorie : ouverture, dotations de l'exercice, reprises (utilisées et non utilisées), clôture. Justification des provisions significatives." },
+
+      { id: uid(), type: 'h2', text: "22.5 État des stocks (Note 5)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition des stocks par catégorie : marchandises (31), matières premières (32), produits en cours (33-34), produits finis (35), emballages (38). Méthode de valorisation appliquée. Provisions pour dépréciation et leurs justifications." },
+      { id: uid(), type: 'dashboard', dashboardId: 'stk', title: 'Synthèse stocks' },
+
+      { id: uid(), type: 'h2', text: "22.6 État des créances et dettes par échéance (Note 6)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Ventilation des créances clients (411-418) et dettes fournisseurs (40) par échéance : à moins d'1 an, de 1 à 5 ans, à plus de 5 ans. Idem pour les emprunts (16-17), les dettes fiscales et sociales. Identification des échéances refinancées." },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'Cycle clients' },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'Cycle fournisseurs' },
+
+      { id: uid(), type: 'h2', text: "22.7 Détail du capital social (Note 7)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Composition du capital : nombre d'actions/parts émises, valeur nominale, catégories d'actions (ordinaires, privilégiées), droits de vote attachés. Mouvements de l'exercice (augmentation, réduction). Capital souscrit non appelé (compte 109)." },
+
+      { id: uid(), type: 'h2', text: "22.8 Variation des capitaux propres (Note 8)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Tableau de variation des capitaux propres détaillé : capital, primes, réserves, report à nouveau, résultat. Affectation du résultat N-1, distributions de dividendes, augmentations de capital." },
+      { id: uid(), type: 'table', source: 'capital', title: 'Variation capitaux propres' },
+
+      { id: uid(), type: 'h2', text: "22.9 Dettes financières et garanties (Note 9)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Détail des emprunts (compte 16) et dettes financières assimilées (17, 18) : prêteur, montant initial, taux d'intérêt, échéance finale, garanties accordées (hypothèques, nantissements, cautions), covenants éventuels." },
+
+      { id: uid(), type: 'h2', text: "22.10 Charges et produits constatés d'avance (Note 10)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décomposition des charges constatées d'avance (compte 476) et produits constatés d'avance (compte 477). Charges à payer (408, 428, 438, 448) et produits à recevoir (418, 438)." },
+
+      { id: uid(), type: 'h2', text: "22.11 Écarts de conversion (Note 11)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Écarts de conversion actif (476) et passif (477) sur les comptes en devises à la clôture. Méthode de conversion appliquée et impact sur le résultat de change." },
+
+      { id: uid(), type: 'h2', text: "22.12 Impôts différés (Note 12)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Calcul de la charge d'impôt sur le résultat : résultat fiscal, réintégrations et déductions, base imposable, IS exigible, IMF (Impôt Minimum Forfaitaire). Différences temporaires donnant lieu à impôts différés actifs/passifs (le cas échéant)." },
+      { id: uid(), type: 'dashboard', dashboardId: 'fis', title: 'Fiscalité' },
+
+      { id: uid(), type: 'h2', text: "22.13 Effectifs et masse salariale (Note 13)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Effectif moyen de l'exercice par catégorie (cadres, agents de maîtrise, employés, ouvriers). Masse salariale brute, charges sociales patronales, taxes assises sur les salaires. Évolution vs N-1." },
+      { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Masse salariale' },
+
+      { id: uid(), type: 'h2', text: "22.14 Rémunération des organes de direction (Note 14)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Conformément à l'article 39 AUDCIF : rémunérations brutes versées aux dirigeants (mandataires sociaux), avantages en nature, jetons de présence, indemnités de fin de fonction. Engagements de retraite des dirigeants." },
+
+      { id: uid(), type: 'h2', text: "22.15 Honoraires des commissaires aux comptes (Note 15)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Honoraires versés au(x) commissaire(s) aux comptes : (a) certification des comptes annuels, (b) services autres que la certification (SACC). Détail par cabinet et par mission." },
+
+      { id: uid(), type: 'h2', text: "22.16 Engagements hors bilan (Note 16)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Cautions et garanties données ou reçues, lettres de confort, contrats de location simple non capitalisés, contrats de location-financement (crédit-bail) non inscrits au bilan, options d'achat ou de vente, engagements de retraite et indemnités de fin de carrière non provisionnés." },
+
+      { id: uid(), type: 'h2', text: "22.17 Événements postérieurs à la clôture (Note 17)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Événements significatifs survenus entre la date de clôture de l'exercice et la date d'établissement du présent rapport, qu'ils confirment ou non des situations existant à la clôture." },
+
+      { id: uid(), type: 'h2', text: "22.18 Parties liées (Note 18)", inToc: true },
+      { id: uid(), type: 'paragraph', text: "Transactions et soldes avec les parties liées (filiales, sociétés mères, dirigeants, actionnaires de référence) conformément à l'article 39 AUDCIF et IAS 24 : nature de la relation, montants des transactions, soldes en cours, conditions des opérations (de pleine concurrence ou non)." },
+
       { id: uid(), type: 'pageBreak' },
 
       // ═══ XI. RECOMMANDATIONS ═══
@@ -783,17 +839,39 @@ export default function Reports() {
     return cb({ orgId: currentOrgId, year: currentYear, fromMonth: periodFromMonth, uptoMonth: periodToMonth, includeOpening: true });
   }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], null);
 
+  // Mouvements seuls (sans à-nouveaux) — utilisés pour calculer le résultat
+  // de l'exercice et éviter le double-comptage si les AN incluent par erreur
+  // des soldes sur les classes 6/7/8 (cas d'import balance N-1 incomplet).
+  const periodMovements = useLiveQuery(async () => {
+    if (!currentOrgId || !hasPeriodFilter) return null;
+    const { computeBalance: cb } = await import('../engine/balance');
+    return cb({ orgId: currentOrgId, year: currentYear, fromMonth: periodFromMonth, uptoMonth: periodToMonth, includeOpening: false });
+  }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], null);
+
   const periodStatements = useMemo(() => {
     if (!hasPeriodFilter || !periodBalance) return null;
-    const b = computeBilan(periodBalance);
+    const b = computeBilan(periodBalance, periodMovements ?? undefined);
     const s = computeSIG(periodBalance);
     return { bilan: b, sig: s.sig, cr: s.cr };
-  }, [periodBalance, hasPeriodFilter]);
+  }, [periodBalance, periodMovements, hasPeriodFilter]);
 
   const effectiveBilan = hasPeriodFilter && periodStatements ? periodStatements.bilan : bilan;
   const effectiveSig = hasPeriodFilter && periodStatements ? periodStatements.sig : sig;
   const effectiveCR = hasPeriodFilter && periodStatements ? periodStatements.cr : cr;
   const effectiveBalance = hasPeriodFilter && periodBalance ? periodBalance : balance;
+
+  // Ratios recalculés sur la période EFFECTIVE du rapport pour cohérence avec
+  // le bilan/SIG. Sans ça, DSO/DPO du rapport étaient basés sur la période
+  // globale de l'app alors que les autres sections utilisaient la période du rapport.
+  const customRatioTargets = useSettings((s) => s.ratioTargets);
+  const effectiveRatios = useMemo(() => {
+    if (!hasPeriodFilter || !periodBalance) return ratios;
+    let pd = 0;
+    for (let m = (periodFromMonth ?? 1); m <= (periodToMonth ?? 12); m++) {
+      pd += new Date(currentYear, m, 0).getDate();
+    }
+    return computeRatios(periodBalance, customRatioTargets, { periodDays: pd || 360 });
+  }, [hasPeriodFilter, periodBalance, ratios, periodFromMonth, periodToMonth, currentYear, customRatioTargets]);
 
   // Balances auxiliaires (vraie ventilation par tier — pas de regroupement parent)
   const auxClient = useLiveQuery(async () => {
@@ -818,13 +896,34 @@ export default function Reports() {
     return agedBalance(currentOrgId, currentYear, 'fournisseur');
   }, [currentOrgId, currentYear], null);
 
+  // Vrais flux de trésorerie mensuels (mouvements classe 5) — pour Cashflow Statement
+  // Distinct du CR : on prend les débits (encaissements) et crédits (décaissements)
+  // sur les comptes de banque/caisse 50-58, pas les charges/produits 6/7.
+  const cashflowMonthly = useLiveQuery(async () => {
+    if (!currentOrgId) return null;
+    const { tresorerieMonthly } = await import('../engine/analytics');
+    return tresorerieMonthly(currentOrgId, currentYear);
+  }, [currentOrgId, currentYear], null);
+
+  // Nb de jours de la période sélectionnée — utilisé pour annualiser DSO/DPO
+  // sans surévaluer les délais quand on regarde un trimestre ou un semestre.
+  const periodDays = useMemo(() => {
+    const fm = hasPeriodFilter ? periodFromMonth : 1;
+    const tm = hasPeriodFilter ? periodToMonth : 12;
+    let d = 0;
+    for (let m = fm; m <= tm; m++) {
+      d += new Date(currentYear, m, 0).getDate(); // jours du mois m
+    }
+    return d || 360;
+  }, [hasPeriodFilter, periodFromMonth, periodToMonth, currentYear]);
+
   const data = useMemo(() => ({
     bilanActif: effectiveBilan?.actif ?? [],
     bilanPassif: effectiveBilan?.passif ?? [],
     cr: effectiveCR,
     sig: effectiveSig,
     balance: effectiveBalance,
-    ratios,
+    ratios: effectiveRatios,
     tft: tft?.lines,
     capital,
     budgetActual,
@@ -834,9 +933,11 @@ export default function Reports() {
     auxFournisseur,
     agedClient,
     agedFournisseur,
+    cashflowMonthly,
     hasAnalytical,
     hasStocks,
-  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, ratios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, hasAnalytical, hasStocks]);
+    periodDays,
+  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays]);
 
   // Rafraîchir les KPIs du rapport par défaut une fois les données chargées (1 fois)
   useEffect(() => {
@@ -2017,22 +2118,86 @@ function TablePreview({ source, data, palette, title }: any) {
           charges_hao: ['81','83','85'],
           impots: ['87','89'],
         };
-        // Extraire le nom de section et le suffixe de période
         const parts = source.replace('crtab_', '').split('_');
-        const suffix = parts[parts.length - 1]; // m, q, s, a
+        const suffix = parts[parts.length - 1]; // m=Monthly, q=Quarterly, s=Semestre, a=Annual
         const sectionKey = parts.slice(0, -1).join('_');
         const prefixes = BASE_PREFIXES[sectionKey] ?? [];
-        const ba = data.budgetActual ?? [];
-        // Exclure les comptes sans aucun mouvement (réalisé=0 ET budget=0)
-        const filtered = ba
-          .filter((r: any) => prefixes.some((p: string) => r.code?.startsWith(p)))
-          .filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01);
 
-        const periodLabel = ({ m: 'Monthly', q: 'Quarterly', s: 'Interim', a: 'Annual' } as Record<string, string>)[suffix] ?? '';
-        head.push('Compte', 'Libellé', `Actual ${periodLabel}`, `Budget ${periodLabel}`, 'Écart', 'Var %', 'N-1');
-        body = filtered.slice(0, 30).map((r: any) => [
-          r.code, r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart),
-          r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—', '—',
+        // Détermine la fenêtre de mois selon le suffixe : on agrège depuis le
+        // monthlyCR pour avoir la VRAIE valeur de la période (pas YTD).
+        const monthCount = ({ m: 1, q: 3, s: 6, a: 12 } as Record<string, number>)[suffix] ?? 12;
+        const periodLabel = ({ m: 'Mois', q: 'Trimestre', s: 'Semestre', a: 'Annuel' } as Record<string, string>)[suffix] ?? 'Période';
+        const mcr = data.monthlyCR;
+        // Index des mois actifs : on prend les `monthCount` derniers mois ayant
+        // au moins un mouvement (sinon rapport sur Q1, Q2... selon la position).
+        const activeMonths: number[] = [];
+        if (mcr?.lines && mcr.lines.length > 0) {
+          for (let mi = 11; mi >= 0; mi--) {
+            const hasData = mcr.lines.some((l: any) => Math.abs(l.values?.[mi] ?? 0) > 0);
+            if (hasData) activeMonths.unshift(mi);
+            if (activeMonths.length >= monthCount) break;
+          }
+        }
+        // Indices = derniers mois actifs (ex: pour quarterly, 3 derniers mois actifs)
+
+        // Construction du tableau : pour chaque compte du CR, agrège le réalisé
+        // sur les mois retenus + budget sur ces mois + N-1 sur ces mêmes mois.
+        type Row = { code: string; label: string; realise: number; budget: number; n1: number; isCharge: boolean };
+        const rowMap = new Map<string, Row>();
+        if (mcr?.lines) {
+          for (const line of mcr.lines) {
+            const code = String(line.code || line.accountCodes || '');
+            if (!prefixes.some((p: string) => code.startsWith(p))) continue;
+            if (line.total || line.intermediate) continue;
+            const r: Row = { code, label: line.label ?? code, realise: 0, budget: 0, n1: 0, isCharge: line.isCharge ?? /^[68]/.test(code) };
+            for (const mi of activeMonths) {
+              r.realise += line.values?.[mi] ?? 0;
+              r.budget  += line.budgets?.[mi] ?? 0;
+              r.n1      += line.previousYear?.[mi] ?? 0;
+            }
+            if (Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01 || Math.abs(r.n1) > 0.01) {
+              rowMap.set(code, r);
+            }
+          }
+        }
+        // Fallback : si monthlyCR vide, retombe sur budgetActual YTD
+        if (rowMap.size === 0) {
+          const ba = data.budgetActual ?? [];
+          for (const r of ba) {
+            if (!prefixes.some((p: string) => r.code?.startsWith(p))) continue;
+            if (Math.abs(r.realise) < 0.01 && Math.abs(r.budget) < 0.01) continue;
+            rowMap.set(r.code, { code: r.code, label: r.label, realise: r.realise, budget: r.budget, n1: 0, isCharge: r.isCharge });
+          }
+        }
+        const filtered = Array.from(rowMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+
+        // Sous-totaux SYSCOHADA pour la section
+        const totR = filtered.reduce((s, r) => s + r.realise, 0);
+        const totB = filtered.reduce((s, r) => s + r.budget, 0);
+        const totN1 = filtered.reduce((s, r) => s + r.n1, 0);
+        const ecartTot = totR - totB;
+        const varN1Tot = totN1 ? ((totR - totN1) / Math.abs(totN1)) * 100 : 0;
+
+        head.push('Compte', 'Libellé', `Réalisé ${periodLabel}`, `Budget`, 'Écart', 'Écart %', 'N-1', 'Var N-1 %');
+        body = filtered.slice(0, 30).map((r) => {
+          const ecart = r.realise - r.budget;
+          const ecartPct = r.budget ? (ecart / Math.abs(r.budget)) * 100 : 0;
+          const varN1 = r.n1 ? ((r.realise - r.n1) / Math.abs(r.n1)) * 100 : 0;
+          return [
+            r.code, r.label,
+            fmtFull(r.realise), fmtFull(r.budget), fmtFull(ecart),
+            r.budget ? `${ecartPct.toFixed(1)}%` : '—',
+            r.n1 ? fmtFull(r.n1) : '—',
+            r.n1 ? `${varN1.toFixed(1)}%` : '—',
+          ];
+        });
+        // Ligne de TOTAL (sous-total intermédiaire SYSCOHADA)
+        body.push([
+          '─', `TOTAL ${sectionKey.toUpperCase()}`,
+          fmtFull(totR), fmtFull(totB), fmtFull(ecartTot),
+          totB ? `${((ecartTot / Math.abs(totB)) * 100).toFixed(1)}%` : '—',
+          totN1 ? fmtFull(totN1) : '—',
+          totN1 ? `${varN1Tot.toFixed(1)}%` : '—',
         ]);
       }
       break;
@@ -2067,21 +2232,33 @@ function DashboardSnippet({ id, data, palette }: any) {
     ];
     if (id === 'cashflow') {
       const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      // VRAI cashflow : encaissements/décaissements totaux sur la période
+      // (mouvements classe 5), pas le CA / résultat du CR.
+      const cf = (data as any).cashflowMonthly as { encaissements: number[]; decaissements: number[] } | null;
+      const totalIn = cf?.encaissements?.reduce((s: number, v: number) => s + v, 0) ?? 0;
+      const totalOut = cf?.decaissements?.reduce((s: number, v: number) => s + v, 0) ?? 0;
+      const netCash = totalIn - totalOut;
       return [
-        { label: 'Total Income', value: fmtMoney(data.sig?.ca ?? 0) },
-        { label: 'Total expenses', value: fmtMoney(-(data.sig?.ca ?? 0) + (data.sig?.resultat ?? 0)) },
-        { label: 'Ending cash', value: fmtMoney(treso) },
-        { label: 'Income %', value: data.sig?.ca ? `${((data.sig.resultat / data.sig.ca) * 100).toFixed(1)} %` : '0 %' },
+        { label: 'Total encaissé', value: fmtMoney(totalIn) },
+        { label: 'Total décaissé', value: fmtMoney(totalOut) },
+        { label: 'Trésorerie de clôture', value: fmtMoney(treso) },
+        { label: 'Cash flow net', value: fmtMoney(netCash), subValue: totalIn > 0 ? `${((netCash / totalIn) * 100).toFixed(1)} % des encaissements` : '' },
       ];
     }
     if (id === 'receivables') {
       const ar = data.bilanActif?.find((l: any) => l.code === 'BH')?.value ?? 0;
       const ap = data.bilanPassif?.find((l: any) => l.code === 'DJ')?.value ?? 0;
+      // VRAIS achats = sommes 60 (hors 603 var stocks) + 61 + 62 + 63
+      // RA seul ne couvrait que les achats marchandises ; signe inversé.
+      const balance = data.balance ?? [];
+      const totalPurchases = balance
+        .filter((r: any) => /^(60|61|62|63)/.test(r.account) && !r.account?.startsWith('603'))
+        .reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
       return [
-        { label: 'Total sales', value: fmtMoney(data.sig?.ca ?? 0) },
-        { label: 'Account receivable', value: fmtMoney(ar) },
-        { label: 'Total Purchases', value: fmtMoney(data.cr?.find((l: any) => l.code === 'RA')?.value ?? 0) },
-        { label: 'Account payable', value: fmtMoney(ap) },
+        { label: 'Ventes (CA HT)', value: fmtMoney(data.sig?.ca ?? 0) },
+        { label: 'Créances clients', value: fmtMoney(ar) },
+        { label: 'Achats consommés', value: fmtMoney(totalPurchases), subValue: 'Comptes 60-63 (hors var. stocks)' },
+        { label: 'Dettes fournisseurs', value: fmtMoney(ap) },
       ];
     }
     if (id?.startsWith('crsec_') && data.budgetActual) {
@@ -2120,16 +2297,37 @@ function DashboardSnippet({ id, data, palette }: any) {
       return [];
     }
     if (id === 'breakeven') {
+      // Seuil de rentabilité SYSCOHADA = Charges fixes / Taux marge sur coûts variables
+      // Charges FIXES typiques : Personnel (66) + Dotations amortissements (681)
+      //                        + Loyers (622) + Assurances (625) + Charges financières (67)
+      // Charges VARIABLES typiques : Achats (60 hors 603) + Transports/61 + Services A 62
+      //                             + Impôts et taxes liés aux ventes (64) — en partie
       const ca = data.sig?.ca ?? 0;
-      const ebe = data.sig?.ebe ?? 0;
-      const tauxMargeCV = ca ? (ebe / ca) : 0.3;
-      const seuil = tauxMargeCV ? Math.round(((data.cr?.find((l: any) => l.code === 'RK')?.value ?? 0) || ebe * 0.5) / tauxMargeCV) : 0;
+      const balance = data.balance ?? [];
+      const sumDebMoinsCre = (regex: RegExp) => balance
+        .filter((r: any) => regex.test(r.account))
+        .reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      const personnel  = sumDebMoinsCre(/^66/);
+      const loyers     = sumDebMoinsCre(/^622/);
+      const assurances = sumDebMoinsCre(/^625/);
+      const dotations  = sumDebMoinsCre(/^68/);
+      const chFin      = sumDebMoinsCre(/^67/);
+      const chargesFixes = personnel + loyers + assurances + dotations + chFin;
+      // Charges variables = Achats consommés + transports + services ext (62 hors 622)
+      const achats     = sumDebMoinsCre(/^60(?!3)/) + sumDebMoinsCre(/^603/); // achats + var stock
+      const transports = sumDebMoinsCre(/^61/);
+      const servExtA   = sumDebMoinsCre(/^62/) - loyers - assurances; // 62 hors 622 et 625
+      const servExtB   = sumDebMoinsCre(/^63/);
+      const chargesVariables = achats + transports + servExtA + servExtB;
+      const margeCV = ca - chargesVariables;
+      const tauxMargeCV = ca > 0 ? margeCV / ca : 0;
+      const seuil = tauxMargeCV > 0 ? Math.round(chargesFixes / tauxMargeCV) : 0;
       const margeSec = ca - seuil;
       return [
-        { label: 'CA', value: fmtMoney(ca) },
-        { label: 'Seuil rentabilité', value: fmtMoney(seuil) },
-        { label: 'Marge sécurité', value: fmtMoney(margeSec) },
-        { label: 'Marge sécurité %', value: ca ? `${((margeSec / ca) * 100).toFixed(1)} %` : '0 %' },
+        { label: 'CA', value: fmtMoney(ca), subValue: `Marge sur CV ${(tauxMargeCV * 100).toFixed(1)} %` },
+        { label: 'Charges fixes', value: fmtMoney(chargesFixes), subValue: 'Pers + Loy + Ass + Dot + Fin' },
+        { label: 'Seuil rentabilité', value: fmtMoney(seuil), subValue: 'CF / Taux marge CV' },
+        { label: 'Marge sécurité', value: fmtMoney(margeSec), subValue: ca > 0 ? `${((margeSec / ca) * 100).toFixed(1)} % du CA` : '—' },
       ];
     }
     if (id === 'pareto') {
@@ -2137,46 +2335,73 @@ function DashboardSnippet({ id, data, palette }: any) {
       return [];
     }
     if (id === 'client') {
-      const a = data.bilanActif ?? [];
-      const creances = a.find((l: any) => l.code === 'BH')?.value ?? 0;
       const ca = data.sig?.ca ?? 0;
-      const dso = ca > 0 ? Math.round((creances / ca) * 360) : 0;
-      const douteuses = (data.balance ?? []).filter((r: any) => r.account?.startsWith('416')).reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
-      const provisions = (data.balance ?? []).filter((r: any) => r.account?.startsWith('491')).reduce((s: number, r: any) => s + (r.credit - r.debit), 0);
+      const periodDays = (data as any).periodDays ?? 360;
+      const balance = data.balance ?? [];
+      // SYSCOHADA — décomposition correcte des créances clients :
+      //   411/412/413/414/415/418 = créances saines (clients ordinaires + effets)
+      //   416 = créances clients douteuses ou litigieuses
+      //   491 = provisions pour dépréciation des comptes clients (contre-actif)
+      // Encours BRUT = solde D 41x ; Encours NET = brut − provisions 491
+      const sainesD = balance.filter((r: any) => /^41[1-58]/.test(r.account)).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      const douteusesD = balance.filter((r: any) => r.account?.startsWith('416')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      const provisions = balance.filter((r: any) => r.account?.startsWith('491')).reduce((s: number, r: any) => s + (r.soldeC - r.soldeD), 0);
+      const encoursBrut = sainesD + douteusesD;
+      const encoursNet = encoursBrut - provisions;
+      // Pertes sur créances de l'exercice (compte 6 partagé : 6541 + 6594)
+      const pertesIrrec = balance.filter((r: any) => /^(6541|6594|654)/.test(r.account)).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      // DSO sur encours NET (convention) et CA TTC du période
+      // Taux TVA fixé à 18 % (norme UEMOA SYSCOHADA). Dériver du solde 443
+      // donne un taux faussé car le solde 443 est minoré dès qu'une déclaration
+      // a été déposée et payée en cours de période.
+      const caTTC = ca * 1.18;
+      const dso = caTTC > 0 ? Math.round((encoursNet / caTTC) * periodDays) : 0;
       return [
-        { label: 'Encours clients', value: fmtMoney(creances) },
-        { label: 'DSO', value: `${dso} j` },
-        { label: 'Créances douteuses', value: fmtMoney(douteuses) },
-        { label: 'Provisions', value: fmtMoney(provisions) },
+        { label: 'Encours net (411 − 491)', value: fmtMoney(encoursNet), subValue: `Brut ${fmtMoney(encoursBrut)} − prov ${fmtMoney(provisions)}` },
+        { label: 'DSO', value: caTTC > 0 ? `${dso} j` : 'n.a.' },
+        { label: 'Dont douteux (416)', value: fmtMoney(douteusesD), subValue: encoursBrut > 0 ? `${((douteusesD / encoursBrut) * 100).toFixed(1)} % du brut` : '—' },
+        { label: 'Pertes sur créances', value: fmtMoney(pertesIrrec), subValue: 'Comptes 654/6594 (charge)' },
       ];
     }
     if (id === 'fr') {
-      const p = data.bilanPassif ?? [];
-      const dettes = p.find((l: any) => l.code === 'DJ')?.value ?? 0;
-      // Achats = total des comptes 60 (achats marchandises, MP, fournitures) +
-      // 61 (transports) + 62 (services extérieurs A) + 63 (services extérieurs B)
-      // → reflète le VRAI volume de dépenses fournisseurs.
       const balance = data.balance ?? [];
-      const achats = balance
-        .filter((r: any) => /^(60|61|62|63)/.test(r.account))
-        .reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
-      const dpo = achats > 0 ? Math.round((dettes / achats) * 360) : 0;
-      // À régler J+30 = dettes échues entre 0-30 j (≈ 30% du total selon norme habituelle)
-      const echusJ30 = Math.round(dettes * 0.30);
+      const periodDays = (data as any).periodDays ?? 360;
+      // SYSCOHADA — décomposition correcte des dettes fournisseurs :
+      //   401/403/408 = fournisseurs ordinaires + effets + factures non parvenues
+      //   481 = fournisseurs d'investissement
+      //   492 = provisions sur fournisseurs débiteurs (à isoler)
+      const dettesNettes = balance.filter((r: any) => /^40/.test(r.account)).reduce((s: number, r: any) => s + (r.soldeC - r.soldeD), 0);
+      const fnp = balance.filter((r: any) => /^408/.test(r.account)).reduce((s: number, r: any) => s + (r.soldeC - r.soldeD), 0);
+      const effetsAPayer = balance.filter((r: any) => /^403/.test(r.account)).reduce((s: number, r: any) => s + (r.soldeC - r.soldeD), 0);
+      // Achats HT (hors variations stocks 603)
+      const achatsHT = balance
+        .filter((r: any) => /^(60|61|62|63)/.test(r.account) && !r.account?.startsWith('603'))
+        .reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      // Taux TVA fixé à 18 % (UEMOA) pour ne pas se faire piéger par un solde
+      // 445 minoré post-déclaration.
+      const achatsTTC = achatsHT * 1.18;
+      const dpo = achatsTTC > 0 ? Math.round((dettesNettes / achatsTTC) * periodDays) : 0;
       return [
-        { label: 'Dettes fournisseurs', value: fmtMoney(dettes) },
-        { label: 'DPO', value: achats > 0 ? `${dpo} j` : 'n.a.' },
-        { label: 'Achats N (60-63)', value: fmtMoney(achats) },
-        { label: 'À régler J+30', value: fmtMoney(echusJ30) },
+        { label: 'Dettes fournisseurs (40x)', value: fmtMoney(dettesNettes), subValue: `dont effets ${fmtMoney(effetsAPayer)}` },
+        { label: 'DPO', value: achatsTTC > 0 ? `${dpo} j` : 'n.a.' },
+        { label: 'Achats N (60-63 HT)', value: fmtMoney(achatsHT), subValue: `TTC ${fmtMoney(achatsTTC)}` },
+        { label: 'Factures non parvenues (408)', value: fmtMoney(fnp), subValue: 'Provision charges courues' },
       ];
     }
     if (id === 'cashforecast') {
       const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      // Projection 13 sem = moyenne mensuelle des vrais flux × 3 mois (~13 sem)
+      const cf = (data as any).cashflowMonthly as { encaissements: number[]; decaissements: number[] } | null;
+      const monthsActifs = (cf?.encaissements ?? []).filter((v: number) => v > 0).length || 1;
+      const moyEnc = (cf?.encaissements?.reduce((s: number, v: number) => s + v, 0) ?? 0) / monthsActifs;
+      const moyDec = (cf?.decaissements?.reduce((s: number, v: number) => s + v, 0) ?? 0) / monthsActifs;
+      const projEnc = moyEnc * 3;
+      const projDec = moyDec * 3;
       return [
         { label: 'Cash actuel', value: fmtMoney(treso) },
         { label: 'Horizon', value: '13 semaines' },
-        { label: 'Encaissements prévus', value: fmtMoney((data.sig?.ca ?? 0) * 0.25) },
-        { label: 'Décaissements prévus', value: fmtMoney(((data.sig?.ca ?? 0) - (data.sig?.resultat ?? 0)) * 0.25) },
+        { label: 'Encaissements prévus', value: fmtMoney(projEnc), subValue: 'Moyenne 3 mois × 3' },
+        { label: 'Décaissements prévus', value: fmtMoney(projDec), subValue: 'Moyenne 3 mois × 3' },
       ];
     }
     if (id === 'waterfall') {
@@ -2189,25 +2414,37 @@ function DashboardSnippet({ id, data, palette }: any) {
     }
     if (id === 'sal') {
       const balance = data.balance || [];
-      const masse = balance.filter((r: any) => r.account.startsWith('66')).reduce((s: number, r: any) => s + (r.debit - r.credit), 0);
+      // Masse salariale = soldeD − soldeC (cohérent avec le reste du moteur)
+      const compte66 = balance.filter((r: any) => r.account?.startsWith('66'));
+      const masse = compte66.reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      const charges66 = balance.filter((r: any) => r.account?.startsWith('663') || r.account?.startsWith('664')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      const remBrutes = balance.filter((r: any) => r.account?.startsWith('661') || r.account?.startsWith('662')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
       const ratio = data.sig?.ca ? (masse / data.sig.ca) * 100 : 0;
+      const tauxCharges = remBrutes > 0 ? (charges66 / remBrutes) * 100 : 0;
       return [
-        { label: 'Masse salariale', value: fmtMoney(masse) },
-        { label: 'Ratio masse / CA', value: `${ratio.toFixed(1)} %` },
-        { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
-        { label: 'Comptes 66', value: String(balance.filter((r: any) => r.account.startsWith('66')).length) },
+        { label: 'Masse salariale (66)', value: fmtMoney(masse), subValue: `${compte66.length} comptes` },
+        { label: 'Ratio masse / CA', value: `${ratio.toFixed(1)} %`, subValue: 'Indicateur productivité' },
+        { label: 'Rém. brutes (661-662)', value: fmtMoney(remBrutes) },
+        { label: 'Charges sociales', value: fmtMoney(charges66), subValue: `${tauxCharges.toFixed(1)} % des brutes` },
       ];
     }
     if (id === 'bfr') {
-      const stocks = data.bilanActif?.find((l: any) => l.code === 'BB')?.value ?? 0;
-      const creances = data.bilanActif?.find((l: any) => l.code === 'BH')?.value ?? 0;
-      const dettesC = data.bilanPassif?.find((l: any) => l.code === '_DP')?.value ?? 0;
-      const bfr = stocks + creances - dettesC;
+      // Cohérent avec le rendu graphique : BFR = Total Actif Circulant (_BK) − Total Passif Circulant (_DP)
+      // FR = Ressources stables (_DF) − Actif immobilisé (_AZ)
+      // TN = Trésorerie active (_BT) − Trésorerie passive (DV) = FR − BFR
+      const a = data.bilanActif ?? [];
+      const p = data.bilanPassif ?? [];
+      const get = (lines: any[], c: string) => lines.find((l: any) => l.code === c)?.value ?? 0;
+      const actifCirc = get(a, '_BK');
+      const passifCirc = get(p, '_DP');
+      const fr = get(p, '_DF') - get(a, '_AZ');
+      const bfr = actifCirc - passifCirc;
+      const tn = get(a, '_BT') - get(p, 'DV');
       return [
-        { label: 'Stocks', value: fmtMoney(stocks) },
-        { label: 'Créances', value: fmtMoney(creances) },
-        { label: 'Dettes circulantes', value: fmtMoney(dettesC) },
-        { label: 'BFR', value: fmtMoney(bfr) },
+        { label: 'FR (Fonds roulement)', value: fmtMoney(fr), subValue: 'Ress. stables − Actif immo' },
+        { label: 'BFR', value: fmtMoney(bfr), subValue: 'Actif circ. − Passif circ.' },
+        { label: 'TN (Trésorerie nette)', value: fmtMoney(tn), subValue: 'Trés. active − Trés. passive' },
+        { label: 'Vérification', value: Math.abs(fr - bfr - tn) < 1 ? '✓ FR = BFR + TN' : `⚠ écart ${fmtMoney(fr - bfr - tn)}` },
       ];
     }
     if (id === 'analytical') {
@@ -2219,7 +2456,201 @@ function DashboardSnippet({ id, data, palette }: any) {
         { label: 'Voir page Analytique', value: '→' },
       ];
     }
-    return [{ label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) }, { label: 'RN', value: fmtMoney(data.sig?.resultat ?? 0) }];
+
+    // ─── Helper : agrégation balance par préfixe ───
+    const balance = data.balance ?? [];
+    const sumD = (...prefixes: string[]) => balance.filter((r: any) => prefixes.some((p) => r.account?.startsWith(p))).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+    const sumC = (...prefixes: string[]) => balance.filter((r: any) => prefixes.some((p) => r.account?.startsWith(p))).reduce((s: number, r: any) => s + (r.soldeC - r.soldeD), 0);
+
+    // ─── DASHBOARDS STANDARD ───
+    if (id === 'stk') {
+      const stocksMP = sumD('32');
+      const stocksProd = sumD('33', '34', '35');
+      const stocksMarch = sumD('31');
+      const provStk = sumC('39');
+      const total = stocksMP + stocksProd + stocksMarch;
+      const ca = data.sig?.ca ?? 0;
+      const rotation = total > 0 ? Math.round((ca / total) * 1) : 0;
+      return [
+        { label: 'Stocks marchandises', value: fmtMoney(stocksMarch), subValue: 'Compte 31' },
+        { label: 'Stocks MP & fournitures', value: fmtMoney(stocksMP), subValue: 'Compte 32' },
+        { label: 'Stocks produits', value: fmtMoney(stocksProd), subValue: 'Comptes 33-35' },
+        { label: 'Provisions stocks', value: fmtMoney(provStk), subValue: `Rotation ${rotation}× / an` },
+      ];
+    }
+    if (id === 'immo') {
+      const immoBrut = sumD('20', '21', '22', '23', '24', '25');
+      const immoFin = sumD('26', '27');
+      const amorts = sumC('28');
+      const provImmo = sumC('29');
+      const vnc = immoBrut + immoFin - amorts - provImmo;
+      const tauxAmort = immoBrut > 0 ? (amorts / immoBrut) * 100 : 0;
+      return [
+        { label: 'Immo. brutes', value: fmtMoney(immoBrut + immoFin), subValue: 'Comptes 20-27' },
+        { label: 'Amortissements', value: fmtMoney(amorts), subValue: `${tauxAmort.toFixed(1)} % vétusté` },
+        { label: 'VNC', value: fmtMoney(vnc), subValue: 'Net brut − amorts − prov' },
+        { label: 'Provisions', value: fmtMoney(provImmo), subValue: 'Compte 29' },
+      ];
+    }
+    if (id === 'tre') {
+      const banques = sumD('52', '53', '54');
+      const caisse = sumD('57');
+      const decouvert = sumC('56');
+      const treso = banques + caisse - decouvert;
+      const ca = data.sig?.ca ?? 0;
+      const joursTreso = ca > 0 ? Math.round((treso / ca) * 360) : 0;
+      return [
+        { label: 'Trésorerie nette', value: fmtMoney(treso), subValue: 'Banques + caisse − découvert' },
+        { label: 'Banques (52-54)', value: fmtMoney(banques) },
+        { label: 'Caisse (57)', value: fmtMoney(caisse) },
+        { label: 'Découverts (56)', value: fmtMoney(decouvert), subValue: `Trés. = ${joursTreso}j de CA` },
+      ];
+    }
+    if (id === 'fis') {
+      const tvaCol = sumC('443');
+      const tvaDed = sumD('445');
+      const tvaAPayer = tvaCol - tvaDed;
+      const isDu = sumC('441');
+      const taxes = sumD('64');
+      const ca = data.sig?.ca ?? 0;
+      const pressionFis = ca > 0 ? ((tvaAPayer + isDu + taxes) / ca) * 100 : 0;
+      return [
+        { label: 'TVA collectée (443)', value: fmtMoney(tvaCol) },
+        { label: 'TVA déductible (445)', value: fmtMoney(tvaDed), subValue: `À payer ${fmtMoney(tvaAPayer)}` },
+        { label: 'IS dû (441)', value: fmtMoney(isDu) },
+        { label: 'Impôts & taxes (64)', value: fmtMoney(taxes), subValue: `Pression ${pressionFis.toFixed(1)} %` },
+      ];
+    }
+
+    // ─── DASHBOARDS SECTORIELS ───
+    const ca = data.sig?.ca ?? 0;
+    const rn = data.sig?.resultat ?? 0;
+    if (id === 'ind') {
+      const achatsMP = sumD('602', '604', '605');
+      const prodImmob = sumC('72');
+      const margeIndus = ca - achatsMP;
+      return [
+        { label: 'CA industriel', value: fmtMoney(ca) },
+        { label: 'Achats MP', value: fmtMoney(achatsMP), subValue: ca > 0 ? `${((achatsMP / ca) * 100).toFixed(1)} % du CA` : '—' },
+        { label: 'Marge industrielle', value: fmtMoney(margeIndus), subValue: ca > 0 ? `${((margeIndus / ca) * 100).toFixed(1)} %` : '—' },
+        { label: 'Production immobilisée', value: fmtMoney(prodImmob), subValue: 'Compte 72' },
+      ];
+    }
+    if (id === 'btp') {
+      const sousTraitance = sumD('604', '611');
+      const travauxEnCours = sumD('335');
+      const ratioSousTr = ca > 0 ? (sousTraitance / ca) * 100 : 0;
+      return [
+        { label: 'CA travaux', value: fmtMoney(ca) },
+        { label: 'Sous-traitance', value: fmtMoney(sousTraitance), subValue: `${ratioSousTr.toFixed(1)} % du CA` },
+        { label: 'Travaux en cours', value: fmtMoney(travauxEnCours), subValue: 'Compte 335' },
+        { label: 'Résultat chantiers', value: fmtMoney(rn), subValue: ca > 0 ? `${((rn / ca) * 100).toFixed(1)} % marge` : '—' },
+      ];
+    }
+    if (id === 'com') {
+      const ventesMarch = sumC('701');
+      const achatsMarch = sumD('601');
+      const margeCom = ventesMarch - achatsMarch;
+      const tauxMarque = ventesMarch > 0 ? (margeCom / ventesMarch) * 100 : 0;
+      const tauxMarge = achatsMarch > 0 ? (margeCom / achatsMarch) * 100 : 0;
+      return [
+        { label: 'Ventes marchandises', value: fmtMoney(ventesMarch), subValue: 'Compte 701' },
+        { label: 'Achats marchandises', value: fmtMoney(achatsMarch), subValue: 'Compte 601' },
+        { label: 'Marge commerciale', value: fmtMoney(margeCom) },
+        { label: 'Taux marque / marge', value: `${tauxMarque.toFixed(1)} % / ${tauxMarge.toFixed(1)} %`, subValue: 'Marque/Vente · Marge/Achat' },
+      ];
+    }
+    if (id === 'mfi') {
+      const interets = sumC('77');
+      const encours = sumD('41', '42', '46');
+      const provDouteux = sumC('491', '496');
+      const par = encours > 0 ? (provDouteux / encours) * 100 : 0;
+      return [
+        { label: 'PNB (intérêts perçus)', value: fmtMoney(interets), subValue: 'Compte 77' },
+        { label: 'Encours total', value: fmtMoney(encours), subValue: 'Comptes 41, 42, 46' },
+        { label: 'Provisions douteux', value: fmtMoney(provDouteux), subValue: 'Comptes 491, 496' },
+        { label: 'PAR (Portfolio at Risk)', value: `${par.toFixed(2)} %`, subValue: 'Provisions / Encours' },
+      ];
+    }
+    if (id === 'imco') {
+      const loyers = sumC('706', '707');
+      const chargesLoc = sumD('614', '615');
+      const valImmo = sumD('22', '23');
+      const renta = valImmo > 0 ? (loyers / valImmo) * 100 : 0;
+      return [
+        { label: 'Loyers perçus', value: fmtMoney(loyers), subValue: 'Comptes 706/707' },
+        { label: 'Charges locatives', value: fmtMoney(chargesLoc), subValue: 'Comptes 614/615' },
+        { label: 'Valeur immobilière', value: fmtMoney(valImmo), subValue: 'Terrains + bâtiments' },
+        { label: 'Rentabilité brute', value: `${renta.toFixed(2)} %`, subValue: 'Loyers / Val. immo' },
+      ];
+    }
+    if (id === 'hot') {
+      const ventesHeb = sumC('706');
+      const ventesFB = sumC('707');
+      const ratioFB = ca > 0 ? (ventesFB / ca) * 100 : 0;
+      return [
+        { label: 'Ventes hébergement', value: fmtMoney(ventesHeb), subValue: 'Compte 706' },
+        { label: 'Ventes F&B', value: fmtMoney(ventesFB), subValue: `${ratioFB.toFixed(1)} % du CA` },
+        { label: 'CA total', value: fmtMoney(ca) },
+        { label: 'GOP (RN)', value: fmtMoney(rn), subValue: ca > 0 ? `${((rn / ca) * 100).toFixed(1)} % CA` : '—' },
+      ];
+    }
+    if (id === 'agri') {
+      const intrants = sumD('602', '604', '605');
+      const subvAgri = sumC('71');
+      const margeAgri = ca - intrants;
+      return [
+        { label: 'CA récoltes', value: fmtMoney(ca) },
+        { label: 'Intrants', value: fmtMoney(intrants), subValue: 'Semences, engrais, phyto' },
+        { label: 'Marge agricole', value: fmtMoney(margeAgri) },
+        { label: "Subventions d'exploitation", value: fmtMoney(subvAgri), subValue: 'Compte 71' },
+      ];
+    }
+    if (id === 'sante') {
+      const honoraires = sumC('706');
+      const personnel = sumD('66');
+      const ratioPers = ca > 0 ? (personnel / ca) * 100 : 0;
+      return [
+        { label: 'Honoraires & actes', value: fmtMoney(honoraires), subValue: 'Compte 706' },
+        { label: 'Personnel soignant', value: fmtMoney(personnel), subValue: `${ratioPers.toFixed(1)} % du CA` },
+        { label: 'CA total', value: fmtMoney(ca) },
+        { label: 'Marge nette', value: fmtMoney(rn), subValue: ca > 0 ? `${((rn / ca) * 100).toFixed(1)} %` : '—' },
+      ];
+    }
+    if (id === 'transp') {
+      const carburant = sumD('6051', '6052');
+      const flotte = sumD('245');
+      const ratioCarb = ca > 0 ? (carburant / ca) * 100 : 0;
+      return [
+        { label: 'CA transport', value: fmtMoney(ca) },
+        { label: 'Carburant', value: fmtMoney(carburant), subValue: `${ratioCarb.toFixed(1)} % du CA` },
+        { label: 'Valeur flotte', value: fmtMoney(flotte), subValue: 'Compte 245 matériel transport' },
+        { label: 'Marge', value: fmtMoney(rn) },
+      ];
+    }
+    if (id === 'serv') {
+      const honoraires = sumC('706', '708');
+      const personnel = sumD('66');
+      const tauxFact = personnel > 0 ? (honoraires / personnel) : 0;
+      return [
+        { label: 'Honoraires', value: fmtMoney(honoraires), subValue: 'Comptes 706, 708' },
+        { label: 'Personnel facturable', value: fmtMoney(personnel) },
+        { label: 'Taux facturable', value: `${tauxFact.toFixed(2)}×`, subValue: 'Honoraires / Personnel' },
+        { label: 'Marge projets', value: fmtMoney(rn), subValue: ca > 0 ? `${((rn / ca) * 100).toFixed(1)} %` : '—' },
+      ];
+    }
+
+    // ─── DASHBOARDS ANALYTIQUES ───
+    if (id === 'ana_centres' || id === 'ana_projets' || id === 'ana_axes') {
+      return [
+        { label: 'CA total', value: fmtMoney(ca) },
+        { label: 'Résultat', value: fmtMoney(rn) },
+        { label: 'Données analytiques', value: data.hasAnalytical ? '✓ Disponibles' : '⚠ Non saisies' },
+        { label: 'Voir page Analytique', value: '→ /analytical' },
+      ];
+    }
+
+    return [{ label: 'CA', value: fmtMoney(ca) }, { label: 'RN', value: fmtMoney(rn) }];
   })();
 
   // ─── Rendu enrichi avec mini-graphiques ───
@@ -2235,6 +2666,7 @@ function DashboardSnippet({ id, data, palette }: any) {
       { label: 'Créances clients', value: get('BH'), color: '#0891b2' },
       { label: 'Autres créances', value: get('BI'), color: '#7c3aed' },
       { label: 'Trésorerie active', value: get('_BT'), color: '#16a34a' },
+      { label: 'Comptes non classés', value: get('_EC'), color: '#a3a3a3' },
     ].filter((it) => Math.abs(it.value) > 0.01);
     const totalCalc = items.reduce((s, it) => s + it.value, 0) || totA || 1;
     return (
@@ -2305,11 +2737,19 @@ function DashboardSnippet({ id, data, palette }: any) {
   if (id === 'struct_passif') {
     const p = data.bilanPassif ?? [];
     const get = (c: string) => p.find((l: any) => l.code === c)?.value ?? 0;
+    // Décomposition stricte SYSCOHADA :
+    //   _CP = Capitaux propres
+    //   DA  = Emprunts et dettes financières (16, 17, 18)  ← ligne dédiée
+    //   DP  = Provisions pour risques et charges (19)      ← ligne dédiée
+    //   _DP = Total passif circulant (40 à 48)
+    //   DV  = Trésorerie passive (56 + découverts)
     const items = [
       { label: 'Capitaux propres', value: get('_CP'), color: palette.primary },
-      { label: 'Dettes financières', value: get('_DF') - get('_CP'), color: '#dc2626' },
+      { label: 'Dettes financières', value: get('DA'), color: '#dc2626' },
+      { label: 'Provisions risques', value: get('DP'), color: '#a16207' },
       { label: 'Dettes circulantes', value: get('_DP'), color: '#d97706' },
       { label: 'Trésorerie passive', value: get('DV'), color: '#7c3aed' },
+      { label: 'Comptes non classés', value: get('_ECP'), color: '#a3a3a3' },
     ].filter((it) => Math.abs(it.value) > 0.01).map((it) => ({ ...it, value: Math.abs(it.value) }));
     const totalCalc = items.reduce((s, it) => s + it.value, 0) || 1;
     return (
@@ -2382,11 +2822,17 @@ function DashboardSnippet({ id, data, palette }: any) {
     const rn = sig?.resultat ?? 0;
     const totA = a.find((l: any) => l.code === '_BZ')?.value ?? 0;
     const cp = pas.find((l: any) => l.code === '_CP')?.value ?? 0;
-    const marge = ca ? (rn / ca) * 100 : 0;        // Marge nette
-    const rotation = totA ? ca / totA : 0;          // Rotation actif
-    const levier = cp ? totA / cp : 0;              // Levier financier
-    const roa = totA ? (rn / totA) * 100 : 0;
-    const roe = cp ? (rn / cp) * 100 : 0;
+    // ROE/ROA basés sur capitaux/actif d'OUVERTURE (sans le résultat de l'exercice)
+    const cpOuv = cp - rn;
+    const totAOuv = totA - rn;
+    const marge = ca ? (rn / ca) * 100 : 0;
+    const rotation = totAOuv > 0 ? ca / totAOuv : 0;
+    // GARDE : capitaux propres ≤ 0 = situation nette dégradée → levier non
+    // significatif. On affiche "n.a." plutôt qu'une valeur trompeuse.
+    const cpInvalid = cpOuv <= 0;
+    const levier = cpInvalid ? 0 : totAOuv / cpOuv;
+    const roa = totAOuv > 0 ? (rn / totAOuv) * 100 : 0;
+    const roe = cpInvalid ? 0 : (rn / cpOuv) * 100;
     const Box = ({ label, value, sub, color, big }: any) => (
       <div className="rounded p-2 text-center" style={{ background: color + '15', borderLeft: `3px solid ${color}` }}>
         <p className="text-[9px] uppercase text-primary-500 font-semibold">{label}</p>
@@ -2399,13 +2845,13 @@ function DashboardSnippet({ id, data, palette }: any) {
         <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
         {/* Niveau 1 : ROE en haut */}
         <div className="mb-2">
-          <Box label="ROE — Rentabilité des capitaux propres" value={`${roe.toFixed(2)} %`} sub={`= Résultat net / Capitaux propres`} color={palette.primary} big />
+          <Box label="ROE — Rentabilité des capitaux propres" value={cpInvalid ? 'n.a.' : `${roe.toFixed(2)} %`} sub={cpInvalid ? '⚠ Capitaux propres ouverture ≤ 0' : `= Résultat net / CP ouverture`} color={palette.primary} big />
         </div>
         <div className="text-center text-xs text-primary-400 my-1">= Marge × Rotation × Levier</div>
         {/* Niveau 2 : ROA × Levier */}
         <div className="grid grid-cols-2 gap-2 mb-2">
           <Box label="ROA — Rentabilité de l'actif" value={`${roa.toFixed(2)} %`} sub={`= Marge × Rotation`} color="#0891b2" />
-          <Box label="Levier financier" value={`${levier.toFixed(2)} ×`} sub={`= Total Actif / CP`} color="#d97706" />
+          <Box label="Levier financier" value={cpInvalid ? 'n.a.' : `${levier.toFixed(2)} ×`} sub={cpInvalid ? 'CP ouverture ≤ 0' : `= Total Actif / CP`} color="#d97706" />
         </div>
         {/* Niveau 3 : Marge × Rotation */}
         <div className="grid grid-cols-2 gap-2 mb-2">
@@ -2499,23 +2945,16 @@ function DashboardSnippet({ id, data, palette }: any) {
   // CASHFLOW — graphique évolution mensuelle Cash In / Out (données RÉELLES)
   if (id === 'cashflow' || id === 'cashforecast') {
     const months = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-    // Cash In = mouvements crédits sur comptes 70-77 (produits encaissés)
-    // Cash Out = mouvements débits sur comptes 60-67 (charges décaissées)
-    // Données extraites du monthlyCR si disponible
-    const mcr = data.monthlyCR;
-    const series = months.map((_, mi) => {
-      let cashIn = 0, cashOut = 0;
-      if (mcr?.lines) {
-        for (const line of mcr.lines) {
-          if (line.total || line.intermediate) continue;
-          const code = String(line.code || line.accountCodes || '');
-          const v = line.values?.[mi] ?? 0;
-          if (/^7/.test(code)) cashIn += v;
-          else if (/^6/.test(code)) cashOut += v;
-        }
-      }
-      return { mois: months[mi], in: Math.round(cashIn), out: Math.round(cashOut) };
-    });
+    // VRAIS flux de trésorerie : débits (encaissements) et crédits (décaissements)
+    // sur les comptes de banque/caisse 50-58. PAS les classes 6/7 du CR (qui
+    // mesurent le RÉSULTAT, pas le CASH — un produit non encaissé n'est pas
+    // du cash, une dotation aux amortissements n'est pas un décaissement).
+    const cf = (data as any).cashflowMonthly as { encaissements: number[]; decaissements: number[] } | null;
+    const series = months.map((_, mi) => ({
+      mois: months[mi],
+      in: Math.round(cf?.encaissements?.[mi] ?? 0),
+      out: Math.round(cf?.decaissements?.[mi] ?? 0),
+    }));
     const maxV = Math.max(...series.flatMap((s) => [s.in, s.out]), 1);
     return (
       <div className="border border-primary-200 dark:border-primary-800 rounded p-3" style={{ borderLeft: `4px solid ${palette.primary}` }}>
@@ -2830,18 +3269,34 @@ function DashboardSnippet({ id, data, palette }: any) {
       detail: unmapped === 0 ? 'Tous mappés' : `${unmapped} non mappé(s)`,
       reco: unmapped === 0 ? '' : 'Importer/compléter le Plan Comptable avec mapping SYSCOHADA.',
     });
-    const c6Cred = balance.filter((r: any) => r.account?.startsWith('6') && r.soldeC > 1000).length;
+    // Classe 6 : sens débiteur — EXCLURE les contre-charges structurellement
+    // créditrices : 603 (var. stocks), 619/629/639 (RRR obtenus), 781/791 (transferts).
+    const c6Cred = balance.filter((r: any) =>
+      r.account?.startsWith('6')
+      && !r.account.startsWith('603')
+      && !r.account.startsWith('619')
+      && !r.account.startsWith('629')
+      && !r.account.startsWith('639')
+      && r.soldeC > 1000
+    ).length;
     checks.push({
       id: 'c6', label: 'Classe 6 : sens débiteur normal', severity: 'major',
       status: c6Cred === 0 ? 'ok' : 'warn',
-      detail: c6Cred === 0 ? 'Tous en débit' : `${c6Cred} en crédit anormal`,
+      detail: c6Cred === 0 ? 'Tous en débit (hors 603, 619, 629, 639)' : `${c6Cred} en crédit anormal`,
       reco: c6Cred === 0 ? '' : 'Vérifier les comptes de charges en solde créditeur (rétrocessions, RRR, erreurs).',
     });
-    const c7Deb = balance.filter((r: any) => r.account?.startsWith('7') && r.soldeD > 1000).length;
+    // Classe 7 : sens créditeur — EXCLURE les contre-produits structurellement
+    // débiteurs : 709 (RRR accordés), 7019/7029... (RRR sur ventes spécifiques)
+    const c7Deb = balance.filter((r: any) =>
+      r.account?.startsWith('7')
+      && !r.account.startsWith('709')
+      && !/^70[1-7]9/.test(r.account)
+      && r.soldeD > 1000
+    ).length;
     checks.push({
       id: 'c7', label: 'Classe 7 : sens créditeur normal', severity: 'major',
       status: c7Deb === 0 ? 'ok' : 'warn',
-      detail: c7Deb === 0 ? 'Tous en crédit' : `${c7Deb} en débit anormal`,
+      detail: c7Deb === 0 ? 'Tous en crédit (hors 709, 7Xx9)' : `${c7Deb} en débit anormal`,
       reco: c7Deb === 0 ? '' : 'Examiner les comptes de produits en débit (avoirs, annulations).',
     });
     const tva443 = balance.filter((r: any) => r.account?.startsWith('443') && r.soldeD > 100).length;

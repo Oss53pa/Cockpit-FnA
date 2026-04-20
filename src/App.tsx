@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
+import { DemoBanner } from './components/layout/DemoBanner';
+import { DemoTour } from './components/layout/DemoTour';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { lazyWithRetry } from './lib/lazyWithRetry';
@@ -17,6 +19,7 @@ const ForgotPassword = lazyWithRetry(() => import('./pages/auth/ForgotPassword')
 const AuthCallback   = lazyWithRetry(() => import('./pages/auth/Callback'));
 
 const Landing        = lazyWithRetry(() => import('./pages/Landing'));
+const Demo           = lazyWithRetry(() => import('./pages/Demo'));
 const Imports        = lazyWithRetry(() => import('./pages/Imports'));
 const States         = lazyWithRetry(() => import('./pages/States'));
 const Ratios         = lazyWithRetry(() => import('./pages/Ratios'));
@@ -74,12 +77,14 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         onToggleCollapse={toggleCollapse}
       />
       <div className="flex-1 flex flex-col min-w-0">
+        <DemoBanner />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main key={`${amountMode}-${remountKey}`} className="flex-1 p-3 sm:p-4 lg:p-6">
           <Suspense fallback={<PageFallback />}>{children}</Suspense>
         </main>
       </div>
       <FloatingAI />
+      <DemoTour />
     </div>
   );
 }
@@ -97,9 +102,11 @@ function App() {
 
         {/* Landing publique */}
         <Route path="/" element={<Suspense fallback={<PageFallback />}><Landing /></Suspense>} />
+        {/* Démo publique — porte d'entrée parcours guidé avec données fictives */}
+        <Route path="/demo" element={<Suspense fallback={<PageFallback />}><Demo /></Suspense>} />
 
         {/* Routes protégées */}
-        <Route path="/home" element={<ProtectedRoute><Home /><FloatingAI /></ProtectedRoute>} />
+        <Route path="/home" element={<ProtectedRoute><DemoBanner /><Home /><FloatingAI /><DemoTour /></ProtectedRoute>} />
         <Route path="/dashboards" element={<ProtectedRoute><AppLayout><Dashboards /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/home" element={<ProtectedRoute><AppLayout><DashboardHome /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/:id" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />

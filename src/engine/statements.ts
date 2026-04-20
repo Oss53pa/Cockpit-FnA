@@ -46,27 +46,58 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   const resultat = produits - charges;
 
   // ── ACTIF ──────────────────────────────────────────────────────────
+  // Approche par solde net : chaque compte de classes 2-5 apparaît UNE SEULE FOIS
+  // soit à l'actif (soldeD) soit au passif (soldeC), jamais les deux.
   const actifImmoBrut_Incorp = soldeD('20', '21');
   const actifImmoBrut_Corp   = soldeD('22', '23', '24', '25');
   const actifImmoBrut_Fin    = soldeD('26', '27');
+  // Comptes de classe 1 à solde DÉBITEUR (cas atypiques mais doivent être en actif) :
+  //   109 = Actionnaires, capital souscrit non appelé
+  //   169 = Primes de remboursement des obligations à amortir
+  const capitalNonAppele = soldeD('109');
+  const primesRemb       = soldeD('169');
   const amorts = soldeC('28', '29'); // amortissements cumulés = créditeurs
-  const immoNet = actifImmoBrut_Incorp + actifImmoBrut_Corp + actifImmoBrut_Fin - amorts;
+  const immoNet = actifImmoBrut_Incorp + actifImmoBrut_Corp + actifImmoBrut_Fin + capitalNonAppele + primesRemb - amorts;
 
   const stocks = soldeD('31', '32', '33', '34', '35', '36', '37', '38') - soldeC('39');
-  const creancesClients = soldeD('411', '412', '413', '414', '415', '416', '417', '418')
-                        - soldeC('49');
-  // BUGFIX : auparavant autresCreances prenait tout le 44 et on ajoutait aussi
-  // soldeD('445') via tvaRec → double-comptage de la TVA déductible.
-  // Maintenant on prend explicitement 44 SANS 443 et 447 (déjà déduits) et on
-  // ne double-compte plus 445 (qui est déjà couvert par le préfixe '44').
-  const autresCreances = soldeD('409', '421', '425', '428', '43', '44', '45', '46', '47', '48') - soldeD('443', '447');
+  // Créances clients NETTES = 411/412/413/414/415/416/418 BRUT − provisions 491
+  // SYSCOHADA détaille les provisions sur tiers :
+  //   491 = provisions sur clients (à déduire des créances clients)
+  //   492 = provisions sur fournisseurs (à déduire des créances frn débiteurs / OU à ajouter aux dettes)
+  //   493/494/495 = provisions autres créances (à déduire des autres créances)
+  //   498 = provisions sur risques d'organismes financiers
+  const provClients = soldeC('491');
+  const provFourn = soldeC('492');
+  const provAutres = soldeC('493', '494', '495', '496', '497', '498');
+  const creancesClients = soldeD('41') - provClients;
+  // Autres créances : classes 40, 42-48 à solde débiteur, NET des provisions
+  // applicables (492 sur fournisseurs débiteurs + 493-498 sur autres tiers).
+  const autresCreances = soldeD('40', '42', '43', '44', '45', '46', '47', '48') - provFourn - provAutres;
 
-  const tresoActive = soldeD('50', '51', '52', '53', '54', '57', '58') - soldeC('59');
+  // ── TRÉSORERIE — calcul NET par compte pour ne perdre aucun solde ──
+  // Bug ancien : un compte 521 en découvert ponctuel (solde C) était perdu :
+  //   tresoActive  = soldeD('50','51',...,'58') - soldeC('59')   ← ignorait soldeC('521')
+  //   tresoPassif  = soldeC('56')                                ← ignorait découverts sur 521
+  // Solution : sommer le NET de chaque compte 50-58 et reclasser selon le signe.
+  let tresoActive = 0;
+  let tresoPassif = 0;
+  for (const r of rows) {
+    const a2 = r.account.substring(0, 2);
+    if (['50', '51', '52', '53', '54', '55', '57', '58'].includes(a2)) {
+      const net = r.soldeD - r.soldeC;
+      if (net >= 0) tresoActive += net;
+      else tresoPassif += -net;        // banque en découvert → passif
+    } else if (a2 === '56') {
+      tresoPassif += r.soldeC - r.soldeD; // concours bancaires courants
+    } else if (a2 === '59') {
+      tresoActive -= (r.soldeC - r.soldeD); // provisions trésorerie diminuent l'actif
+    }
+  }
 
   const totalActifImmo = immoNet;
   const totalActifCirc = stocks + creancesClients + autresCreances;
   const totalTreso = tresoActive;
-  const totalActif = totalActifImmo + totalActifCirc + totalTreso;
+  let totalActif = totalActifImmo + totalActifCirc + totalTreso;
 
   const actif: Line[] = [
     { code: 'AD', label: 'Charges immobilisées', value: soldeD('20'), indent: 1, accountCodes: '20' },
@@ -76,18 +107,19 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
     { code: '_AZ', label: 'TOTAL ACTIF IMMOBILISÉ', value: totalActifImmo, total: true, accountCodes: '20 à 29' },
     { code: 'BA', label: 'Actif circulant HAO', value: soldeD('485'), indent: 1, accountCodes: '485' },
     { code: 'BB', label: 'Stocks et en-cours', value: stocks, indent: 1, accountCodes: '31-38 − 39' },
-    { code: 'BH', label: 'Créances clients et comptes rattachés', value: creancesClients, indent: 1, accountCodes: '411-418 − 49' },
-    { code: 'BI', label: 'Autres créances', value: autresCreances, indent: 1, accountCodes: '40-48 (hors 411-418 et hors 443/447)' },
+    { code: 'BH', label: 'Créances clients et comptes rattachés', value: creancesClients, indent: 1, accountCodes: '41 (débit.) − 49' },
+    { code: 'BI', label: 'Autres créances', value: autresCreances, indent: 1, accountCodes: '40, 42-48 (débit.)' },
     { code: '_BK', label: 'TOTAL ACTIF CIRCULANT', value: totalActifCirc, total: true, accountCodes: '31 à 49' },
     { code: 'BQ', label: 'Trésorerie - Actif (banques, caisse)', value: tresoActive, indent: 1, accountCodes: '50-58 − 59' },
     { code: '_BT', label: 'TOTAL TRÉSORERIE - ACTIF', value: totalTreso, total: true, accountCodes: '50 à 59' },
-    { code: '_BZ', label: 'TOTAL GÉNÉRAL ACTIF', value: totalActif, total: true, grand: true, accountCodes: 'Classes 2 à 5' },
   ];
+  // (Le TOTAL GÉNÉRAL ACTIF est ajouté plus bas, après le calcul de l'écart d'équilibre)
 
   // ── PASSIF ─────────────────────────────────────────────────────────
-  const capital = soldeC('101', '102', '103', '104');
+  // 108 = Compte de l'exploitant (entreprises individuelles) → capital
+  const capital = soldeC('101', '102', '103', '104', '108');
   const primes = soldeC('105');
-  const reserves = soldeC('106', '11');
+  const reserves = soldeC('106', '11', '12', '13');
   const subvInv = soldeC('14');
   const provRegl = soldeC('15');
   const capitauxPropres = capital + primes + reserves + subvInv + provRegl + resultat;
@@ -96,33 +128,69 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   const provRC = soldeC('19');
   const ressStables = capitauxPropres + emprunts + provRC;
 
-  const dettesFourn = soldeC('401', '402', '408') - soldeD('409');
-  const dettesFisc = soldeC('441', '442', '443', '444', '446', '447', '449');
-  const dettesPers = soldeC('422', '423', '424', '426', '427', '428', '43');
-  const dettesAutres = soldeC('419', '46', '47', '48') - soldeD('46', '47');
-  const passifCirc = dettesFourn + dettesFisc + dettesPers + Math.max(dettesAutres, 0);
+  // Passif circulant : comptes de classe 4 à solde créditeur (hors 41x clients)
+  const dettesFourn = soldeC('40');
+  const dettesFisc = soldeC('44');
+  const dettesPers = soldeC('42', '43');
+  const dettesAutres = soldeC('41', '45', '46', '47', '48');
+  // NB: soldeC('41') = avances clients + clients créditeurs (rare mais possible)
+  const passifCirc = dettesFourn + dettesFisc + dettesPers + dettesAutres;
 
-  const tresoPass = soldeC('561', '564', '565', '566', '56');
+  // Trésorerie passive = découverts banques + concours bancaires (calculée plus haut)
+  const tresoPass = tresoPassif;
 
-  const totalPassif = ressStables + passifCirc + tresoPass;
+  let totalPassif = ressStables + passifCirc + tresoPass;
 
   const passif: Line[] = [
     { code: 'CA', label: 'Capital', value: capital, indent: 1, accountCodes: '101-104' },
-    { code: 'CD', label: 'Primes et réserves', value: primes + reserves, indent: 1, accountCodes: '105, 106, 11' },
-    { code: 'CF', label: 'Résultat net de l\'exercice', value: resultat, indent: 1, accountCodes: '12 (Cl. 6 vs 7)' },
+    { code: 'CD', label: 'Primes et réserves', value: primes + reserves, indent: 1, accountCodes: '105, 106, 11, 12, 13' },
+    { code: 'CF', label: 'Résultat net de l\'exercice', value: resultat, indent: 1, accountCodes: 'Cl. 7 − Cl. 6' },
     { code: 'CL', label: "Subventions d'investissement", value: subvInv, indent: 1, accountCodes: '14' },
     { code: 'CM', label: 'Provisions réglementées', value: provRegl, indent: 1, accountCodes: '15' },
     { code: '_CP', label: 'TOTAL CAPITAUX PROPRES', value: capitauxPropres, total: true, accountCodes: '10 à 15' },
     { code: 'DA', label: 'Emprunts et dettes financières', value: emprunts, indent: 1, accountCodes: '16, 17, 18' },
     { code: 'DP', label: 'Provisions pour risques et charges', value: provRC, indent: 1, accountCodes: '19' },
     { code: '_DF', label: 'TOTAL RESSOURCES STABLES', value: ressStables, total: true, accountCodes: '10 à 19' },
-    { code: 'DJ', label: 'Fournisseurs et comptes rattachés', value: dettesFourn, indent: 1, accountCodes: '401, 402, 408 − 409' },
+    { code: 'DJ', label: 'Fournisseurs et comptes rattachés', value: dettesFourn, indent: 1, accountCodes: '40' },
     { code: 'DK', label: 'Dettes fiscales et sociales', value: dettesFisc + dettesPers, indent: 1, accountCodes: '42, 43, 44' },
-    { code: 'DM', label: 'Autres dettes', value: Math.max(dettesAutres, 0), indent: 1, accountCodes: '419, 46, 47, 48' },
+    { code: 'DM', label: 'Autres dettes', value: dettesAutres, indent: 1, accountCodes: '41 (crédit.), 45-48' },
     { code: '_DP', label: 'TOTAL PASSIF CIRCULANT', value: passifCirc, total: true, accountCodes: '40 à 48' },
-    { code: 'DV', label: 'Trésorerie - Passif (concours bancaires)', value: tresoPass, indent: 1, accountCodes: '561, 564-566' },
-    { code: '_DZ', label: 'TOTAL GÉNÉRAL PASSIF', value: totalPassif, total: true, grand: true, accountCodes: 'Classes 1, 4, 5' },
+    { code: 'DV', label: 'Trésorerie - Passif (concours bancaires)', value: tresoPass, indent: 1, accountCodes: '56' },
   ];
+
+  // ─── ÉQUILIBRAGE FORCÉ DU BILAN ─────────────────────────────────────
+  // En partie double, Σ(soldeD − soldeC) = 0 sur toutes les écritures donc
+  // Total Actif = Total Passif. Si écart, c'est qu'un compte n'a pas été pris
+  // dans nos catégories (mapping incomplet, comptes exotiques, écritures
+  // déséquilibrées, AN sur classes 6/7/8). On l'AJOUTE explicitement comme
+  // ligne d'écart pour garantir l'équilibre visuel + signaler l'anomalie.
+  const ecartFinal = totalPassif - totalActif;
+  if (Math.abs(ecartFinal) > 1) {
+    if (ecartFinal > 0) {
+      // Passif > Actif : ajouter un poste d'actif "régularisation"
+      actif.push({
+        code: '_EC',
+        label: '⚠ Écart de balance à analyser (régularisation)',
+        value: ecartFinal,
+        indent: 1,
+        accountCodes: 'Comptes ignorés ou écritures déséquilibrées',
+      });
+      totalActif = totalPassif;
+    } else {
+      // Actif > Passif : ajouter un poste de passif "régularisation"
+      passif.push({
+        code: '_ECP',
+        label: '⚠ Écart de balance à analyser (régularisation)',
+        value: -ecartFinal,
+        indent: 1,
+        accountCodes: 'Comptes ignorés ou écritures déséquilibrées',
+      });
+      totalPassif = totalActif;
+    }
+  }
+
+  actif.push({ code: '_BZ', label: 'TOTAL GÉNÉRAL ACTIF', value: totalActif, total: true, grand: true, accountCodes: 'Classes 2 à 5' });
+  passif.push({ code: '_DZ', label: 'TOTAL GÉNÉRAL PASSIF', value: totalPassif, total: true, grand: true, accountCodes: 'Classes 1, 4, 5' });
 
   return { actif, passif, totalActif, totalPassif };
 }
@@ -146,11 +214,17 @@ export type SIG = {
 export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const soldeC = (...p: string[]) => { let s = 0; for (const r of rows) if (p.some((x) => r.account.startsWith(x))) s += r.soldeC; return s; };
   const soldeD = (...p: string[]) => { let s = 0; for (const r of rows) if (p.some((x) => r.account.startsWith(x))) s += r.soldeD; return s; };
+  // Exclut certains préfixes (utilisé pour retirer 7069 de 706)
+  const soldeCExcl = (excl: string[], ...p: string[]) => { let s = 0; for (const r of rows) if (p.some((x) => r.account.startsWith(x)) && !excl.some((e) => r.account.startsWith(e))) s += r.soldeC; return s; };
 
   // Produits d'exploitation
   const venteMarch = soldeC('701');
-  const venteProd = soldeC('702', '703', '704', '705', '706', '707');
-  const ca = venteMarch + venteProd + soldeC('708');
+  // Ventes de produits/services HORS RRR accordés (7069xx exclus de 706)
+  const venteProd = soldeCExcl(['7069'], '702', '703', '704', '705', '706', '707');
+  // RRR accordés (709 + sous-comptes 7069xx) : réduction du CA
+  // Ces comptes sont des contre-produits avec solde débiteur normal
+  const rrrAccordes = (soldeD('709') - soldeC('709')) + (soldeD('7069') - soldeC('7069'));
+  const ca = venteMarch + venteProd + soldeC('708') - rrrAccordes;
   const prodStockee = soldeC('73') - soldeD('73');
   const prodImmob = soldeC('72');
   const subvExpl = soldeC('71');
@@ -171,9 +245,21 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   // chaque classe pour gérer correctement les éventuels soldes inversés.
   const dotations = (soldeD('68', '69') - soldeC('68', '69')) - (soldeC('79') - soldeD('79'));
 
-  // SIG
-  const margeMarch = venteMarch - (achatMarch + varStockMarch);
-  const margeMP = venteProd + prodStockee - (achatMP + varStockMP);
+  // SIG — Marge brute SYSCOHADA (sans double comptage des RRR)
+  // Les ventes brutes (venteMarch / venteProd) n'incluent PAS les comptes
+  // 709/7069 (RRR accordés). Le CA est déjà calculé NET de RRR ci-dessus.
+  // La marge brute doit donc se calculer SUR LE CA NET, pas sur les ventes
+  // brutes ; sinon on déduit les RRR deux fois.
+  // Convention SYSCOHADA :
+  //   Marge sur marchandises = (Ventes march − RRR sur march) − Coût d'achat march
+  //   Marge sur matières     = (Ventes prod − RRR sur prod) + Var prod stockée − Coût matières
+  // On répartit le rrrAccordes proportionnellement aux ventes (approximation
+  // raisonnable quand le découpage 7019/7029... n'est pas dispo).
+  const totalVentesBrut = venteMarch + venteProd;
+  const rrrMarch = totalVentesBrut > 0 ? rrrAccordes * (venteMarch / totalVentesBrut) : 0;
+  const rrrProd  = totalVentesBrut > 0 ? rrrAccordes * (venteProd / totalVentesBrut) : 0;
+  const margeMarch = (venteMarch - rrrMarch) - (achatMarch + varStockMarch);
+  const margeMP    = (venteProd  - rrrProd ) + prodStockee - (achatMP + varStockMP);
   const margeBrute = margeMarch + margeMP;
   const valeurAjoutee = margeBrute + prodImmob + subvExpl + autresProd - transport - servExt - impotsTaxes - autresCharges;
   const ebe = valeurAjoutee - personnel;
@@ -199,7 +285,8 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const cr: Line[] = [
     { code: 'TA', label: 'Ventes de marchandises', value: venteMarch, indent: 1, accountCodes: '701' },
     { code: 'TB', label: 'Ventes de produits / services', value: venteProd + soldeC('708'), indent: 1, accountCodes: '702-707, 708' },
-    { code: '_XB', label: 'CHIFFRE D\'AFFAIRES', value: ca, total: true, accountCodes: '70' },
+    { code: 'TC_RRR', label: 'RRR accordés (−)', value: -rrrAccordes, indent: 1, accountCodes: '709, 7069' },
+    { code: '_XB', label: 'CHIFFRE D\'AFFAIRES', value: ca, total: true, accountCodes: '70 − 709' },
     { code: 'TC', label: 'Production stockée', value: prodStockee, indent: 1, accountCodes: '73' },
     { code: 'TD', label: 'Production immobilisée', value: prodImmob, indent: 1, accountCodes: '72' },
     { code: 'TE', label: 'Subventions d\'exploitation', value: subvExpl, indent: 1, accountCodes: '71' },

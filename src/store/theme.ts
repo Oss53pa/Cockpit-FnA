@@ -56,6 +56,14 @@ export function generateScale(baseHex: string): Palette['scale'] {
 
 // ── Palettes prédéfinies ───────────────────────────────────────────
 export const BUILTIN_PALETTES: Record<string, Palette> = {
+  // Palette officielle Atlas Studio : anthracite + or mat
+  // Référence visuelle (luxe / éditorial premium)
+  atlas: {
+    name: 'Atlas Studio',
+    scale: ['#faf8f3','#f3eee2','#e6dcc4','#cfbe95','#b8954a','#9c7d3e','#6e5a2d','#4d3f20','#332915','#1f1f23','#16161A'],
+    tableHeader: '#1F1F23', tableHeaderText: '#D4B870',
+    chartColors: ['#B8954A','#1F1F23','#D4B870','#9C7D3E','#6E5A2D','#E8D5A0','#4D3F20'],
+  },
   graphite: {
     name: 'Graphite',
     scale: ['#fafafa','#f5f5f5','#e5e5e5','#d4d4d4','#a3a3a3','#737373','#525252','#404040','#262626','#171717','#0a0a0a'],
@@ -237,13 +245,13 @@ type ThemeState = {
 
 function loadKey(): string {
   const v = localStorage.getItem(KEY);
-  if (!v) return 'graphite';
+  if (!v) return 'atlas';
   const all = getAllPalettes();
-  return v in all ? v : 'graphite';
+  return v in all ? v : 'atlas';
 }
 
 function loadPalette(): Palette {
-  return getAllPalettes()[loadKey()] ?? BUILTIN_PALETTES.graphite;
+  return getAllPalettes()[loadKey()] ?? BUILTIN_PALETTES.atlas;
 }
 
 // Apply on first load
@@ -255,7 +263,7 @@ export const useTheme = create<ThemeState>((set, get) => ({
   customPalettes: loadCustomPalettes(),
   setPalette: (k) => {
     const all = { ...BUILTIN_PALETTES, ...get().customPalettes };
-    const p = all[k] ?? BUILTIN_PALETTES.graphite;
+    const p = all[k] ?? BUILTIN_PALETTES.atlas;
     localStorage.setItem(KEY, k);
     applyPalette(p);
     set({ paletteKey: k, palette: p });
@@ -271,9 +279,9 @@ export const useTheme = create<ThemeState>((set, get) => ({
     saveCustomPalettes(customs);
     // Si la palette supprimée était active, revenir à graphite
     if (get().paletteKey === id) {
-      localStorage.setItem(KEY, 'graphite');
-      applyPalette(BUILTIN_PALETTES.graphite);
-      set({ customPalettes: customs, paletteKey: 'graphite', palette: BUILTIN_PALETTES.graphite });
+      localStorage.setItem(KEY, 'atlas');
+      applyPalette(BUILTIN_PALETTES.atlas);
+      set({ customPalettes: customs, paletteKey: 'atlas', palette: BUILTIN_PALETTES.atlas });
     } else {
       set({ customPalettes: customs });
     }

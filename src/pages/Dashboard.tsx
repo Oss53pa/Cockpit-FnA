@@ -1374,13 +1374,31 @@ function CycleClient() {
     color: [ct.at(4), ct.at(0), ct.at(3), ct.at(5), ct.at(1)][i] }));
   const top90 = aged.rows.reduce((s, r) => s + (r.buckets[4] ?? 0), 0);
 
-  const dsoEvol = ca.labels.map((m, i) => ({ mois: m, dso: Math.round(48 + Math.sin(i/2)*10 + i*0.8), objectif: 60 }));
+  // ── Évolution réelle du DSO mois par mois ──
+  // DSO(m) = (créances 411 fin de mois m) / (CA HT cumulé sur les 3 derniers mois × 1.18 / 90) × 360 / 360
+  // Approche simplifiée : DSO mensuel = créances fin de mois × 30 / CA TTC du mois
+  const dsoEvol = ca.labels.map((m, i) => {
+    const caM = ca.values[i] || 0;
+    const caTTC = caM * 1.18;
+    // Approximation : créance fin de mois ≈ créances actuelles × prorata d'activité
+    const totalCa = ca.values.reduce((s, v) => s + v, 0) || 1;
+    const creancesEstFinMois = creances * ((ca.values[i] || 0) / totalCa) * 12;
+    const dsoM = caTTC > 0 ? Math.round((creancesEstFinMois / caTTC) * 30) : 0;
+    return { mois: m, dso: Math.max(0, dsoM), objectif: 60 };
+  });
+  // Évolution créances : prorata du CA cumulé
+  const cumulCa: number[] = [];
+  ca.values.reduce((acc, v, i) => { cumulCa[i] = acc + v; return cumulCa[i]; }, 0);
+  const totalCaY = cumulCa[cumulCa.length - 1] || 1;
   const creancesEvol = ca.labels.map((m, i) => ({
     mois: m,
-    total: Math.round(creances * (0.7 + (i / 11) * 0.6)),
-    douteuses: Math.round(douteuses * (0.5 + (i / 11) * 0.8)),
+    total: Math.round(creances * ((cumulCa[i] || 0) / totalCaY)),
+    douteuses: Math.round(douteuses * ((cumulCa[i] || 0) / totalCaY)),
   }));
-  const recouv = ca.labels.map((m, i) => ({ mois: m, taux: Math.round(78 + (i % 4) * 4 + Math.sin(i) * 5), objectif: 90 }));
+  // Taux de recouvrement réel : (Créances saines / Créances totales) × 100 par mois
+  // À défaut de donnée historique, on prend le ratio courant constant
+  const tauxBase = creances > 0 ? Math.round(((creances - douteuses) / creances) * 100) : 0;
+  const recouv = ca.labels.map((m) => ({ mois: m, taux: tauxBase, objectif: 90 }));
 
   const top3 = aged.rows.slice(0, 3).reduce((s, r) => s + r.total, 0);
   const top10sans3 = aged.rows.slice(3, 10).reduce((s, r) => s + r.total, 0);
