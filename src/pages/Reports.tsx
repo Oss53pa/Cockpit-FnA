@@ -1294,14 +1294,13 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   // la dimension A4 mais on n'IMPOSE plus de minHeight, donc une page courte
   // ne génère plus d'espace blanc inutile.
   const maxH = config.format === 'pptx' ? 540 : isLandscape ? 760 : 1400;
+  // Pas de maxWidth en écran : la page A4 occupe toute la cellule grid centrale.
+  // Le ratio A4 réel est respecté à l'impression via les CSS @page (cf. index.css).
   const pageStyle = config.format === 'pptx'
-    ? { width: '100%', maxWidth: 1400, aspectRatio: '16/9', minHeight: 'auto' as const, maxHeight: maxH }
+    ? { width: '100%', aspectRatio: '16/9', minHeight: 'auto' as const, maxHeight: maxH }
     : isLandscape
-      ? { width: '100%', maxWidth: 1400, aspectRatio: '297/210', minHeight: 'auto' as const, maxHeight: maxH }
-      // A4 portrait : on étend à 1400px max comme le landscape pour mieux remplir
-      // l'écran sans sacrifier la lisibilité. Le ratio A4 (210/297) est respecté
-      // côté impression (CSS @page) — la simulation écran peut être plus large.
-      : { width: '100%', maxWidth: 1400, minHeight: 'auto' as const, maxHeight: maxH };
+      ? { width: '100%', aspectRatio: '297/210', minHeight: 'auto' as const, maxHeight: maxH }
+      : { width: '100%', minHeight: 'auto' as const, maxHeight: maxH };
 
   // Estimation de la hauteur de chaque bloc (en px) pour pagination auto.
   // Pour les tables : on utilise le NOMBRE RÉEL DE LIGNES dans `data` afin
@@ -1649,7 +1648,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // Style MODERN — bandeau gauche coloré
   if (style === 'modern') {
     return (
-      <div className="h-full relative overflow-hidden flex" style={{ minHeight: 700, background: bgColor }}>
+      <div className="h-full relative overflow-hidden flex" style={{ minHeight: 480, background: bgColor }}>
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
         <div className="w-2/5 flex flex-col justify-between p-10 relative z-10" style={{ background: titleColor, color: '#fff' }}>
@@ -1681,7 +1680,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // Style BANNER — bandeau horizontal en haut
   if (style === 'banner') {
     return (
-      <div className="h-full relative overflow-hidden flex flex-col" style={{ minHeight: 700, background: bgColor }}>
+      <div className="h-full relative overflow-hidden flex flex-col" style={{ minHeight: 480, background: bgColor }}>
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
         <div className="h-44 flex items-center justify-between px-12 relative z-10" style={{ background: titleColor, color: '#fff' }}>
@@ -1712,7 +1711,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   return (
     <div
       className="h-full flex flex-col relative overflow-hidden"
-      style={{ minHeight: 700, background: bgColor }}
+      style={{ minHeight: 480, background: bgColor }}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
