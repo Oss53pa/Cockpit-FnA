@@ -1177,7 +1177,7 @@ export default function Reports() {
         )}
 
         {/* ════════════════ CENTRE — VISUALISEUR ════════════════ */}
-        <main className="space-y-1 report-print-area">
+        <main className="space-y-1 report-print-area w-full min-w-0">
           {renderPages(config, data, palette, {
             updateBlock, removeBlock, moveBlock, insertBlockAt, reorderBlock, moveBlockToIndex,
             openTablesCatalog: (idx: number) => { setInsertAtIndex(idx); setOpenCatalog('tables'); },
@@ -1298,7 +1298,10 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
     ? { width: '100%', maxWidth: 1400, aspectRatio: '16/9', minHeight: 'auto' as const, maxHeight: maxH }
     : isLandscape
       ? { width: '100%', maxWidth: 1400, aspectRatio: '297/210', minHeight: 'auto' as const, maxHeight: maxH }
-      : { width: '100%', maxWidth: 1100, minHeight: 'auto' as const, maxHeight: maxH };
+      // A4 portrait : on étend à 1400px max comme le landscape pour mieux remplir
+      // l'écran sans sacrifier la lisibilité. Le ratio A4 (210/297) est respecté
+      // côté impression (CSS @page) — la simulation écran peut être plus large.
+      : { width: '100%', maxWidth: 1400, minHeight: 'auto' as const, maxHeight: maxH };
 
   // Estimation de la hauteur de chaque bloc (en px) pour pagination auto.
   // Pour les tables : on utilise le NOMBRE RÉEL DE LIGNES dans `data` afin
