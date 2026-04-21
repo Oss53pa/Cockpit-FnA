@@ -1648,7 +1648,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // Style MODERN — bandeau gauche coloré
   if (style === 'modern') {
     return (
-      <div className="h-full relative overflow-hidden flex" style={{ minHeight: 480, background: bgColor }}>
+      <div className="w-full h-full relative overflow-hidden flex" style={{ minHeight: 480, background: bgColor }}>
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
         <div className="w-2/5 flex flex-col justify-between p-10 relative z-10" style={{ background: titleColor, color: '#fff' }}>
@@ -1680,7 +1680,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // Style BANNER — bandeau horizontal en haut
   if (style === 'banner') {
     return (
-      <div className="h-full relative overflow-hidden flex flex-col" style={{ minHeight: 480, background: bgColor }}>
+      <div className="w-full h-full relative overflow-hidden flex flex-col" style={{ minHeight: 480, background: bgColor }}>
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
         <div className="h-44 flex items-center justify-between px-12 relative z-10" style={{ background: titleColor, color: '#fff' }}>
@@ -1710,7 +1710,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // Style CLASSIC (par défaut) — centré épuré et élégant
   return (
     <div
-      className="h-full flex flex-col relative overflow-hidden"
+      className="w-full h-full flex flex-col relative overflow-hidden"
       style={{ minHeight: 480, background: bgColor }}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
@@ -1838,7 +1838,7 @@ function CoverEditPanel({ id, setCoverProps, setBgImage }: any) {
 // Page de dos / 4ème de couverture
 function BackCoverPage({ config, palette, org }: any) {
   return (
-    <div className="border-2 rounded p-6 h-full flex flex-col justify-between" style={{ borderColor: palette.primary, minHeight: 700 }}>
+    <div className="w-full border-2 rounded p-6 h-full flex flex-col justify-between" style={{ borderColor: palette.primary, minHeight: 480 }}>
       <div className="text-center">
         {config.identity.logoDataUrl && (
           <img
@@ -1886,7 +1886,7 @@ function BackCoverPage({ config, palette, org }: any) {
 function TocPage({ config, palette }: any) {
   const toc = config.blocks.filter((b: any) => (b.type === 'h1' || b.type === 'h2' || b.type === 'h3') && b.inToc !== false);
   return (
-    <div>
+    <div className="w-full">
       <h2 className="text-2xl font-bold pb-2 mb-6 border-b-2" style={{ color: palette.primary, borderColor: palette.primary }}>Sommaire</h2>
       <ol className="space-y-2">
         {toc.map((t: any, i: number) => (
