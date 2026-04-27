@@ -1645,6 +1645,9 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
     reader.readAsDataURL(file);
   };
 
+  // NOTE: `w-full` explicite sur les 3 styles ci-dessous. Le parent PageA4 est un
+  // `flex flex-col` dans une cellule grid ; sans w-full, l'enfant peut se réduire
+  // à sa largeur intrinsèque (notamment sur les conteneurs `flex` row internes).
   // Style MODERN — bandeau gauche coloré
   if (style === 'modern') {
     return (
@@ -1838,6 +1841,8 @@ function CoverEditPanel({ id, setCoverProps, setBgImage }: any) {
 // Page de dos / 4ème de couverture
 function BackCoverPage({ config, palette, org }: any) {
   return (
+    // minHeight aligné sur les covers (480) pour cohérence visuelle ; la hauteur
+    // réelle est imposée par PageA4 via `h-full` + maxHeight du pageStyle.
     <div className="w-full border-2 rounded p-6 h-full flex flex-col justify-between" style={{ borderColor: palette.primary, minHeight: 480 }}>
       <div className="text-center">
         {config.identity.logoDataUrl && (
