@@ -12,6 +12,14 @@ export type Palette = {
   tableHeaderText: string;
   /** 7 couleurs distinctes pour les graphiques */
   chartColors: string[];
+  /** Tokens layout (Twisty-style) : fond page, container shell, surface carte, accent */
+  layout?: {
+    bgPage: string;     // fond de la page (gris-bleu / neutre)
+    bgShell: string;    // grand container arrondi (crème / clair)
+    bgSurface: string;  // cartes intérieures (blanc en général)
+    accent: string;     // couleur d'accent (orange Twisty, etc.)
+    accentSoft: string; // version légère de l'accent (badges, hovers)
+  };
 };
 
 // ── Génération automatique d'échelle à partir d'une couleur de base ──
@@ -56,6 +64,21 @@ export function generateScale(baseHex: string): Palette['scale'] {
 
 // ── Palettes prédéfinies ───────────────────────────────────────────
 export const BUILTIN_PALETTES: Record<string, Palette> = {
+  // Palette TWISTY (référence visuelle dashboard freelancer)
+  // Fond gris-bleu, shell crème, accent orange brûlé.
+  twisty: {
+    name: 'Twisty',
+    scale: ['#f4f1ec','#ede9df','#e2dccd','#cabfa6','#9c917b','#736b58','#544e3f','#3c372d','#272420','#1a1815','#0e0d0b'],
+    tableHeader: '#1A1815', tableHeaderText: '#F4F1EC',
+    chartColors: ['#1A1815','#E8552B','#C9C2B0','#9C917B','#FFB070','#544E3F','#E2DCCD'],
+    layout: {
+      bgPage:     '#B7C4CF',
+      bgShell:    '#F4F1EC',
+      bgSurface:  '#FFFFFF',
+      accent:     '#E8552B',
+      accentSoft: '#FFB070',
+    },
+  },
   // Palette officielle Atlas Studio : anthracite + or mat
   // Référence visuelle (luxe / éditorial premium)
   atlas: {
@@ -228,6 +251,23 @@ function applyPalette(p: Palette) {
   s.setProperty('--th-bg', p.tableHeader);
   s.setProperty('--th-text', p.tableHeaderText);
   s.setProperty('--grid-color', p.scale[2]); // grille des graphiques
+
+  // Tokens layout — fallback intelligent quand la palette n'en définit pas :
+  // bg-page = scale[3], bg-shell = scale[0], bg-surface = #FFFFFF,
+  // accent = chartColors[0]. Permet à toutes les palettes existantes de
+  // continuer à fonctionner sans refonte.
+  const lay = p.layout ?? {
+    bgPage: p.scale[3] ?? p.scale[1],
+    bgShell: p.scale[0],
+    bgSurface: '#FFFFFF',
+    accent: p.chartColors[0] ?? p.scale[8],
+    accentSoft: p.chartColors[2] ?? p.scale[3],
+  };
+  s.setProperty('--bg-page', hexToRgb(lay.bgPage));
+  s.setProperty('--bg-shell', hexToRgb(lay.bgShell));
+  s.setProperty('--bg-surface', hexToRgb(lay.bgSurface));
+  s.setProperty('--accent', hexToRgb(lay.accent));
+  s.setProperty('--accent-soft', hexToRgb(lay.accentSoft));
 }
 
 // ── Store ──────────────────────────────────────────────────────────
@@ -245,13 +285,13 @@ type ThemeState = {
 
 function loadKey(): string {
   const v = localStorage.getItem(KEY);
-  if (!v) return 'atlas';
+  if (!v) return 'twisty';
   const all = getAllPalettes();
-  return v in all ? v : 'atlas';
+  return v in all ? v : 'twisty';
 }
 
 function loadPalette(): Palette {
-  return getAllPalettes()[loadKey()] ?? BUILTIN_PALETTES.atlas;
+  return getAllPalettes()[loadKey()] ?? BUILTIN_PALETTES.twisty;
 }
 
 // Apply on first load
@@ -263,7 +303,7 @@ export const useTheme = create<ThemeState>((set, get) => ({
   customPalettes: loadCustomPalettes(),
   setPalette: (k) => {
     const all = { ...BUILTIN_PALETTES, ...get().customPalettes };
-    const p = all[k] ?? BUILTIN_PALETTES.atlas;
+    const p = all[k] ?? BUILTIN_PALETTES.twisty;
     localStorage.setItem(KEY, k);
     applyPalette(p);
     set({ paletteKey: k, palette: p });
@@ -279,9 +319,9 @@ export const useTheme = create<ThemeState>((set, get) => ({
     saveCustomPalettes(customs);
     // Si la palette supprimée était active, revenir à graphite
     if (get().paletteKey === id) {
-      localStorage.setItem(KEY, 'atlas');
-      applyPalette(BUILTIN_PALETTES.atlas);
-      set({ customPalettes: customs, paletteKey: 'atlas', palette: BUILTIN_PALETTES.atlas });
+      localStorage.setItem(KEY, 'twisty');
+      applyPalette(BUILTIN_PALETTES.twisty);
+      set({ customPalettes: customs, paletteKey: 'twisty', palette: BUILTIN_PALETTES.twisty });
     } else {
       set({ customPalettes: customs });
     }

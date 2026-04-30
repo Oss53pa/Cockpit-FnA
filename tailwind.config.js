@@ -20,6 +20,14 @@ export default {
           900: 'rgb(var(--p-900) / <alpha-value>)',
           950: 'rgb(var(--p-950) / <alpha-value>)',
         },
+        // Tokens layout Twisty (page / shell / surface / accent)
+        bgpage:  'rgb(var(--bg-page) / <alpha-value>)',
+        shell:   'rgb(var(--bg-shell) / <alpha-value>)',
+        surface: 'rgb(var(--bg-surface) / <alpha-value>)',
+        accent: {
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          soft:    'rgb(var(--accent-soft) / <alpha-value>)',
+        },
         // Couleurs de statut fonctionnelles (fixes)
         success: '#22c55e',
         warning: '#f59e0b',
@@ -33,9 +41,12 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['"Exo 2"', 'system-ui', 'sans-serif'],
+        sans: ['Inter', '"Exo 2"', 'system-ui', 'sans-serif'],
         display: ['"Grand Hotel"', 'cursive'],
         mono: ['"JetBrains Mono"', 'monospace'],
+      },
+      borderRadius: {
+        'shell': '28px',
       },
       boxShadow: {
         'sm': '0 1px 2px 0 rgb(0 0 0 / 0.03)',

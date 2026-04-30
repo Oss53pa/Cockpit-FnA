@@ -69,14 +69,17 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen">
+    // Twisty layout : fond gris-bleu de la page (bg-bgpage défini par le thème),
+    // sidebar à gauche, et le bloc droit est le grand "shell" crème arrondi qui
+    // contient header + main. Le padding extérieur (p-3) crée la marge bleue.
+    <div className="flex min-h-screen p-2 sm:p-3 lg:p-4 gap-3">
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         collapsed={collapsed}
         onToggleCollapse={toggleCollapse}
       />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 app-shell overflow-hidden">
         <DemoBanner />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main key={`${amountMode}-${remountKey}`} className="flex-1 p-3 sm:p-4 lg:p-6">

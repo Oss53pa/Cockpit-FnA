@@ -56,10 +56,13 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
   // Full nav content (used by desktop expanded + mobile drawer)
   const fullNav = (showClose: boolean) => (
     <>
-      <div className="px-5 py-5 border-b border-primary-200 dark:border-primary-800 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit F&amp;A</p>
-          <p className="text-[10px] uppercase tracking-[0.15em] text-primary-400 mt-1.5">SYSCOHADA 2017</p>
+      <div className="px-5 py-5 border-b border-primary-200/60 dark:border-primary-800 flex items-center justify-between gap-2">
+        <div className="min-w-0 flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-[11px] font-bold shrink-0">F&amp;A</div>
+          <div className="min-w-0">
+            <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit</p>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-primary-400 mt-1">SYSCOHADA 2017</p>
+          </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {onToggleCollapse && (
@@ -82,10 +85,10 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
               {sec.items.map((it) => (
                 <NavLink key={it.to} to={it.to} end={it.to === '/'} onClick={onClose}
                   className={({ isActive }) => clsx(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors',
+                    'flex items-center gap-3 px-3 py-2 rounded-full text-[13px] transition-colors',
                     isActive
                       ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-semibold'
-                      : 'text-primary-600 dark:text-primary-400 hover:bg-primary-200 dark:hover:bg-primary-800'
+                      : 'text-primary-700 dark:text-primary-400 hover:bg-primary-200/60 dark:hover:bg-primary-800'
                   )}>
                   <it.icon className="w-4 h-4 shrink-0" />
                   <span className="truncate">{it.label}</span>
@@ -95,9 +98,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
           </div>
         ))}
       </nav>
-      <div className="border-t border-primary-200 dark:border-primary-800">
+      <div className="border-t border-primary-200/60 dark:border-primary-800">
         {onToggleCollapse && (
-          <button onClick={onToggleCollapse} className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-800 transition">
+          <button onClick={onToggleCollapse} className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-200/60 dark:hover:bg-primary-800 transition">
             <ChevronsLeft className="w-3.5 h-3.5" /> Replier
           </button>
         )}
@@ -135,13 +138,16 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
 
   return (
     <>
-      {/* Desktop sidebar — expanded or collapsed */}
+      {/* Desktop sidebar — expanded or collapsed
+          Style Twisty : pas de bordure, sidebar transparente sur le fond bgpage.
+          Le shell à droite est arrondi, donc visuellement la sidebar et le shell
+          coexistent sans séparation. */}
       {collapsed ? (
-        <aside className="hidden lg:flex w-14 shrink-0 h-screen sticky top-0 border-r border-primary-200 dark:border-primary-800 bg-white dark:bg-primary-900 flex-col transition-all duration-200">
+        <aside className="hidden lg:flex w-14 shrink-0 h-[calc(100vh-2rem)] sticky top-4 bg-shell dark:bg-primary-900 rounded-shell flex-col transition-all duration-200 shadow-sm">
           {collapsedNav}
         </aside>
       ) : (
-        <aside className="hidden lg:flex w-60 shrink-0 h-screen sticky top-0 border-r border-primary-200 dark:border-primary-800 bg-white dark:bg-primary-900 flex-col transition-all duration-200">
+        <aside className="hidden lg:flex w-60 shrink-0 h-[calc(100vh-2rem)] sticky top-4 bg-shell dark:bg-primary-900 rounded-shell flex-col transition-all duration-200 shadow-sm">
           {fullNav(false)}
         </aside>
       )}

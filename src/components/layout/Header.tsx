@@ -51,16 +51,19 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 bg-primary-900 dark:bg-primary-950 text-primary-50 border-b border-primary-800">
+    // Header style Twisty : fond shell crème (transparent sur le shell parent),
+    // texte sombre, contrôles en pills arrondies. Le header n'a plus de bordure
+    // basse ; la séparation visuelle vient du padding du <main>.
+    <header className="sticky top-0 z-20 bg-shell dark:bg-primary-950 text-primary-900 dark:text-primary-50">
       <div className="px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
         <div className="flex items-center gap-3">
           {/* Hamburger — mobile only */}
-          <button onClick={onMenuClick} className="lg:hidden p-1 rounded hover:bg-white/15">
+          <button onClick={onMenuClick} className="lg:hidden p-1 rounded hover:bg-primary-200/60">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="text-sm font-medium text-primary-400 tracking-wide truncate">
+          <div className="text-sm font-medium text-primary-700 dark:text-primary-300 tracking-wide truncate">
             {currentOrg?.name ?? '---'}
-            <span className="text-primary-600 mx-2 hidden sm:inline">|</span>
+            <span className="text-primary-400 mx-2 hidden sm:inline">|</span>
             <span className="num hidden sm:inline">{currentYear}</span>
           </div>
         </div>
@@ -69,21 +72,21 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <select
             value={currentOrgId}
             onChange={(e) => setCurrentOrg(e.target.value)}
-            className="hidden sm:block px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
+            className="hidden sm:block px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
             {orgs.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
           </select>
           <select
             value={currentYear}
             onChange={(e) => setCurrentYear(Number(e.target.value))}
-            className="px-2 sm:px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
+            className="px-2 sm:px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
             {(years.length ? years : [2025]).map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
           <select
             value={currentPeriodId}
             onChange={(e) => setCurrentPeriod(e.target.value)}
-            className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
+            className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
           >
             <option value="">YTD</option>
             {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
@@ -96,7 +99,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               value={currentImport}
               onChange={(e) => setCurrentImport(e.target.value)}
               title="Import GL utilisé pour les calculs"
-              className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer [&>option]:text-primary-900 max-w-[200px]"
+              className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900 max-w-[200px]"
             >
               <option value="latest">🆕 Dernier import ({glImports.length})</option>
               <option value="all">∑ Tous les imports (cumul)</option>
@@ -111,19 +114,19 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           )}
 
           {/* Sélecteur de période globale (intervalle de mois) */}
-          <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 border border-white/15">
-            <span className="text-[10px] uppercase tracking-wider text-white/60 mr-1">Période</span>
+          <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-primary-200/40 border border-primary-200/80">
+            <span className="text-[10px] uppercase tracking-wider text-primary-500 mr-1">Période</span>
             <select
-              className="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer"
+              className="bg-transparent text-[11px] font-semibold text-primary-900 dark:text-white focus:outline-none cursor-pointer"
               value={fromMonth}
               onChange={(e) => setPeriodRange(parseInt(e.target.value), toMonth)}
               title="Mois de début"
             >
               {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1} className="text-primary-900">{m}</option>)}
             </select>
-            <span className="text-white/50">→</span>
+            <span className="text-primary-400">→</span>
             <select
-              className="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer"
+              className="bg-transparent text-[11px] font-semibold text-primary-900 dark:text-white focus:outline-none cursor-pointer"
               value={toMonth}
               onChange={(e) => setPeriodRange(fromMonth, parseInt(e.target.value))}
               title="Mois de fin"
@@ -131,13 +134,13 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1} className="text-primary-900">{m}</option>)}
             </select>
             {(fromMonth !== 1 || toMonth !== 12) && (
-              <button onClick={() => setPeriodRange(1, 12)} className="ml-1 text-[9px] text-white/60 hover:text-white" title="Réinitialiser à année complète">↺</button>
+              <button onClick={() => setPeriodRange(1, 12)} className="ml-1 text-[9px] text-primary-500 hover:text-primary-900" title="Réinitialiser à année complète">↺</button>
             )}
           </div>
 
           {/* Toggle segmenté Entier / Abrégé — affichage des montants */}
           <div
-            className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 border border-white/15"
+            className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-lg bg-primary-200/40 border border-primary-200/80"
             role="tablist"
             aria-label="Mode d'affichage des montants"
           >
@@ -147,7 +150,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               aria-selected={amountMode === 'full'}
               title="Afficher les montants en entier (ex : 1 234 567 890)"
               onClick={() => setAmountMode('full')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition flex items-center gap-1 ${amountMode === 'full' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition flex items-center gap-1 ${amountMode === 'full' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-primary-600 hover:text-primary-900 hover:bg-primary-200/60'}`}
             >
               <Hash className="w-3 h-3" />
               Entier
@@ -158,7 +161,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               aria-selected={amountMode === 'short'}
               title="Afficher les montants abrégés (ex : 1,2 Md)"
               onClick={() => setAmountMode('short')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${amountMode === 'short' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${amountMode === 'short' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-primary-600 hover:text-primary-900 hover:bg-primary-200/60'}`}
             >
               K/M
             </button>
@@ -169,7 +172,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             type="button"
             title={amountMode === 'full' ? 'Entier — cliquer pour abréger' : 'Abrégé — cliquer pour afficher en entier'}
             aria-label="Basculer l'affichage des montants"
-            className="sm:hidden w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition relative"
+            className="sm:hidden w-9 h-9 rounded-full bg-primary-200/60 hover:bg-primary-200 text-primary-900 flex items-center justify-center transition relative"
             onClick={() => setAmountMode(amountMode === 'full' ? 'short' : 'full')}
           >
             <Hash className="w-4 h-4" />
@@ -182,14 +185,14 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             type="button"
             title="Objet & mode d'emploi"
             aria-label="Objet & mode d'emploi"
-            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
+            className="w-9 h-9 rounded-full bg-primary-200/60 hover:bg-primary-200 text-primary-900 flex items-center justify-center transition"
             onClick={() => { setHelpOpen(true); setNotifOpen(false); setUserOpen(false); }}
           >
             <HelpCircle className="w-4 h-4" />
           </button>
 
           <div ref={notifRef} className="relative">
-            <button className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition relative"
+            <button className="w-9 h-9 rounded-full bg-primary-200/60 hover:bg-primary-200 text-primary-900 flex items-center justify-center transition relative"
               onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); }}>
               <Bell className="w-4 h-4" />
               {alertCount > 0 && (
@@ -218,7 +221,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
           <div ref={userRef} className="relative">
             <button
-              className="w-9 h-9 rounded-full bg-primary-700 hover:bg-primary-600 flex items-center justify-center text-[11px] font-bold transition"
+              className="w-9 h-9 rounded-full bg-primary-900 dark:bg-primary-700 text-white hover:bg-primary-800 flex items-center justify-center text-[11px] font-bold transition"
               onClick={() => { setUserOpen(!userOpen); setNotifOpen(false); }}
             >
               {initials}

@@ -28,27 +28,22 @@ export function KPICard({ title, value, unit, icon, variation, vsLabel = 'vs N-1
   const isBad = hasVar && (inverse ? isUp : isDown);
 
   return (
-    <div className="group relative card p-3.5 flex flex-col min-w-0 overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 duration-200">
-      <span
-        aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-[2px] rounded-l-xl opacity-70 group-hover:opacity-100 transition-opacity"
-        style={{ background: color ?? 'currentColor' }}
-      />
+    <div className="group relative card p-4 flex flex-col min-w-0 overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 duration-200">
+      {/* Twisty style : pas de bandeau gauche coloré (la couleur passe sur l'icône) */}
 
       <div className="flex justify-between items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[9.5px] uppercase tracking-[0.1em] text-primary-500 font-semibold leading-tight">{title}</p>
-          <p className="num text-[20px] leading-none font-bold text-primary-900 dark:text-primary-50 mt-1.5 break-all">
+          <p className="text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold leading-tight">{title}</p>
+          <p className="num text-[22px] leading-none font-bold text-primary-900 dark:text-primary-50 mt-2 break-all tracking-tight">
             {value}
             {unit && <span className="text-[11px] font-normal text-primary-400 ml-1 tracking-normal">{unit}</span>}
           </p>
-          {subValue && <p className="text-[10px] text-primary-500 mt-1 leading-tight">{subValue}</p>}
+          {subValue && <p className="text-[10px] text-primary-500 mt-1.5 leading-tight">{subValue}</p>}
         </div>
-        <div className={clsx(
-          'w-8 h-8 rounded-lg flex items-center justify-center text-[13px] shrink-0 font-semibold',
-          'bg-gradient-to-br from-primary-200/70 to-primary-300/40 dark:from-primary-800/70 dark:to-primary-700/40',
-          'text-primary-800 dark:text-primary-200 ring-1 ring-inset ring-primary-300/40 dark:ring-primary-700/40',
-        )}>
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] shrink-0 font-semibold text-white"
+          style={{ background: color ?? 'rgb(var(--accent))' }}
+        >
           {icon}
         </div>
       </div>
