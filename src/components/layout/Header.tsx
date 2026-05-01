@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Hash, HelpCircle, LogOut, Menu, Settings, ChevronDown, Search } from 'lucide-react';
+import { Bell, Hash, HelpCircle, LogOut, Menu, Settings, ChevronDown, Search, LogIn } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
@@ -246,6 +246,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                   <p className="text-xs text-primary-500 mt-0.5">Mode hors-ligne</p>
                 </div>
                 <div className="py-1">
+                  <MenuItem icon={<LogIn className="w-4 h-4" />} label="Se connecter" onClick={() => { setUserOpen(false); navigate('/login'); }} />
                   <MenuItem icon={<Settings className="w-4 h-4" />} label="Paramètres" onClick={() => { setUserOpen(false); navigate('/settings'); }} />
                   <MenuItem icon={<LogOut className="w-4 h-4" />} label="Déconnexion" onClick={() => toast.info('Authentification', 'Disponible au Sprint 5 (Supabase Auth)')} />
                 </div>
