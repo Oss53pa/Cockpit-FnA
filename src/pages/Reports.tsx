@@ -760,7 +760,18 @@ export default function Reports() {
     if (currentReportId === id) setCurrentReportId(null);
   };
   // Pliage des sidebars (état persisté)
-  const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('reports-left-collapsed') === 'true');
+  // Migration Twisty : force les sidebars editeur+recap collapsed par defaut
+  // pour donner le maximum d'espace a la preview A4 sur ecrans moyens.
+  // Au premier passage on fixe la valeur, ensuite l'user peut toggle librement.
+  const [leftCollapsed, setLeftCollapsed] = useState(() => {
+    if (!localStorage.getItem('reports-twisty-init')) {
+      localStorage.setItem('reports-left-collapsed', 'true');
+      localStorage.setItem('reports-right-collapsed', 'true');
+      localStorage.setItem('reports-twisty-init', '1');
+      return true;
+    }
+    return localStorage.getItem('reports-left-collapsed') === 'true';
+  });
   const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('reports-right-collapsed') === 'true');
   const toggleLeft = () => { const n = !leftCollapsed; setLeftCollapsed(n); localStorage.setItem('reports-left-collapsed', String(n)); };
   const toggleRight = () => { const n = !rightCollapsed; setRightCollapsed(n); localStorage.setItem('reports-right-collapsed', String(n)); };
@@ -1025,7 +1036,7 @@ export default function Reports() {
       />
 
       <div className="grid grid-cols-1 gap-4" style={{
-        gridTemplateColumns: `${leftCollapsed ? '48px' : '340px'} minmax(0, 1fr) ${rightCollapsed ? '48px' : '320px'}`,
+        gridTemplateColumns: `${leftCollapsed ? '48px' : '300px'} minmax(0, 1fr) ${rightCollapsed ? '48px' : '280px'}`,
       }}>
 
         {/* ════════════════ SIDEBAR GAUCHE — ÉDITEUR ════════════════ */}
@@ -1625,14 +1636,17 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   const id = config.identity || {};
   // Cover : on consomme les tokens layout (palette.layout) pour matcher le
   // theme Twisty par defaut — bg creme + accent orange pour les liserés.
+  // Important : on traite '#ffffff' comme "pas defini" pour ecraser les vieilles
+  // configs persistees en localStorage qui ont coverBgColor='#ffffff'.
   const lay = (palette as any).layout as { bgShell?: string; accent?: string } | undefined;
+  const isDefaultBg = !id.coverBgColor || id.coverBgColor.toLowerCase() === '#ffffff' || id.coverBgColor.toLowerCase() === '#fff';
   const titleColor = id.titleColor || palette.primary;
   const subtitleColor = id.subtitleColor || (lay?.accent ?? palette.primary);
   const accentColor = lay?.accent ?? palette.primary;
-  const bgColor = id.coverBgColor || lay?.bgShell || '#ffffff';
+  const bgColor = isDefaultBg ? (lay?.bgShell ?? '#F4F1EC') : id.coverBgColor;
   const bgImage = id.coverBgImageUrl;
   const bgOpacity = typeof id.coverBgOpacity === 'number' ? id.coverBgOpacity : 0.15;
-  const style = (id.coverStyle as 'classic' | 'modern' | 'banner') || 'classic';
+  const style = (id.coverStyle as 'classic' | 'modern' | 'banner') || 'modern';
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -1674,8 +1688,8 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
         <div className="flex-1 flex flex-col justify-center p-12 relative z-10">
           <p className="text-[11px] uppercase tracking-[0.25em] mb-4" style={{ color: titleColor, opacity: 0.7 }}>{org?.name ?? 'Société'}</p>
           <h1 className="text-5xl font-bold leading-tight mb-3" style={{ color: titleColor }}>{id.title}</h1>
-          {id.subtitle && <p className="text-lg italic" style={{ color: subtitleColor, opacity: 0.85 }}>{id.subtitle}</p>}
-          <div className="mt-12 pt-6 border-t-2" style={{ borderColor: titleColor + '40' }}>
+          {id.subtitle && <p className="text-lg italic" style={{ color: subtitleColor, opacity: 0.9 }}>{id.subtitle}</p>}
+          <div className="mt-12 pt-6 border-t-2" style={{ borderColor: accentColor }}>
             {(org?.rccm || org?.ifu) && <p className="text-xs text-primary-500">{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
             {org?.address && <p className="text-xs text-primary-500 mt-1">{org.address}</p>}
           </div>

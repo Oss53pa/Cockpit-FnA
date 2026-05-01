@@ -79,7 +79,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         collapsed={collapsed}
         onToggleCollapse={toggleCollapse}
       />
-      <div className="flex-1 flex flex-col min-w-0 app-shell overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 app-shell">
         <DemoBanner />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main key={`${amountMode}-${remountKey}`} className="flex-1 p-3 sm:p-4 lg:p-6">
