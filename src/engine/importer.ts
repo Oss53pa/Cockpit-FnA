@@ -172,13 +172,24 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     return 'X';
   };
 
+  // Diagnostic : compteurs des raisons de skip pour expliquer si 0 import
+  let skipCodeAbsent = 0;
+  let skipCodeNonNumerique = 0;
+  let skipLabelAbsent = 0;
+  const sampleRejets: string[] = [];
+
   for (const r of rows) {
     let code = r[colCode];
-    if (code === undefined || code === null) continue;
+    if (code === undefined || code === null) { skipCodeAbsent++; continue; }
     code = String(code).trim();
-    if (!code || !/^\d/.test(code)) continue;
+    if (!code) { skipCodeAbsent++; continue; }
+    if (!/^\d/.test(code)) {
+      skipCodeNonNumerique++;
+      if (sampleRejets.length < 5) sampleRejets.push(`"${code}"`);
+      continue;
+    }
     const label = String(r[colLabel] ?? '').trim();
-    if (!label) { errors.push(`Compte ${code} sans libellé — ignoré`); continue; }
+    if (!label) { skipLabelAbsent++; errors.push(`Compte ${code} sans libellé — ignoré`); continue; }
     const cls = colClass ? String(r[colClass] ?? '').trim() : (classOf(code) ?? code[0]);
     // Type : essaie chaque colonne "Type*" jusqu'a obtenir un code valide
     let type: Account['type'] = 'X';
@@ -193,7 +204,22 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     toImport.push({ orgId, code, label, class: cls || code[0], type, syscoCode });
   }
 
-  console.log('🟢 [importCOAv2] Comptes à importer:', toImport.length);
+  console.log('🟢 [importCOAv2] Comptes à importer:', toImport.length, '— skip:', { skipCodeAbsent, skipCodeNonNumerique, skipLabelAbsent });
+
+  // Si 0 import : ajouter un diagnostic au debut des erreurs
+  if (toImport.length === 0) {
+    const totalRows = rows.length;
+    const diag: string[] = [];
+    diag.push(`Lecture OK : feuille "${sheetName}", ${totalRows} lignes data extraites.`);
+    diag.push(`Colonnes mappées : Code = "${colCode}", Libellé = "${colLabel}".`);
+    if (skipCodeAbsent) diag.push(`${skipCodeAbsent} ligne(s) sans valeur de code.`);
+    if (skipCodeNonNumerique) diag.push(`${skipCodeNonNumerique} ligne(s) avec un code NON-numérique (ex: ${sampleRejets.join(', ')}). Le compte doit commencer par un chiffre (ex: 411, 601100).`);
+    if (skipLabelAbsent) diag.push(`${skipLabelAbsent} ligne(s) sans libellé.`);
+    if (!skipCodeAbsent && !skipCodeNonNumerique && !skipLabelAbsent) {
+      diag.push('Toutes les lignes ont été ignorées sans raison identifiée — vérifiez le sample row dans la console (F12).');
+    }
+    errors.unshift(...diag);
+  }
 
   if (toImport.length > 0) {
     await db.accounts.bulkPut(toImport);
@@ -203,7 +229,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     orgId, date: Date.now(), user: 'Utilisateur local', fileName: file.name,
     source: 'Excel (v2)', kind: 'COA', count: toImport.length, rejected: errors.length,
     status: toImport.length === 0 ? 'error' : (errors.length === 0 ? 'success' : 'partial'),
-    report: JSON.stringify({ updated: updatedCount, errors, sheetName, headers, sampleRow: rows[0] }),
+    report: JSON.stringify({ updated: updatedCount, errors, sheetName, headers, sampleRow: rows[0], skipStats: { skipCodeAbsent, skipCodeNonNumerique, skipLabelAbsent } }),
   });
 
   return { imported: toImport.length, updated: updatedCount, errors, sheetName };

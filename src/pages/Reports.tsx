@@ -1623,13 +1623,14 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
           Hors marge — créez un nouveau saut de page
         </div>
       )}
-      {/* Le contenu utilise flex-col gap mais PAS flex-1 : il garde sa hauteur
-          naturelle, le footer suit immediatement (pas d'espace vide). */}
-      <div ref={ref} className="break-words flex flex-col gap-1 p-4 pb-2">{children}</div>
-      {/* Footer en flux normal (mt-auto pour le coller en bas SI le parent
-          a une hauteur — c'est le cas en print, pas a l'ecran). */}
+      {/* flex-1 conserve : assure que le contenu prend la largeur stretch du
+          parent. Sans flex-1, certains layouts internes (TOC notamment) ne
+          s'etendent pas a la pleine largeur. */}
+      <div ref={ref} className="break-words flex-1 flex flex-col gap-1 p-4 pb-2">{children}</div>
+      {/* Footer en flux normal — pas d'absolute pour eviter l'espace vide
+          quand la page contient peu de contenu. */}
       {!hideNumber && pageNum && totalPages && (
-        <div className="mt-auto pb-2 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
+        <div className="pb-2 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
           <span style={{ color: palette?.primary ?? undefined }}>Page {pageNum} / {totalPages}</span>
         </div>
       )}
