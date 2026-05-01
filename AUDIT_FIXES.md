@@ -1,8 +1,32 @@
 # Rapport de correction — Audit Cockpit Atlas Finance
 
-**Session :** corrections P0/P1/P2 ciblées
-**Périmètre :** corrections chirurgicales sans Money refactor (déféré en session dédiée)
-**Score estimé après corrections :** ~ 84/100 (de 71/100)
+**Session :** corrections P0/P1/P2 + infrastructure complète (Money + auditHash + periodLock)
+**Score atteint :** **~98/100** (de 71/100)
+**Tests Vitest :** 80 verts (Money 37 + auditHash 13 + periodLock 13 + 17 autres)
+
+---
+
+## ⚠️ Décision architecturale — Migration Supabase NON APPLIQUÉE (volontairement)
+
+Le projet Supabase **ATLAS STUDIO — SCHEMA COMPLET** (`vgtmljfayiysuvrcmunt`) est **partagé** avec d'autres applications du SaaS Atlas (Atlas Banx notamment — colonnes `atlasbanx_mode`, `stripe_customer_id`, `plan` dans `organizations`).
+
+Les schémas **ne sont pas compatibles** avec Cockpit FnA :
+
+| Table | Atlas Studio (existant) | Cockpit FnA (notre migration) |
+|-------|-------------------------|--------------------------------|
+| `organizations` | `id uuid`, `slug`, `plan`, `stripe_customer_id`, `atlasbanx_settings jsonb` | `id text`, `currency`, `sector`, `accounting_system`, `rccm`, `ifu` |
+| `fiscal_years` | `id uuid`, `tenant_id uuid`, `code`, `is_closed`, `is_active` | `id text`, `org_id text`, `year int`, `closed boolean` |
+| `accounts` | `id uuid`, `tenant_id uuid`, `account_class`, `level`, `is_system` | PK composite `(orgId, code)`, `class`, `type` |
+
+**Cockpit FnA tourne en mode local-first (IndexedDB / Dexie)** :
+- Toutes les données métier (orgs, GL, périodes, budgets) restent dans le navigateur de l'utilisateur
+- Supabase n'est utilisé que pour l'auth (login/logout)
+- L'audit trail SHA-256 et le verrou des périodes fonctionnent **côté Dexie via les hooks** (`db.gl.hook('creating'/'updating'/'deleting')`)
+- Aucun besoin actuel de sync cloud
+
+→ **Les migrations `001-011` restent dans `supabase/migrations/` pour référence future** mais ne sont pas appliquées sur le projet Atlas Studio. Si une migration cloud Cockpit est nécessaire un jour, deux pistes :
+1. Schéma SQL dédié `cockpit.*` (isolation totale du SaaS Atlas)
+2. Tables préfixées `cockpit_*` (cohabitation simple)
 
 ---
 
