@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts';
-import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, Banknote, Receipt, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
+import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, Banknote, Receipt, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -13,6 +13,7 @@ import { SIGList } from '../components/ui/SIGList';
 import { PerformanceGauges } from '../components/ui/PerformanceGauges';
 import { AlertsCard } from '../components/ui/AlertsCard';
 import { SkeletonKPIGrid } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
@@ -49,7 +50,31 @@ export default function DashboardHome() {
   const alerts = useMemo(() => computeAlerts(ratios, balance), [ratios, balance]);
 
   if (!bilan || !sig) {
-    return <SkeletonKPIGrid count={4} />;
+    // Pas de donnees : EmptyState avec CTA d'import (sinon le skeleton tourne
+    // indefiniment quand l'utilisateur n'a pas encore importe son Grand Livre)
+    return (
+      <div>
+        <PageHeader
+          title="Synthèse de gestion"
+          subtitle={`${org?.name ?? '—'} · Exercice ${currentYear}`}
+        />
+        <EmptyState
+          icon={Upload}
+          title="Aucune donnée à analyser"
+          description="Importez votre Grand Livre pour générer automatiquement le bilan, le compte de résultat, les SIG et tous les ratios financiers SYSCOHADA."
+          action={
+            <div className="flex gap-2">
+              <button className="btn-primary" onClick={() => navigate('/imports')}>
+                <Upload className="w-4 h-4" /> Importer un Grand Livre
+              </button>
+              <button className="btn-outline" onClick={() => navigate('/demo')}>
+                Voir la démo
+              </button>
+            </div>
+          }
+        />
+      </div>
+    );
   }
 
   const system = resolveSystem(org?.accountingSystem);

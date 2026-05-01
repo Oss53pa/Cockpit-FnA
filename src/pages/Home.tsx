@@ -36,7 +36,10 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen relative px-8 py-8 flex flex-col bg-bgpage dark:bg-primary-950 animate-fade-in">
+    // Layout Twisty : bg-page bleu en BORDURE FINE (p-3) + shell blanc-bleute
+    // qui occupe l'ecran. Le bleu n'apparait que comme "frame" autour du shell.
+    <div className="min-h-screen p-2 sm:p-3 lg:p-4 bg-bgpage dark:bg-primary-950 animate-fade-in">
+      <div className="min-h-[calc(100vh-1rem)] sm:min-h-[calc(100vh-1.5rem)] lg:min-h-[calc(100vh-2rem)] relative px-8 py-8 flex flex-col app-shell">
       {/* TOP BAR */}
       <div className="flex items-start justify-between">
         <div>
@@ -112,6 +115,7 @@ export default function Home() {
       {/* FOOTER */}
       <div className="text-center text-[10px] text-primary-400 mt-6">
         CockPit F&amp;A — SYSCOHADA révisé 2017 · Tous droits réservés © {currentYear}
+      </div>
       </div>
     </div>
   );
