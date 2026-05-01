@@ -9,6 +9,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { toast } from '../components/ui/Toast';
 import { SYSCOHADA_COA, SyscoAccount, findSyscoAccount } from '../syscohada/coa';
 import { db, Account, GLEntry, ImportLog } from '../db/schema';
 import { useApp } from '../store/app';
@@ -110,17 +111,11 @@ export default function COA() {
                 if (!f) return;
                 try {
                   const res = await importCOAv2(f, currentOrgId);
-                  const errPreview = res.errors.slice(0, 5).join('\n');
-                  alert(`${res.imported > 0 ? '✅' : '⚠️'} Import terminé\n\n` +
-                    `Fichier : ${f.name}\n` +
-                    `Feuille lue : ${res.sheetName || '(aucune)'}\n` +
-                    `Comptes importés : ${res.imported}\n` +
-                    `Mis à jour : ${res.updated}\n` +
-                    `Erreurs : ${res.errors.length}` +
-                    (errPreview ? '\n\n' + errPreview : ''));
+                  const variant = res.imported > 0 ? 'success' : 'warning';
+                  toast[variant]('Import COA terminé', `${res.imported} comptes · ${res.updated} mis à jour` + (res.errors.length ? ` · ${res.errors.length} erreurs` : ''));
                   if (res.imported > 0) window.location.reload();
                 } catch (err: any) {
-                  alert(`❌ Erreur :\n${err.message}`);
+                  toast.error("Erreur d'import COA", err.message);
                   console.error('[Import COA] Exception:', err);
                 }
                 e.target.value = '';
@@ -133,7 +128,7 @@ export default function COA() {
               if (!confirm(`Vider le Plan Comptable de l'entreprise ?\n${accounts.length} compte(s) seront supprimés. Le Grand Livre n'est PAS impacté.`)) return;
               const toDel = (await db.accounts.where('orgId').equals(currentOrgId).toArray()).map((a) => [a.orgId, a.code] as [string, string]);
               await db.accounts.bulkDelete(toDel);
-              alert(`${toDel.length} compte(s) supprimés. Importez votre Plan Comptable via l'onglet "Import & Historique".`);
+              toast.success('Plan comptable vidé', `${toDel.length} comptes supprimés — réimportez via l'onglet Import`);
               window.location.reload();
             }}>
               Vider PC
@@ -199,7 +194,7 @@ export default function COA() {
             <button className="btn-outline !py-1.5 text-xs" onClick={async () => {
               if (!confirm('Générer le Plan Comptable à partir des comptes mouvementés du Grand Livre ?\nLes libellés seront ceux des écritures GL (le plus fréquent par compte).')) return;
               const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
-              if (entries.length === 0) { alert('Aucune écriture GL. Importez d\'abord un Grand Livre.'); return; }
+              if (entries.length === 0) { toast.warning('Pas de Grand Livre', 'Importez d\'abord un GL pour générer le plan comptable'); return; }
               const freq = new Map<string, Map<string, number>>();
               for (const e of entries) {
                 if (!e.label) continue;
@@ -225,16 +220,16 @@ export default function COA() {
                   type: (sysco?.type as Account['type']) ?? 'X',
                 });
               }
-              if (toCreate.length === 0) { alert('Tous les comptes du GL existent déjà dans le PC.'); return; }
+              if (toCreate.length === 0) { toast.info('Plan déjà à jour', 'Tous les comptes du GL existent déjà'); return; }
               await db.accounts.bulkPut(toCreate);
-              alert(`${toCreate.length} compte(s) créés depuis le Grand Livre.`);
+              toast.success('Comptes créés', `${toCreate.length} comptes ajoutés depuis le Grand Livre`);
             }}>Générer depuis le GL</button>
             <button className="btn-primary !py-1.5 text-xs" onClick={async () => {
               const code = prompt('Code du nouveau compte (ex: 706111) :', '');
               if (!code || !code.trim()) return;
               const trimmed = code.trim();
               const existing = await db.accounts.where({ orgId: currentOrgId, code: trimmed }).first();
-              if (existing) { alert(`Le compte ${trimmed} existe déjà.`); return; }
+              if (existing) { toast.warning('Compte existant', `Le compte ${trimmed} existe déjà`); return; }
               const label = prompt('Libellé du compte :', '');
               if (!label || !label.trim()) return;
               const sysco = SYSCOHADA_COA.find((a) => trimmed.startsWith(a.code));
@@ -246,7 +241,7 @@ export default function COA() {
                 class: trimmed[0],
                 type: sysco?.type ?? 'X',
               });
-              alert(`Compte ${trimmed} ajouté.`);
+              toast.success('Compte ajouté', `Compte ${trimmed} créé avec succès`);
             }}>+ Ajouter compte</button>
             </div>
           </div>
@@ -620,15 +615,12 @@ function COAImportTab({
               if (!f) return;
               try {
                 const res = await importCOAv2(f, orgId);
-                const errPreview = res.errors.slice(0, 5).join('\n');
-                alert(`${res.imported > 0 ? '✅' : '⚠️'} Import terminé\n\n` +
-                  `Fichier : ${f.name}\nFeuille lue : ${res.sheetName || '(aucune)'}\n` +
-                  `Comptes importés : ${res.imported}\nMis à jour : ${res.updated}\nErreurs : ${res.errors.length}` +
-                  (errPreview ? '\n\n' + errPreview : ''));
+                const variant = res.imported > 0 ? 'success' : 'warning';
+                toast[variant]('Import terminé', `${res.imported} comptes · ${res.updated} mis à jour` + (res.errors.length ? ` · ${res.errors.length} erreurs` : ''));
                 onImported();
                 if (res.imported > 0) window.location.reload();
               } catch (err: any) {
-                alert(`❌ Erreur :\n${err.message}`);
+                toast.error("Erreur d'import", err.message);
               }
               e.target.value = '';
             }} />

@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { TabSwitch } from '../components/ui/TabSwitch';
+import { toast } from '../components/ui/Toast';
 import { VirtualTable, type Column } from '../components/ui/VirtualTable';
 import { useApp } from '../store/app';
 import { db, type GLEntry, type ImportLog } from '../db/schema';
@@ -41,7 +42,7 @@ export default function GrandLivre() {
       setAuditReport(report);
       setAuditOpen(true);
     } catch (e: any) {
-      alert(`Erreur audit : ${e.message}`);
+      toast.error('Erreur audit', e.message);
     } finally {
       setAuditing(false);
     }

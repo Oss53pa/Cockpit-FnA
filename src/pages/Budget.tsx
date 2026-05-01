@@ -6,6 +6,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Chart } from '../components/ui/Chart';
+import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { db, ImportLog } from '../db/schema';
 import {
@@ -171,12 +172,12 @@ export default function Budget() {
             </button>
             <button className="btn-outline" onClick={async () => {
               const all = await db.budgets.where('orgId').equals(currentOrgId).toArray();
-              if (all.length === 0) { alert('Aucun budget à supprimer.'); return; }
+              if (all.length === 0) { toast.info('Aucun budget', 'Rien à supprimer pour cette société'); return; }
               if (!confirm(`Vider TOUS les budgets de la société ?\n${all.length} ligne(s) seront supprimées (toutes années + versions confondues).`)) return;
               await db.budgets.where('orgId').equals(currentOrgId).delete();
               await db.imports.where('orgId').equals(currentOrgId).filter((i) => i.kind === 'BUDGET').delete();
               setItems([]); setVersion('');
-              alert(`${all.length} ligne(s) supprimées.`);
+              toast.success('Budgets supprimés', `${all.length} lignes effacées`);
             }}>
               <Trash2 className="w-4 h-4" /> Vider budget
             </button>
@@ -386,15 +387,13 @@ function BudgetImportTab({
               if (!ver) return;
               try {
                 const res = await importBudgetV2(f, orgId, defaultYear, ver.trim());
-                const errPreview = res.errors.slice(0, 5).join('\n');
-                alert(`${res.imported > 0 ? '✅' : '⚠️'} Import budget terminé\n\n` +
-                  `Fichier : ${f.name}\nFeuille lue : ${res.sheetName || '(aucune)'}\n` +
-                  `Comptes importés : ${res.imported}\nLignes insérées : ${res.lines}\nErreurs : ${res.errors.length}` +
-                  (errPreview ? '\n\n' + errPreview : ''));
+                const variant = res.imported > 0 ? 'success' : 'warning';
+                const description = `${res.imported} comptes · ${res.lines} lignes` + (res.errors.length ? ` · ${res.errors.length} erreurs` : '');
+                toast[variant]('Import budget terminé', description);
                 onImported({ year: defaultYear, version: ver.trim() });
                 if (res.imported > 0) window.location.reload();
               } catch (err: any) {
-                alert(`❌ Erreur :\n${err.message}`);
+                toast.error("Erreur d'import budget", err.message);
               }
               e.target.value = '';
             }} />

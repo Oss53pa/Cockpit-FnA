@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { CheckCircle2, Download, UploadCloud } from 'lucide-react';
 import { Card } from './Card';
+import { toast } from './Toast';
 
 export type WizardField = {
   key: string;
@@ -114,7 +115,7 @@ export function ImportWizard(props: Props) {
       setMapping(autoDetect(hs));
       setStep('mapping');
     } catch (e) {
-      alert((e as Error).message);
+      toast.error('Lecture impossible', (e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -123,11 +124,11 @@ export function ImportWizard(props: Props) {
   const runImport = async () => {
     if (!file) return;
     for (const f of fields) {
-      if (f.required && !mapping[f.key]) { alert(`Colonne manquante : ${f.label}`); return; }
+      if (f.required && !mapping[f.key]) { toast.warning('Colonne manquante', f.label); return; }
     }
     for (const f of extraFields) {
       if (f.required && (extras[f.key] === undefined || extras[f.key] === '')) {
-        alert(`Champ manquant : ${f.label}`); return;
+        toast.warning('Champ manquant', f.label); return;
       }
     }
     setLoading(true);
@@ -136,7 +137,7 @@ export function ImportWizard(props: Props) {
       setResult(res);
       setStep('result');
     } catch (e) {
-      alert(`Erreur import : ${(e as Error).message}`);
+      toast.error("Erreur d'import", (e as Error).message);
     } finally {
       setLoading(false);
     }

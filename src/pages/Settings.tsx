@@ -6,6 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { TabSwitch } from '../components/ui/TabSwitch';
+import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
 import { PALETTES, PaletteKey, useTheme } from '../store/theme';
@@ -313,9 +314,9 @@ function TabExercices() {
   const openCreate = () => { resetForm(); setOpenNew(true); };
 
   const create = async () => {
-    if (!currentOrgId) { alert('Sélectionnez une société dans le header avant de créer un exercice.'); return; }
+    if (!currentOrgId) { toast.warning('Société requise', 'Sélectionnez une société dans le header avant de créer un exercice'); return; }
     if (fiscalYears.some((fy: any) => fy.year === form.year)) {
-      alert(`L'exercice ${form.year} existe déjà pour cette société.`); return;
+      toast.warning('Exercice existant', `L'exercice ${form.year} existe déjà pour cette société`); return;
     }
     setSaving(true);
     try {
@@ -650,8 +651,8 @@ function TabDonnees() {
         if (data.reports) await db.reports.bulkAdd(data.reports.map(({ id: _i, ...r }: any) => r));
         if (data.templates) await db.templates.bulkAdd(data.templates.map(({ id: _i, ...r }: any) => r));
       });
-      alert('Import terminé.');
-    } catch (e: any) { alert('Erreur : ' + e.message); } finally { setBusy(false); }
+      toast.success('Import terminé', 'Sauvegarde restaurée avec succès');
+    } catch (e: any) { toast.error("Erreur d'import", e.message); } finally { setBusy(false); }
   };
 
   return (
@@ -672,7 +673,7 @@ function TabDonnees() {
             <Upload className="w-4 h-4" /> Importer sauvegarde
             <input type="file" accept=".json" className="hidden" onChange={(e) => e.target.files?.[0] && importDB(e.target.files[0])} />
           </label>
-          <button className="btn-outline" onClick={async () => { if (!confirm('Regénérer les données de démonstration ?')) return; setBusy(true); await ensureSeeded(); setBusy(false); alert('Terminé'); }}>
+          <button className="btn-outline" onClick={async () => { if (!confirm('Regénérer les données de démonstration ?')) return; setBusy(true); await ensureSeeded(); setBusy(false); toast.success('Données régénérées', 'Démo prête à être consultée'); }}>
             <Database className="w-4 h-4" /> Regénérer données démo
           </button>
         </div>

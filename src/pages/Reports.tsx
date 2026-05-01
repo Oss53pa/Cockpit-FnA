@@ -7,6 +7,7 @@ import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { Collapsible } from '../components/ui/Collapsible';
+import { toast } from '../components/ui/Toast';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
@@ -735,11 +736,11 @@ export default function Reports() {
     };
     if (currentReportId && !newSave) {
       await db.reports.update(currentReportId, payload);
-      alert('✅ Rapport mis à jour.');
+      toast.success('Rapport mis à jour', config.identity.title);
     } else {
       const id = await db.reports.add({ ...payload, createdAt: now });
       setCurrentReportId(id as number);
-      alert(`✅ Rapport enregistré.`);
+      toast.success('Rapport enregistré', config.identity.title);
     }
   };
 
@@ -750,7 +751,7 @@ export default function Reports() {
       setCurrentReportId(rep.id);
       setOpenJournal(false);
     } catch (e: any) {
-      alert(`Erreur chargement : ${e.message}`);
+      toast.error('Chargement impossible', e.message);
     }
   };
 
@@ -1019,14 +1020,14 @@ export default function Reports() {
                 context: config.identity.period || `${currentYear}`,
               });
               setConfig((c) => ({ ...c, blocks: res.blocks as any }));
-              alert(`✅ ${res.count} section(s) commentée(s) par Proph3t.\n📚 Mémoire mise à jour pour cette société (apprentissage continu).`);
+              toast.success('Proph3t a commenté le rapport', `${res.count} sections enrichies — mémoire mise à jour`);
             }}><Sparkles className="w-4 h-4" /> Commenter avec Proph3t</button>
             <button className="btn-outline" onClick={async () => {
               if (!confirm("Effacer tous les commentaires générés par Proph3t ?\nLes paragraphes que vous avez écrits manuellement sont préservés.")) return;
               const { clearAutoComments } = await import('../engine/proph3/reportCommentator');
               const res = clearAutoComments(config.blocks as any);
               setConfig((c) => ({ ...c, blocks: res.blocks as any }));
-              alert(`✅ ${res.count} commentaire(s) Proph3t supprimé(s).`);
+              toast.success('Commentaires effacés', `${res.count} commentaires Proph3t supprimés`);
             }}>Effacer commentaires Proph3t</button>
             <button className="btn-outline" onClick={() => generate(false)}><Eye className="w-4 h-4" /> Aperçu</button>
             <button className="btn-outline" onClick={() => generate(true)}><Download className="w-4 h-4" /> Télécharger</button>
@@ -3550,7 +3551,7 @@ function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
     <Modal open={open} onClose={onClose} title="Envoyer le rapport" subtitle="Validation interne ou diffusion finale"
       footer={<>
         <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={() => { onValidate(); onClose(); alert(`Rapport généré et "envoyé" en ${destination === 'validation' ? 'validation' : 'diffusion finale'} à ${config.recipients.length} destinataire(s).\n\nL'envoi réel par email sera fonctionnel au Sprint 5 (Supabase Edge Functions + Resend).`); }}>
+        <button className="btn-primary" onClick={() => { onValidate(); onClose(); toast.info('Rapport envoyé', `${destination === 'validation' ? 'Validation interne' : 'Diffusion finale'} · ${config.recipients.length} destinataires (envoi réel au Sprint 5)`); }}>
           <Send className="w-4 h-4" /> Envoyer
         </button>
       </>}>
@@ -3609,7 +3610,7 @@ function SaveModal({ open, onClose, config, orgId }: any) {
     const now = Date.now();
     await db.templates.add({ orgId, name: name.trim(), description: desc.trim() || undefined, config: JSON.stringify(config), createdAt: now, updatedAt: now });
     onClose();
-    alert(`Modèle "${name}" enregistré.`);
+    toast.success('Modèle enregistré', `"${name}" prêt à être réutilisé`);
   };
   return (
     <Modal open={open} onClose={onClose} title="Enregistrer comme modèle"

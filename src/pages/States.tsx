@@ -3,6 +3,7 @@ import { Download, FileSpreadsheet, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
+import { toast } from '../components/ui/Toast';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyBilan, useMonthlyCR, useMonthlyTFT, useRatios, useStatements, useTAFIRE, useTFT } from '../hooks/useFinancials';
 import { bySection, computeIntermediates, CR_FLOW, CRSection, CustomSection, INTERMEDIATE_LABELS, loadCustomSections, loadLabels, loadOrder, saveCustomSections, saveLabels, saveOrder } from '../engine/budgetActual';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
@@ -351,7 +352,7 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
   const addSection = () => {
     const label = newSec.label.trim();
     const prefixes = newSec.prefixes.split(',').map((s) => s.trim()).filter(Boolean);
-    if (!label || !prefixes.length) { alert('Libellé et préfixes requis (ex : 605, 611)'); return; }
+    if (!label || !prefixes.length) { toast.warning('Champs requis', 'Libellé et préfixes obligatoires (ex : 605, 611)'); return; }
     const id = `custom_${Date.now()}`;
     const next = [...customs, { id, label, prefixes, isCharge: newSec.isCharge }];
     setCustoms(next); saveCustomSections(currentOrgId, next);

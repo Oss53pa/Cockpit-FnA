@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, UploadCloud, XCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
@@ -47,7 +48,7 @@ export default function Imports() {
       setMapping(detectColumns(headers));
       setStep('mapping');
     } catch (e: any) {
-      alert(e.message);
+      toast.error('Lecture du fichier impossible', e.message);
     } finally {
       setLoading(false);
     }
@@ -57,7 +58,7 @@ export default function Imports() {
     if (!file) return;
     const required: (keyof ColumnMapping)[] = ['date', 'account', 'debit', 'credit'];
     for (const k of required) {
-      if (!mapping[k]) { alert(`Colonne manquante : ${k}`); return; }
+      if (!mapping[k]) { toast.warning('Colonne manquante', `Le champ "${k}" n'a pas été mappé`); return; }
     }
     setLoading(true);
     try {
@@ -67,7 +68,7 @@ export default function Imports() {
       setReport(res);
       setStep('result');
     } catch (e: any) {
-      alert(`Erreur import : ${e.message}`);
+      toast.error("Erreur d'import", e.message);
     } finally {
       setLoading(false);
     }
@@ -97,8 +98,8 @@ export default function Imports() {
             setLoading(true);
             try {
               const res = await migrateGLPeriods(currentOrgId);
-              alert(`${res.migrated} écriture(s) réaffectée(s), ${res.periodsCreated} période(s) créée(s).`);
-            } catch (e: any) { alert(e.message); }
+              toast.success('Périodes recalculées', `${res.migrated} écritures réaffectées · ${res.periodsCreated} périodes créées`);
+            } catch (e: any) { toast.error('Recalcul impossible', e.message); }
             finally { setLoading(false); }
           }}>
             <RefreshCw className="w-4 h-4" /> Recalculer les périodes
@@ -108,8 +109,8 @@ export default function Imports() {
             setLoading(true);
             try {
               const res = await resyncAccountLabels(currentOrgId);
-              alert(`${res.updated} libellé(s) de compte mis à jour depuis le GL.`);
-            } catch (e: any) { alert(e.message); }
+              toast.success('Libellés synchronisés', `${res.updated} comptes mis à jour depuis le GL`);
+            } catch (e: any) { toast.error('Resync impossible', e.message); }
             finally { setLoading(false); }
           }}>
             <RefreshCw className="w-4 h-4" /> Resync libellés
@@ -138,7 +139,9 @@ export default function Imports() {
               lines.push(`${k}`);
               lines.push(`  ${v.count} écr. | D=${v.debit.toFixed(0)} C=${v.credit.toFixed(0)} | ex: ${v.sample}`);
             }
-            alert(lines.join('\n'));
+            // Ouvrir le diagnostic dans la console pour pouvoir le copier
+            console.log(lines.join('\n'));
+            toast.info('Diagnostic compte ' + code, `${entries.length} écritures inspectées — voir la console (F12)`);
           }}>
             <FileWarning className="w-4 h-4" /> Diagnostic compte
           </button>

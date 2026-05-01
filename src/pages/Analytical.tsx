@@ -9,6 +9,7 @@ import { Card } from '../components/ui/Card';
 import { ChartCard } from '../components/ui/ChartCard';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull } from '../lib/format';
@@ -232,7 +233,7 @@ function AxesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis[
 
   const create = () => {
     const next = (axes.length > 0 ? Math.max(...axes.map((a) => a.number)) : 0) + 1;
-    if (next > 5) { alert('Maximum 5 axes.'); return; }
+    if (next > 5) { toast.warning('Maximum atteint', '5 axes analytiques maximum'); return; }
     setEditing({ id: uid(), orgId, number: next, name: '', codeName: '', required: false, active: true });
   };
 
@@ -474,7 +475,7 @@ function RulesTab({ orgId, axes, onUpdate, year }: { orgId: string; axes: Analyt
     try {
       const result = await applyRules(orgId, year);
       setSimResult(result);
-      alert(`${result.matched} ligne(s) affectée(s). Taux de couverture : ${result.coverageRate}%`);
+      toast.success('Affectations exécutées', `${result.matched} lignes affectées · couverture ${result.coverageRate}%`);
       onUpdate();
     } finally { setApplying(false); }
   };
@@ -482,7 +483,7 @@ function RulesTab({ orgId, axes, onUpdate, year }: { orgId: string; axes: Analyt
   const clearAuto = async () => {
     if (!confirm('Supprimer toutes les affectations automatiques ? Les affectations manuelles seront conservées.')) return;
     const n = await clearAutoAssignments(orgId);
-    alert(`${n} affectation(s) supprimée(s).`);
+    toast.success('Affectations supprimées', `${n} lignes effacées`);
     onUpdate();
   };
 
@@ -659,7 +660,7 @@ function AssignTab({ orgId, axes, year, onUpdate }: { orgId: string; axes: Analy
   };
 
   const assign = async () => {
-    if (selectedIds.size === 0 || !targetCodeId) { alert('Sélectionnez des lignes et un code analytique.'); return; }
+    if (selectedIds.size === 0 || !targetCodeId) { toast.warning('Sélection requise', 'Choisissez des lignes et un code analytique'); return; }
     await assignManual(orgId, [...selectedIds], axisNum, targetCodeId);
     setSelectedIds(new Set());
     setTargetCodeId('');
