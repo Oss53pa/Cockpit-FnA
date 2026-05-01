@@ -68,18 +68,21 @@ export function generateScale(baseHex: string): Palette['scale'] {
 // noyaient le système — un produit international defend UNE direction
 // visuelle, pas 18 au choix de l'utilisateur.
 export const BUILTIN_PALETTES: Record<string, Palette> = {
-  // Palette principale — minimaliste, style Twisty / Stripe / Linear
+  // Palette principale — match REEL du dashboard Twisty :
+  // bg-page gris-bleu PALE (lavande), shell BLANC (pas creme), accent orange chaud.
+  // Les nuances grises sont neutres-froides (cool-tinted) pour s'aligner sur le
+  // fond page lavande plutot que sur un crème chaud.
   twisty: {
     name: 'Cockpit (default)',
-    scale: ['#f4f1ec','#ede9df','#e2dccd','#cabfa6','#9c917b','#736b58','#544e3f','#3c372d','#272420','#1a1815','#0e0d0b'],
-    tableHeader: '#1A1815', tableHeaderText: '#F4F1EC',
-    chartColors: ['#1A1815','#E8552B','#C9C2B0','#9C917B','#FFB070','#544E3F','#E2DCCD'],
+    scale: ['#fafafa','#f4f4f5','#e4e4e7','#d4d4d8','#a1a1aa','#71717a','#52525b','#3f3f46','#27272a','#18181b','#09090b'],
+    tableHeader: '#18181B', tableHeaderText: '#FAFAFA',
+    chartColors: ['#18181B','#F47B45','#D4D4D8','#71717A','#FFB400','#3F3F46','#E4E4E7'],
     layout: {
-      bgPage:     '#B7C4CF',
-      bgShell:    '#F4F1EC',
-      bgSurface:  '#FFFFFF',
-      accent:     '#E8552B',
-      accentSoft: '#FFB070',
+      bgPage:     '#B5BFC8',  // gris-bleu pale (lavande froide) — fond page
+      bgShell:    '#FAFAFA',  // blanc cassé — shell container
+      bgSurface:  '#FFFFFF',  // blanc pur — cards intérieures
+      accent:     '#F47B45',  // orange chaud Twisty (pas brulé)
+      accentSoft: '#FFB400',  // jaune-ambre badge "Middle"
     },
   },
   // Graphite — neutre pur (style Linear / Vercel)
