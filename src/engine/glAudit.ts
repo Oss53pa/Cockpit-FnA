@@ -31,7 +31,22 @@ export interface AuditReport {
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 
-export async function auditGL(orgId: string, year?: number): Promise<AuditReport> {
+/**
+ * Audit du Grand Livre — détection d'anomalies comptables.
+ *
+ * @param orgId      Organisation à auditer
+ * @param year       Année à auditer (optionnel — si absent, toutes années)
+ * @param thresholds Seuils paramétrables par tenant (P2-5) :
+ *   - amountAnomaly : montant minimal pour considérer une anomalie classe 6/7
+ *     (défaut : 1000 XOF — adapté UEMOA, à augmenter pour grandes entreprises
+ *     ou devises plus fortes comme EUR/USD)
+ */
+export async function auditGL(
+  orgId: string,
+  year?: number,
+  thresholds?: { amountAnomaly?: number },
+): Promise<AuditReport> {
+  const minAmount = thresholds?.amountAnomaly ?? 1000;
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
   const periods = await db.periods.where('orgId').equals(orgId).toArray();
   const accounts = await db.accounts.where('orgId').equals(orgId).toArray();
@@ -172,7 +187,7 @@ export async function auditGL(orgId: string, year?: number): Promise<AuditReport
   }
 
   // ─── 8. CLASSE 6 EN CRÉDIT ANORMAL ───
-  const c6Cred = filtered.filter((e) => e.account?.startsWith('6') && e.credit > 1000 && e.debit === 0);
+  const c6Cred = filtered.filter((e) => e.account?.startsWith('6') && e.credit > minAmount && e.debit === 0);
   if (c6Cred.length > 0) {
     const total = c6Cred.reduce((s, e) => s + e.credit, 0);
     findings.push({
@@ -186,7 +201,7 @@ export async function auditGL(orgId: string, year?: number): Promise<AuditReport
   }
 
   // ─── 9. CLASSE 7 EN DÉBIT ANORMAL ───
-  const c7Deb = filtered.filter((e) => e.account?.startsWith('7') && e.debit > 1000 && e.credit === 0);
+  const c7Deb = filtered.filter((e) => e.account?.startsWith('7') && e.debit > minAmount && e.credit === 0);
   if (c7Deb.length > 0) {
     const total = c7Deb.reduce((s, e) => s + e.debit, 0);
     findings.push({

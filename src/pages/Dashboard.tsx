@@ -140,8 +140,16 @@ function ChargesProduits() {
     topAccountsByPrefix(currentOrgId, currentYear, ['6'], 10).then(setTopCharges);
   }, [currentOrgId, currentYear]);
 
-  const totalCharges = chargesMonthly.values.reduce((s, v) => s + v, 0);
-  const totalProduits = produitsMonthly.values.reduce((s, v) => s + v, 0);
+  // (P1-7) Source UNIQUE : balance (qui respecte la période sélectionnée via
+  // useBalance avec fromMonth/toMonth). Avant : `chargesMonthly.values` était
+  // calculé sur 12 mois fixes alors que `repartitionCharges` lisait `balance`
+  // filtré sur la période — sources incompatibles → totaux incohérents.
+  const totalCharges = balance
+    .filter((r) => r.account.startsWith('6'))
+    .reduce((s, r) => s + (r.debit - r.credit), 0);
+  const totalProduits = balance
+    .filter((r) => r.account.startsWith('7'))
+    .reduce((s, r) => s + (r.credit - r.debit), 0);
   const resultat = totalProduits - totalCharges;
   const ratioCA = totalProduits ? (totalCharges / totalProduits) * 100 : 0;
 

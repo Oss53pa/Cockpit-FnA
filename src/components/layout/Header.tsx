@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Hash, HelpCircle, LogOut, Menu, Settings, ChevronDown, Search, LogIn } from 'lucide-react';
+import { Bell, Hash, HelpCircle, Lock, LogOut, Menu, Settings, ChevronDown, Search, LogIn } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
@@ -58,6 +58,12 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     ? `Cumul ${currentYear}`
     : `${MONTH_SHORT[fromMonth - 1]} → ${MONTH_SHORT[toMonth - 1]} ${currentYear}`;
 
+  // (UI Audit) Détecte si la période sélectionnée est verrouillée pour afficher
+  // un badge "Clôturée" et alerter l'utilisateur que les écritures sont en lecture seule.
+  const periodLocked = periods
+    .filter((p) => p.month >= fromMonth && p.month <= toMonth)
+    .some((p) => p.closed);
+
   return (
     // Header epure : breadcrumb + 1 pill contexte + actions a droite
     <header className="sticky top-0 z-20 bg-shell dark:bg-primary-950 text-primary-900 dark:text-primary-50">
@@ -78,6 +84,15 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               <span className="truncate max-w-[200px]">{currentOrg?.name ?? '—'}</span>
               <span className="w-px h-3 bg-primary-300 dark:bg-primary-700" />
               <span className="num text-primary-600 dark:text-primary-400">{periodLabel}</span>
+              {periodLocked && (
+                <span
+                  className="badge-warning inline-flex items-center gap-1"
+                  title="La période sélectionnée contient au moins une période clôturée — toute écriture y est refusée"
+                >
+                  <Lock className="w-3 h-3" strokeWidth={2.5} />
+                  Clôturée
+                </span>
+              )}
               <ChevronDown className={`w-3.5 h-3.5 text-primary-400 transition-transform duration-200 ${contextOpen ? 'rotate-180' : ''}`} />
             </button>
 

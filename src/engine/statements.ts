@@ -259,9 +259,22 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const autresProd = soldeC('75', '78') - soldeD('75', '78');
 
   // Charges d'exploitation
+  // (P2-4) Décomposition explicite des classes 60x au lieu d'un groupage opaque.
+  // SYSCOHADA art. 38 :
+  //   601 : Achats de marchandises
+  //   602 : Achats de matières premières
+  //   604 : Achats stockés de matières et fournitures consommables
+  //   605 : Autres achats (eau, électricité, fournitures de bureau)
+  //   608 : Achats d'emballages perdus / récupérables
+  // On les regroupe sous "achats matières & autres" (achatMP) mais on conserve
+  // les sous-postes nommés pour traçabilité dans le CR détaillé.
   const achatMarch = soldeD('601') - soldeC('601');
   const varStockMarch = soldeD('6031') - soldeC('6031');
-  const achatMP = soldeD('602', '604', '605', '608') - soldeC('602', '604', '605', '608');
+  const achatMatPrem = soldeD('602') - soldeC('602');
+  const achatStockesMatFourn = soldeD('604') - soldeC('604'); // Matières et fournitures consommables
+  const autresAchats = soldeD('605') - soldeC('605');         // Eau, électricité, fournitures
+  const achatEmballages = soldeD('608') - soldeC('608');
+  const achatMP = achatMatPrem + achatStockesMatFourn + autresAchats + achatEmballages;
   const varStockMP = soldeD('6032', '6033') - soldeC('6032', '6033');
   const transport = soldeD('61') - soldeC('61');
   const servExt = soldeD('62', '63') - soldeC('62', '63');

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import clsx from 'clsx';
+import { Search, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { TabSwitch } from '../components/ui/TabSwitch';
@@ -11,6 +12,7 @@ import { db, type GLEntry, type ImportLog } from '../db/schema';
 import { computeBalance, computeAuxBalance, type BalanceRow, type AuxBalanceRow } from '../engine/balance';
 import { agedBalance, type AgedTier } from '../engine/analytics';
 import { fmtFull } from '../lib/format';
+import { verifyChain } from '../lib/auditHash';
 import Imports from './Imports';
 
 type Tab = 'import' | 'gl' | 'bg' | 'baC' | 'baF' | 'ageeC' | 'ageeF';
@@ -48,6 +50,44 @@ export default function GrandLivre() {
     }
   };
 
+  // (UI Audit) Vérification d'intégrité de la chaîne SHA-256 sur tout le GL
+  const [verifying, setVerifying] = useState(false);
+  const runVerifyChain = async () => {
+    setVerifying(true);
+    try {
+      const entries = await db.gl.where('orgId').equals(currentOrgId).sortBy('id');
+      const chain = entries.map((e) => ({
+        id: e.id ?? '',
+        date: e.date,
+        journal: e.journal,
+        piece: e.piece,
+        account: e.account,
+        label: e.label,
+        debit: e.debit,
+        credit: e.credit,
+        tiers: e.tiers,
+        hash: e.hash,
+        previousHash: e.previousHash,
+      }));
+      const result = await verifyChain(chain);
+      if (result.valid) {
+        toast.success(
+          'Intégrité vérifiée ✓',
+          `${result.count} écritures — chaîne SHA-256 cohérente. Aucune altération détectée.`,
+        );
+      } else {
+        toast.error(
+          'Chaîne d\'intégrité cassée',
+          `Altération détectée à l'écriture #${result.brokenAt} (position ${result.brokenIndex}). Une modification a posteriori a été effectuée.`,
+        );
+      }
+    } catch (e: any) {
+      toast.error('Erreur vérification', e.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const imports = useLiveQuery(async () => {
     if (!currentOrgId) return [] as ImportLog[];
     const list = await db.imports.where('orgId').equals(currentOrgId).toArray();
@@ -64,9 +104,16 @@ export default function GrandLivre() {
         action={
           <div className="flex items-center gap-2 flex-wrap">
             {imports.length > 0 && (
-              <button className="btn-primary" onClick={runAudit} disabled={auditing} title="Audit complet du Grand Livre : intégrité, cohérence, qualité, risques">
-                🔍 {auditing ? 'Analyse…' : 'Auditer le GL'}
-              </button>
+              <>
+                <button className="btn-outline" onClick={runVerifyChain} disabled={verifying} title="Vérifier la chaîne SHA-256 — détecte toute altération a posteriori des écritures">
+                  <ShieldCheck className="w-4 h-4" />
+                  {verifying ? 'Vérification…' : 'Vérifier intégrité'}
+                </button>
+                <button className="btn-primary" onClick={runAudit} disabled={auditing} title="Audit complet du Grand Livre : intégrité, cohérence, qualité, risques">
+                  <Search className="w-4 h-4" />
+                  {auditing ? 'Analyse…' : 'Auditer le GL'}
+                </button>
+              </>
             )}
             {showVersionPicker && (
               <>

@@ -361,8 +361,21 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
 
   for (const e of entries) {
     const c = e.account[0];
-    if (c !== '6' && c !== '7') continue;
-    const v = c === '6' ? e.debit - e.credit : e.credit - e.debit;
+    // (P1-6) Inclure classe 8 (HAO) en plus des classes 6 et 7.
+    // SYSCOHADA art. 38 — la classe 8 contient à la fois des charges (81/83/85/87/89)
+    // et des produits (82/84/86/88) HAO. On les ventile selon le 2e digit :
+    //   8[1,3,5,7,9] -> charges -> sens débit-crédit
+    //   8[2,4,6,8]   -> produits -> sens crédit-débit
+    if (c !== '6' && c !== '7' && c !== '8') continue;
+    const second = e.account[1] ?? '';
+    const isHaoCharge = c === '8' && ['1', '3', '5', '7', '9'].includes(second);
+    const isHaoProduit = c === '8' && ['2', '4', '6', '8'].includes(second);
+    const v = (c === '6' || isHaoCharge)
+      ? e.debit - e.credit
+      : (c === '7' || isHaoProduit)
+        ? e.credit - e.debit
+        : 0;
+    if (v === 0) continue;
 
     // Année N
     for (let m = 1; m <= 12; m++) {

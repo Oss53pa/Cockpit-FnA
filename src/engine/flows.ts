@@ -2,6 +2,7 @@
 import { computeBalance } from './balance';
 import { computeBilan, computeSIG, Line } from './statements';
 import { db } from '../db/schema';
+import { sumMoneyWhere } from '../lib/moneySum';
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function get(lines: Line[], code: string): number {
@@ -271,12 +272,16 @@ async function computeTFTForRange(orgId: string, year: number, fromMonth: number
   const acquisitions = -(immoC - immoO + dotations);
   const fluxInv = acquisitions + pxCess;
 
-  const capO = get(bilanO.passif, 'CA') + get(bilanO.passif, 'CD');
-  const capC = get(bilanC.passif, 'CA') + get(bilanC.passif, 'CD');
-  const augCapital = capC - capO;
-  const empruntsO = get(bilanO.passif, 'DA');
-  const empruntsC = get(bilanC.passif, 'DA');
-  const varEmprunts = empruntsC - empruntsO;
+  // (P1-5) Capital + emprunts : on utilise les MOUVEMENTS BRUTS de la période
+  // (pas la simple différence ouverture/clôture) pour distinguer apports et
+  // remboursements. L'ancienne version cumulait les 2, donnant un "varEmprunts"
+  // qui pouvait masquer un emprunt nouveau de 1M et un remboursement de 1M.
+  const augCapitalBrut = sumMoneyWhere(periodBal, (r) => r.soldeC, (r) => r.account.startsWith('10') || r.account.startsWith('105'));
+  const reductionsCapitalBrut = sumMoneyWhere(periodBal, (r) => r.soldeD, (r) => r.account.startsWith('10') || r.account.startsWith('105'));
+  const augCapital = augCapitalBrut - reductionsCapitalBrut;
+  const nouveauxEmprunts = sumMoneyWhere(periodBal, (r) => r.soldeC, (r) => r.account.startsWith('16') || r.account.startsWith('17'));
+  const remboursementsEmprunts = sumMoneyWhere(periodBal, (r) => r.soldeD, (r) => r.account.startsWith('16') || r.account.startsWith('17'));
+  const varEmprunts = nouveauxEmprunts - remboursementsEmprunts;
   const fluxFin = augCapital + varEmprunts;
 
   const variationTreso = fluxOp + fluxInv + fluxFin;
