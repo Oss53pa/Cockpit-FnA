@@ -51,14 +51,18 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
 
     if (matrix.length === 0) return;
 
-    // Détecter la ligne d'en-tête
+    // Détecter la ligne d'en-tête (scan plus large : 25 lignes)
     let bestRow = 0; let bestScore = 0;
-    for (let r = 0; r < Math.min(matrix.length, 15); r++) {
+    for (let r = 0; r < Math.min(matrix.length, 25); r++) {
       const row = matrix[r] || [];
       const score = row.filter((h) => h !== undefined && h !== null && String(h).trim() && dataKeywords.test(String(h).trim())).length;
       if (score > bestScore) { bestScore = score; bestRow = r; }
     }
-    if (bestScore < 2) return;
+    // Seuil baisse a 1 mot-cle (etait 2) — un fichier avec juste "Code" et
+    // "Libellé" en en-tetes longs (genre "CODE COMPTE") match en partie.
+    // On garde la feuille meme avec score=1 ; le filtrage final se fera sur
+    // colCode + colLabel dans importCOAv2.
+    if (bestScore < 1) return;
 
     cands.push({
       sheetName: name,
