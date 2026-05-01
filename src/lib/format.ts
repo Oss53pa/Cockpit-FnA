@@ -30,36 +30,63 @@ export function useAmountMode(): 'full' | 'short' {
 
 const frFull = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
 
-/** Valeur entière avec séparateur de milliers, sans devise. Jamais abrégée. */
-export const fmtFull = (v: number) =>
-  frFull.format(v ?? 0).replace(/\u202F/g, ' ').replace(/\u00A0/g, ' ');
+/** Sentinelle "donnée non disponible" — affichée pour NaN/Infinity/null/undefined. */
+const NA = '—';
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+// Caractères de séparation inter-millier que Intl.NumberFormat peut utiliser :
+// espace fine insécable (U+202F) et espace insécable (U+00A0). Remplacés par
+// un espace classique pour que les exports CSV/PDF restent lisibles partout.
+const NARROW_NBSP = String.fromCharCode(0x202F);
+const NBSP = String.fromCharCode(0x00A0);
 
-/** Abrégée K/M/Md (utilisable dans les axes/tooltips compacts). Jamais en entier. */
-export const fmtShort = (v: number) => {
-  const abs = Math.abs(v ?? 0);
+/** Valeur entière avec séparateur de milliers, sans devise. Jamais abrégée.
+ *  (P2-7) Retourne "—" pour NaN/Infinity/null/undefined au lieu de "0" silencieux. */
+export const fmtFull = (v: number | null | undefined): string => {
+  if (!isFiniteNumber(v)) return NA;
+  return frFull.format(v).split(NARROW_NBSP).join(' ').split(NBSP).join(' ');
+};
+
+/** Abrégée K/M/Md (utilisable dans les axes/tooltips compacts). Jamais en entier.
+ *  (P2-7) Retourne "—" pour NaN/Infinity. */
+export const fmtShort = (v: number | null | undefined): string => {
+  if (!isFiniteNumber(v)) return NA;
+  const abs = Math.abs(v);
   if (abs >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1).replace('.0', '') + ' Md';
   if (abs >= 1_000_000)    return (v / 1_000_000).toFixed(1).replace('.0', '') + ' M';
   if (abs >= 1_000)        return (v / 1_000).toFixed(0) + ' k';
-  return String(Math.round(v ?? 0));
+  return String(Math.round(v));
 };
 
 /**
  * Format monétaire — respecte le mode d'affichage global (localStorage
  * « amount-mode »). En mode 'full' affiche toujours l'entier complet.
+ * (P2-7) Retourne "— XOF" pour les valeurs invalides.
+ * (P1-8) Centralisé : tous les exports PDF/Excel doivent passer par cette fonction.
  */
-export const fmtMoney = (v: number, currency = 'XOF') => {
+export const fmtMoney = (v: number | null | undefined, currency = 'XOF'): string => {
+  if (!isFiniteNumber(v)) return `${NA} ${currency}`;
   const body = currentMode() === 'full' ? fmtFull(v) : fmtShort(v);
   return `${body} ${currency}`;
 };
 
-export const fmtPct = (v: number, digits = 1) =>
-  `${v >= 0 ? '+' : ''}${(v ?? 0).toFixed(digits)} %`;
+/** Pourcentage cohérent : signe explicite (+/−), virgule décimale fr-FR.
+ *  (P2-8) Centralisé pour éviter les divergences PDF/écran. */
+export const fmtPct = (v: number | null | undefined, digits = 1): string => {
+  if (!isFiniteNumber(v)) return NA;
+  const sign = v >= 0 ? '+' : '';
+  return `${sign}${v.toFixed(digits).replace('.', ',')} %`;
+};
 
-export const fmtRatio = (v: number, digits = 2) => (v ?? 0).toFixed(digits);
+/** Ratio (sans unité, ex: 1,5×). Retourne "—" si non-fini. */
+export const fmtRatio = (v: number | null | undefined, digits = 2): string => {
+  if (!isFiniteNumber(v)) return NA;
+  return v.toFixed(digits).replace('.', ',');
+};
 
 /**
  * Format compact K/M/Md historiquement utilisé dans Dashboard (KPI cards,
  * axes de charts). Respecte désormais le mode global : en mode 'full' il
  * délègue à fmtFull pour afficher l'entier, sinon garde le format abrégé.
  */
-export const fmtK = (v: number) => currentMode() === 'full' ? fmtFull(v) : fmtShort(v);
+export const fmtK = (v: number | null | undefined): string =>
+  currentMode() === 'full' ? fmtFull(v) : fmtShort(v);

@@ -39,10 +39,16 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
     return s;
   };
 
-  // Résultat de l'exercice : calculé sur les MOUVEMENTS (sans AN) si fournis
+  // Résultat de l'exercice : calculé sur les MOUVEMENTS (sans AN) si fournis.
+  // SYSCOHADA art. 38 — Classe 8 (HAO) :
+  //   Charges HAO     : 81, 83, 85, 87, 89
+  //   Produits HAO    : 82, 84, 86, 88 (88 = produits exceptionnels divers)
+  // Le compte 88 (Subventions d'équilibre, dégagements de provisions devenus
+  // sans objet, etc.) etait OMIS — provoquait une sous-estimation des produits
+  // exceptionnels et donc du résultat net dans certains exercices.
   const resSource = movements && movements.length > 0 ? movements : rows;
-  const charges = sumBy(resSource, ['6', '81', '83', '85', '87', '89']); // débiteurs
-  const produits = -sumBy(resSource, ['7', '82', '84', '86']);           // créditeurs (on inverse)
+  const charges = sumBy(resSource, ['6', '81', '83', '85', '87', '89']);
+  const produits = -sumBy(resSource, ['7', '82', '84', '86', '88']);
   const resultat = produits - charges;
 
   // ── ACTIF ──────────────────────────────────────────────────────────

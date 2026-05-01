@@ -203,12 +203,17 @@ export function useBudgetActual(version?: string): BudgetActualRow[] {
 }
 
 // KPIs mensuels sur l'année (pour graphiques)
+// (P1-9) Propage fromMonth/toMonth pour respecter la période sélectionnée
+// par l'utilisateur. Avant : tous les mois étaient retournés même quand le
+// header avait une plage restreinte → graphiques incohérents avec les KPI.
 export function useMonthlyCA() {
-  const { currentOrgId, currentYear } = useApp();
+  const { currentOrgId, currentYear, fromMonth, toMonth } = useApp();
   return useLiveQuery(async () => {
     if (!currentOrgId) return [];
     const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
-    const thisYear = periods.filter((p) => p.year === currentYear && p.month >= 1 && p.month <= 12).sort((a, b) => a.month - b.month);
+    const thisYear = periods
+      .filter((p) => p.year === currentYear && p.month >= fromMonth && p.month <= toMonth)
+      .sort((a, b) => a.month - b.month);
     const result: { mois: string; month: number; realise: number }[] = [];
     for (const p of thisYear) {
       const entries = await db.gl.where('periodId').equals(p.id).toArray();
@@ -218,7 +223,7 @@ export function useMonthlyCA() {
       result.push({ mois: p.label.substring(0, 3), month: p.month, realise: ca });
     }
     return result;
-  }, [currentOrgId, currentYear], []);
+  }, [currentOrgId, currentYear, fromMonth, toMonth], []);
 }
 
 export function useBudgetActualMonthly(version?: string) {

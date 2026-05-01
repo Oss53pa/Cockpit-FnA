@@ -328,15 +328,17 @@ function ChargesProduits() {
                 </thead>
                 <tbody>
                   {topCharges.map((c, i) => {
-                    const v = (Math.random() - 0.4) * 30;
+                    // (P2-9) Variation N-1 : on n'a pas encore le calcul réel via
+                    // computeBalance(year-1). En attendant le hook dédié, on affiche
+                    // "—" plutôt qu'une valeur Math.random() qui ETAIT FAUSSE.
+                    // TODO: implementer useBalanceN1() qui charge la balance N-1
+                    // et renvoie la variation pour chaque compte.
                     return (
                       <tr key={i} className="border-b border-primary-100 dark:border-primary-800">
                         <td className="py-1 px-1">{c.code} — {c.label}</td>
                         <td className="text-right num font-semibold">{fmtFull(c.value)}</td>
                         <td className="text-right num text-primary-500">{((c.value / Math.max(totalCharges, 1)) * 100).toFixed(1)} %</td>
-                        <td className="text-right num font-semibold" style={{ color: v > 0 ? ct.at(1) : ct.at(4) }}>
-                          {v > 0 ? '↑' : '↓'} {Math.abs(v).toFixed(1)} %
-                        </td>
+                        <td className="text-right num text-primary-400">—</td>
                       </tr>
                     );
                   })}

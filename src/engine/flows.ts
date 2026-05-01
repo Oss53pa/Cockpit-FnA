@@ -92,7 +92,10 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
     .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
 
   // Plus / moins values sur cessions
-  const vnc = closingBal.filter((r) => r.account.startsWith('81')).reduce((s, r) => s + r.soldeD, 0);
+  // (P1-4) VNC strictement compte 685 (Valeur nette comptable des immobilisations
+  // cédées). Le filtre 81 incluait toutes les charges HAO (811-818) et
+  // surestimait la VNC cédée.
+  const vnc = closingBal.filter((r) => r.account.startsWith('685')).reduce((s, r) => s + r.soldeD, 0);
   const pxCess = closingBal.filter((r) => r.account.startsWith('82')).reduce((s, r) => s + r.soldeC, 0);
   const plusValueCession = pxCess - vnc;
 
@@ -235,13 +238,22 @@ async function computeTFTForRange(orgId: string, year: number, fromMonth: number
 
   const resultat = sig.resultat;
 
+  // (P0-5) Dotations IMMOBILISATIONS uniquement (681x amortissements + 687x
+  // amortissements HAO). On EXCLUT 68 entier qui inclut aussi 691 (provisions
+  // pour risques et charges) qui sont des CHARGES déjà dans le résultat mais
+  // PAS des amortissements à réintégrer dans la CAFG.
+  // SYSCOHADA — comptes 681 (Dotations aux amortissements d'exploitation),
+  // 687 (Dotations aux amortissements HAO).
   const dotations = periodBal
-    .filter((r) => r.account.startsWith('68') || r.account.startsWith('69'))
+    .filter((r) => r.account.startsWith('681') || r.account.startsWith('687'))
     .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
+  // Idem reprises : 781 (reprises amortissements exploitation) + 787 (HAO).
   const reprises = periodBal
-    .filter((r) => r.account.startsWith('78') || r.account.startsWith('79'))
+    .filter((r) => r.account.startsWith('781') || r.account.startsWith('787'))
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
-  const vnc = periodBal.filter((r) => r.account.startsWith('81')).reduce((s, r) => s + r.soldeD, 0);
+  // (P1-4) VNC cédée : compte 685 strict (Valeur nette comptable des
+  // immobilisations cédées). 81 entier englobait des charges HAO non liées.
+  const vnc = periodBal.filter((r) => r.account.startsWith('685')).reduce((s, r) => s + r.soldeD, 0);
   const pxCess = periodBal.filter((r) => r.account.startsWith('82')).reduce((s, r) => s + r.soldeC, 0);
   const plusValueCession = pxCess - vnc;
 
@@ -363,18 +375,31 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
   const immoO = bilanO.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
   const immoC = bilanC.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
   const investissements = Math.max((immoC - immoO + dotations), 0);
-  const distributions = 0; // hypothèse : pas de distribution (à paramétrer)
+  // (P0-6) Distributions de dividendes lues du compte 457 (Associés - dividendes
+  // à payer). SYSCOHADA art. 38 — comptes 457x : dividendes à verser aux associés.
+  // Les paiements effectués dans l'exercice apparaissent en débits de 457
+  // (diminution de la dette de l'entreprise vis-à-vis des associés).
+  // Calcul : variation négative (= versements) + dotation initiale via résultat N-1.
+  const dividendesPayes = closingBal
+    .filter((r) => r.account.startsWith('457'))
+    .reduce((s, r) => s + r.soldeD - r.soldeC, 0);
+  const distributions = Math.max(dividendesPayes, 0);
 
   const totalEmploisStables = investissements + distributions + remboursements;
 
   const varFR = totalRessourcesStables - totalEmploisStables;
 
-  // Variation BFR
-  const stocksVar = get(bilanC.actif, 'BB') - get(bilanO.actif, 'BB');
-  const creancesVar = (get(bilanC.actif, 'BH') + get(bilanC.actif, 'BI')) - (get(bilanO.actif, 'BH') + get(bilanO.actif, 'BI'));
+  // Variation BFR — convention SYSCOHADA TAFIRE :
+  //   Augmentation de créances = EMPLOI (négatif pour la trésorerie)
+  //   Augmentation de stocks   = EMPLOI
+  //   Augmentation de dettes   = RESSOURCE (positive)
+  // (P0-4) Le signe `creancesVar` etait inversé (calculé en (clôture − ouverture)
+  // alors que TFT.ts l.117 utilisait −(clôture − ouverture)). Aligné maintenant.
+  const stocksVar = -(get(bilanC.actif, 'BB') - get(bilanO.actif, 'BB'));
+  const creancesVar = -((get(bilanC.actif, 'BH') + get(bilanC.actif, 'BI')) - (get(bilanO.actif, 'BH') + get(bilanO.actif, 'BI')));
   const dettesVar = (get(bilanC.passif, 'DJ') + get(bilanC.passif, 'DK') + get(bilanC.passif, 'DM')) -
                     (get(bilanO.passif, 'DJ') + get(bilanO.passif, 'DK') + get(bilanO.passif, 'DM'));
-  const varBFR = stocksVar + creancesVar - dettesVar;
+  const varBFR = stocksVar + creancesVar + dettesVar;
 
   // Variation TN = var FR − var BFR
   const varTN = varFR - varBFR;

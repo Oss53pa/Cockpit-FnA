@@ -133,7 +133,12 @@ export async function auditGL(orgId: string, year?: number): Promise<AuditReport
   }
 
   // ─── 6. DOUBLONS POTENTIELS ───
-  const dupKey = (e: GLEntry) => `${e.date}|${e.account}|${e.debit}|${e.credit}|${(e.label || '').trim()}`;
+  // (P2-6) Clé enrichie avec journal + piece pour réduire les faux positifs.
+  // Avant : 2 écritures identiques dans 2 journaux différents (ex: VT et AC)
+  // étaient marquées doublons à tort. Maintenant on inclut journal + piece :
+  // 2 écritures vraiment identiques sont rares (sauf erreur de saisie réelle).
+  const dupKey = (e: GLEntry) =>
+    `${e.date}|${e.account}|${e.debit}|${e.credit}|${(e.journal || '').trim()}|${(e.piece || '').trim()}|${(e.label || '').trim()}`;
   const groups = new Map<string, GLEntry[]>();
   for (const e of filtered) {
     const k = dupKey(e);

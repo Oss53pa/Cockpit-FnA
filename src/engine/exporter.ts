@@ -6,10 +6,12 @@ import autoTable from 'jspdf-autotable';
 import { Line } from './statements';
 import { BalanceRow } from './balance';
 import { Ratio } from './ratios';
+import { fmtFull } from '../lib/format';
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n);
-}
+// (P1-8) Le fmt() local est remplacé par fmtFull() de lib/format.ts pour
+// garantir la cohérence des séparateurs (espaces insécables remplacés) entre
+// l'écran et les exports PDF/Excel.
+const fmt = fmtFull;
 
 // ─── EXCEL ──────────────────────────────────────────────────────────────────
 export async function exportStatementsXLSX(params: {
