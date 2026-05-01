@@ -4,6 +4,31 @@
 
 @layer base {
   :root {
+    /* === ANTI-FOUC : valeurs par defaut palette Twisty ===
+       Ces variables sont surchargées au runtime par theme.ts/applyPalette()
+       quand l'utilisateur active une autre palette, mais elles permettent
+       au CSS d'afficher TOUT DE SUITE les bonnes couleurs avant meme que
+       le JS ne s'execute (evite le flash noir/blanc au cold load). */
+    --p-50:  248 249 251;   /* #F8F9FB */
+    --p-100: 231 235 238;   /* #E7EBEE — shell Twisty */
+    --p-200: 209 214 221;   /* #D1D6DD */
+    --p-300: 181 183 192;   /* #B5B7C0 — gris Twisty */
+    --p-400: 147 155 170;   /* #939BAA */
+    --p-500: 110 120 136;   /* #6E7888 */
+    --p-600: 82 92 110;     /* #525C6E */
+    --p-700: 63 72 88;      /* #3F4858 */
+    --p-800: 45 51 64;      /* #2D3340 */
+    --p-900: 34 40 52;      /* #222834 — bleu nuit Twisty */
+    --p-950: 22 25 31;      /* #16191F */
+    --bg-page:    130 176 217;  /* #82B0D9 — bleu page Twisty */
+    --bg-shell:   231 235 238;  /* #E7EBEE — shell */
+    --bg-surface: 255 255 255;  /* #FFFFFF — cards */
+    --accent:     218 77 40;    /* #DA4D28 — orange-rouge Twisty */
+    --accent-soft:130 176 217;  /* #82B0D9 — bleu clair */
+    --th-bg: #222834;
+    --th-text: #E7EBEE;
+    --grid-color: #D1D6DD;
+
     /* Couleurs de statut */
     --color-status-success: #22c55e;
     --color-status-warning: #f59e0b;
@@ -39,11 +64,14 @@
     @apply bg-bgpage text-primary-900 dark:bg-primary-950 dark:text-primary-100;
     font-weight: 400;
   }
-  /* Hierarchie typographique stricte (international standard) */
-  h1, .h1 { @apply text-3xl font-semibold tracking-tight text-primary-900 dark:text-primary-50; }
-  h2, .h2 { @apply text-2xl font-semibold tracking-tight text-primary-900 dark:text-primary-50; }
-  h3, .h3 { @apply text-xl font-semibold tracking-tight text-primary-900 dark:text-primary-50; }
-  h4, .h4 { @apply text-lg font-medium tracking-tight text-primary-900 dark:text-primary-50; }
+  /* Hierarchie typographique stricte (international standard).
+     Important : on NE FORCE PAS la couleur ici — elle reste heritee du parent
+     pour permettre les contextes sombres (DashHeader bleu nuit, KPI hero,
+     buttons primary, etc.) sans avoir besoin de className: text-white partout. */
+  h1, .h1 { @apply text-3xl font-semibold tracking-tight; }
+  h2, .h2 { @apply text-2xl font-semibold tracking-tight; }
+  h3, .h3 { @apply text-xl font-semibold tracking-tight; }
+  h4, .h4 { @apply text-lg font-medium tracking-tight; }
   /* Poids semantiques (Inter rend mieux a 500/600/700) */
   .font-bold     { font-weight: 600 !important; }
   .font-semibold { font-weight: 600 !important; }
