@@ -159,24 +159,102 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     }
     return { imported: 0, updated: 0, errors: lines, sheetName };
   }
-  // Detection robuste : Sage / Cegid / Saari / EBP utilisent des en-tetes varies
-  // Code : "Code", "Compte", "N° Compte", "Numéro", "Cpte", "Code compte"…
-  // Libellé : "Libellé", "Intitulé", "Désignation", "Description", "Nom"…
-  const colCode = headers.find((h) => /^(code|compte|cpte|n[°ºo]?\s*compte|num[ée]ro|n[°ºo]\s*cpte)$/i.test(h.trim()))
+  // === DETECTION DES COLONNES — DOUBLE STRATEGIE ===
+  // 1) Par NOM d'en-tete (Code, Libellé, Compte, Numéro, etc.)
+  // 2) Par CONTENU des donnees (fallback robuste pour Sage avec décalage de
+  //    cellules fusionnées : si la colonne nommée "N°compte" est vide alors
+  //    qu'une autre colonne contient des codes 2-10 chiffres, on prend l'autre)
+  //
+  // Cette double strategie garantit que peu importe le decalage Excel ou les
+  // cellules fusionnees, on retrouve les bonnes colonnes par leur contenu.
+
+  /** Devine la colonne Code en regardant les valeurs : 30+ lignes numériques (2-10 chiffres) sur les 50 premières */
+  const guessCodeColByContent = (): string | undefined => {
+    let best: { h: string; count: number } | undefined;
+    for (const h of headers) {
+      let count = 0;
+      for (const r of rows.slice(0, Math.min(50, rows.length))) {
+        const v = r[h];
+        if (v === null || v === undefined || v === '') continue;
+        const s = String(v).trim();
+        if (/^\d{2,10}$/.test(s)) count++;
+      }
+      if (count >= 10 && (!best || count > best.count)) best = { h, count };
+    }
+    return best?.h;
+  };
+  /** Devine la colonne Libellé : 30+ lignes avec du texte alphabétique > 3 char */
+  const guessLabelColByContent = (excludeCol?: string): string | undefined => {
+    let best: { h: string; count: number } | undefined;
+    for (const h of headers) {
+      if (h === excludeCol) continue;
+      let count = 0;
+      for (const r of rows.slice(0, Math.min(50, rows.length))) {
+        const v = r[h];
+        if (v === null || v === undefined || v === '') continue;
+        const s = String(v).trim();
+        // Au moins 4 caracteres dont une lettre alphabetique
+        if (s.length >= 4 && /[a-zA-ZÀ-ÿ]/.test(s) && !/^\d+$/.test(s)) count++;
+      }
+      if (count >= 10 && (!best || count > best.count)) best = { h, count };
+    }
+    return best?.h;
+  };
+
+  /** Verifie si une colonne (par nom) contient effectivement des donnees code-like */
+  const colHasNumericCodes = (h: string | undefined): boolean => {
+    if (!h) return false;
+    let count = 0;
+    for (const r of rows.slice(0, Math.min(20, rows.length))) {
+      const v = r[h];
+      if (v && /^\d{2,10}$/.test(String(v).trim())) count++;
+    }
+    return count >= 5;
+  };
+
+  // 1) D'abord par nom
+  let colCode = headers.find((h) => /^(code|compte|cpte|n[°ºo]?\s*compte|num[ée]ro|n[°ºo]\s*cpte)$/i.test(h.trim()))
     || headers.find((h) => /code|compte|cpte|num[ée]ro/i.test(h));
-  const colLabel = headers.find((h) => /^(libell[éeè]|label|intitul[ée]?|description|d[ée]signation|nom)$/i.test(h.trim()))
+  let colLabel = headers.find((h) => /^(libell[éeè]|label|intitul[ée]?|description|d[ée]signation|nom)$/i.test(h.trim()))
     || headers.find((h) => /libell|label|intitul|d[ée]signation|description/i.test(h));
+
+  // 2) Si la colonne par nom est vide en data, fallback CONTENU
+  if (!colHasNumericCodes(colCode)) {
+    const guessed = guessCodeColByContent();
+    if (guessed) {
+      console.log(`🟢 [importCOAv2] colCode "${colCode}" vide en data, fallback contenu: "${guessed}"`);
+      colCode = guessed;
+    }
+  }
+  if (colLabel) {
+    // Verifier si colLabel a du texte
+    let textCount = 0;
+    for (const r of rows.slice(0, 20)) {
+      const v = r[colLabel];
+      if (v && /[a-zA-ZÀ-ÿ]/.test(String(v))) textCount++;
+    }
+    if (textCount < 5) {
+      const guessed = guessLabelColByContent(colCode);
+      if (guessed) {
+        console.log(`🟢 [importCOAv2] colLabel "${colLabel}" vide en data, fallback contenu: "${guessed}"`);
+        colLabel = guessed;
+      }
+    }
+  } else {
+    colLabel = guessLabelColByContent(colCode);
+  }
+  // Si tout par nom a echoue
+  if (!colCode) colCode = guessCodeColByContent();
+  if (!colLabel) colLabel = guessLabelColByContent(colCode);
+
   const colClass = headers.find((h) => /classe/i.test(h));
-  // Sage exporte "Type" = libelles longs (PASSIF, ACTIF, CHARGE, RECETTE) +
-  // "Type 2" = codes courts (P, A, C, R). On capture TOUTES les colonnes "Type*"
-  // et on choisit la 1ere qui donne une valeur normalisable a P/A/C/R.
   const typeCols = headers.filter((h) => /^type(\s*\d+)?$/i.test(h.trim()));
   const colSysco = headers.find((h) => /sysco/i.test(h));
 
-  console.log('🟢 [importCOAv2] Colonnes mappées:', { colCode, colLabel, colClass, typeCols, colSysco });
+  console.log('🟢 [importCOAv2] Colonnes finales:', { colCode, colLabel, colClass, typeCols, colSysco });
 
-  if (!colCode) return { imported: 0, updated: 0, errors: [`Colonne "Code" introuvable. Headers : ${headers.join(', ')}`], sheetName };
-  if (!colLabel) return { imported: 0, updated: 0, errors: [`Colonne "Libellé" introuvable. Headers : ${headers.join(', ')}`], sheetName };
+  if (!colCode) return { imported: 0, updated: 0, errors: [`Colonne "Code" introuvable (ni par nom, ni par contenu). Headers : ${headers.join(', ')}`], sheetName };
+  if (!colLabel) return { imported: 0, updated: 0, errors: [`Colonne "Libellé" introuvable (ni par nom, ni par contenu). Headers : ${headers.join(', ')}`], sheetName };
 
   const existing = new Set((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => a.code));
   const toImport: Account[] = [];
