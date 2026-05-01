@@ -163,12 +163,9 @@ function applyPalette(p: Palette) {
   }
   s.setProperty('--th-bg', p.tableHeader);
   s.setProperty('--th-text', p.tableHeaderText);
-  s.setProperty('--grid-color', p.scale[2]); // grille des graphiques
+  s.setProperty('--grid-color', p.scale[2]);
 
-  // Tokens layout — fallback intelligent quand la palette n'en définit pas :
-  // bg-page = scale[3], bg-shell = scale[0], bg-surface = #FFFFFF,
-  // accent = chartColors[0]. Permet à toutes les palettes existantes de
-  // continuer à fonctionner sans refonte.
+  // Tokens layout — fallback intelligent
   const lay = p.layout ?? {
     bgPage: p.scale[3] ?? p.scale[1],
     bgShell: p.scale[0],
@@ -176,11 +173,18 @@ function applyPalette(p: Palette) {
     accent: p.chartColors[0] ?? p.scale[8],
     accentSoft: p.chartColors[2] ?? p.scale[3],
   };
+
+  // Mode CLAIR (default) : tokens pris de la palette
   s.setProperty('--bg-page', hexToRgb(lay.bgPage));
   s.setProperty('--bg-shell', hexToRgb(lay.bgShell));
   s.setProperty('--bg-surface', hexToRgb(lay.bgSurface));
   s.setProperty('--accent', hexToRgb(lay.accent));
   s.setProperty('--accent-soft', hexToRgb(lay.accentSoft));
+
+  // Mode SOMBRE : tokens recalculés en inversant le contexte
+  // (bg-page sombre, shell legerement plus clair, surface plus claire encore)
+  // Ces valeurs surchargent les light-tokens UNIQUEMENT quand .dark est active
+  // sur <html>. La declaration .dark { --bg-page: ... } se trouve dans index.css.
 }
 
 // ── Store ──────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
@@ -46,7 +46,25 @@ const CashflowForecast = lazyWithRetry(() => import('./pages/CashflowForecast'))
 const Waterfall = lazyWithRetry(() => import('./pages/Waterfall'));
 
 function PageFallback() {
-  return <div className="py-20 text-center text-primary-500">Chargement...</div>;
+  return (
+    <div className="py-20 flex flex-col items-center justify-center gap-3">
+      <div className="w-8 h-8 rounded-full border-2 border-primary-200 border-t-accent animate-spin" />
+      <p className="text-xs text-primary-400 tracking-wide">Chargement…</p>
+    </div>
+  );
+}
+
+/**
+ * Page transition wrapper — anime l'entree de chaque route via animate-fade-in-up.
+ * La key change a chaque navigation -> remount + animation.
+ */
+function PageTransition({ children }: { children: React.ReactNode }) {
+  const loc = useLocation();
+  return (
+    <div key={loc.pathname} className="animate-fade-in-up">
+      {children}
+    </div>
+  );
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -85,7 +103,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         <DemoBanner />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main key={`${amountMode}-${remountKey}`} className="flex-1 p-3 sm:p-4 lg:p-6">
-          <Suspense fallback={<PageFallback />}>{children}</Suspense>
+          <Suspense fallback={<PageFallback />}>
+            <PageTransition>{children}</PageTransition>
+          </Suspense>
         </main>
       </div>
       <FloatingAI />

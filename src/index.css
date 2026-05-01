@@ -17,6 +17,15 @@
     --color-sev-critical: #7f1d1d;
   }
 
+  /* Mode SOMBRE : surcharge des tokens layout pour donner un vrai dark mode
+     (Linear / Vercel font ca). Le shell devient anthracite, le surface passe
+     a #1f1f23, le bg-page a un noir leger, l'accent reste vif. */
+  html.dark {
+    --bg-page:    23 23 26;       /* #17171a — tres sombre, presque noir */
+    --bg-shell:   31 31 36;       /* #1f1f24 — anthracite shell */
+    --bg-surface: 39 39 45;       /* #27272d — surface card un cran plus clair */
+  }
+
   html {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;

@@ -1434,7 +1434,7 @@ function CycleClient() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="⏱️ Évolution du DSO (jours)">
+        <ChartCard title="Évolution du DSO (jours)">
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={dsoEvol}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
@@ -1665,7 +1665,7 @@ function CycleFournisseur() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="⏱️ DPO vs DSO — évolution comparée">
+        <ChartCard title="DPO vs DSO — évolution comparée">
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={dpoEvol}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
@@ -1898,7 +1898,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="⏱️ Cycle de Conversion de Trésorerie">
+          <ChartCard title="Cycle de Conversion de Trésorerie">
             <div className="p-2">
               {cycleData.map((item, i) => (
                 <div key={i} className="mb-3">
