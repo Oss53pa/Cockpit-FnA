@@ -4,6 +4,8 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { db, GLEntry, Account } from '../db/schema';
 import { findSyscoAccount, classOf, SYSCOHADA_COA } from '../syscohada/coa';
+import { hashEntry, type HashableEntry } from '../lib/auditHash';
+import { assertPeriodOpen, PeriodLockedError } from '../lib/periodLock';
 
 // ─── IMPORT BULLETPROOF AVEC EXCELJS ────────────────────────────────────
 // Lit n'importe quel fichier Excel généré par ExcelJS sans dépendre de la
@@ -881,7 +883,53 @@ export async function importGL(
     });
 
     if (entries.length > 0) {
-      const tagged = entries.map((e) => ({ ...e, importId: String(importId) })) as GLEntry[];
+      // ── Verrouillage périodes clôturées (P2-12) ──
+      // Avant insertion, vérifier qu'aucune écriture ne tombe dans une période fermée.
+      // Si oui : abort l'import entier (transaction Dexie rollback automatique).
+      const datesUniques = Array.from(new Set(entries.map((e) => e.date)));
+      for (const date of datesUniques) {
+        try {
+          await assertPeriodOpen(date, opts.orgId);
+        } catch (err) {
+          if (err instanceof PeriodLockedError) {
+            errors.push(`Import refusé : ${err.message}`);
+            throw err; // rollback Dexie
+          }
+          throw err;
+        }
+      }
+
+      // ── Audit trail SHA-256 (P2-11) ──
+      // Récupère le DERNIER hash de la chaîne pour cet orgId, pour chaîner
+      // proprement avec l'import en cours. Première écriture de l'orgId : prev = ''.
+      const lastEntries = await db.gl
+        .where('orgId').equals(opts.orgId)
+        .reverse()
+        .limit(1)
+        .toArray();
+      let prevHash = lastEntries[0]?.hash ?? '';
+
+      // Calcule hash + previousHash pour chaque écriture, puis insère.
+      const tagged: GLEntry[] = [];
+      for (const e of entries) {
+        const tempEntry: GLEntry = { ...e, importId: String(importId) };
+        const hashable: HashableEntry = {
+          // L'id Dexie n'est pas encore connu (auto-increment) — on utilise
+          // une signature stable basée sur orgId+date+account+piece+importId
+          id: `${opts.orgId}-${e.date}-${e.account}-${e.piece}-${importId}`,
+          date: e.date,
+          journal: e.journal,
+          piece: e.piece,
+          account: e.account,
+          label: e.label,
+          debit: e.debit,
+          credit: e.credit,
+          tiers: e.tiers,
+        };
+        const hash = await hashEntry(hashable, prevHash);
+        tagged.push({ ...tempEntry, hash, previousHash: prevHash });
+        prevHash = hash;
+      }
       await db.gl.bulkAdd(tagged);
     }
   });

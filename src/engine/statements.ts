@@ -1,5 +1,6 @@
 // Moteur — Bilan, Compte de résultat, SIG selon SYSCOHADA révisé 2017
 import { BalanceRow, sumBy } from './balance';
+import { sumMoneyWhere } from '../lib/moneySum';
 
 export type Line = {
   code: string;
@@ -27,17 +28,13 @@ export type Line = {
  *                    Si absent, le résultat est calculé sur `rows`.
  */
 export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { actif: Line[]; passif: Line[]; totalActif: number; totalPassif: number } {
-  // Fonctions d'aide : solde D positif pour actif, solde C positif pour passif
-  const soldeD = (...prefixes: string[]) => {
-    let s = 0;
-    for (const r of rows) if (prefixes.some((p) => r.account.startsWith(p))) s += r.soldeD;
-    return s;
-  };
-  const soldeC = (...prefixes: string[]) => {
-    let s = 0;
-    for (const r of rows) if (prefixes.some((p) => r.account.startsWith(p))) s += r.soldeC;
-    return s;
-  };
+  // Fonctions d'aide : solde D positif pour actif, solde C positif pour passif.
+  // Utilise sumMoneyWhere (Money interne, bigint) pour éviter les erreurs
+  // d'arrondi flottant sur les cumuls de balances volumineuses (1M+ écritures).
+  const soldeD = (...prefixes: string[]): number =>
+    sumMoneyWhere(rows, (r) => r.soldeD, (r) => prefixes.some((p) => r.account.startsWith(p)));
+  const soldeC = (...prefixes: string[]): number =>
+    sumMoneyWhere(rows, (r) => r.soldeC, (r) => prefixes.some((p) => r.account.startsWith(p)));
 
   // Résultat de l'exercice : calculé sur les MOUVEMENTS (sans AN) si fournis.
   // SYSCOHADA art. 38 — Classe 8 (HAO) :
@@ -225,10 +222,18 @@ export type SIG = {
 };
 
 export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
-  const soldeC = (...p: string[]) => { let s = 0; for (const r of rows) if (p.some((x) => r.account.startsWith(x))) s += r.soldeC; return s; };
-  const soldeD = (...p: string[]) => { let s = 0; for (const r of rows) if (p.some((x) => r.account.startsWith(x))) s += r.soldeD; return s; };
+  // Sum déterministes via Money en interne (cf. lib/moneySum.ts)
+  const soldeC = (...p: string[]): number =>
+    sumMoneyWhere(rows, (r) => r.soldeC, (r) => p.some((x) => r.account.startsWith(x)));
+  const soldeD = (...p: string[]): number =>
+    sumMoneyWhere(rows, (r) => r.soldeD, (r) => p.some((x) => r.account.startsWith(x)));
   // Exclut certains préfixes (utilisé pour retirer 7069 de 706)
-  const soldeCExcl = (excl: string[], ...p: string[]) => { let s = 0; for (const r of rows) if (p.some((x) => r.account.startsWith(x)) && !excl.some((e) => r.account.startsWith(e))) s += r.soldeC; return s; };
+  const soldeCExcl = (excl: string[], ...p: string[]): number =>
+    sumMoneyWhere(
+      rows,
+      (r) => r.soldeC,
+      (r) => p.some((x) => r.account.startsWith(x)) && !excl.some((e) => r.account.startsWith(e)),
+    );
 
   // Produits d'exploitation
   const venteMarch = soldeC('701');

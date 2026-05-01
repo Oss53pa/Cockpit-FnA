@@ -2,6 +2,7 @@
 import { BalanceRow } from './balance';
 import { computeBilan, computeSIG } from './statements';
 import { DEFAULT_RATIO_TARGETS, RatioTarget } from '../store/settings';
+import { sumMoneyWhere } from '../lib/moneySum';
 
 export type Ratio = {
   code: string;
@@ -141,7 +142,8 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   //   3. Fallback ultime : 18% (taux UEMOA standard)
   // SYSCOHADA — Plan comptable révisé 2017, comptes 443 (TVA facturée).
   const fallbackVat = opts?.vatRate ?? 0.18;
-  const tvaCollectee = rows.filter((r) => r.account.startsWith('443')).reduce((s, r) => s + r.soldeC - r.soldeD, 0);
+  // Sum déterministe via Money (évite erreurs d'arrondi sur cumul TVA)
+  const tvaCollectee = sumMoneyWhere(rows, (r) => r.soldeC - r.soldeD, (r) => r.account.startsWith('443'));
   const tauxTvaSortieRaw = sig.ca > 0 && tvaCollectee > 0 ? tvaCollectee / sig.ca : fallbackVat;
   const tauxTvaSortie = clampVatRate(tauxTvaSortieRaw, fallbackVat);
   const caTTC = sig.ca * (1 + tauxTvaSortie);
@@ -152,10 +154,12 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   // Achats RÉELS depuis la balance : 60 (achats marchandises/MP/non-stockés/EE)
   //                                + 61 (transports), 62/63 (services ext.)
   // Variations de stocks (603) exclues pour rester sur les achats consommés.
-  const achatsHT = rows
-    .filter((r) => (r.account.startsWith('60') && !r.account.startsWith('603')) || r.account.startsWith('61') || r.account.startsWith('62') || r.account.startsWith('63'))
-    .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
-  const tvaDeductible = rows.filter((r) => r.account.startsWith('445')).reduce((s, r) => s + r.soldeD - r.soldeC, 0);
+  const achatsHT = sumMoneyWhere(
+    rows,
+    (r) => r.soldeD - r.soldeC,
+    (r) => (r.account.startsWith('60') && !r.account.startsWith('603')) || r.account.startsWith('61') || r.account.startsWith('62') || r.account.startsWith('63'),
+  );
+  const tvaDeductible = sumMoneyWhere(rows, (r) => r.soldeD - r.soldeC, (r) => r.account.startsWith('445'));
   const tauxTvaEntreeRaw = achatsHT > 0 && tvaDeductible > 0 ? tvaDeductible / achatsHT : fallbackVat;
   const tauxTvaEntree = clampVatRate(tauxTvaEntreeRaw, fallbackVat);
   const achatsTTC = achatsHT * (1 + tauxTvaEntree);

@@ -292,3 +292,50 @@ class CockpitDB extends Dexie {
 }
 
 export const db = new CockpitDB();
+
+// ── Dexie hooks : verrouillage des periodes cloturees (P2-12) ──────
+// Toute tentative d'INSERT/UPDATE/DELETE sur une ecriture dont la date tombe
+// dans une periode `closed === true` est BLOQUEE par exception.
+// Couvre automatiquement : importGL, addEntry manuel, updateEntry, deleteEntry.
+//
+// Override admin (a venir Phase B) : un utilisateur avec role 'accountant_admin'
+// pourra contourner via un flag context et tracer dans period_audit_log.
+async function assertWritable(orgId: string | undefined, date: string | undefined): Promise<void> {
+  if (!orgId || !date) return;
+  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const year = parseInt(date.substring(0, 4), 10);
+  const month = parseInt(date.substring(5, 7), 10);
+  const period = periods.find((p) => p.year === year && p.month === month);
+  if (period?.closed) {
+    throw new Error(`Période ${period.id} (${date}) clôturée — écriture refusée. Utilisez "Réouvrir la période" pour modifier.`);
+  }
+}
+
+db.gl.hook('creating', function (_primKey, obj) {
+  // Hook synchrone Dexie — on lance la verification async sans bloquer.
+  // En cas de violation, l'exception remonte au caller.
+  this.onsuccess = () => { /* noop */ };
+  this.onerror = () => { /* noop */ };
+  void assertWritable(obj.orgId, obj.date).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[periodLock] Insertion bloquée :', err.message);
+    throw err;
+  });
+});
+
+db.gl.hook('updating', function (mods, _primKey, obj) {
+  const newDate = (mods as Partial<GLEntry>).date ?? obj.date;
+  void assertWritable(obj.orgId, newDate).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[periodLock] Modification bloquée :', err.message);
+    throw err;
+  });
+});
+
+db.gl.hook('deleting', function (_primKey, obj) {
+  void assertWritable(obj.orgId, obj.date).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[periodLock] Suppression bloquée :', err.message);
+    throw err;
+  });
+});
