@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { LayoutGrid, Table as TableIcon, Download, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { LayoutGrid, Table as TableIcon, Download, CheckCircle2, AlertTriangle, XCircle, Calculator } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { TabSwitch } from '../components/ui/TabSwitch';
+import { EmptyState } from '../components/ui/EmptyState';
 import { useRatios } from '../hooks/useFinancials';
 import { fmtMoney } from '../lib/format';
 
@@ -25,9 +27,21 @@ export default function Ratios() {
   const ratios = useRatios();
   const [view, setView] = useState<View>('cards');
   const [family, setFamily] = useState<Family>('Toutes');
+  const navigate = useNavigate();
 
   if (!ratios.length) {
-    return <div className="py-20 text-center text-primary-500">Chargement…</div>;
+    return (
+      <EmptyState
+        icon={Calculator}
+        title="Aucun ratio à analyser"
+        description="Importez votre Grand Livre pour calculer automatiquement les ratios de rentabilité, liquidité, structure et activité."
+        action={
+          <button className="btn-primary" onClick={() => navigate('/imports')}>
+            Importer un Grand Livre
+          </button>
+        }
+      />
+    );
   }
 
   const filtered = family === 'Toutes' ? ratios : ratios.filter((r) => r.family === family);

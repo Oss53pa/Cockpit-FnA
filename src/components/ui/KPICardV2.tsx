@@ -79,11 +79,16 @@ export function KPICard({
           )}
         </div>
 
-        {/* Icone : pastille teintee (default) ou translucide (hero) */}
+        {/* Icone : pastille teintee (default) ou translucide (hero).
+            Si icon est une string courte (initiales 2-3 char), on bascule sur
+            un styling monogramme (font-bold + tracking-tight + text-[11px]). */}
         <div
           className={clsx(
-            'w-10 h-10 rounded-xl flex items-center justify-center text-base shrink-0',
+            'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
             'transition-transform duration-200 group-hover:scale-105',
+            typeof icon === 'string' && icon.length <= 3
+              ? 'text-[11px] font-bold tracking-tight'
+              : 'text-base',
             isHero ? 'bg-white/10 text-primary-50 backdrop-blur-sm' : 'text-white',
           )}
           style={!isHero ? { background: color ?? 'rgb(var(--accent))' } : undefined}

@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, AreaChart, Area, ComposedChart,
 } from 'recharts';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, Diamond, Circle, Star, TrendingUp, TrendingDown, Target, Layers, Activity, Percent, ArrowUp, ArrowDown, AlertTriangle, CheckCircle2, Gem, Settings as SettingsIcon, Banknote, Receipt, Users } from 'lucide-react';
 import clsx from 'clsx';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -501,10 +501,10 @@ function CRBlock() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon="◆" />
-          <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon="○" />
+          <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+          <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon={<Circle className="w-4 h-4" strokeWidth={2} />} />
           <KPICard title="Écart" value={fmtK(sec.totalEcart)} unit="XOF" subValue={`${sec.ecartPct.toFixed(1)} %`} icon={sec.totalEcart >= 0 ? '↑' : '↓'} />
-          <KPICard title="% de l'activité" value={`${(sec.isCharge ? totalCharges : totalProduits) ? ((sec.totalRealise / (sec.isCharge ? totalCharges : totalProduits)) * 100).toFixed(1) : 0} %`} icon="%" />
+          <KPICard title="% de l'activité" value={`${(sec.isCharge ? totalCharges : totalProduits) ? ((sec.totalRealise / (sec.isCharge ? totalCharges : totalProduits)) * 100).toFixed(1) : 0} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -578,10 +578,10 @@ function CRBlock() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" icon="▲" />
-        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" icon="▼" />
-        <KPICard title="Résultat net" value={fmtK(resultat)} unit="XOF" icon="◆" />
-        <KPICard title="Sections" value={String(sections.length)} icon="◫" />
+        <KPICard title="Total Produits" value={fmtK(totalProduits)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Total Charges" value={fmtK(totalCharges)} unit="XOF" icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Résultat net" value={fmtK(resultat)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Sections" value={String(sections.length)} icon={<Layers className="w-4 h-4" strokeWidth={2} />} />
       </div>
 
       <p className="text-xs text-primary-500 mb-3">Chaque bloc ci-dessous représente une section du CR. Cliquez « Analyser → » pour zoomer sur le détail des comptes.</p>
@@ -1103,9 +1103,9 @@ function CRSecTable({ sectionKey }: { sectionKey: any }) {
     <>
       {/* KPIs en haut */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Comptes" value={String(sec.rows.length)} icon="◫" />
-        <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon="◆" />
-        <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon="○" />
+        <KPICard title="Comptes" value={String(sec.rows.length)} icon={<Layers className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon={<Circle className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Écart" value={fmtK(sec.totalEcart)} unit="XOF" subValue={`${sec.ecartPct.toFixed(1)} %`} icon={sec.totalEcart >= 0 ? '↑' : '↓'} />
       </div>
 
@@ -1274,16 +1274,16 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon="◆" />
-        <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon="○" />
+        <KPICard title="Total réalisé" value={fmtK(sec.totalRealise)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Total budget" value={fmtK(sec.totalBudget)} unit="XOF" icon={<Circle className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Écart" value={fmtK(sec.totalEcart)} unit="XOF" subValue={`${sec.ecartPct.toFixed(1)} %`} icon={sec.totalEcart >= 0 ? '↑' : '↓'} />
-        <KPICard title="% de l'activité" value={`${pctActivite.toFixed(1)} %`} subValue={sec.isCharge ? 'des charges totales' : 'des produits totaux'} icon="%" />
+        <KPICard title="% de l'activité" value={`${pctActivite.toFixed(1)} %`} subValue={sec.isCharge ? 'des charges totales' : 'des produits totaux'} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Nombre de comptes" value={String(sec.rows.length)} icon="◫" />
-        <KPICard title="Moyenne mensuelle" value={fmtK(moyMensuelle)} unit="XOF" icon="≈" />
-        <KPICard title="Plus gros poste" value={top10[0]?.label.substring(0, 20) ?? '—'} subValue={top10[0] ? fmtK(top10[0].realise) : ''} icon="★" />
-        <KPICard title="Concentration top 3" value={sec.totalRealise ? `${((top3 / sec.totalRealise) * 100).toFixed(1)} %` : '—'} icon="◉" />
+        <KPICard title="Nombre de comptes" value={String(sec.rows.length)} icon={<Layers className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Moyenne mensuelle" value={fmtK(moyMensuelle)} unit="XOF" icon={<Activity className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Plus gros poste" value={top10[0]?.label.substring(0, 20) ?? '—'} subValue={top10[0] ? fmtK(top10[0].realise) : ''} icon={<Star className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Concentration top 3" value={sec.totalRealise ? `${((top3 / sec.totalRealise) * 100).toFixed(1)} %` : '—'} icon={<Target className="w-4 h-4" strokeWidth={2} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
@@ -2469,13 +2469,13 @@ function SecIndustrie() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Production vendue" value={fmtK(production)} unit="XOF" icon="FO" />
         <KPICard title="Coût MP consommées" value={fmtK(matieres)} unit="XOF" icon="⚙️" />
-        <KPICard title="Marge industrielle" value={fmtK(sig.margeBrute)} unit="XOF" icon="◆" />
-        <KPICard title="Taux de marge" value={`${tauxMarge.toFixed(1)} %`} icon="%" />
+        <KPICard title="Marge industrielle" value={fmtK(sig.margeBrute)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Taux de marge" value={`${tauxMarge.toFixed(1)} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Stock MP" value={fmtK(stockMP)} unit="XOF" icon="▦" />
         <KPICard title="Stock PF" value={fmtK(stockPF)} unit="XOF" icon="▨" />
-        <KPICard title="Productivité (CA/MS)" value={productivite.toFixed(2)} icon="↗" subValue={productivite > 3 ? 'Bonne' : 'À améliorer'} />
+        <KPICard title="Productivité (CA/MS)" value={productivite.toFixed(2)} icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} subValue={productivite > 3 ? 'Bonne' : 'À améliorer'} />
         <KPICard title="Personnel production" value={fmtK(personnel)} unit="XOF" icon="◐" />
       </div>
 
@@ -2560,16 +2560,16 @@ function SecBTP() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Travaux facturés" value={fmtK(travaux)} unit="XOF" icon="▲" />
+        <KPICard title="Travaux facturés" value={fmtK(travaux)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Achats chantier" value={fmtK(achats)} unit="XOF" icon="▦" />
         <KPICard title="Sous-traitance" value={fmtK(soustrait)} unit="XOF" icon="◈" />
-        <KPICard title="Marge brute BTP" value={fmtK(margeBTP)} unit="XOF" subValue={`${tauxMargeBTP.toFixed(1)} % des travaux`} icon="◆" />
+        <KPICard title="Marge brute BTP" value={fmtK(margeBTP)} unit="XOF" subValue={`${tauxMargeBTP.toFixed(1)} % des travaux`} icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Encours travaux (34-35)" value={fmtK(encours)} unit="XOF" icon="▣" />
         <KPICard title="Locations matériel" value={fmtK(locations)} unit="XOF" icon="⚙" />
         <KPICard title="Main-d'œuvre" value={fmtK(mainoeuvre)} unit="XOF" icon="●" />
-        <KPICard title="Créances clients" value={fmtK(clients)} unit="XOF" icon="◉" />
+        <KPICard title="Créances clients" value={fmtK(clients)} unit="XOF" icon={<Target className="w-4 h-4" strokeWidth={2} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -2676,14 +2676,14 @@ function SecCommerce() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Ventes marchandises" value={fmtK(ventes)} unit="XOF" icon="▸" />
         <KPICard title="Coût d'achat" value={fmtK(coutAchat)} unit="XOF" icon="▾" />
-        <KPICard title="Marge commerciale" value={fmtK(margeCom)} unit="XOF" subValue={`${tauxMarque.toFixed(1)} % de taux de marque`} icon="◆" />
+        <KPICard title="Marge commerciale" value={fmtK(margeCom)} unit="XOF" subValue={`${tauxMarque.toFixed(1)} % de taux de marque`} icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Rotation stocks" value={`${Math.round(rotation)} j`} icon="↻" subValue="Couverture stock" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Stock marchandises" value={fmtK(stockMarch)} unit="XOF" icon="▦" />
         <KPICard title="Transports sur ventes" value={fmtK(transport)} unit="XOF" icon="→" />
-        <KPICard title="Panier moyen (estimation)" value={fmtK(ventes / 1000)} unit="XOF" icon="◉" subValue="CA / nb transactions" />
-        <KPICard title="Taux de marque" value={`${tauxMarque.toFixed(1)} %`} icon="%" />
+        <KPICard title="Panier moyen (estimation)" value={fmtK(ventes / 1000)} unit="XOF" icon={<Target className="w-4 h-4" strokeWidth={2} />} subValue="CA / nb transactions" />
+        <KPICard title="Taux de marque" value={`${tauxMarque.toFixed(1)} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -2768,16 +2768,16 @@ function SecMicrofinance() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Produits d'intérêts" value={fmtK(prodInt)} unit="XOF" icon="▲" />
-        <KPICard title="Charges d'intérêts" value={fmtK(chargeInt)} unit="XOF" icon="▼" />
-        <KPICard title="PNB" value={fmtK(pnb)} unit="XOF" subValue="Produit Net Bancaire" icon="◆" />
+        <KPICard title="Produits d'intérêts" value={fmtK(prodInt)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Charges d'intérêts" value={fmtK(chargeInt)} unit="XOF" icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="PNB" value={fmtK(pnb)} unit="XOF" subValue="Produit Net Bancaire" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Commissions" value={fmtK(commissions)} unit="XOF" icon="◈" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Encours crédit" value={fmtK(encours)} unit="XOF" icon="●" />
         <KPICard title="Dépôts collectés" value={fmtK(depots)} unit="XOF" icon="▣" />
         <KPICard title="PAR 30" value={`${par30.toFixed(2)} %`} subValue="Portefeuille à risque" icon="⚠" inverse />
-        <KPICard title="Taux de provisionnement" value={`${tauxProv.toFixed(2)} %`} icon="◉" />
+        <KPICard title="Taux de provisionnement" value={`${tauxProv.toFixed(2)} %`} icon={<Target className="w-4 h-4" strokeWidth={2} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -2865,15 +2865,15 @@ function SecImmobilierCom() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Loyers encaissés" value={fmtK(loyers)} unit="XOF" icon="▲" />
-        <KPICard title="Charges locatives" value={fmtK(chargesLoc + entretien)} unit="XOF" icon="▼" />
-        <KPICard title="Résultat immobilier" value={fmtK(resultatImmo)} unit="XOF" icon="◆" />
-        <KPICard title="Taux d'occupation" value={`${tauxOccup.toFixed(1)} %`} icon="%" />
+        <KPICard title="Loyers encaissés" value={fmtK(loyers)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Charges locatives" value={fmtK(chargesLoc + entretien)} unit="XOF" icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Résultat immobilier" value={fmtK(resultatImmo)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Taux d'occupation" value={`${tauxOccup.toFixed(1)} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Rendement brut" value={`${rendement.toFixed(2)} %`} icon="↗" />
+        <KPICard title="Rendement brut" value={`${rendement.toFixed(2)} %`} icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Entretien & réparations" value={fmtK(entretien)} unit="XOF" icon="⚙" />
-        <KPICard title="Taxes foncières" value={fmtK(taxes)} unit="XOF" icon="◉" />
+        <KPICard title="Taxes foncières" value={fmtK(taxes)} unit="XOF" icon={<Target className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Assurance" value={fmtK(assurance)} unit="XOF" icon="◎" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -2954,14 +2954,14 @@ function SecHotellerie() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="CA Hébergement" value={fmtK(hebergement)} unit="XOF" icon="▲" />
+        <KPICard title="CA Hébergement" value={fmtK(hebergement)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="CA Restauration" value={fmtK(restauration)} unit="XOF" icon="◈" />
-        <KPICard title="RevPAR" value={fmtK(revpar)} unit="XOF" icon="◆" subValue="Revenu par chambre dispo" />
-        <KPICard title="Taux d'occupation" value={`${tauxOccup.toFixed(1)} %`} icon="%" />
+        <KPICard title="RevPAR" value={fmtK(revpar)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} subValue="Revenu par chambre dispo" />
+        <KPICard title="Taux d'occupation" value={`${tauxOccup.toFixed(1)} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="ADR (prix moyen)" value={fmtK(adr)} unit="XOF" icon="●" subValue="Average Daily Rate" />
-        <KPICard title="GOP" value={fmtK(gop)} unit="XOF" icon="◆" subValue="Gross Operating Profit" />
+        <KPICard title="GOP" value={fmtK(gop)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} subValue="Gross Operating Profit" />
         <KPICard title="F&B Cost ratio" value={`${fbRatio.toFixed(1)} %`} icon="↻" subValue="Achats / CA resto" inverse />
         <KPICard title="Nuitées" value={nuitees.toLocaleString('fr-FR')} icon="▣" />
       </div>
@@ -3021,16 +3021,16 @@ function SecAgriculture() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Production vendue" value={fmtK(production)} unit="XOF" icon="▲" />
-        <KPICard title="Intrants & semences" value={fmtK(intrants)} unit="XOF" icon="▼" />
-        <KPICard title="Marge brute" value={fmtK(marge)} unit="XOF" subValue={`${tauxMarge.toFixed(1)} %`} icon="◆" />
+        <KPICard title="Production vendue" value={fmtK(production)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Intrants & semences" value={fmtK(intrants)} unit="XOF" icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Marge brute" value={fmtK(marge)} unit="XOF" subValue={`${tauxMarge.toFixed(1)} %`} icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Subventions" value={fmtK(subventions)} unit="XOF" icon="◈" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Stocks récoltes" value={fmtK(stocks)} unit="XOF" icon="▦" />
         <KPICard title="Personnel" value={fmtK(personnel)} unit="XOF" icon="●" />
-        <KPICard title="Ratio intrants/CA" value={`${production ? ((intrants/production)*100).toFixed(1) : 0} %`} icon="%" inverse />
-        <KPICard title="Productivité" value={(production && personnel ? (production/personnel) : 0).toFixed(2)} icon="↗" subValue="CA / Masse salariale" />
+        <KPICard title="Ratio intrants/CA" value={`${production ? ((intrants/production)*100).toFixed(1) : 0} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} inverse />
+        <KPICard title="Productivité" value={(production && personnel ? (production/personnel) : 0).toFixed(2)} icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} subValue="CA / Masse salariale" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ChartCard title="CA par culture">
@@ -3083,8 +3083,8 @@ function SecSante() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Recettes totales" value={fmtK(recettes)} unit="XOF" icon="▲" />
-        <KPICard title="Achats pharma & mat." value={fmtK(pharma)} unit="XOF" icon="▼" />
+        <KPICard title="Recettes totales" value={fmtK(recettes)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Achats pharma & mat." value={fmtK(pharma)} unit="XOF" icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Masse salariale" value={fmtK(personnel)} unit="XOF" subValue={`${ratioPersonnel.toFixed(1)} % du CA`} icon="●" />
         <KPICard title="Équipements (VB)" value={fmtK(equipements)} unit="XOF" icon="◎" />
       </div>
@@ -3136,15 +3136,15 @@ function SecTransport() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Chiffre d'affaires" value={fmtK(ca)} unit="XOF" icon="▲" />
-        <KPICard title="Carburant & énergie" value={fmtK(carburant)} unit="XOF" subValue={`${ratioCarb.toFixed(1)} % du CA`} icon="▼" inverse />
+        <KPICard title="Chiffre d'affaires" value={fmtK(ca)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Carburant & énergie" value={fmtK(carburant)} unit="XOF" subValue={`${ratioCarb.toFixed(1)} % du CA`} icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} inverse />
         <KPICard title="Entretien flotte" value={fmtK(entretien)} unit="XOF" icon="⚙" />
-        <KPICard title="Marge d'exploitation" value={fmtK(sig.re)} unit="XOF" icon="◆" />
+        <KPICard title="Marge d'exploitation" value={fmtK(sig.re)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Flotte (VB)" value={fmtK(flotte)} unit="XOF" icon="▣" />
         <KPICard title="Assurance" value={fmtK(assurance)} unit="XOF" icon="◎" />
-        <KPICard title="Amortissements" value={fmtK(amort)} unit="XOF" icon="◉" />
+        <KPICard title="Amortissements" value={fmtK(amort)} unit="XOF" icon={<Target className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Personnel" value={fmtK(personnel)} unit="XOF" icon="●" />
       </div>
       <ChartCard title="Structure des coûts transport">
@@ -3190,15 +3190,15 @@ function SecServices() {
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPICard title="CA Honoraires" value={fmtK(ca)} unit="XOF" icon="▲" />
+        <KPICard title="CA Honoraires" value={fmtK(ca)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Sous-traitance" value={fmtK(soustraitance)} unit="XOF" icon="◈" />
-        <KPICard title="Marge sur missions" value={fmtK(marge)} unit="XOF" icon="◆" />
-        <KPICard title="Taux facturable" value={`${tauxFacturable.toFixed(0)} %`} icon="%" />
+        <KPICard title="Marge sur missions" value={fmtK(marge)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Taux facturable" value={`${tauxFacturable.toFixed(0)} %`} icon={<Percent className="w-4 h-4" strokeWidth={2} />} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Masse salariale" value={fmtK(personnel)} unit="XOF" subValue={`${ratioPersonnel.toFixed(1)} % du CA`} icon="●" />
-        <KPICard title="CA / collaborateur" value={fmtK(personnel ? ca / (personnel / 500000) : 0)} icon="↗" subValue="estimation" />
-        <KPICard title="Résultat exploit." value={fmtK(sig.re)} unit="XOF" icon="◆" />
+        <KPICard title="CA / collaborateur" value={fmtK(personnel ? ca / (personnel / 500000) : 0)} icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} subValue="estimation" />
+        <KPICard title="Résultat exploit." value={fmtK(sig.re)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
         <KPICard title="Projets actifs" value={String(projets.length)} icon="▣" />
       </div>
       <ChartCard title="Suivi des missions — avancement et marge">
@@ -3275,9 +3275,9 @@ function Analytique({ id: _id }: { id: string }) {
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPICard title="Centres analytiques" value={String(data.length)} icon="▣" />
-        <KPICard title="Total produits" value={fmtK(totalProduits)} unit="XOF" icon="▲" />
-        <KPICard title="Total charges" value={fmtK(totalCharges)} unit="XOF" icon="▼" />
-        <KPICard title="Résultat analytique" value={fmtK(totalProduits - totalCharges)} unit="XOF" icon="◆" />
+        <KPICard title="Total produits" value={fmtK(totalProduits)} unit="XOF" icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Total charges" value={fmtK(totalCharges)} unit="XOF" icon={<TrendingDown className="w-4 h-4" strokeWidth={2} />} />
+        <KPICard title="Résultat analytique" value={fmtK(totalProduits - totalCharges)} unit="XOF" icon={<Diamond className="w-4 h-4" strokeWidth={2} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
