@@ -239,7 +239,7 @@ export default function Waterfall() {
                 <li>🟢 Les barres <strong>vertes</strong> représentent les <strong>produits</strong> qui ajoutent au résultat (CA, produits financiers, HAO positif).</li>
                 <li>🔴 Les barres <strong>rouges</strong> représentent les <strong>charges</strong> qui réduisent le résultat (achats, personnel, dotations, impôts).</li>
                 <li>🔵 Les barres <strong>bleues</strong> cadrées sont des <strong>totaux intermédiaires</strong> (Marge brute, VA, EBE, RE, RN).</li>
-                <li>📈 Suivez la cascade de gauche à droite pour voir chaque étape de transformation du CA en résultat final.</li>
+                <li>Suivez la cascade de gauche à droite pour voir chaque étape de transformation du CA en résultat final.</li>
               </>
             ) : (
               <>

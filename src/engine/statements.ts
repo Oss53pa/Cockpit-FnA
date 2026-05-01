@@ -105,6 +105,13 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   const totalTreso = tresoActive;
   let totalActif = totalActifImmo + totalActifCirc + totalTreso;
 
+  // (P1-1) Décomposition AE/AF/AG harmonisée :
+  //   AE (incorp.)  : classe 21 − amortissements 281
+  //   AF (corp.)    : classes 22-25 − amortissements 282-285
+  //   AG (financ.)  : classes 26-27 − dépréciations 29 (et provisions financières)
+  // Cohérent avec la l.59 amorts = soldeC('28','29') : la somme AE+AF+AG ré-applique
+  // exactement les mêmes amortissements/provisions, ventilés par nature d'immobilisation.
+  // SYSCOHADA art. 38 — Plan comptable révisé 2017.
   const actif: Line[] = [
     { code: 'AD', label: 'Charges immobilisées', value: soldeD('20'), indent: 1, accountCodes: '20' },
     { code: 'AE', label: 'Immobilisations incorporelles', value: soldeD('21') - soldeC('281'), indent: 1, accountCodes: '21 − 281' },
@@ -228,8 +235,18 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   // Ventes de produits/services HORS RRR accordés (7069xx exclus de 706)
   const venteProd = soldeCExcl(['7069'], '702', '703', '704', '705', '706', '707');
   // RRR accordés (709 + sous-comptes 7069xx) : réduction du CA
-  // Ces comptes sont des contre-produits avec solde débiteur normal
-  const rrrAccordes = (soldeD('709') - soldeC('709')) + (soldeD('7069') - soldeC('7069'));
+  // Ces comptes sont des contre-produits avec solde DÉBITEUR normal.
+  // (P2-3) Détection du sens anormal : si solde créditeur > débiteur sur 709/7069,
+  // on logue un warning au lieu d'augmenter le CA en silence (saisie inversée
+  // probable). Le calcul reste correct mathématiquement (D−C donne un négatif
+  // qui se soustrait, ce qui revient à AJOUTER un montant au CA — anomalie).
+  const sd709 = soldeD('709'); const sc709 = soldeC('709');
+  const sd7069 = soldeD('7069'); const sc7069 = soldeC('7069');
+  if (sc709 > sd709 || sc7069 > sd7069) {
+    // eslint-disable-next-line no-console
+    console.warn('[statements] RRR accordés (709/7069) en solde créditeur — sens inversé probable. Vérifier les écritures.', { sd709, sc709, sd7069, sc7069 });
+  }
+  const rrrAccordes = (sd709 - sc709) + (sd7069 - sc7069);
   const ca = venteMarch + venteProd + soldeC('708') - rrrAccordes;
   const prodStockee = soldeC('73') - soldeD('73');
   const prodImmob = soldeC('72');

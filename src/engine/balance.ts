@@ -176,18 +176,32 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
   return rows;
 }
 
-// Agrégation par racine SYSCOHADA (2 chiffres)
+// Agrégation par racine SYSCOHADA (2 chiffres).
+// (P2-1) Les comptes non mappés au plan SYSCOHADA officiel sont maintenant
+// rangés dans un bucket "_NON_MAPPE" visible (au lieu d'être silencieusement
+// ignorés). Un warning console est emis pour l'audit.
 export function aggregateBySyscoRoot(rows: BalanceRow[]): Map<string, BalanceRow> {
   const m = new Map<string, BalanceRow>();
+  const unmapped: string[] = [];
   for (const r of rows) {
     const sysco = findSyscoAccount(r.account);
-    if (!sysco) continue;
-    const root = sysco.code.length >= 2 ? sysco.code.substring(0, 2) : sysco.code;
+    let root: string;
+    let label: string;
+    if (!sysco) {
+      // Bucket "non-mappé" : le compte existe dans le GL mais pas dans le PCG
+      // de référence. Probable plan tenant custom ou compte technique.
+      root = '_NON_MAPPE';
+      label = `Comptes non mappés au plan SYSCOHADA (${r.account[0] ?? '?'}xxx)`;
+      unmapped.push(r.account);
+    } else {
+      root = sysco.code.length >= 2 ? sysco.code.substring(0, 2) : sysco.code;
+      label = findSyscoAccount(root)?.label ?? '';
+    }
     const cur = m.get(root) ?? {
       account: root,
-      label: findSyscoAccount(root)?.label ?? '',
+      label,
       syscoCode: root,
-      class: root[0],
+      class: root[0] ?? '_',
       debit: 0, credit: 0, solde: 0, soldeD: 0, soldeC: 0,
     };
     cur.debit += r.debit;
@@ -196,6 +210,10 @@ export function aggregateBySyscoRoot(rows: BalanceRow[]): Map<string, BalanceRow
     cur.soldeD = cur.solde > 0 ? cur.solde : 0;
     cur.soldeC = cur.solde < 0 ? -cur.solde : 0;
     m.set(root, cur);
+  }
+  if (unmapped.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`[balance] ${unmapped.length} comptes non mappés au plan SYSCOHADA :`, unmapped.slice(0, 10), unmapped.length > 10 ? `... (+${unmapped.length - 10})` : '');
   }
   return m;
 }
