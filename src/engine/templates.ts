@@ -113,6 +113,54 @@ export async function downloadGLTemplate(orgName?: string, year?: number) {
   saveAs(new Blob([buf]), `Modele_GrandLivre_${orgName ? orgName.replace(/\s+/g, '_') + '_' : ''}${yyyy}.xlsx`);
 }
 
+// ─── TEMPLATE GRAND LIVRE TIERS ─────────────────────────────────────
+export async function downloadTiersTemplate(orgName?: string, year?: number) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'CockPit F&A';
+  wb.created = new Date();
+  const yyyy = year ?? new Date().getFullYear();
+  const ws = wb.addWorksheet('GL Tiers');
+  const headers = ['DATE', 'JOURNAL', 'N° PIECE', 'COMPTE GENERAL', 'CODE TIERS', 'NOM TIERS', 'LIBELLE', 'DEBIT', 'CREDIT'];
+  ws.addRow(headers);
+  ws.getRow(1).eachCell((c) => { c.fill = HEADER_FILL; c.font = HEADER_FONT; c.alignment = { horizontal: 'center' }; });
+  // Exemples
+  const examples = [
+    [`01/01/${yyyy}`, 'VT', 'FA001', '411', 'CLI001', 'SOCIETE ALPHA', 'Facture vente marchandises', 1500000, 0],
+    [`01/01/${yyyy}`, 'VT', 'FA001', '411', 'CLI002', 'ENTREPRISE BETA', 'Facture prestation services', 850000, 0],
+    [`15/01/${yyyy}`, 'BQ', 'RG001', '411', 'CLI001', 'SOCIETE ALPHA', 'Règlement facture FA001', 0, 1500000],
+    [`05/02/${yyyy}`, 'AC', 'FF001', '401', 'FRN001', 'FOURNISSEUR GAMMA', 'Facture achat fournitures', 0, 2300000],
+    [`20/02/${yyyy}`, 'BQ', 'VP001', '401', 'FRN001', 'FOURNISSEUR GAMMA', 'Virement fournisseur', 2300000, 0],
+  ];
+  for (let i = 0; i < examples.length; i++) {
+    const row = ws.addRow(examples[i]);
+    if (i % 2 === 1) row.eachCell((c) => { c.fill = ALT_FILL; });
+  }
+  ws.columns = [
+    { width: 14 }, { width: 10 }, { width: 12 }, { width: 16 }, { width: 14 }, { width: 30 },
+    { width: 40 }, { width: 16 }, { width: 16 },
+  ];
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 9 } };
+
+  // Feuille instructions
+  const wsHelp = wb.addWorksheet('Instructions');
+  wsHelp.addRow(['IMPORT GRAND LIVRE TIERS — CockPit F&A']);
+  wsHelp.addRow([]);
+  wsHelp.addRow(['Ce fichier sert à importer le détail des tiers (clients 411 et fournisseurs 401).']);
+  wsHelp.addRow(['Il enrichit les écritures du Grand Livre Général avec le code et le nom du tiers.']);
+  wsHelp.addRow([]);
+  wsHelp.addRow(['Colonnes OBLIGATOIRES : DATE, COMPTE GENERAL, CODE TIERS, NOM TIERS, DEBIT, CREDIT']);
+  wsHelp.addRow(['Colonnes optionnelles : JOURNAL, N° PIECE, LIBELLE']);
+  wsHelp.addRow([]);
+  wsHelp.addRow(['Le rapprochement se fait par : DATE + COMPTE + DEBIT + CREDIT']);
+  wsHelp.addRow(['Si une correspondance est trouvée dans le GL, le code tiers est ajouté (pas de doublon).']);
+  wsHelp.addRow(['Si aucune correspondance, l\'écriture est créée en mode standalone.']);
+  wsHelp.getRow(1).font = { bold: true, size: 14 };
+  wsHelp.getColumn(1).width = 80;
+
+  const buf = await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf]), `Modele_GL_Tiers_${orgName ? orgName.replace(/\s+/g, '_') + '_' : ''}${yyyy}.xlsx`);
+}
+
 // ─── TEMPLATE BALANCE GÉNÉRALE ──────────────────────────────────────
 export async function downloadBalanceGeneraleTemplate(orgName?: string, year?: number) {
   const wb = new ExcelJS.Workbook();

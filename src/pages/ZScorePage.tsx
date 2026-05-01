@@ -7,7 +7,6 @@ import { ShieldCheck, AlertTriangle, Award } from 'lucide-react';
 import { ResponsiveContainer, RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ChartCard } from '../components/ui/ChartCard';
-import { useApp } from '../store/app';
 import { computeFinancialScore, type FinancialScore } from '../engine/proph3/scoring';
 import { useStatements, useRatios, useCurrentOrg } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';

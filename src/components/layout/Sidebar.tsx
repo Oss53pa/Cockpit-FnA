@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
-  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search,
+  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search, Users,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -23,6 +23,7 @@ const sections = [
       { to: '/coa', icon: FolderTree, label: 'Plan comptable' },
       { to: '/budget', icon: Wallet, label: 'Budget' },
       { to: '/grand-livre', icon: BookOpen, label: 'Grand Livre' },
+      { to: '/import-tiers', icon: Users, label: 'GL Tiers' },
     ],
   },
   {

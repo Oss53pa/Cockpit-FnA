@@ -21,9 +21,6 @@ const controls = [
   'Lettrage automatique des tiers',
 ];
 
-// Composant réutilisable — uniquement l'IMPORT du Grand Livre.
-// Les balances (générale, auxiliaire, âgée) sont DÉRIVÉES automatiquement du GL,
-// elles ne s'importent jamais séparément.
 export default function Imports() {
   const { currentOrgId, currentYear, setCurrentYear } = useApp();
   const org = useCurrentOrg();

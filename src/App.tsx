@@ -23,6 +23,7 @@ const AuthCallback   = lazyWithRetry(() => import('./pages/auth/Callback'));
 const Landing        = lazyWithRetry(() => import('./pages/Landing'));
 const Demo           = lazyWithRetry(() => import('./pages/Demo'));
 const Imports        = lazyWithRetry(() => import('./pages/Imports'));
+const ImportTiers    = lazyWithRetry(() => import('./pages/ImportTiers'));
 const States         = lazyWithRetry(() => import('./pages/States'));
 const Ratios         = lazyWithRetry(() => import('./pages/Ratios'));
 const Dashboards     = lazyWithRetry(() => import('./pages/Dashboards'));
@@ -51,6 +52,24 @@ const ZScorePage = lazyWithRetry(() => import('./pages/ZScorePage'));
 const RollingForecast = lazyWithRetry(() => import('./pages/RollingForecast'));
 const WorkingCapitalDays = lazyWithRetry(() => import('./pages/WorkingCapitalDays'));
 const DashboardBuilder = lazyWithRetry(() => import('./pages/DashboardBuilder'));
+// Nouveaux dashboards (Phase 4 — coverage P0/P1/P2)
+const TAFIREPage = lazyWithRetry(() => import('./pages/TAFIREPage'));
+const BilanMonthly = lazyWithRetry(() => import('./pages/BilanMonthly'));
+const CAFPage = lazyWithRetry(() => import('./pages/CAFPage'));
+const MultiYear = lazyWithRetry(() => import('./pages/MultiYear'));
+const BankReconciliation = lazyWithRetry(() => import('./pages/BankReconciliation'));
+const ClosingJustification = lazyWithRetry(() => import('./pages/ClosingJustification'));
+const AuditTrailVisualizer = lazyWithRetry(() => import('./pages/AuditTrailVisualizer'));
+const AnomaliesHeatmap = lazyWithRetry(() => import('./pages/AnomaliesHeatmap'));
+const Lettrage = lazyWithRetry(() => import('./pages/Lettrage'));
+const Seasonality = lazyWithRetry(() => import('./pages/Seasonality'));
+const WhatIf = lazyWithRetry(() => import('./pages/WhatIf'));
+const ProvisionsTracking = lazyWithRetry(() => import('./pages/ProvisionsTracking'));
+const Intercos = lazyWithRetry(() => import('./pages/Intercos'));
+const WeeklyDashboard = lazyWithRetry(() => import('./pages/WeeklyDashboard'));
+const MdaAuto = lazyWithRetry(() => import('./pages/MdaAuto'));
+const BoardPack = lazyWithRetry(() => import('./pages/BoardPack'));
+const SectorBenchmark = lazyWithRetry(() => import('./pages/SectorBenchmark'));
 
 function PageFallback() {
   return (
@@ -147,6 +166,7 @@ function App() {
         <Route path="/alerts" element={<ProtectedRoute><AppLayout><Alerts /></AppLayout></ProtectedRoute>} />
         <Route path="/actions" element={<ProtectedRoute><AppLayout><Actions /></AppLayout></ProtectedRoute>} />
         <Route path="/imports" element={<ProtectedRoute><AppLayout><Imports /></AppLayout></ProtectedRoute>} />
+        <Route path="/import-tiers" element={<ProtectedRoute><AppLayout><ImportTiers /></AppLayout></ProtectedRoute>} />
         <Route path="/budget" element={<ProtectedRoute><AppLayout><Budget /></AppLayout></ProtectedRoute>} />
         <Route path="/coa" element={<ProtectedRoute><AppLayout><COA /></AppLayout></ProtectedRoute>} />
         <Route path="/grand-livre" element={<ProtectedRoute><AppLayout><GrandLivre /></AppLayout></ProtectedRoute>} />
@@ -169,6 +189,23 @@ function App() {
         <Route path="/dashboard/zscore" element={<ProtectedRoute><AppLayout><ZScorePage /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/forecast" element={<ProtectedRoute><AppLayout><RollingForecast /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/wcd" element={<ProtectedRoute><AppLayout><WorkingCapitalDays /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/tafire" element={<ProtectedRoute><AppLayout><TAFIREPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/bilan-monthly" element={<ProtectedRoute><AppLayout><BilanMonthly /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/caf" element={<ProtectedRoute><AppLayout><CAFPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/multi-year" element={<ProtectedRoute><AppLayout><MultiYear /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/bank-reconciliation" element={<ProtectedRoute><AppLayout><BankReconciliation /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/closing-justification" element={<ProtectedRoute><AppLayout><ClosingJustification /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/audit-trail" element={<ProtectedRoute><AppLayout><AuditTrailVisualizer /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/anomalies" element={<ProtectedRoute><AppLayout><AnomaliesHeatmap /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/lettrage" element={<ProtectedRoute><AppLayout><Lettrage /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/seasonality" element={<ProtectedRoute><AppLayout><Seasonality /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/whatif" element={<ProtectedRoute><AppLayout><WhatIf /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/provisions" element={<ProtectedRoute><AppLayout><ProvisionsTracking /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/intercos" element={<ProtectedRoute><AppLayout><Intercos /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/weekly" element={<ProtectedRoute><AppLayout><WeeklyDashboard /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/mda" element={<ProtectedRoute><AppLayout><MdaAuto /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/board-pack" element={<ProtectedRoute><AppLayout><BoardPack /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/sector-benchmark" element={<ProtectedRoute><AppLayout><SectorBenchmark /></AppLayout></ProtectedRoute>} />
         <Route path="/builder" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
         <Route path="/builder/:id" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
       </Routes>
