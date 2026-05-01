@@ -117,10 +117,12 @@ export default function COA() {
                     if (res.errors.length) console.warn('[Import COA] Erreurs:', res.errors);
                     window.location.reload();
                   } else {
-                    // Aucun compte importe : afficher la 1ere erreur explicite
-                    const reason = res.errors[0] ?? 'Aucune ligne valide trouvée dans le fichier';
+                    // Aucun compte importe : afficher TOUTES les erreurs (concat) + console string
+                    const reason = res.errors.length ? res.errors.join(' ') : 'Aucune ligne valide trouvée dans le fichier';
                     toast.error("Import impossible", reason);
-                    console.error('[Import COA] Échec — détails:', { sheetName: res.sheetName, errors: res.errors });
+                    // Print en STRING (pas Object collapsed) pour que ce soit immediatement lisible
+                    console.error('[Import COA] Échec :\n' + (res.errors.join('\n') || '(aucune erreur explicite)'));
+                    console.error('[Import COA] Feuille sélectionnée:', res.sheetName || '(aucune)');
                   }
                 } catch (err: any) {
                   toast.error("Erreur d'import COA", err.message);
@@ -628,9 +630,9 @@ function COAImportTab({
                   onImported();
                   window.location.reload();
                 } else {
-                  const reason = res.errors[0] ?? 'Aucune ligne valide trouvée dans le fichier';
+                  const reason = res.errors.length ? res.errors.join(' ') : 'Aucune ligne valide trouvée dans le fichier';
                   toast.error("Import impossible", reason);
-                  console.error('[Import COA] Échec — détails:', { sheetName: res.sheetName, errors: res.errors });
+                  console.error('[Import COA] Échec :\n' + (res.errors.join('\n') || '(aucune erreur explicite)'));
                 }
               } catch (err: any) {
                 toast.error("Erreur d'import", err.message);

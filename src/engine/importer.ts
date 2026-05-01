@@ -12,7 +12,7 @@ import { findSyscoAccount, classOf, SYSCOHADA_COA } from '../syscohada/coa';
 // les données en dessous, retourne tout en objets.
 type AnyRow = Record<string, any>;
 
-async function readExcelBulletproof(file: File): Promise<{ headers: string[]; rows: AnyRow[]; sheetName: string }> {
+async function readExcelBulletproof(file: File): Promise<{ headers: string[]; rows: AnyRow[]; sheetName: string; debug: { allSheets: string[]; candidates: Array<{ sheet: string; score: number; headerRow: number; rows: number; preferred: boolean }>; selectedSheet?: string } }> {
   const wb = new ExcelJS.Workbook();
   const buf = await file.arrayBuffer();
   await wb.xlsx.load(buf);
@@ -20,6 +20,7 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
   const dataKeywords = /(compte|cpte|code|num[ée]ro|date|journal|jrn|d[ée]bit|cr[ée]dit|libell[éeè]|label|intitul|description|classe|type|sysco|tiers|piece|janv|f[ée]vr|mars|avr|mai|juin|juil|ao[ûu]t|sept|octo|nov|d[ée]ce|montant|amount|solde|annuel)/i;
   const blacklist = /^(instructions?|consignes?|aide|help|r[ée]f[ée]rentiel|reference|sysco(hada)?|notes?|intro|readme|à\s*propos|about|exemples?|samples?)$/i;
   const preferred = /(plan\s*comptable|comptes|grand\s*livre|gl|grandlivre|budget|balance|écritures?|donn[ée]es)/i;
+  const allSheets = wb.worksheets.map((w) => w.name);
 
   type Cand = { sheetName: string; headerRow: number; score: number; rowsCount: number; preferredScore: number; order: number; matrix: any[][] };
   const cands: Cand[] = [];
@@ -70,13 +71,15 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
     });
   });
 
-  console.log('🔵 [readExcelBulletproof v3] Feuilles candidates :', cands.map((c) => ({
-    sheet: c.sheetName, score: c.score, headerRow: c.headerRow, rows: c.rowsCount, prefScore: c.preferredScore,
-  })));
+  const debugCands = cands.map((c) => ({
+    sheet: c.sheetName, score: c.score, headerRow: c.headerRow, rows: c.rowsCount, preferred: c.preferredScore > 0,
+  }));
+  console.log('🔵 [readExcelBulletproof v3] Toutes les feuilles :', allSheets);
+  console.log('🔵 [readExcelBulletproof v3] Feuilles candidates :', debugCands);
 
   if (cands.length === 0) {
-    console.error('🔵 Aucune feuille reconnue. Toutes les feuilles :', wb.worksheets.map((w) => w.name));
-    return { headers: [], rows: [], sheetName: '' };
+    console.error('🔵 Aucune feuille reconnue. Toutes les feuilles :', allSheets);
+    return { headers: [], rows: [], sheetName: '', debug: { allSheets, candidates: [] } };
   }
 
   cands.sort((a, b) =>
@@ -107,15 +110,26 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
 
   console.log('🔵 Headers extraits :', headerArr);
   console.log('🔵 Lignes data :', rows.length, '— premières :', rows.slice(0, 3));
-  return { headers: headerArr, rows, sheetName: best.sheetName };
+  return { headers: headerArr, rows, sheetName: best.sheetName, debug: { allSheets, candidates: debugCands, selectedSheet: best.sheetName } };
 }
 
 // Wrappers simples pour PC et Budget
 export async function importCOAv2(file: File, orgId: string): Promise<{ imported: number; updated: number; errors: string[]; sheetName: string }> {
   console.log('🟢 [importCOAv2] Start, file:', file.name);
-  const { headers, rows, sheetName } = await readExcelBulletproof(file);
+  const { headers, rows, sheetName, debug } = await readExcelBulletproof(file);
   if (rows.length === 0) {
-    return { imported: 0, updated: 0, errors: ['Aucune donnée trouvée dans le fichier (toutes feuilles testées)'], sheetName };
+    // Diagnostic explicite : toutes feuilles + candidates + raisons
+    const lines: string[] = [];
+    if (debug.candidates.length === 0) {
+      lines.push(`Aucune feuille reconnue dans le classeur.`);
+      lines.push(`Feuilles présentes : ${debug.allSheets.join(' · ') || '(aucune)'}.`);
+      lines.push(`Causes possibles : feuille blacklistée (Notes/Aide/...), en-têtes < 2 mots-clés reconnus, ou cellules fusionnées.`);
+    } else {
+      const top = debug.candidates[0];
+      lines.push(`Feuille sélectionnée : "${top.sheet}" (ligne d'en-tête ${top.headerRow + 1}, ${top.rows} lignes data).`);
+      lines.push(`Mais aucune ligne valide trouvée — les en-têtes ne contiennent peut-être pas Code/Libellé.`);
+    }
+    return { imported: 0, updated: 0, errors: lines, sheetName };
   }
   // Detection robuste : Sage / Cegid / Saari / EBP utilisent des en-tetes varies
   // Code : "Code", "Compte", "N° Compte", "Numéro", "Cpte", "Code compte"…
