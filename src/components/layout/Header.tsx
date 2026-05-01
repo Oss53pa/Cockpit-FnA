@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Hash, HelpCircle, LogOut, Menu, Settings } from 'lucide-react';
+import { Bell, Hash, HelpCircle, LogOut, Menu, Settings, ChevronDown } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
@@ -19,7 +19,6 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     [currentOrgId], [] as Array<{ year: number }>,
   ) ?? [];
   const periods = allPeriods.filter((p) => p.year === currentYear && p.month >= 1);
-  // Union des années : celles ayant des périodes + celles définies comme exercices
   const yearsSet = new Set<number>([
     ...allPeriods.map((p) => p.year),
     ...fiscalYears.map((fy) => fy.year),
@@ -35,9 +34,11 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const currentOrg = orgs.find((o) => o.id === currentOrgId);
   const initials = currentOrg?.name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase() ?? 'AD';
@@ -46,192 +47,191 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     const onClick = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
       if (userRef.current && !userRef.current.contains(e.target as Node)) setUserOpen(false);
+      if (contextRef.current && !contextRef.current.contains(e.target as Node)) setContextOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
+  // Periode label compact (pour le pill principal)
+  const periodLabel = (fromMonth === 1 && toMonth === 12)
+    ? `Cumul ${currentYear}`
+    : `${MONTH_SHORT[fromMonth - 1]} → ${MONTH_SHORT[toMonth - 1]} ${currentYear}`;
+
   return (
-    // Header style Twisty : fond shell crème (transparent sur le shell parent),
-    // texte sombre, contrôles en pills arrondies. Le header n'a plus de bordure
-    // basse ; la séparation visuelle vient du padding du <main>.
+    // Header epure : breadcrumb + 1 pill contexte + actions a droite
     <header className="sticky top-0 z-20 bg-shell dark:bg-primary-950 text-primary-900 dark:text-primary-50">
-      <div className="px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
-        <div className="flex items-center gap-3">
-          {/* Hamburger — mobile only */}
-          <button onClick={onMenuClick} className="lg:hidden p-1 rounded hover:bg-primary-200/60">
+      <div className="px-3 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+
+        {/* GAUCHE : breadcrumb societe + pill contexte (annee/periode unifiees) */}
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onMenuClick} className="lg:hidden btn-icon" aria-label="Menu">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="text-sm font-medium text-primary-700 dark:text-primary-300 tracking-wide truncate">
-            {currentOrg?.name ?? '---'}
-            <span className="text-primary-400 mx-2 hidden sm:inline">|</span>
-            <span className="num hidden sm:inline">{currentYear}</span>
+
+          {/* Pill unifie : org + annee + periode (tous les contextes en 1 click) */}
+          <div ref={contextRef} className="relative">
+            <button
+              onClick={() => setContextOpen(!contextOpen)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-surface/80 hover:bg-surface dark:bg-primary-900 border border-primary-200/60 dark:border-primary-800 text-sm font-medium text-primary-900 dark:text-primary-100 transition-colors duration-150"
+            >
+              <span className="truncate max-w-[200px]">{currentOrg?.name ?? '—'}</span>
+              <span className="w-px h-3 bg-primary-300 dark:bg-primary-700" />
+              <span className="num text-primary-600 dark:text-primary-400">{periodLabel}</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-primary-400 transition-transform duration-200 ${contextOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {contextOpen && (
+              <div className="absolute left-0 top-full mt-2 w-80 card-glass shadow-xl p-4 space-y-3 animate-fade-in-up">
+                <div>
+                  <label className="text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold mb-1.5 block">Société</label>
+                  <select className="input" value={currentOrgId} onChange={(e) => setCurrentOrg(e.target.value)}>
+                    {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold mb-1.5 block">Exercice</label>
+                    <select className="input" value={currentYear} onChange={(e) => setCurrentYear(Number(e.target.value))}>
+                      {(years.length ? years : [2025]).map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold mb-1.5 block">Période</label>
+                    <select className="input" value={currentPeriodId} onChange={(e) => setCurrentPeriod(e.target.value)}>
+                      <option value="">YTD</option>
+                      {periods.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold mb-1.5 block">Intervalle de mois</label>
+                  <div className="flex items-center gap-2">
+                    <select className="input flex-1" value={fromMonth} onChange={(e) => setPeriodRange(parseInt(e.target.value), toMonth)}>
+                      {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    </select>
+                    <span className="text-primary-400 text-sm">→</span>
+                    <select className="input flex-1" value={toMonth} onChange={(e) => setPeriodRange(fromMonth, parseInt(e.target.value))}>
+                      {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {glImports.length > 0 && (
+                  <div>
+                    <label className="text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold mb-1.5 block">Import GL utilisé</label>
+                    <select className="input" value={currentImport} onChange={(e) => setCurrentImport(e.target.value)}>
+                      <option value="latest">Dernier import ({glImports.length})</option>
+                      <option value="all">Tous les imports (cumul)</option>
+                      {glImports.map((i) => (
+                        <option key={i.id} value={String(i.id)}>
+                          {new Date(i.date).toLocaleDateString('fr-FR')} · {i.fileName.substring(0, 30)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <select
-            value={currentOrgId}
-            onChange={(e) => setCurrentOrg(e.target.value)}
-            className="hidden sm:block px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
-          >
-            {orgs.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
-          </select>
-          <select
-            value={currentYear}
-            onChange={(e) => setCurrentYear(Number(e.target.value))}
-            className="px-2 sm:px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
-          >
-            {(years.length ? years : [2025]).map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select
-            value={currentPeriodId}
-            onChange={(e) => setCurrentPeriod(e.target.value)}
-            className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900"
-          >
-            <option value="">YTD</option>
-            {periods.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
-          </select>
-
-          {/* Sélecteur d'import GL : par défaut « dernier » (évite le cumul
-              des imports historiques qui fausse les totaux). */}
-          {glImports.length > 0 && (
-            <select
-              value={currentImport}
-              onChange={(e) => setCurrentImport(e.target.value)}
-              title="Import GL utilisé pour les calculs"
-              className="hidden md:block px-3 py-1.5 rounded-lg text-[12px] bg-primary-200/60 border border-primary-200 text-primary-900 dark:text-white focus:outline-none cursor-pointer [&>option]:text-primary-900 max-w-[200px]"
-            >
-              <option value="latest">🆕 Dernier import ({glImports.length})</option>
-              <option value="all">∑ Tous les imports (cumul)</option>
-              <optgroup label="— Versions historiques —">
-                {glImports.map((i) => (
-                  <option key={i.id} value={String(i.id)}>
-                    {new Date(i.date).toLocaleDateString('fr-FR')} · {i.fileName.substring(0, 30)}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          )}
-
-          {/* Sélecteur de période globale (intervalle de mois) */}
-          <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-primary-200/40 border border-primary-200/80">
-            <span className="text-[10px] uppercase tracking-wider text-primary-500 mr-1">Période</span>
-            <select
-              className="bg-transparent text-[11px] font-semibold text-primary-900 dark:text-white focus:outline-none cursor-pointer"
-              value={fromMonth}
-              onChange={(e) => setPeriodRange(parseInt(e.target.value), toMonth)}
-              title="Mois de début"
-            >
-              {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1} className="text-primary-900">{m}</option>)}
-            </select>
-            <span className="text-primary-400">→</span>
-            <select
-              className="bg-transparent text-[11px] font-semibold text-primary-900 dark:text-white focus:outline-none cursor-pointer"
-              value={toMonth}
-              onChange={(e) => setPeriodRange(fromMonth, parseInt(e.target.value))}
-              title="Mois de fin"
-            >
-              {MONTH_SHORT.map((m, i) => <option key={i} value={i + 1} className="text-primary-900">{m}</option>)}
-            </select>
-            {(fromMonth !== 1 || toMonth !== 12) && (
-              <button onClick={() => setPeriodRange(1, 12)} className="ml-1 text-[9px] text-primary-500 hover:text-primary-900" title="Réinitialiser à année complète">↺</button>
-            )}
-          </div>
-
-          {/* Toggle segmenté Entier / Abrégé — affichage des montants */}
-          <div
-            className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-lg bg-primary-200/40 border border-primary-200/80"
-            role="tablist"
-            aria-label="Mode d'affichage des montants"
-          >
+        {/* DROITE : actions */}
+        <div className="flex items-center gap-1.5">
+          {/* Toggle montants — segmented control discret */}
+          <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-full bg-primary-200/40 dark:bg-primary-800/40">
             <button
               type="button"
-              role="tab"
-              aria-selected={amountMode === 'full'}
-              title="Afficher les montants en entier (ex : 1 234 567 890)"
+              aria-pressed={amountMode === 'full'}
+              title="Montants complets"
               onClick={() => setAmountMode('full')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition flex items-center gap-1 ${amountMode === 'full' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-primary-600 hover:text-primary-900 hover:bg-primary-200/60'}`}
+              className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-150 ${amountMode === 'full' ? 'bg-surface text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-900'}`}
             >
-              <Hash className="w-3 h-3" />
-              Entier
+              <Hash className="w-3 h-3 inline -mt-0.5 mr-0.5" />Entier
             </button>
             <button
               type="button"
-              role="tab"
-              aria-selected={amountMode === 'short'}
-              title="Afficher les montants abrégés (ex : 1,2 Md)"
+              aria-pressed={amountMode === 'short'}
+              title="Montants abrégés (K/M/Md)"
               onClick={() => setAmountMode('short')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${amountMode === 'short' ? 'bg-primary-100 text-primary-900 shadow-sm' : 'text-primary-600 hover:text-primary-900 hover:bg-primary-200/60'}`}
+              className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-150 ${amountMode === 'short' ? 'bg-surface text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-900'}`}
             >
               K/M
             </button>
           </div>
 
-          {/* Version mobile compacte : juste un bouton icône */}
+          {/* Mobile : bouton compact pour le toggle */}
           <button
             type="button"
-            title={amountMode === 'full' ? 'Entier — cliquer pour abréger' : 'Abrégé — cliquer pour afficher en entier'}
+            title={amountMode === 'full' ? 'Cliquer pour abréger' : 'Cliquer pour afficher en entier'}
             aria-label="Basculer l'affichage des montants"
-            className="sm:hidden w-9 h-9 rounded-full bg-primary-200/60 hover:bg-primary-200 text-primary-900 flex items-center justify-center transition relative"
+            className="sm:hidden btn-icon"
             onClick={() => setAmountMode(amountMode === 'full' ? 'short' : 'full')}
           >
             <Hash className="w-4 h-4" />
-            <span className="absolute -bottom-0.5 -right-0.5 min-w-[20px] h-[14px] px-1 bg-primary-100 text-primary-900 rounded-full text-[8px] font-bold flex items-center justify-center uppercase">
-              {amountMode === 'full' ? '123' : 'K/M'}
-            </span>
           </button>
 
           <button
             type="button"
-            title="Objet & mode d'emploi"
-            aria-label="Objet & mode d'emploi"
-            className="w-9 h-9 rounded-full bg-primary-200/60 hover:bg-primary-200 text-primary-900 flex items-center justify-center transition"
+            className="btn-icon"
+            title="Aide & mode d'emploi"
+            aria-label="Aide"
             onClick={() => { setHelpOpen(true); setNotifOpen(false); setUserOpen(false); }}
           >
             <HelpCircle className="w-4 h-4" />
           </button>
 
+          {/* Notifications */}
           <div ref={notifRef} className="relative">
-            <button className="w-9 h-9 rounded-full bg-primary-200/60 hover:bg-primary-200 text-primary-900 flex items-center justify-center transition relative"
-              onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); }}>
+            <button
+              className="btn-icon relative"
+              aria-label="Notifications"
+              onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); }}
+            >
               <Bell className="w-4 h-4" />
               {alertCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-primary-100 text-primary-900 rounded-full text-[10px] font-bold flex items-center justify-center num">
+                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 bg-accent text-white rounded-full text-[9px] font-bold flex items-center justify-center num ring-2 ring-shell">
                   {alertCount > 99 ? '99+' : alertCount}
                 </span>
               )}
             </button>
             {notifOpen && (
-              <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl overflow-hidden text-primary-900 dark:text-primary-100">
-                <div className="px-4 py-3 border-b border-primary-200 dark:border-primary-800">
-                  <p className="font-semibold text-sm">Notifications</p>
-                  <p className="text-xs text-primary-500">{alertCount} alerte(s)</p>
+              <div className="absolute right-0 top-full mt-2 w-80 card-glass shadow-xl overflow-hidden animate-fade-in-up">
+                <div className="px-4 py-3 border-b border-primary-200/60 dark:border-primary-800">
+                  <p className="font-semibold text-sm text-primary-900 dark:text-primary-50">Notifications</p>
+                  <p className="text-xs text-primary-500 mt-0.5">{alertCount} alerte(s) financières</p>
                 </div>
                 {alertCount === 0 ? (
-                  <div className="p-6 text-center text-xs text-primary-500">Aucune notification</div>
+                  <div className="p-8 text-center text-xs text-primary-500">Aucune notification active</div>
                 ) : (
-                  <button className="w-full text-left px-4 py-3 hover:bg-primary-100 dark:hover:bg-primary-800 text-sm"
-                    onClick={() => { setNotifOpen(false); navigate('/alerts'); }}>
-                    Voir les alertes
+                  <button
+                    className="w-full text-left px-4 py-3 hover:bg-primary-100/60 dark:hover:bg-primary-800/60 text-sm font-medium text-primary-900 dark:text-primary-100 transition-colors"
+                    onClick={() => { setNotifOpen(false); navigate('/alerts'); }}
+                  >
+                    Voir toutes les alertes
+                    <span className="float-right text-primary-400 text-xs">→</span>
                   </button>
                 )}
               </div>
             )}
           </div>
 
+          {/* Avatar utilisateur */}
           <div ref={userRef} className="relative">
             <button
-              className="w-9 h-9 rounded-full bg-primary-900 dark:bg-primary-700 text-white hover:bg-primary-800 flex items-center justify-center text-[11px] font-bold transition"
+              className="w-9 h-9 rounded-full bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 hover:opacity-90 flex items-center justify-center text-[11px] font-semibold transition-opacity duration-150 shadow-sm"
+              aria-label="Compte"
               onClick={() => { setUserOpen(!userOpen); setNotifOpen(false); }}
             >
               {initials}
             </button>
             {userOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 sm:w-64 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-xl shadow-xl overflow-hidden text-primary-900 dark:text-primary-100">
-                <div className="px-4 py-3 border-b border-primary-200 dark:border-primary-800">
-                  <p className="font-semibold text-sm">{currentOrg?.name ?? 'Utilisateur'}</p>
-                  <p className="text-xs text-primary-500">mode hors-ligne</p>
+              <div className="absolute right-0 top-full mt-2 w-64 card-glass shadow-xl overflow-hidden animate-fade-in-up">
+                <div className="px-4 py-3 border-b border-primary-200/60 dark:border-primary-800">
+                  <p className="font-semibold text-sm text-primary-900 dark:text-primary-50">{currentOrg?.name ?? 'Utilisateur'}</p>
+                  <p className="text-xs text-primary-500 mt-0.5">Mode hors-ligne</p>
                 </div>
                 <div className="py-1">
                   <MenuItem icon={<Settings className="w-4 h-4" />} label="Paramètres" onClick={() => { setUserOpen(false); navigate('/settings'); }} />
@@ -249,8 +249,12 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
 function MenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-primary-100 dark:hover:bg-primary-800 text-left" onClick={onClick}>
-      {icon}{label}
+    <button
+      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-primary-700 dark:text-primary-300 hover:bg-primary-100/60 dark:hover:bg-primary-800/60 hover:text-primary-900 dark:hover:text-primary-100 text-left transition-colors duration-150"
+      onClick={onClick}
+    >
+      <span className="text-primary-400">{icon}</span>
+      {label}
     </button>
   );
 }

@@ -51,85 +51,158 @@ type Props = {
   onToggleCollapse?: () => void;
 };
 
+/**
+ * Sidebar premium — niveau international (Linear / Vercel / Notion).
+ *
+ * - Logo Cockpit en haut avec point accent (signature visuelle)
+ * - Sections avec libelle uppercase tracking-widest discret
+ * - NavLink active : pill arrondie pleine, accent indicator a gauche
+ * - Collapsed mode : icones centrees, tooltip implicite via title
+ * - Footer minimal (version)
+ */
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
 
-  // Full nav content (used by desktop expanded + mobile drawer)
   const fullNav = (showClose: boolean) => (
     <>
-      <div className="px-5 py-5 border-b border-primary-200/60 dark:border-primary-800 flex items-center justify-between gap-2">
+      {/* Header — wordmark Grand Hotel (signature unique de l'app) */}
+      <div className="px-5 pt-6 pb-5 flex items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-[11px] font-bold shrink-0">F&amp;A</div>
+          <div className="relative w-9 h-9 rounded-2xl bg-primary-900 dark:bg-primary-100 flex items-center justify-center shrink-0 shadow-sm">
+            <span className="text-primary-50 dark:text-primary-900 text-xs font-semibold tracking-tight">FA</span>
+            <span aria-hidden className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-shell" />
+          </div>
           <div className="min-w-0">
             <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit</p>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-primary-400 mt-1">SYSCOHADA 2017</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-primary-400 mt-1.5 font-medium">SYSCOHADA 2017</p>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           {onToggleCollapse && (
-            <button onClick={onToggleCollapse} className="p-1.5 rounded hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 transition" title="Replier la sidebar">
+            <button
+              onClick={onToggleCollapse}
+              className="btn-icon w-7 h-7"
+              title="Replier la sidebar"
+              aria-label="Replier"
+            >
               <ChevronsLeft className="w-4 h-4" />
             </button>
           )}
           {showClose && onClose && (
-            <button onClick={onClose} className="p-1 rounded hover:bg-primary-200 dark:hover:bg-primary-800">
-              <X className="w-5 h-5 text-primary-500" />
+            <button onClick={onClose} className="btn-icon w-7 h-7" aria-label="Fermer">
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-6">
         {sections.map((sec) => (
           <div key={sec.label}>
-            <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-primary-400 font-semibold">{sec.label}</p>
+            <p className="px-3 mb-1.5 text-[10px] uppercase tracking-[0.14em] text-primary-400 font-semibold">
+              {sec.label}
+            </p>
             <div className="space-y-0.5">
               {sec.items.map((it) => (
-                <NavLink key={it.to} to={it.to} end={it.to === '/'} onClick={onClose}
-                  className={({ isActive }) => clsx(
-                    'flex items-center gap-3 px-3 py-2 rounded-full text-[13px] transition-colors',
-                    isActive
-                      ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-semibold'
-                      : 'text-primary-700 dark:text-primary-400 hover:bg-primary-200/60 dark:hover:bg-primary-800'
-                  )}>
-                  <it.icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{it.label}</span>
+                <NavLink
+                  key={it.to}
+                  to={it.to}
+                  end={it.to === '/'}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    clsx(
+                      'group relative flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] transition-all duration-150',
+                      isActive
+                        ? 'bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 font-semibold shadow-sm'
+                        : 'text-primary-700 dark:text-primary-400 hover:bg-primary-200/60 dark:hover:bg-primary-800 hover:text-primary-900 dark:hover:text-primary-100',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {/* Indicator accent vertical pour l'item actif */}
+                      {isActive && (
+                        <span
+                          aria-hidden
+                          className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent"
+                        />
+                      )}
+                      <it.icon
+                        className={clsx('w-4 h-4 shrink-0', isActive ? 'text-primary-50 dark:text-primary-900' : 'text-primary-500 group-hover:text-primary-900 dark:group-hover:text-primary-100')}
+                        strokeWidth={isActive ? 2.4 : 2}
+                      />
+                      <span className="truncate">{it.label}</span>
+                    </>
+                  )}
                 </NavLink>
               ))}
             </div>
           </div>
         ))}
       </nav>
-      <div className="border-t border-primary-200/60 dark:border-primary-800">
-        {onToggleCollapse && (
-          <button onClick={onToggleCollapse} className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-200/60 dark:hover:bg-primary-800 transition">
-            <ChevronsLeft className="w-3.5 h-3.5" /> Replier
-          </button>
-        )}
-        <p className="px-5 py-2 text-[10px] text-primary-400">v0.3.0</p>
+
+      {/* Footer minimal */}
+      <div className="px-5 py-3 border-t border-primary-200/60 dark:border-primary-800">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] text-primary-400 tracking-tight">v0.3.0</p>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="btn-icon w-6 h-6 text-primary-400 hover:text-primary-700"
+              title="Replier"
+              aria-label="Replier la sidebar"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </>
   );
 
-  // Collapsed nav (icons only, tooltips)
+  // Collapsed nav (icones seules)
   const collapsedNav = (
     <>
-      <div className="py-4 flex justify-center border-b border-primary-200 dark:border-primary-800">
-        <span className="text-xs font-bold text-primary-900 dark:text-primary-50">F&A</span>
+      <div className="pt-5 pb-3 flex justify-center">
+        <div className="relative w-9 h-9 rounded-2xl bg-primary-900 dark:bg-primary-100 flex items-center justify-center shadow-sm">
+          <span className="text-primary-50 dark:text-primary-900 text-xs font-semibold tracking-tight">FA</span>
+          <span aria-hidden className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-shell" />
+        </div>
       </div>
       <nav className="flex-1 overflow-y-auto py-3 px-1.5 space-y-1">
         {sections.flatMap((sec) => sec.items).map((it) => (
-          <NavLink key={it.to} to={it.to} end={it.to === '/'} title={it.label}
-            className={({ isActive }) => clsx(
-              'flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-colors',
-              isActive
-                ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900'
-                : 'text-primary-500 hover:bg-primary-200 dark:hover:bg-primary-800 hover:text-primary-900 dark:hover:text-primary-100'
-            )}>
-            <it.icon className="w-[18px] h-[18px]" />
+          <NavLink
+            key={it.to}
+            to={it.to}
+            end={it.to === '/'}
+            title={it.label}
+            className={({ isActive }) =>
+              clsx(
+                'group relative flex items-center justify-center w-10 h-10 mx-auto rounded-xl transition-all duration-150',
+                isActive
+                  ? 'bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 shadow-sm'
+                  : 'text-primary-500 hover:bg-primary-200/60 dark:hover:bg-primary-800 hover:text-primary-900 dark:hover:text-primary-100',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span aria-hidden className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent" />
+                )}
+                <it.icon className="w-[18px] h-[18px]" strokeWidth={isActive ? 2.4 : 2} />
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
-      <div className="border-t border-primary-200 dark:border-primary-800 py-2 flex justify-center">
-        <button onClick={onToggleCollapse} title="Déplier" className="p-2 rounded-lg text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-800 transition">
+      <div className="border-t border-primary-200/60 dark:border-primary-800 py-2 flex justify-center">
+        <button
+          onClick={onToggleCollapse}
+          title="Déplier"
+          aria-label="Déplier la sidebar"
+          className="btn-icon"
+        >
           <ChevronsRight className="w-4 h-4" />
         </button>
       </div>
@@ -138,10 +211,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
 
   return (
     <>
-      {/* Desktop sidebar — expanded or collapsed
-          Style Twisty : pas de bordure, sidebar transparente sur le fond bgpage.
-          Le shell à droite est arrondi, donc visuellement la sidebar et le shell
-          coexistent sans séparation. */}
+      {/* Desktop sidebar */}
       {collapsed ? (
         <aside className="hidden lg:flex w-14 shrink-0 h-[calc(100vh-2rem)] sticky top-4 bg-shell dark:bg-primary-900 rounded-shell flex-col transition-all duration-200 shadow-sm">
           {collapsedNav}
@@ -152,11 +222,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
         </aside>
       )}
 
-      {/* Mobile drawer overlay */}
+      {/* Mobile drawer */}
       {open && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={onClose} />
-          <aside className="fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-primary-900 shadow-2xl flex flex-col lg:hidden">
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden animate-fade-in" onClick={onClose} />
+          <aside className="fixed inset-y-0 left-0 z-50 w-72 bg-shell dark:bg-primary-900 shadow-2xl flex flex-col lg:hidden animate-slide-in-right">
             {fullNav(true)}
           </aside>
         </>
