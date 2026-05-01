@@ -282,7 +282,7 @@ function ChargesProduits() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="🍩 Répartition des charges">
+          <ChartCard title="Répartition des charges">
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie data={repartitionCharges} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value"
@@ -301,7 +301,7 @@ function ChargesProduits() {
             </div>
           </ChartCard>
 
-          <ChartCard title="📌 Charges Fixes vs Variables">
+          <ChartCard title="Charges Fixes vs Variables">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={charFixes}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
@@ -315,7 +315,7 @@ function ChargesProduits() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="🏆 Top 10 Postes de Charges" className="lg:col-span-2">
+          <ChartCard title="Top 10 Postes de Charges" className="lg:col-span-2">
             <div className="text-xs max-h-[220px] overflow-y-auto">
               <table className="w-full">
                 <thead>
@@ -365,7 +365,7 @@ function ChargesProduits() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="🍩 Répartition des produits">
+          <ChartCard title="Répartition des produits">
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie data={repartitionProduits} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value"
@@ -1462,7 +1462,7 @@ function CycleClient() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="✅ Taux de recouvrement mensuel (%)">
+        <ChartCard title="Taux de recouvrement mensuel (%)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={recouv}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
@@ -1479,7 +1479,7 @@ function CycleClient() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard title="🏆 Top 10 clients — Encours et Risque" className="lg:col-span-2">
+        <ChartCard title="Top 10 clients — Encours et Risque" className="lg:col-span-2">
           <div className="text-xs max-h-[280px] overflow-y-auto">
             <table className="w-full">
               <thead>
@@ -1708,7 +1708,7 @@ function CycleFournisseur() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard title="🏆 Top 10 fournisseurs — Encours et Échéances" className="lg:col-span-2">
+        <ChartCard title="Top 10 fournisseurs — Encours et Échéances" className="lg:col-span-2">
           <div className="text-xs max-h-[280px] overflow-y-auto">
             <table className="w-full">
               <thead>
@@ -2019,7 +2019,7 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
               </div>
             </ChartCard>
 
-            <ChartCard title="🤖 Analyse IA — Trésorerie">
+            <ChartCard title="Analyse IA — Trésorerie">
               <div className="p-3 rounded-lg text-xs leading-relaxed" style={{ background: '#f0f9ff', color: '#1e40af' }}>
                 <p className="font-bold mb-2">🧠 Synthèse IA :</p>
                 <p>La trésorerie nette est en <strong>{tn >= 0 ? 'position positive' : 'position négative'}</strong> de {fmtK(Math.abs(tn))} XOF.</p>
@@ -2129,7 +2129,7 @@ function MasseSalariale() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="🍩 Répartition de la masse salariale">
+            <ChartCard title="Répartition de la masse salariale">
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={msRepartition} cx="50%" cy="50%" innerRadius={40} outerRadius={65} dataKey="value"
@@ -2344,7 +2344,7 @@ function Stocks() {
         <KPICard title="Catégories" value={String(stocks.length)} color={ct.at(3)} icon="📂" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="🍩 Répartition des stocks par nature">
+        <ChartCard title="Répartition des stocks par nature">
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={stocks} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value"

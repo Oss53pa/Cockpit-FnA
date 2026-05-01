@@ -36,7 +36,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen relative px-8 py-8 flex flex-col bg-primary-50 dark:bg-primary-950">
+    <div className="min-h-screen relative px-8 py-8 flex flex-col bg-bgpage dark:bg-primary-950 animate-fade-in">
       {/* TOP BAR */}
       <div className="flex items-start justify-between">
         <div>
@@ -56,7 +56,7 @@ export default function Home() {
           )}
           <Link to="/ai" className="flex items-center gap-1.5 text-xs hover:text-primary-900 dark:hover:text-primary-50 transition">
             <Bot className="w-3.5 h-3.5 text-primary-500" />
-            <span className="italic font-medium">Proph<span className="text-error">3t</span></span>
+            <span className="italic font-medium">Proph<span className="text-accent">3t</span></span>
           </Link>
           <span className="text-xs text-primary-500">
             Exercice : <span className="font-bold text-primary-900 dark:text-primary-50 num">{currentYear}</span>
