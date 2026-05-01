@@ -19,7 +19,6 @@ const dashboards = [
   { id: 'is_bvsa', route: '/dashboard/is_bvsa', name: 'Income Statement — Budget vs Actual', desc: 'Compte de résultat : Current period / Versus N-1 / YTD avec status', icon: 'TableProperties', cat: 'Reporting' },
   { id: 'cashflow', route: '/dashboard/cashflow', name: 'Cashflow Statement', desc: 'Position trésorerie : Cash In / Out / Solde mensuel + KPIs', icon: 'Banknote', cat: 'Reporting' },
   { id: 'receivables', route: '/dashboard/receivables', name: 'Receivables & Payables Review', desc: 'Suivi créances/dettes : KPIs, donuts et évolution mensuelle', icon: 'BookCheck', cat: 'Reporting' },
-  // ─── Dashboards de section CR (charts + KPIs) ───────────
   { id: 'crsec_produits_expl', route: '/dashboard/crsec_produits_expl', name: "Produits d'exploitation — Dashboard", desc: 'KPIs + graphiques · comptes 70-75', icon: 'TrendingUp', cat: 'CR — Dashboards' },
   { id: 'crsec_charges_expl',  route: '/dashboard/crsec_charges_expl',  name: "Charges d'exploitation — Dashboard", desc: 'KPIs + graphiques · comptes 60-66', icon: 'TrendingDown', cat: 'CR — Dashboards' },
   { id: 'crsec_produits_fin',  route: '/dashboard/crsec_produits_fin',  name: 'Produits financiers — Dashboard', desc: 'KPIs + graphiques · comptes 77', icon: 'Coins', cat: 'CR — Dashboards' },
@@ -27,7 +26,6 @@ const dashboards = [
   { id: 'crsec_produits_hao',  route: '/dashboard/crsec_produits_hao',  name: 'Produits exceptionnels — Dashboard', desc: 'KPIs + graphiques · comptes 82, 84, 86, 88', icon: 'Sparkle', cat: 'CR — Dashboards' },
   { id: 'crsec_charges_hao',   route: '/dashboard/crsec_charges_hao',   name: 'Charges exceptionnelles — Dashboard', desc: 'KPIs + graphiques · comptes 81, 83, 85', icon: 'AlertCircle', cat: 'CR — Dashboards' },
   { id: 'crsec_impots',        route: '/dashboard/crsec_impots',        name: 'Impôts sur les bénéfices — Dashboard', desc: 'KPIs + graphiques · comptes 87, 89', icon: 'Receipt', cat: 'CR — Dashboards' },
-  // ─── Tables de section CR (données pures, repliables) ────
   { id: 'crtab_produits_expl', route: '/dashboard/crtab_produits_expl', name: "Produits d'exploitation — Table", desc: 'Tableau détaillé des comptes 70-75', icon: 'Table2', cat: 'CR — Tables' },
   { id: 'crtab_charges_expl',  route: '/dashboard/crtab_charges_expl',  name: "Charges d'exploitation — Table", desc: 'Tableau détaillé des comptes 60-66', icon: 'Table2', cat: 'CR — Tables' },
   { id: 'crtab_produits_fin',  route: '/dashboard/crtab_produits_fin',  name: 'Produits financiers — Table', desc: 'Tableau détaillé des comptes 77', icon: 'Table2', cat: 'CR — Tables' },
@@ -53,10 +51,8 @@ const dashboards = [
   { id: 'sante', route: '/dashboard/sante', name: 'Santé', desc: 'Actes médicaux, recettes, personnel soignant, équipements', icon: 'HeartPulse', cat: 'Sectoriel' },
   { id: 'transp', route: '/dashboard/transp', name: 'Transport & Logistique', desc: 'CA/km, flotte, carburant, maintenance, taux de remplissage', icon: 'Truck', cat: 'Sectoriel' },
   { id: 'serv', route: '/dashboard/serv', name: 'Services & Conseil', desc: 'Honoraires, taux facturable, marge projets, staffing', icon: 'Briefcase', cat: 'Sectoriel' },
-  // ─── Pilotage & Suivi ─────────────────────────────────
   { id: 'alerts', route: '/alerts', name: 'Points d\'attention & Alertes', desc: 'Risques détectés, anomalies comptables, seuils dépassés, suivi par sévérité et statut', icon: 'AlertTriangle', cat: 'Pilotage' },
   { id: 'actions', route: '/actions', name: 'Plan d\'action', desc: 'Actions correctives, responsables, échéances, priorités, taux d\'avancement, actions en retard', icon: 'ClipboardCheck', cat: 'Pilotage' },
-  // ─── Comptabilité analytique ───────────────────────────
   { id: 'ana_dashboard', route: '/analytical?tab=dashboard', name: 'Dashboard analytique', desc: 'KPIs couverture, répartition charges/produits par code, évolution mensuelle, budget vs réalisé', icon: 'PieChart', cat: 'Analytique' },
   { id: 'ana_axes', route: '/analytical?tab=axes', name: 'Plan analytique (Axes)', desc: 'Configuration des axes analytiques : projet, centre de coût, région, activité (jusqu\'à 5 axes)', icon: 'GitBranch', cat: 'Analytique' },
   { id: 'ana_codes', route: '/analytical?tab=codes', name: 'Codes analytiques', desc: 'Gestion des codes hiérarchiques par axe : création, recherche, activation', icon: 'FolderKanban', cat: 'Analytique' },
@@ -64,57 +60,69 @@ const dashboards = [
   { id: 'ana_assign', route: '/analytical?tab=assign', name: 'Affectation manuelle', desc: 'Lignes non affectées : sélection multiple, affectation manuelle en masse par axe', icon: 'ListChecks', cat: 'Analytique' },
 ];
 
+type ViewMode = 'cards' | 'table' | 'kanban';
+const VIEW_KEY = 'dashboards-view-mode';
+
+const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique'] as const;
+type Category = typeof CATEGORIES[number];
+
 export default function Dashboards() {
-  const [filter, setFilter] = useState<'Tous' | 'Standard' | 'Reporting' | 'CR — Dashboards' | 'CR — Tables' | 'Sectoriel' | 'Pilotage' | 'Analytique'>('Tous');
+  const [filter, setFilter] = useState<Category>('Tous');
+  const [view, setView] = useState<ViewMode>(() => {
+    const v = localStorage.getItem(VIEW_KEY);
+    return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const navigate = useNavigate();
   const list = dashboards.filter((d) => filter === 'Tous' || d.cat === filter);
+
+  const setViewMode = (m: ViewMode) => { setView(m); localStorage.setItem(VIEW_KEY, m); };
 
   return (
     <div>
       <PageHeader
         title="Catalogue"
         subtitle="Standards & sectoriels — drill-down jusqu'à l'écriture"
-        action={<button className="btn-primary" onClick={() => setCreateOpen(true)}><Icons.Plus className="w-4 h-4" /> Créer un dashboard</button>}
+        action={
+          <div className="flex items-center gap-2">
+            <ViewSwitcher view={view} onChange={setViewMode} />
+            <button className="btn-primary" onClick={() => setCreateOpen(true)}>
+              <Icons.Plus className="w-4 h-4" /> Créer un dashboard
+            </button>
+          </div>
+        }
       />
 
-      <div className="flex gap-2 mb-6">
-        {(['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique'] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={clsx('btn !py-1.5 text-xs',
-              filter === f ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'btn-outline')}>
+      {/* Filtres catégorie — pills horizontales scrollables */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {CATEGORIES.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={clsx(
+              'btn !py-1.5 text-xs whitespace-nowrap shrink-0',
+              filter === f
+                ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900'
+                : 'btn-outline',
+            )}
+          >
             {f}
+            <span className={clsx('ml-1.5 text-[10px] tabular-nums opacity-70')}>
+              ({f === 'Tous' ? dashboards.length : dashboards.filter((d) => d.cat === f).length})
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {list.map((d) => {
-          const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
-          return (
-            <button key={d.id} onClick={() => navigate(d.route)}
-              className="group relative text-left card-premium p-5 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-primary-400 dark:hover:border-primary-600">
-              {/* Accent lumineux au survol */}
-              <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-primary-900/40 dark:via-primary-100/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      {/* Vue Cartes */}
+      {view === 'cards' && <CardsView list={list} navigate={navigate} />}
 
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-200/70 to-primary-300/40 dark:from-primary-800/70 dark:to-primary-700/40 flex items-center justify-center ring-1 ring-inset ring-primary-300/30 dark:ring-primary-700/30 text-primary-800 dark:text-primary-200 group-hover:from-primary-900 group-hover:to-primary-800 dark:group-hover:from-primary-100 dark:group-hover:to-primary-200 group-hover:text-primary-50 dark:group-hover:text-primary-900 transition-all duration-300">
-                  <Icon className="w-5 h-5" strokeWidth={1.75} />
-                </div>
-                <Badge>{d.cat}</Badge>
-              </div>
-              <p className="font-semibold text-[13px] text-primary-900 dark:text-primary-100 tracking-tight leading-snug">{d.name}</p>
-              <p className="text-[11px] text-primary-500 mt-1.5 leading-relaxed">{d.desc}</p>
+      {/* Vue Table */}
+      {view === 'table' && <TableView list={list} navigate={navigate} />}
 
-              {/* Chevron discret au survol */}
-              <span aria-hidden className="absolute bottom-4 right-4 text-primary-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
-                <Icons.ArrowUpRight className="w-4 h-4" strokeWidth={2} />
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Vue Kanban */}
+      {view === 'kanban' && <KanbanView list={list} navigate={navigate} filter={filter} />}
 
       <Modal
         open={createOpen}
@@ -137,6 +145,202 @@ export default function Dashboards() {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// View Switcher (Cards / Table / Kanban)
+// ─────────────────────────────────────────────────────────────────────
+function ViewSwitcher({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
+  const buttons: { v: ViewMode; icon: React.ComponentType<any>; label: string }[] = [
+    { v: 'cards',  icon: Icons.LayoutGrid,    label: 'Cartes' },
+    { v: 'table',  icon: Icons.Rows3,         label: 'Table' },
+    { v: 'kanban', icon: Icons.LayoutDashboard, label: 'Kanban' },
+  ];
+  return (
+    <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-primary-200/40 dark:bg-primary-800/40">
+      {buttons.map((b) => {
+        const active = view === b.v;
+        return (
+          <button
+            key={b.v}
+            type="button"
+            onClick={() => onChange(b.v)}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-150',
+              active
+                ? 'bg-surface text-primary-900 shadow-sm dark:bg-primary-100 dark:text-primary-900'
+                : 'text-primary-500 hover:text-primary-900 dark:hover:text-primary-100',
+            )}
+            aria-pressed={active}
+            title={`Vue ${b.label}`}
+          >
+            <b.icon className="w-3.5 h-3.5" strokeWidth={2} />
+            <span className="hidden sm:inline">{b.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Vue 1 — CARTES
+// ─────────────────────────────────────────────────────────────────────
+function CardsView({ list, navigate }: { list: typeof dashboards; navigate: (path: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {list.map((d) => {
+        const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
+        return (
+          <button
+            key={d.id}
+            onClick={() => navigate(d.route)}
+            className="group relative text-left card-premium p-5 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-primary-400 dark:hover:border-primary-600"
+          >
+            <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-primary-900/40 dark:via-primary-100/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-200/70 to-primary-300/40 dark:from-primary-800/70 dark:to-primary-700/40 flex items-center justify-center ring-1 ring-inset ring-primary-300/30 dark:ring-primary-700/30 text-primary-800 dark:text-primary-200 group-hover:from-primary-900 group-hover:to-primary-800 dark:group-hover:from-primary-100 dark:group-hover:to-primary-200 group-hover:text-primary-50 dark:group-hover:text-primary-900 transition-all duration-300">
+                <Icon className="w-5 h-5" strokeWidth={1.75} />
+              </div>
+              <Badge>{d.cat}</Badge>
+            </div>
+            <p className="font-semibold text-[13px] text-primary-900 dark:text-primary-100 tracking-tight leading-snug">{d.name}</p>
+            <p className="text-[11px] text-primary-500 mt-1.5 leading-relaxed">{d.desc}</p>
+            <span aria-hidden className="absolute bottom-4 right-4 text-primary-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
+              <Icons.ArrowUpRight className="w-4 h-4" strokeWidth={2} />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Vue 2 — TABLE
+// ─────────────────────────────────────────────────────────────────────
+function TableView({ list, navigate }: { list: typeof dashboards; navigate: (path: string) => void }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-primary-100/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300 text-[11px] uppercase tracking-wider">
+              <th className="text-left py-2.5 px-4 font-semibold w-10"></th>
+              <th className="text-left py-2.5 px-4 font-semibold">Dashboard</th>
+              <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Description</th>
+              <th className="text-left py-2.5 px-4 font-semibold w-40">Catégorie</th>
+              <th className="py-2.5 px-4 w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((d, i) => {
+              const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
+              return (
+                <tr
+                  key={d.id}
+                  onClick={() => navigate(d.route)}
+                  className={clsx(
+                    'cursor-pointer table-row-hover transition-colors',
+                    i !== list.length - 1 && 'border-b border-primary-200/60 dark:border-primary-800',
+                  )}
+                >
+                  <td className="py-3 px-4">
+                    <div className="w-8 h-8 rounded-lg bg-primary-100/80 dark:bg-primary-800/80 flex items-center justify-center text-primary-700 dark:text-primary-200">
+                      <Icon className="w-4 h-4" strokeWidth={2} />
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 font-medium text-primary-900 dark:text-primary-100">{d.name}</td>
+                  <td className="py-3 px-4 text-xs text-primary-500 hidden md:table-cell max-w-md">
+                    <span className="line-clamp-2">{d.desc}</span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <Badge>{d.cat}</Badge>
+                  </td>
+                  <td className="py-3 px-4 text-primary-400">
+                    <Icons.ChevronRight className="w-4 h-4" strokeWidth={2} />
+                  </td>
+                </tr>
+              );
+            })}
+            {list.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-sm text-primary-400">
+                  Aucun dashboard dans cette catégorie.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Vue 3 — KANBAN (colonnes par catégorie)
+// ─────────────────────────────────────────────────────────────────────
+function KanbanView({ list, navigate, filter }: {
+  list: typeof dashboards;
+  navigate: (path: string) => void;
+  filter: Category;
+}) {
+  // Groupe par catégorie. Si filtre actif (≠ Tous), on n'affiche qu'une colonne.
+  const groups = filter === 'Tous'
+    ? CATEGORIES.filter((c) => c !== 'Tous').map((cat) => ({
+        cat,
+        items: list.filter((d) => d.cat === cat),
+      })).filter((g) => g.items.length > 0)
+    : [{ cat: filter, items: list }];
+
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0">
+      {groups.map(({ cat, items }) => (
+        <div key={cat} className="shrink-0 w-72 flex flex-col">
+          {/* Header colonne */}
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200">
+              {cat}
+            </h3>
+            <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-full bg-primary-200/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300">
+              {items.length}
+            </span>
+          </div>
+
+          {/* Cards verticales */}
+          <div className="flex flex-col gap-2 bg-primary-100/30 dark:bg-primary-900/30 p-2 rounded-2xl min-h-[200px] flex-1 border border-primary-200/40 dark:border-primary-800/40">
+            {items.map((d) => {
+              const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => navigate(d.route)}
+                  className="group text-left card p-3 hover:shadow-md hover:-translate-y-px transition-all duration-200"
+                >
+                  <div className="flex items-center gap-2.5 mb-1.5">
+                    <div className="w-8 h-8 rounded-lg bg-primary-200/80 dark:bg-primary-800/80 flex items-center justify-center text-primary-700 dark:text-primary-200 shrink-0 group-hover:bg-primary-900 group-hover:text-primary-50 dark:group-hover:bg-primary-100 dark:group-hover:text-primary-900 transition-colors">
+                      <Icon className="w-3.5 h-3.5" strokeWidth={2} />
+                    </div>
+                    <p className="font-semibold text-[12px] text-primary-900 dark:text-primary-100 leading-tight tracking-tight line-clamp-2 flex-1">
+                      {d.name}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-primary-500 leading-relaxed line-clamp-2 pl-[42px]">
+                    {d.desc}
+                  </p>
+                </button>
+              );
+            })}
+            {items.length === 0 && (
+              <p className="text-[10px] text-primary-400 italic text-center py-4">
+                Aucun dashboard
+              </p>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
