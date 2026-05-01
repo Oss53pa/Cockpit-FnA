@@ -62,18 +62,31 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
 
     if (matrix.length === 0) return;
 
-    // Détecter la ligne d'en-tête (scan plus large : 25 lignes)
+    // Détecter la ligne d'en-tête (scan large : 30 lignes).
+    // SCORE PONDÉRÉ : on compte les en-tetes UNIQUES (pas juste le nombre de
+    // cellules avec un mot-cle). Une ligne "Type | Type | Type" = score 1, pas 3.
+    // On preferera donc la ligne qui contient PLUSIEURS keywords differents.
     let bestRow = 0; let bestScore = 0;
-    for (let r = 0; r < Math.min(matrix.length, 25); r++) {
+    for (let r = 0; r < Math.min(matrix.length, 30); r++) {
       const row = matrix[r] || [];
-      const score = row.filter((h) => h !== undefined && h !== null && String(h).trim() && dataKeywords.test(String(h).trim())).length;
-      if (score > bestScore) { bestScore = score; bestRow = r; }
+      // Compter les en-tetes UNIQUES qui matchent dataKeywords
+      const matched = new Set<string>();
+      for (const cell of row) {
+        if (cell === undefined || cell === null) continue;
+        const s = String(cell).trim().toLowerCase();
+        if (!s) continue;
+        if (dataKeywords.test(s)) matched.add(s);
+      }
+      const score = matched.size;
+      // En cas d'egalite, on prefere la ligne avec PLUS de cellules non-vides
+      // (= la ligne qui ressemble vraiment a un header complet).
+      const fullness = row.filter((h) => h !== undefined && h !== null && String(h).trim()).length;
+      const composite = score * 100 + fullness;
+      if (composite > bestScore) { bestScore = composite; bestRow = r; }
     }
-    // Seuil baisse a 1 mot-cle (etait 2) — un fichier avec juste "Code" et
-    // "Libellé" en en-tetes longs (genre "CODE COMPTE") match en partie.
-    // On garde la feuille meme avec score=1 ; le filtrage final se fera sur
-    // colCode + colLabel dans importCOAv2.
-    if (bestScore < 1) return;
+    // bestScore est composite (score*100 + fullness). On extrait le score reel :
+    const realScore = Math.floor(bestScore / 100);
+    if (realScore < 1) return;
 
     cands.push({
       sheetName: name,
@@ -222,17 +235,15 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     const totalRows = rows.length;
     const diag: string[] = [];
     diag.push(`Lecture OK : feuille "${sheetName}", ${totalRows} lignes data extraites.`);
+    // ALL HEADERS — pour voir si la mauvaise ligne d'en-tete a ete detectee
+    diag.push(`En-têtes détectés : [${headers.map((h) => `"${h}"`).join(', ')}]`);
     diag.push(`Colonnes mappées : Code = "${colCode}", Libellé = "${colLabel}".`);
     // Echantillon de la 1ere ligne pour diagnostic immediat
     if (rows[0]) {
       const r0 = rows[0];
-      const sampleKeys = Object.keys(r0).slice(0, 4);
+      const sampleKeys = Object.keys(r0).slice(0, 6);
       const sample = sampleKeys.map((k) => `${k}=${JSON.stringify(r0[k]).slice(0, 30)}`).join(' | ');
       diag.push(`Échantillon ligne 1 : ${sample}`);
-      // Lookup direct du mapping
-      const codeVal = r0[colCode];
-      const labelVal = r0[colLabel];
-      diag.push(`Lookup "${colCode}" -> ${JSON.stringify(codeVal)} (type: ${typeof codeVal}). "${colLabel}" -> ${JSON.stringify(labelVal)}.`);
     }
     if (skipCodeAbsent) diag.push(`${skipCodeAbsent} ligne(s) sans valeur de code.`);
     if (skipCodeNonNumerique) diag.push(`${skipCodeNonNumerique} ligne(s) avec un code NON-numérique (ex: ${sampleRejets.join(', ')}). Le compte doit commencer par un chiffre.`);

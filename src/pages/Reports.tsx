@@ -1623,10 +1623,10 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
           Hors marge — créez un nouveau saut de page
         </div>
       )}
-      {/* flex-1 conserve : assure que le contenu prend la largeur stretch du
-          parent. Sans flex-1, certains layouts internes (TOC notamment) ne
-          s'etendent pas a la pleine largeur. */}
-      <div ref={ref} className="break-words flex-1 flex flex-col gap-1 p-4 pb-2">{children}</div>
+      {/* w-full force la pleine largeur (parfois flex-basis:0 de flex-1 cause
+          un retreciement en cross-axis) — important pour les covers modern
+          qui utilisent flex horizontal interne avec w-2/5 et flex-1. */}
+      <div ref={ref} className="break-words flex-1 w-full flex flex-col gap-1 p-4 pb-2">{children}</div>
       {/* Footer en flux normal — pas d'absolute pour eviter l'espace vide
           quand la page contient peu de contenu. */}
       {!hideNumber && pageNum && totalPages && (
