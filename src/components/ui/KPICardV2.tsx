@@ -44,7 +44,7 @@ export function KPICard({
         'transition-all duration-200 ease-spring',
         isHero
           ? 'card-hero hover:shadow-lg'
-          : 'card hover:shadow-card-hover hover:-translate-y-px',
+          : 'card-hover hover:-translate-y-px',
       )}
     >
       <div className="flex justify-between items-start gap-3">

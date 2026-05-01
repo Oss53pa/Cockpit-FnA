@@ -16,7 +16,7 @@ type Props = {
  */
 export function ChartCard({ title, subtitle, action, children, className = '', accent }: Props) {
   return (
-    <div className={`group card hover:shadow-card-hover transition-shadow duration-200 ${className}`}>
+    <div className={`group card-hover transition-shadow duration-200 ${className}`}>
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
         <div className="min-w-0 flex items-center gap-2.5">
           {accent && (

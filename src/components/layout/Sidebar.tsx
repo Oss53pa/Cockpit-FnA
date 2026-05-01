@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
-  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList,
+  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -93,6 +93,19 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Recherche rapide ⌘K */}
+      <div className="px-3 pb-3">
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-100/50 dark:bg-primary-800/40 hover:bg-primary-200/60 dark:hover:bg-primary-800 text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 text-xs transition-colors duration-150 group"
+          aria-label="Recherche rapide"
+        >
+          <Search className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1 text-left">Rechercher…</span>
+          <kbd className="font-mono text-[10px] px-1 py-0.5 rounded bg-surface dark:bg-primary-900 text-primary-600 group-hover:text-primary-900 dark:group-hover:text-primary-100">⌘K</kbd>
+        </button>
       </div>
 
       {/* Navigation */}
