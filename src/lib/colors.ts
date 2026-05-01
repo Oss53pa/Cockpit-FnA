@@ -1,21 +1,21 @@
-// Palette de fallback alignee sur Twisty (palette par defaut).
+// Palette de fallback alignee sur Twisty EXACTE (5 couleurs sources).
 // Ces couleurs sont utilisees quand un composant veut une couleur fixe (ex:
 // `color={C.primary}` sur un KPICard pour la pastille d'icone). Elles doivent
-// rester COHERENTES avec la palette twisty principale (zinc froid + orange).
+// rester COHERENTES avec la palette twisty principale (cool-blue + orange).
 //
 // Pour des couleurs DYNAMIQUES qui suivent la palette active, utiliser
 // directement `rgb(var(--accent))`, `rgb(var(--p-900))`, etc. dans le style.
 export const C = {
-  // Grayscale Twisty (zinc froid Tailwind default)
-  primary:   '#18181B',  // accent neutre noir (KPI standard)
-  secondary: '#3F3F46',
-  dark:      '#09090B',
-  neutral:   '#A1A1AA',
-  light:     '#E4E4E7',
+  // Cool-blue Twisty (teinte HSL 218°, 22% — generee depuis #222834)
+  primary:   '#222834',  // bleu nuit Twisty (noir source)
+  secondary: '#3F4858',
+  dark:      '#16191F',
+  neutral:   '#939BAA',
+  light:     '#E7EBEE',  // shell source
 
-  // Accent Twisty (orange chaud)
-  accent:    '#F47B45',  // accent vif (KPI primaire / CTA)
-  accentSoft:'#FFB400',  // accent ambre (badges)
+  // Accent Twisty
+  accent:    '#DA4D28',  // orange-rouge source
+  accentSoft:'#82B0D9',  // bleu clair source
 
   // Statuts fonctionnels
   success:   '#22c55e',
@@ -29,13 +29,13 @@ export const C = {
   sevHigh:     '#ef4444',
   sevCritical: '#7f1d1d',
 
-  // Nuances grayscale utilisees comme "accents" neutres dans les charts
-  accent1:   '#52525B',
-  accent2:   '#71717A',
-  accent3:   '#27272A',
-  accent4:   '#D4D4D8',
+  // Nuances cool-blue utilisees comme "accents" neutres dans les charts
+  accent1:   '#525C6E',  // 600
+  accent2:   '#6E7888',  // 500
+  accent3:   '#2D3340',  // 800
+  accent4:   '#B5B7C0',  // 300 — gris source
 };
 
 // Couleurs de graphique par defaut (utilisees si aucune palette n'est chargee)
-// Sequence : noir Twisty -> orange accent -> gris -> ambre -> ...
-export const CHART_COLORS = ['#18181B', '#F47B45', '#71717A', '#FFB400', '#3F3F46', '#A1A1AA', '#E4E4E7'];
+// Sequence Twisty : noir -> orange -> bleu -> gris -> gris moyen -> ...
+export const CHART_COLORS = ['#222834', '#DA4D28', '#82B0D9', '#B5B7C0', '#6E7888', '#E7EBEE', '#3F4858'];

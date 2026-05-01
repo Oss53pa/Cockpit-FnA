@@ -68,21 +68,36 @@ export function generateScale(baseHex: string): Palette['scale'] {
 // noyaient le système — un produit international defend UNE direction
 // visuelle, pas 18 au choix de l'utilisateur.
 export const BUILTIN_PALETTES: Record<string, Palette> = {
-  // Palette principale — match REEL du dashboard Twisty :
-  // bg-page gris-bleu PALE (lavande), shell BLANC (pas creme), accent orange chaud.
-  // Les nuances grises sont neutres-froides (cool-tinted) pour s'aligner sur le
-  // fond page lavande plutot que sur un crème chaud.
+  // Palette TWISTY EXACTE — 5 couleurs sources fournies par le designer :
+  //   #82B0D9 (bleu clair page) · #222834 (bleu nuit "noir") · #B5B7C0 (gris bleuté)
+  //   #E7EBEE (shell tres clair) · #DA4D28 (orange-rouge accent)
+  // La scale est generee en gardant la teinte HSL du bleu nuit (218°, 22%) avec
+  // luminosite decroissante 97% -> 6%. Resultat : nuances cool-blue cohérentes
+  // entre elles (pas de zinc neutre, pas de creme chaud).
   twisty: {
-    name: 'Cockpit (default)',
-    scale: ['#fafafa','#f4f4f5','#e4e4e7','#d4d4d8','#a1a1aa','#71717a','#52525b','#3f3f46','#27272a','#18181b','#09090b'],
-    tableHeader: '#18181B', tableHeaderText: '#FAFAFA',
-    chartColors: ['#18181B','#F47B45','#D4D4D8','#71717A','#FFB400','#3F3F46','#E4E4E7'],
+    name: 'Twisty',
+    scale: [
+      '#F8F9FB', // 50  — quasi blanc bleuté
+      '#E7EBEE', // 100 — shell Twisty source
+      '#D1D6DD', // 200
+      '#B5B7C0', // 300 — gris bleuté source
+      '#939BAA', // 400
+      '#6E7888', // 500
+      '#525C6E', // 600
+      '#3F4858', // 700
+      '#2D3340', // 800
+      '#222834', // 900 — bleu nuit Twisty source ("noir")
+      '#16191F', // 950
+    ],
+    tableHeader: '#222834', tableHeaderText: '#E7EBEE',
+    // Sequence charts : noir Twisty -> orange accent -> bleu page -> gris -> gris moyen -> clair -> gris fonce
+    chartColors: ['#222834','#DA4D28','#82B0D9','#B5B7C0','#6E7888','#E7EBEE','#3F4858'],
     layout: {
-      bgPage:     '#B5BFC8',  // gris-bleu pale (lavande froide) — fond page
-      bgShell:    '#FAFAFA',  // blanc cassé — shell container
-      bgSurface:  '#FFFFFF',  // blanc pur — cards intérieures
-      accent:     '#F47B45',  // orange chaud Twisty (pas brulé)
-      accentSoft: '#FFB400',  // jaune-ambre badge "Middle"
+      bgPage:     '#82B0D9',  // bleu clair Twisty (fond exterieur)
+      bgShell:    '#E7EBEE',  // tres clair bleuté (sidebar + container)
+      bgSurface:  '#FFFFFF',  // blanc pur (cards intérieures)
+      accent:     '#DA4D28',  // orange-rouge Twisty (CTA, indicators)
+      accentSoft: '#82B0D9',  // bleu clair (badges secondaires)
     },
   },
   // Graphite — neutre pur (style Linear / Vercel)
@@ -211,7 +226,7 @@ type ThemeState = {
 // pourrait court-circuiter la built-in (les custom ecrasent les built-in dans
 // getAllPalettes). Sans cette purge, les utilisateurs qui ont cree une "Twisty"
 // custom (mix de vieilles couleurs marine/sable/etc.) continuent de la voir.
-const TWISTY_MIGRATION_KEY = 'twisty-migration-v2';
+const TWISTY_MIGRATION_KEY = 'twisty-migration-v3';
 try {
   if (typeof window !== 'undefined' && !localStorage.getItem(TWISTY_MIGRATION_KEY)) {
     localStorage.setItem(KEY, 'twisty');
