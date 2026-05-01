@@ -1674,12 +1674,17 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // `flex flex-col` dans une cellule grid ; sans w-full, l'enfant peut se réduire
   // à sa largeur intrinsèque (notamment sur les conteneurs `flex` row internes).
   // Style MODERN — bandeau gauche coloré
+  // Layout en CSS GRID 2 colonnes (40% / 1fr) au lieu de flex : plus deterministe,
+  // les 2 bandeaux occupent TOUJOURS toute la largeur peu importe le contexte parent.
   if (style === 'modern') {
     return (
-      <div className="w-full h-full relative overflow-hidden flex" style={{ minHeight: 480, background: bgColor }}>
+      <div
+        className="w-full h-full relative overflow-hidden grid"
+        style={{ minHeight: 480, background: bgColor, gridTemplateColumns: '40% 1fr' }}
+      >
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
-        <div className="w-2/5 flex flex-col justify-between p-10 relative z-10" style={{ background: titleColor, color: '#fff' }}>
+        <div className="flex flex-col justify-between p-10 relative z-10" style={{ background: titleColor, color: '#fff' }}>
           {id.logoDataUrl ? (
             <div className="bg-white/10 backdrop-blur p-3 rounded inline-block self-start">
               <img src={id.logoDataUrl} alt="logo" style={{ maxHeight: '72px', maxWidth: '180px', objectFit: 'contain' }} />
@@ -1692,7 +1697,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
             <p className="text-xs opacity-90 mt-3">Émis par {id.author}</p>
           </div>
         </div>
-        <div className="flex-1 flex flex-col justify-center p-12 relative z-10">
+        <div className="flex flex-col justify-center p-12 relative z-10">
           <p className="text-[11px] uppercase tracking-[0.25em] mb-4" style={{ color: titleColor, opacity: 0.7 }}>{org?.name ?? 'Société'}</p>
           <h1 className="text-5xl font-bold leading-tight mb-3" style={{ color: titleColor }}>{id.title}</h1>
           {id.subtitle && <p className="text-lg italic" style={{ color: subtitleColor, opacity: 0.9 }}>{id.subtitle}</p>}
