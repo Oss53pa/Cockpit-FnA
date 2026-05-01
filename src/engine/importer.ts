@@ -36,13 +36,24 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
     ws.eachRow({ includeEmpty: false }, (row) => {
       const arr: any[] = [];
       row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        // Prendre la valeur calculée (pour les formules), sinon la valeur brute
+        // Extraction VALEUR de cellule : ExcelJS expose plusieurs formats
+        // - string/number direct
+        // - { formula, result } : formule avec resultat
+        // - { richText: [...] } : texte enrichi
+        // - { hyperlink, text } : lien hypertexte
+        // - { sharedFormula, result } : formule partagee
+        // - { error: '#REF!' } : erreur Excel
+        // - Date instance
         let v: any = cell.value;
-        if (v && typeof v === 'object') {
-          if ('result' in v) v = (v as any).result;        // formule avec résultat caché
-          else if ('text' in v) v = (v as any).text;        // rich text
-          else if ('richText' in v) v = (v as any).richText.map((r: any) => r.text).join('');
-          else if (v instanceof Date) v = v;                // date — conserver
+        if (v && typeof v === 'object' && !(v instanceof Date)) {
+          if ('error' in v) v = '';                                                     // erreur Excel -> vide
+          else if ('result' in v && v.result !== undefined && v.result !== null) v = (v as any).result;
+          else if ('richText' in v && Array.isArray((v as any).richText)) v = (v as any).richText.map((r: any) => r.text || '').join('');
+          else if ('text' in v) v = (v as any).text;
+          else if ('hyperlink' in v) v = (v as any).text || (v as any).hyperlink || '';
+          else if ('formula' in v) v = (v as any).result ?? '';
+          // Si rien ne match, fallback sur cell.text (string render Excel)
+          else v = cell.text || '';
         }
         arr[colNumber - 1] = v;
       });
@@ -212,12 +223,20 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     const diag: string[] = [];
     diag.push(`Lecture OK : feuille "${sheetName}", ${totalRows} lignes data extraites.`);
     diag.push(`Colonnes mappées : Code = "${colCode}", Libellé = "${colLabel}".`);
-    if (skipCodeAbsent) diag.push(`${skipCodeAbsent} ligne(s) sans valeur de code.`);
-    if (skipCodeNonNumerique) diag.push(`${skipCodeNonNumerique} ligne(s) avec un code NON-numérique (ex: ${sampleRejets.join(', ')}). Le compte doit commencer par un chiffre (ex: 411, 601100).`);
-    if (skipLabelAbsent) diag.push(`${skipLabelAbsent} ligne(s) sans libellé.`);
-    if (!skipCodeAbsent && !skipCodeNonNumerique && !skipLabelAbsent) {
-      diag.push('Toutes les lignes ont été ignorées sans raison identifiée — vérifiez le sample row dans la console (F12).');
+    // Echantillon de la 1ere ligne pour diagnostic immediat
+    if (rows[0]) {
+      const r0 = rows[0];
+      const sampleKeys = Object.keys(r0).slice(0, 4);
+      const sample = sampleKeys.map((k) => `${k}=${JSON.stringify(r0[k]).slice(0, 30)}`).join(' | ');
+      diag.push(`Échantillon ligne 1 : ${sample}`);
+      // Lookup direct du mapping
+      const codeVal = r0[colCode];
+      const labelVal = r0[colLabel];
+      diag.push(`Lookup "${colCode}" -> ${JSON.stringify(codeVal)} (type: ${typeof codeVal}). "${colLabel}" -> ${JSON.stringify(labelVal)}.`);
     }
+    if (skipCodeAbsent) diag.push(`${skipCodeAbsent} ligne(s) sans valeur de code.`);
+    if (skipCodeNonNumerique) diag.push(`${skipCodeNonNumerique} ligne(s) avec un code NON-numérique (ex: ${sampleRejets.join(', ')}). Le compte doit commencer par un chiffre.`);
+    if (skipLabelAbsent) diag.push(`${skipLabelAbsent} ligne(s) sans libellé.`);
     errors.unshift(...diag);
   }
 
