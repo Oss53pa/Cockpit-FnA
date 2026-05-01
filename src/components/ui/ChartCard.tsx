@@ -6,26 +6,38 @@ type Props = {
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Couleur de l'indicateur a gauche du titre (point) */
   accent?: string;
 };
 
 /**
- * Chart card compact & premium.
+ * Chart card premium — header epure, sans bordure visible, hover lift subtil.
+ * Indicateur de couleur sous forme de point (pas de barre verticale agressive).
  */
 export function ChartCard({ title, subtitle, action, children, className = '', accent }: Props) {
   return (
-    <div className={`group relative card overflow-hidden transition-all hover:shadow-md duration-200 ${className}`}>
-      {accent && (
-        <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] opacity-80" style={{ background: accent }} />
-      )}
-      <div className="flex items-start justify-between gap-2 px-4 pt-3 pb-2 border-b border-primary-200/40 dark:border-primary-800/50">
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-primary-900 dark:text-primary-50 tracking-tight leading-tight">{title}</p>
-          {subtitle && <p className="text-[10px] text-primary-500 mt-0.5 leading-tight">{subtitle}</p>}
+    <div className={`group card hover:shadow-card-hover transition-shadow duration-200 ${className}`}>
+      <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
+        <div className="min-w-0 flex items-center gap-2.5">
+          {accent && (
+            <span
+              aria-hidden
+              className="w-2 h-2 rounded-full shrink-0 mt-1"
+              style={{ background: accent }}
+            />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-primary-900 dark:text-primary-50 tracking-tight leading-tight">
+              {title}
+            </p>
+            {subtitle && (
+              <p className="text-xs text-primary-500 mt-0.5 leading-relaxed">{subtitle}</p>
+            )}
+          </div>
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="px-5 pb-5">{children}</div>
     </div>
   );
 }

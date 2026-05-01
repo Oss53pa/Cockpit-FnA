@@ -6,6 +6,7 @@ import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
 import { HelpModal } from '../ui/HelpModal';
+import { toast } from '../ui/Toast';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { currentOrgId, setCurrentOrg, currentPeriodId, setCurrentPeriod, currentYear, setCurrentYear, amountMode, setAmountMode, currentImport, setCurrentImport, fromMonth, toMonth, setPeriodRange } = useApp();
@@ -234,7 +235,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 </div>
                 <div className="py-1">
                   <MenuItem icon={<Settings className="w-4 h-4" />} label="Paramètres" onClick={() => { setUserOpen(false); navigate('/settings'); }} />
-                  <MenuItem icon={<LogOut className="w-4 h-4" />} label="Déconnexion" onClick={() => alert('Auth Supabase au Sprint 5')} />
+                  <MenuItem icon={<LogOut className="w-4 h-4" />} label="Déconnexion" onClick={() => toast.info('Authentification', 'Disponible au Sprint 5 (Supabase Auth)')} />
                 </div>
               </div>
             )}

@@ -7,6 +7,7 @@ import { DemoBanner } from './components/layout/DemoBanner';
 import { DemoTour } from './components/layout/DemoTour';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { ToastContainer } from './components/ui/Toast';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
@@ -95,6 +96,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <ErrorBoundary>
+    <ToastContainer />
     <BrowserRouter>
       <Routes>
         {/* Auth pages — publiques */}
