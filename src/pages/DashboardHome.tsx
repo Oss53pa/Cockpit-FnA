@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts';
-import { Download, Sparkles } from 'lucide-react';
+import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, Banknote, Receipt, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -12,6 +12,7 @@ import { TabSwitch } from '../components/ui/TabSwitch';
 import { SIGList } from '../components/ui/SIGList';
 import { PerformanceGauges } from '../components/ui/PerformanceGauges';
 import { AlertsCard } from '../components/ui/AlertsCard';
+import { SkeletonKPIGrid } from '../components/ui/Skeleton';
 import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
@@ -48,7 +49,7 @@ export default function DashboardHome() {
   const alerts = useMemo(() => computeAlerts(ratios, balance), [ratios, balance]);
 
   if (!bilan || !sig) {
-    return <div className="py-20 text-center text-primary-500">Chargement des données financières…</div>;
+    return <SkeletonKPIGrid count={4} />;
   }
 
   const system = resolveSystem(org?.accountingSystem);
@@ -92,16 +93,16 @@ export default function DashboardHome() {
           <div className="mb-4 px-3 py-2 rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 text-xs text-primary-600 dark:text-primary-400">
             <strong>{SYSTEM_META.SMT.label}</strong> — cadrage simplifié. Pour le détail, voir onglet <em>Recettes / Dépenses</em> dans <a href="/states" className="underline">États financiers</a>.
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5 animate-fade-in-up">
             {(() => {
               const recettes = balance.filter((r) => r.account.startsWith('7')).reduce((s, r) => s + r.credit - r.debit, 0);
               const depenses = balance.filter((r) => r.account.startsWith('6')).reduce((s, r) => s + r.debit - r.credit, 0);
               const soldeNet = recettes - depenses;
               return <>
-                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} icon="R" color={C.primary} />
-                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} icon="D" color={C.secondary} />
-                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} icon="S" color={C.accent1} />
-                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} icon="T" color={C.accent2} />
+                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} icon={<ArrowDownToLine className="w-4 h-4" strokeWidth={2} />} />
+                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} icon={<ArrowUpFromLine className="w-4 h-4" strokeWidth={2} />} />
+                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
+                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} icon={<Wallet className="w-4 h-4" strokeWidth={2} />} />
               </>;
             })()}
           </div>
@@ -120,49 +121,62 @@ export default function DashboardHome() {
       )}
 
       {system !== 'SMT' && tab === 'perf' && <>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-5">
-          <KPICard title="Chiffre d'Affaires" value={fmtK(ca)} unit={currency} variation={variationCA} vsLabel="vs N-1" icon="CA" color={C.primary} subValue={`Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} %)`} />
-          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} icon="RN" color={C.secondary} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
-          <KPICard title="EBE" value={fmtK(sig.ebe)} unit={currency} icon="EB" color={C.warning} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
-          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} icon="TN" color={C.accent1} subValue={`FR : ${fmtK(frV)} · BFR : ${fmtK(bfrV)}`} />
-          <KPICard title="BFR" value={fmtK(bfrV)} unit={currency} icon="BF" color={C.accent4} subValue={`${jCA.toFixed(1)} jours de CA`} inverse />
+        {/* Hero KPI : CA en grand carré sombre + 4 KPI standards */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-5 animate-fade-in-up">
+          <div className="lg:col-span-2 lg:row-span-1">
+            <KPICard
+              variant="hero"
+              title="Chiffre d'Affaires"
+              value={fmtK(ca)}
+              unit={currency}
+              variation={variationCA}
+              vsLabel="vs N-1"
+              icon={<TrendingUp className="w-5 h-5" strokeWidth={2} />}
+              subValue={`Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} % executé)`}
+            />
+          </div>
+          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} icon={<BadgeDollarSign className="w-4 h-4" strokeWidth={2} />} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
+          <KPICard title="EBE" value={fmtK(sig.ebe)} unit={currency} icon={<Activity className="w-4 h-4" strokeWidth={2} />} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
+          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} icon={<Wallet className="w-4 h-4" strokeWidth={2} />} subValue={`FR ${fmtK(frV)} · BFR ${fmtK(bfrV)}`} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-          <ChartCard title="Chiffre d'Affaires — Réalisé vs Budget vs N-1 (mensuel)" className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
+          <ChartCard title="Chiffre d'Affaires" subtitle="Réalisé · Budget · N-1 (mensuel)" className="lg:col-span-2" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={caData} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mois" tick={{ fontSize: 11, fill: C.dark }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
-                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="realise" name="Réalisé" fill={ct.at(0)} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="budget" name="Budget" fill={ct.at(1)} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="n1" name="N-1" fill={ct.at(2)} radius={[3, 3, 0, 0]} />
+              <BarChart data={caData} barGap={2} barCategoryGap="30%">
+                <CartesianGrid {...ct.gridProps} />
+                <XAxis dataKey="mois" {...ct.axisProps} />
+                <YAxis {...ct.axisProps} tickFormatter={fmtK} />
+                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
+                <Bar dataKey="realise" name="Réalisé" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="budget" name="Budget" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="n1" name="N-1" fill={ct.at(4)} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="🍩 Répartition des Charges">
+          <ChartCard title="Répartition des Charges" subtitle="Top postes de dépenses" accent={ct.at(1)}>
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
-                <Pie data={chargesData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
-                  label={(p: any) => `${p.name} ${p.pct}%`} labelLine={false} fontSize={10}>
+                <Pie data={chargesData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={2} dataKey="value"
+                  label={(p: any) => `${p.pct}%`} labelLine={false} fontSize={10} stroke="rgb(var(--bg-surface))" strokeWidth={2}>
                   {chargesData.map((_, i) => <Cell key={i} fill={ct.at(i)} />)}
                 </Pie>
-                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
         </div>
 
-        <SIGList sig={sig} ca={ca} />
+        <div className="animate-fade-in-up" style={{ animationDelay: '120ms' }}>
+          <SIGList sig={sig} ca={ca} />
+        </div>
       </>}
 
       {system !== 'SMT' && tab === 'risk' && <>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <ChartCard title="Évolution de la Trésorerie Nette">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 animate-fade-in-up">
+          <ChartCard title="Évolution de la Trésorerie Nette" subtitle="Cumul mensuel YTD" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={treso}>
                 <defs>
@@ -171,32 +185,32 @@ export default function DashboardHome() {
                     <stop offset="100%" stopColor={ct.at(0)} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
-                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <CartesianGrid {...ct.gridProps} />
+                <XAxis dataKey="mois" {...ct.axisProps} />
+                <YAxis {...ct.axisProps} tickFormatter={fmtK} />
+                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} />
                 <Area type="monotone" dataKey="solde" stroke={ct.at(0)} strokeWidth={2.5} fill="url(#colorTreso)" />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="FR / BFR / Trésorerie Nette">
+          <ChartCard title="FR / BFR / Trésorerie Nette" subtitle="Equilibre du cycle d'exploitation" accent={ct.at(1)}>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={fr}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
-                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="fr" name="FR" stroke={ct.at(0)} strokeWidth={2.5} dot={false} />
-                <Line type="monotone" dataKey="bfr" name="BFR" stroke={ct.at(1)} strokeWidth={2.5} dot={false} />
-                <Line type="monotone" dataKey="tn" name="TN" stroke={ct.at(2)} strokeWidth={2.5} dot={false} />
+                <CartesianGrid {...ct.gridProps} />
+                <XAxis dataKey="mois" {...ct.axisProps} />
+                <YAxis {...ct.axisProps} tickFormatter={fmtK} />
+                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
+                <Line type="monotone" dataKey="fr" name="FR" stroke={ct.at(0)} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="bfr" name="BFR" stroke={ct.at(1)} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="tn" name="TN" stroke={ct.at(2)} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
           <PerformanceGauges budgetExec={budgetExec} marge={marge} ratios={ratios} />
           <AlertsCard alerts={alerts} />
         </div>
