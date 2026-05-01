@@ -1623,9 +1623,13 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
 function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   const [dragOver, setDragOver] = useState(false);
   const id = config.identity || {};
+  // Cover : on consomme les tokens layout (palette.layout) pour matcher le
+  // theme Twisty par defaut — bg creme + accent orange pour les liserés.
+  const lay = (palette as any).layout as { bgShell?: string; accent?: string } | undefined;
   const titleColor = id.titleColor || palette.primary;
-  const subtitleColor = id.subtitleColor || palette.primary;
-  const bgColor = id.coverBgColor || '#ffffff';
+  const subtitleColor = id.subtitleColor || (lay?.accent ?? palette.primary);
+  const accentColor = lay?.accent ?? palette.primary;
+  const bgColor = id.coverBgColor || lay?.bgShell || '#ffffff';
   const bgImage = id.coverBgImageUrl;
   const bgOpacity = typeof id.coverBgOpacity === 'number' ? id.coverBgOpacity : 0.15;
   const style = (id.coverStyle as 'classic' | 'modern' | 'banner') || 'classic';
@@ -1730,7 +1734,8 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
         </div>
       )}
       <div className="h-3" style={{ background: titleColor }} />
-      <div className="h-1 mt-1 mx-12" style={{ background: titleColor + '60' }} />
+      {/* Liseré accent (orange Twisty par defaut) sous le bandeau noir principal */}
+      <div className="h-1 mt-1 mx-12" style={{ background: accentColor }} />
 
       <div className="flex-1 flex flex-col p-12 relative z-10">
         <p className="text-center text-[10px] uppercase tracking-[0.25em] text-primary-500 font-semibold">Document {id.confidentiality}</p>
@@ -1753,22 +1758,23 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
         )}
 
         <div className="flex-1 flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-px mb-6" style={{ background: titleColor }} />
+          {/* Petits traits de cadrage en accent autour du titre */}
+          <div className="w-16 h-px mb-6" style={{ background: accentColor }} />
           <h1 className="text-4xl font-bold leading-tight tracking-tight" style={{ color: titleColor }}>{id.title}</h1>
-          {id.subtitle && <p className="text-lg italic mt-3" style={{ color: subtitleColor, opacity: 0.85 }}>{id.subtitle}</p>}
-          <div className="w-16 h-px mt-6" style={{ background: titleColor }} />
+          {id.subtitle && <p className="text-lg italic mt-3" style={{ color: subtitleColor, opacity: 0.9 }}>{id.subtitle}</p>}
+          <div className="w-16 h-px mt-6" style={{ background: accentColor }} />
 
           <p className="text-2xl font-bold mt-12" style={{ color: titleColor + 'cc' }}>{org?.name ?? '—'}</p>
           {(org?.rccm || org?.ifu) && <p className="text-xs text-primary-500 mt-2">{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
         </div>
 
-        <div className="text-center text-sm space-y-1.5 mt-8 pt-6 border-t" style={{ borderColor: titleColor + '40' }}>
+        <div className="text-center text-sm space-y-1.5 mt-8 pt-6 border-t" style={{ borderColor: accentColor + '40' }}>
           <p className="text-primary-700"><span className="text-primary-500 text-xs uppercase tracking-wider">Période</span><br /><strong className="text-base">{id.period}</strong></p>
           <p className="text-primary-500 text-xs">Émis par <strong className="text-primary-700">{id.author}</strong> · {new Date().toLocaleDateString('fr-FR')}</p>
         </div>
       </div>
 
-      <div className="h-1 mb-1 mx-12" style={{ background: titleColor + '60' }} />
+      <div className="h-1 mb-1 mx-12" style={{ background: accentColor }} />
       <div className="h-3" style={{ background: titleColor }} />
     </div>
   );
@@ -1840,10 +1846,14 @@ function CoverEditPanel({ id, setCoverProps, setBgImage }: any) {
 
 // Page de dos / 4ème de couverture
 function BackCoverPage({ config, palette, org }: any) {
+  const lay = (palette as any).layout as { bgShell?: string; accent?: string } | undefined;
+  const accentColor = lay?.accent ?? palette.primary;
+  const bgColor = lay?.bgShell ?? '#ffffff';
   return (
     // minHeight aligné sur les covers (480) pour cohérence visuelle ; la hauteur
     // réelle est imposée par PageA4 via `h-full` + maxHeight du pageStyle.
-    <div className="w-full border-2 rounded p-6 h-full flex flex-col justify-between" style={{ borderColor: palette.primary, minHeight: 480 }}>
+    // Bordure en accent (orange) + fond shell (creme) pour matcher Twisty.
+    <div className="w-full border-2 rounded p-6 h-full flex flex-col justify-between" style={{ borderColor: accentColor, minHeight: 480, background: bgColor }}>
       <div className="text-center">
         {config.identity.logoDataUrl && (
           <img
@@ -1862,7 +1872,7 @@ function BackCoverPage({ config, palette, org }: any) {
           {config.identity.subtitle && <p className="text-sm italic text-primary-500">{config.identity.subtitle}</p>}
         </div>
 
-        <div className="border-t border-b py-4 space-y-2 text-xs text-primary-600 dark:text-primary-400" style={{ borderColor: palette.primary + '40' }}>
+        <div className="border-t border-b py-4 space-y-2 text-xs text-primary-600 dark:text-primary-400" style={{ borderColor: accentColor + '60' }}>
           <p><strong>Document confidentiel</strong> — destiné exclusivement aux destinataires désignés. Toute reproduction ou diffusion non autorisée est strictement interdite.</p>
           <p>Les analyses présentées dans ce rapport sont basées sur les données comptables disponibles à la date d'émission. Elles n'engagent que leur auteur et n'ont pas vocation à constituer un avis d'expertise.</p>
           <p>Conformément aux normes <strong>SYSCOHADA révisé 2017</strong> en vigueur dans l'espace OHADA.</p>
@@ -1878,7 +1888,7 @@ function BackCoverPage({ config, palette, org }: any) {
         )}
       </div>
 
-      <div className="text-center text-[10px] text-primary-400 space-y-1 border-t pt-4" style={{ borderColor: palette.primary + '40' }}>
+      <div className="text-center text-[10px] text-primary-400 space-y-1 border-t pt-4" style={{ borderColor: accentColor + '60' }}>
         <p>Émis par {config.identity.author} · {new Date().toLocaleDateString('fr-FR')}</p>
         {(org?.rccm || org?.ifu) && <p>{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
         {org?.address && <p>{org.address}</p>}
@@ -1890,9 +1900,11 @@ function BackCoverPage({ config, palette, org }: any) {
 
 function TocPage({ config, palette }: any) {
   const toc = config.blocks.filter((b: any) => (b.type === 'h1' || b.type === 'h2' || b.type === 'h3') && b.inToc !== false);
+  const lay = (palette as any).layout as { accent?: string } | undefined;
+  const accentColor = lay?.accent ?? palette.primary;
   return (
     <div className="w-full">
-      <h2 className="text-2xl font-bold pb-2 mb-6 border-b-2" style={{ color: palette.primary, borderColor: palette.primary }}>Sommaire</h2>
+      <h2 className="text-2xl font-bold pb-2 mb-6 border-b-2" style={{ color: palette.primary, borderColor: accentColor }}>Sommaire</h2>
       <ol className="space-y-2">
         {toc.map((t: any, i: number) => (
           <li key={t.id} className={clsx('flex items-baseline gap-2', t.type === 'h2' && 'pl-4', t.type === 'h3' && 'pl-8')}>
