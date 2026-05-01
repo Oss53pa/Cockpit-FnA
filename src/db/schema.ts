@@ -58,6 +58,10 @@ export type GLEntry = {
   analyticalSection?: string;
   lettrage?: string;
   importId?: string;
+  // Audit trail SHA-256 (cf. lib/auditHash.ts) — optionnels pour rétro-compat
+  // sur les bases existantes. Les nouvelles écritures doivent toujours en avoir.
+  hash?: string;          // SHA-256 hex (64 chars) calculé via signGLEntry()
+  previousHash?: string;  // hash de l'écriture précédente dans la chaîne
 };
 
 export type ImportLog = {
