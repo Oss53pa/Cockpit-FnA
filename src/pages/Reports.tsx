@@ -1613,6 +1613,9 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
   }, [maxH, children]);
 
   return (
+    // Layout flex naturel SANS hauteur forcee a l'ecran : la page A4 prend la
+    // hauteur de son contenu (pas d'espace blanc inutile entre les pages).
+    // En print, l'@media print impose min-height: 100vh pour le rendu A4.
     <div data-page-type={pageType ?? 'content'} className={clsx('bg-white dark:bg-primary-900 mx-auto relative flex flex-col page-a4',
       overflow ? 'ring-1 ring-error/30' : '')} style={style}>
       {overflow && (
@@ -1620,11 +1623,13 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
           Hors marge — créez un nouveau saut de page
         </div>
       )}
-      {/* Padding intérieur réduit de p-6 à p-4 pour gagner de la place */}
-      <div ref={ref} className="break-words flex-1 flex flex-col gap-1 p-4 pb-8">{children}</div>
-      {/* Footer avec numéro de page */}
+      {/* Le contenu utilise flex-col gap mais PAS flex-1 : il garde sa hauteur
+          naturelle, le footer suit immediatement (pas d'espace vide). */}
+      <div ref={ref} className="break-words flex flex-col gap-1 p-4 pb-2">{children}</div>
+      {/* Footer en flux normal (mt-auto pour le coller en bas SI le parent
+          a une hauteur — c'est le cas en print, pas a l'ecran). */}
       {!hideNumber && pageNum && totalPages && (
-        <div className="absolute bottom-1 left-0 right-0 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
+        <div className="mt-auto pb-2 flex items-center justify-center text-[10px] text-primary-400 font-medium select-none pointer-events-none">
           <span style={{ color: palette?.primary ?? undefined }}>Page {pageNum} / {totalPages}</span>
         </div>
       )}
