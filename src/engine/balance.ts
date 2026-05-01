@@ -81,8 +81,18 @@ export async function computeAuxBalance(opts: {
     map.set(key, cur);
   }
 
+  // (P2-2) Filtrage des soldes nuls : ancien seuil arbitraire `> 0.01` (XOF)
+  // qui maskait les vraies valeurs inférieures à 1 centime. Maintenant on
+  // utilise Money en interne pour avoir une comparaison déterministe.
+  // Pour XOF (devise sans subdivision OHADA), tout solde non nul = ≥ 1 unité.
   return Array.from(map.values())
-    .filter((r) => Math.abs(r.solde) > 0.01)
+    .filter((r) => {
+      // Si XOF : solde non nul = au moins 1 XOF (la plus petite unité)
+      // Si autre devise : on tolère 0.01 (1 cent) pour être robuste aux
+      // erreurs d'arrondi historiques en attendant la migration complète Money.
+      const minor = Math.round(Math.abs(r.solde));
+      return minor >= 1;
+    })
     .sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
 }
 
