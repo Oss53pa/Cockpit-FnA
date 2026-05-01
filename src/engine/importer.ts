@@ -125,10 +125,13 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   const colLabel = headers.find((h) => /^(libell[éeè]|label|intitul[ée]?|description|d[ée]signation|nom)$/i.test(h.trim()))
     || headers.find((h) => /libell|label|intitul|d[ée]signation|description/i.test(h));
   const colClass = headers.find((h) => /classe/i.test(h));
-  const colType = headers.find((h) => /^type$/i.test(h.trim()));
+  // Sage exporte "Type" = libelles longs (PASSIF, ACTIF, CHARGE, RECETTE) +
+  // "Type 2" = codes courts (P, A, C, R). On capture TOUTES les colonnes "Type*"
+  // et on choisit la 1ere qui donne une valeur normalisable a P/A/C/R.
+  const typeCols = headers.filter((h) => /^type(\s*\d+)?$/i.test(h.trim()));
   const colSysco = headers.find((h) => /sysco/i.test(h));
 
-  console.log('🟢 [importCOAv2] Colonnes mappées:', { colCode, colLabel, colClass, colType, colSysco });
+  console.log('🟢 [importCOAv2] Colonnes mappées:', { colCode, colLabel, colClass, typeCols, colSysco });
 
   if (!colCode) return { imported: 0, updated: 0, errors: [`Colonne "Code" introuvable. Headers : ${headers.join(', ')}`], sheetName };
   if (!colLabel) return { imported: 0, updated: 0, errors: [`Colonne "Libellé" introuvable. Headers : ${headers.join(', ')}`], sheetName };
@@ -138,6 +141,19 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   const errors: string[] = [];
   let updatedCount = 0;
 
+  // Normalise une valeur de type vers le code court : P / A / C / R / X
+  // Accepte : 'P', 'PASSIF', 'A', 'ACTIF', 'C', 'CHARGE(S)', 'R', 'RECETTE(S)',
+  // 'PRODUIT(S)', 'REVENUE', 'REVENU(S)' — en majuscules ou minuscules.
+  const normalizeType = (raw: string): Account['type'] => {
+    const v = raw.trim().toUpperCase();
+    if (!v) return 'X';
+    if (v === 'P' || v.startsWith('PASSIF')) return 'P';
+    if (v === 'A' || v.startsWith('ACTIF')) return 'A';
+    if (v === 'C' || v.startsWith('CHARGE')) return 'C';
+    if (v === 'R' || v.startsWith('RECETTE') || v.startsWith('PRODUIT') || v.startsWith('REVENU')) return 'R';
+    return 'X';
+  };
+
   for (const r of rows) {
     let code = r[colCode];
     if (code === undefined || code === null) continue;
@@ -146,10 +162,17 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     const label = String(r[colLabel] ?? '').trim();
     if (!label) { errors.push(`Compte ${code} sans libellé — ignoré`); continue; }
     const cls = colClass ? String(r[colClass] ?? '').trim() : (classOf(code) ?? code[0]);
-    const type = colType ? (String(r[colType] ?? '').trim() as Account['type']) : ((findSyscoAccount(code)?.type ?? 'X') as Account['type']);
+    // Type : essaie chaque colonne "Type*" jusqu'a obtenir un code valide
+    let type: Account['type'] = 'X';
+    for (const tc of typeCols) {
+      const t = normalizeType(String(r[tc] ?? ''));
+      if (t !== 'X') { type = t; break; }
+    }
+    // Fallback : deduire depuis le plan SYSCOHADA officiel
+    if (type === 'X') type = (findSyscoAccount(code)?.type ?? 'X') as Account['type'];
     const syscoCode = colSysco ? String(r[colSysco] ?? '').trim() : findSyscoAccount(code)?.code;
     if (existing.has(code)) updatedCount++;
-    toImport.push({ orgId, code, label, class: cls || code[0], type: type || 'X', syscoCode });
+    toImport.push({ orgId, code, label, class: cls || code[0], type, syscoCode });
   }
 
   console.log('🟢 [importCOAv2] Comptes à importer:', toImport.length);
