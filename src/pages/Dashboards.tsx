@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Badge } from '../components/ui/Badge';
-import { Modal } from '../components/ui/Modal';
 
 const dashboards = [
   { id: 'exec', route: '/dashboard/exec', name: 'Executive Summary ★', desc: 'Vue exécutive one-pager : KPIs, radar de performance, cascade SIG, structure bilan, alertes', icon: 'Sparkles', cat: 'Standard' },
@@ -58,12 +57,21 @@ const dashboards = [
   { id: 'ana_codes', route: '/analytical?tab=codes', name: 'Codes analytiques', desc: 'Gestion des codes hiérarchiques par axe : création, recherche, activation', icon: 'FolderKanban', cat: 'Analytique' },
   { id: 'ana_rules', route: '/analytical?tab=rules', name: 'Règles de mapping', desc: 'Moteur d\'affectation automatique : règles par priorité, simulation, application en masse', icon: 'Wand2', cat: 'Analytique' },
   { id: 'ana_assign', route: '/analytical?tab=assign', name: 'Affectation manuelle', desc: 'Lignes non affectées : sélection multiple, affectation manuelle en masse par axe', icon: 'ListChecks', cat: 'Analytique' },
+  // ─── États SYSCOHADA officiels (NOUVEAUX) ─────────────────────
+  { id: 'tft_monthly',  route: '/dashboard/tft-monthly',       name: 'TFT mensuel ★',                desc: 'Tableau des Flux de Trésorerie sur 12 mois — exploitation/investissement/financement (SYSCOHADA art. 38)', icon: 'GitBranch',      cat: 'Reporting' },
+  { id: 'cap_var',      route: '/dashboard/capital-variation', name: 'Variation capitaux propres ★', desc: 'État SYSCOHADA obligatoire — apports, distributions, affectation résultat, mouvements bruts',                  icon: 'Layers',         cat: 'Reporting' },
+  { id: 'closing_pack', route: '/dashboard/closing-pack',      name: 'Closing Pack ★',               desc: 'Synthèse 1 page A4 print-ready : KPIs, charts, alertes, faits saillants — livrable Direction',                  icon: 'FileBarChart',   cat: 'Reporting' },
+  { id: 'zscore',       route: '/dashboard/zscore',            name: 'Score de santé financière ★',  desc: 'Z-Score Altman + score Cockpit 0-100 par famille (Rentabilité/Liquidité/Structure/Activité)',                     icon: 'Award',          cat: 'Standard'  },
+  { id: 'forecast',     route: '/dashboard/forecast',          name: 'Rolling Forecast 90j ★',       desc: 'Projection trésorerie 30/60/90 jours, modèle Prophet-like + bandes de confiance + alerte rupture',                icon: 'TrendingUp',     cat: 'Standard'  },
+  { id: 'wcd',          route: '/dashboard/wcd',               name: 'Working Capital Days ★',       desc: 'DSO + DIO + DPO + Cash Conversion Cycle — efficacité du cycle d\'exploitation',                                    icon: 'Clock',          cat: 'Standard'  },
+  // ─── Builder personnalisé (Sprint 4) ──────────────────────────
+  { id: 'builder',      route: '/builder',                     name: 'Mes dashboards personnalisés', desc: 'Composez vos propres dashboards par drag & drop : KPIs, charts, tables. Persistance locale.',                  icon: 'LayoutGrid',     cat: 'Custom'    },
 ];
 
 type ViewMode = 'cards' | 'table' | 'kanban';
 const VIEW_KEY = 'dashboards-view-mode';
 
-const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique'] as const;
+const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique', 'Custom'] as const;
 type Category = typeof CATEGORIES[number];
 
 export default function Dashboards() {
@@ -72,8 +80,6 @@ export default function Dashboards() {
     const v = localStorage.getItem(VIEW_KEY);
     return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
   });
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState('');
   const navigate = useNavigate();
   const list = dashboards.filter((d) => filter === 'Tous' || d.cat === filter);
 
@@ -87,7 +93,7 @@ export default function Dashboards() {
         action={
           <div className="flex items-center gap-2">
             <ViewSwitcher view={view} onChange={setViewMode} />
-            <button className="btn-primary" onClick={() => setCreateOpen(true)}>
+            <button className="btn-primary" onClick={() => navigate('/builder')}>
               <Icons.Plus className="w-4 h-4" /> Créer un dashboard
             </button>
           </div>
@@ -123,28 +129,6 @@ export default function Dashboards() {
 
       {/* Vue Kanban */}
       {view === 'kanban' && <KanbanView list={list} navigate={navigate} filter={filter} />}
-
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Créer un dashboard personnalisé"
-        subtitle="Éditeur drag & drop — Sprint 4"
-        footer={<>
-          <button className="btn-outline" onClick={() => setCreateOpen(false)}>Annuler</button>
-          <button className="btn-primary" disabled>Bientôt disponible</button>
-        </>}
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-primary-500 font-medium block mb-1">Nom du dashboard</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Suivi hebdo Direction" />
-          </div>
-          <div className="card p-3 bg-primary-200/30 dark:bg-primary-800/30 text-xs text-primary-500">
-            <p className="font-semibold text-primary-700 dark:text-primary-300 mb-1">Éditeur visuel disponible au Sprint 4</p>
-            <p>Il permettra de composer un dashboard par drag &amp; drop de widgets (KPIs, graphiques, tableaux), avec filtres globaux et partage.</p>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

@@ -44,6 +44,13 @@ const BreakEven = lazyWithRetry(() => import('./pages/BreakEven'));
 const ParetoAccounts = lazyWithRetry(() => import('./pages/ParetoAccounts'));
 const CashflowForecast = lazyWithRetry(() => import('./pages/CashflowForecast'));
 const Waterfall = lazyWithRetry(() => import('./pages/Waterfall'));
+const TFTMonthly = lazyWithRetry(() => import('./pages/TFTMonthly'));
+const CapitalVariationPage = lazyWithRetry(() => import('./pages/CapitalVariationPage'));
+const ClosingPack = lazyWithRetry(() => import('./pages/ClosingPack'));
+const ZScorePage = lazyWithRetry(() => import('./pages/ZScorePage'));
+const RollingForecast = lazyWithRetry(() => import('./pages/RollingForecast'));
+const WorkingCapitalDays = lazyWithRetry(() => import('./pages/WorkingCapitalDays'));
+const DashboardBuilder = lazyWithRetry(() => import('./pages/DashboardBuilder'));
 
 function PageFallback() {
   return (
@@ -156,6 +163,14 @@ function App() {
         <Route path="/dashboard/pareto" element={<ProtectedRoute><AppLayout><ParetoAccounts /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/cashforecast" element={<ProtectedRoute><AppLayout><CashflowForecast /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/waterfall" element={<ProtectedRoute><AppLayout><Waterfall /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/tft-monthly" element={<ProtectedRoute><AppLayout><TFTMonthly /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/capital-variation" element={<ProtectedRoute><AppLayout><CapitalVariationPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/closing-pack" element={<ProtectedRoute><AppLayout><ClosingPack /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/zscore" element={<ProtectedRoute><AppLayout><ZScorePage /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/forecast" element={<ProtectedRoute><AppLayout><RollingForecast /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/wcd" element={<ProtectedRoute><AppLayout><WorkingCapitalDays /></AppLayout></ProtectedRoute>} />
+        <Route path="/builder" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
+        <Route path="/builder/:id" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>
