@@ -146,9 +146,53 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     }
     return total;
   };
+  // Roll-up budget : le budget peut être saisi sur un code court (ex: 60, 622)
+  // alors que le réalisé tombe sur un sous-compte détaillé (ex: 605118, 622100).
+  // On pré-distribue le budget parent vers ses enfants proportionnellement au réalisé.
+  const budgetResolved = Array.from({ length: 12 }, () => new Map<string, number>());
+  // Collecter tous les comptes réalisés
+  const allRealAccounts = new Set<string>();
+  for (let m = 0; m < 12; m++) for (const k of netByMonthAccount[m].keys()) allRealAccounts.add(k);
+  // Pour chaque mois, résoudre les budgets
+  for (let m = 0; m < 12; m++) {
+    const bMap = budgetByMonthAccount[m];
+    const rMap = netByMonthAccount[m];
+    const resolved = budgetResolved[m];
+    // Copier d'abord les budgets exact-match
+    for (const [code, amt] of bMap) {
+      if (rMap.has(code)) {
+        resolved.set(code, (resolved.get(code) ?? 0) + amt);
+      }
+    }
+    // Puis distribuer les budgets parents vers les enfants
+    for (const [budCode, budAmt] of bMap) {
+      if (rMap.has(budCode)) continue; // déjà traité en exact
+      // Chercher les sous-comptes réalisés qui commencent par ce code budget
+      const children: string[] = [];
+      let totalChildReal = 0;
+      for (const realCode of allRealAccounts) {
+        if (realCode.startsWith(budCode) && realCode.length > budCode.length) {
+          children.push(realCode);
+          totalChildReal += Math.abs(rMap.get(realCode) ?? 0);
+        }
+      }
+      if (children.length === 0) {
+        // Pas d'enfants : garder le budget sur le code parent tel quel
+        resolved.set(budCode, (resolved.get(budCode) ?? 0) + budAmt);
+      } else {
+        // Distribuer proportionnellement au réalisé (ou uniformément si réalisé = 0)
+        for (const child of children) {
+          const childReal = Math.abs(rMap.get(child) ?? 0);
+          const share = totalChildReal > 0 ? (childReal / totalChildReal) * budAmt : budAmt / children.length;
+          resolved.set(child, (resolved.get(child) ?? 0) + share);
+        }
+      }
+    }
+  }
+
   const accountValues = (account: string) => {
     const values = Array.from({ length: 12 }, (_, m) => netByMonthAccount[m].get(account) ?? 0);
-    const budgets = Array.from({ length: 12 }, (_, m) => budgetByMonthAccount[m].get(account) ?? 0);
+    const budgets = Array.from({ length: 12 }, (_, m) => budgetResolved[m].get(account) ?? 0);
     const previousYear = Array.from({ length: 12 }, (_, m) => n1ByMonthAccount[m].get(account) ?? 0);
     return {
       values, budgets, previousYear,

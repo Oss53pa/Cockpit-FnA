@@ -125,6 +125,44 @@ export async function computeVariance(
     perAccount.set(e.account, (perAccount.get(e.account) ?? 0) + v);
   }
 
+  // Roll-up budget parent → enfants du réalisé
+  // Le budget peut être saisi sur des codes courts (60, 622) alors que le réalisé
+  // est détaillé (605118, 622100). On distribue proportionnellement au réalisé.
+  const budgetCodes = Array.from(budgetMap.keys());
+  const realiseCodes = Array.from(perAccount.keys());
+  const absorbedChildren = new Set<string>();
+  const sortedBudgetCodes = [...budgetCodes].sort((a, b) => a.length - b.length);
+  for (const budCode of sortedBudgetCodes) {
+    const exactRealise = perAccount.get(budCode) ?? 0;
+    const children = realiseCodes.filter(
+      (c) => c !== budCode && c.startsWith(budCode) && c.length > budCode.length && !absorbedChildren.has(c),
+    );
+    if (children.length === 0) continue;
+    let childRealise = 0;
+    for (const c of children) childRealise += perAccount.get(c) ?? 0;
+    if (childRealise !== 0 || exactRealise === 0) {
+      perAccount.set(budCode, exactRealise + childRealise);
+      for (const c of children) absorbedChildren.add(c);
+    }
+  }
+  // Sens inverse : réalisé orphelin → agrège budgets enfants
+  const realiseOrphans = realiseCodes.filter(
+    (c) => !budgetMap.has(c) && !absorbedChildren.has(c),
+  );
+  for (const realCode of realiseOrphans) {
+    const childBudgets = budgetCodes.filter(
+      (b) => b !== realCode && b.startsWith(realCode) && b.length > realCode.length,
+    );
+    if (childBudgets.length === 0) continue;
+    let agg = budgetMap.get(realCode) ?? 0;
+    for (const cb of childBudgets) agg += budgetMap.get(cb) ?? 0;
+    if (agg !== 0) {
+      budgetMap.set(realCode, agg);
+      for (const cb of childBudgets) budgetMap.delete(cb);
+    }
+  }
+  for (const c of absorbedChildren) perAccount.delete(c);
+
   // Agrégation tous comptes (budget + réalisé)
   const all = new Set<string>([...budgetMap.keys(), ...perAccount.keys()]);
   const rows: VarianceRow[] = [];

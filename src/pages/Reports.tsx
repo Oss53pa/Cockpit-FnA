@@ -8,7 +8,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { Collapsible } from '../components/ui/Collapsible';
 import { toast } from '../components/ui/Toast';
-import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
+import { useBudgetActual, useBudgetActualMonthly, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
 import { computeRatios } from '../engine/ratios';
@@ -697,6 +697,7 @@ export default function Reports() {
   const tft = useTFT();
   const capital = useCapitalVariation();
   const budgetActual = useBudgetActual();
+  const budgetActualMonthly = useBudgetActualMonthly();
   const monthlyCR = useMonthlyCR();
   const monthlyBilan = useMonthlyBilan();
   const org = useCurrentOrg();
@@ -939,6 +940,7 @@ export default function Reports() {
     tft: tft?.lines,
     capital,
     budgetActual,
+    budgetActualMonthly,
     monthlyCR,
     monthlyBilan,
     auxClient,
@@ -949,7 +951,7 @@ export default function Reports() {
     hasAnalytical,
     hasStocks,
     periodDays,
-  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays]);
+  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, budgetActualMonthly, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays]);
 
   // Rafraîchir les KPIs du rapport par défaut une fois les données chargées (1 fois)
   useEffect(() => {
@@ -2136,19 +2138,29 @@ function TablePreview({ source, data, palette, title }: any) {
       break;
     }
     case 'budget_monthly': {
-      head.push('Section', 'Actual Mois', 'Budget Mois', 'N-1 Mois', 'Actual YTD', 'Budget YTD');
-      const ba = data.budgetActual ?? [];
-      const produits = ba.filter((r: any) => r.code?.startsWith('7'));
-      const charges = ba.filter((r: any) => r.code?.startsWith('6'));
-      const totProdR = produits.reduce((s: number, r: any) => s + r.realise, 0);
-      const totProdB = produits.reduce((s: number, r: any) => s + r.budget, 0);
-      const totChR = charges.reduce((s: number, r: any) => s + r.realise, 0);
-      const totChB = charges.reduce((s: number, r: any) => s + r.budget, 0);
-      body = [
-        ['Produits expl.', '—', '—', '—', fmtFull(totProdR), fmtFull(totProdB)],
-        ['Charges expl.', '—', '—', '—', fmtFull(totChR), fmtFull(totChB)],
-        ['Résultat', '—', '—', '—', fmtFull(totProdR - totChR), fmtFull(totProdB - totChB)],
-      ];
+      const bam = data.budgetActualMonthly;
+      if (bam?.rows?.length) {
+        const months = bam.months ?? [];
+        head.push('Compte', ...months.slice(0, 6).map((m: string) => `${m} R`), 'YTD R', 'YTD B', 'Écart');
+        body = bam.rows
+          .filter((r: any) => Math.abs(r.totalRealise) > 0.01 || Math.abs(r.totalBudget) > 0.01)
+          .slice(0, 30)
+          .map((r: any) => [
+            r.label,
+            ...r.months.slice(0, 6).map((m: any) => fmtFull(m.realise)),
+            fmtFull(r.totalRealise),
+            fmtFull(r.totalBudget),
+            fmtFull(r.totalEcart),
+          ]);
+      } else {
+        // Fallback sur budgetActual annuel
+        head.push('Compte', 'Réalisé', 'Budget', 'Écart', 'Var %');
+        const ba = data.budgetActual ?? [];
+        body = ba
+          .filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01)
+          .slice(0, 30)
+          .map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart), r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—']);
+      }
       break;
     }
     default: {
@@ -2269,7 +2281,20 @@ function TablePreview({ source, data, palette, title }: any) {
 function DashboardSnippet({ id, data, palette }: any) {
   const dash = DASHBOARD_CATALOG.find((d) => d.id === id);
   const kpis = (() => {
-    if (id === 'home' || id === 'cp' || id === 'crblock' || id === 'is_bvsa' || id === 'is_bvsa_monthly' || id?.startsWith('crblock_')) return [
+    if (id === 'is_bvsa' || id === 'is_bvsa_monthly') {
+      const ba = data.budgetActual ?? [];
+      const totR = ba.reduce((s: number, r: any) => s + (r.isCharge ? -r.realise : r.realise), 0);
+      const totB = ba.reduce((s: number, r: any) => s + (r.isCharge ? -r.budget : r.budget), 0);
+      const ecart = totR - totB;
+      const pct = totB !== 0 ? ((ecart / Math.abs(totB)) * 100).toFixed(1) + ' %' : '—';
+      return [
+        { label: 'Réalisé total', value: fmtMoney(totR) },
+        { label: 'Budget total', value: fmtMoney(totB) },
+        { label: 'Écart', value: fmtMoney(ecart), subValue: pct },
+        { label: 'Lignes', value: `${ba.filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01).length} comptes` },
+      ];
+    }
+    if (id === 'home' || id === 'cp' || id === 'crblock' || id?.startsWith('crblock_')) return [
       { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
       { label: 'Résultat net', value: fmtMoney(data.sig?.resultat ?? 0) },
       { label: 'EBE', value: fmtMoney(data.sig?.ebe ?? 0) },

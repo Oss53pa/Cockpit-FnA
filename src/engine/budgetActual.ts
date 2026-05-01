@@ -412,6 +412,37 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
     }
   }
 
+  // Roll-up budget parent → enfants du réalisé (même logique que computeBudgetActual)
+  // Le budget peut être saisi sur un code court (60, 622) et le réalisé sur un
+  // sous-compte détaillé (605118, 622100). On distribue mois par mois.
+  const allRealKeys = new Set([...realise.keys(), ...realiseN1.keys()]);
+  const budgetCodes = Array.from(budgetMonthly.keys());
+  const absorbedChildren = new Set<string>();
+  const sortedBudCodes = [...budgetCodes].sort((a, b) => a.length - b.length);
+  for (const budCode of sortedBudCodes) {
+    if (allRealKeys.has(budCode)) continue; // exact match existe
+    const children = Array.from(allRealKeys).filter(
+      (c) => c.startsWith(budCode) && c.length > budCode.length && !absorbedChildren.has(c),
+    );
+    if (children.length === 0) continue;
+    const budArr = budgetMonthly.get(budCode) ?? Array(12).fill(0);
+    // Distribuer chaque mois proportionnellement au réalisé
+    for (let m = 0; m < 12; m++) {
+      if (budArr[m] === 0) continue;
+      let totalChildReal = 0;
+      for (const c of children) totalChildReal += Math.abs((realise.get(c) ?? Array(12).fill(0))[m]);
+      for (const c of children) {
+        const childReal = Math.abs((realise.get(c) ?? Array(12).fill(0))[m]);
+        const share = totalChildReal > 0 ? (childReal / totalChildReal) * budArr[m] : budArr[m] / children.length;
+        const arr = budgetMonthly.get(c) ?? Array(12).fill(0);
+        arr[m] += share;
+        budgetMonthly.set(c, arr);
+      }
+    }
+    budgetMonthly.delete(budCode); // supprimer le parent (distribué)
+    for (const c of children) absorbedChildren.add(c);
+  }
+
   // Fusionner tous les comptes
   const allAccounts = new Set([...realise.keys(), ...realiseN1.keys(), ...budgetMonthly.keys()]);
   const rows: MonthlyBudgetRow[] = [];
