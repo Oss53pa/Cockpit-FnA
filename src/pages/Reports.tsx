@@ -2961,12 +2961,16 @@ function DashboardSnippet({ id, data, palette }: any) {
             const pct = (Math.abs(s.value) / max) * 100;
             const neg = s.value < 0;
             return (
+              // Layout 3 colonnes : label | track de barre | valeur sombre.
+              // La valeur est SORTIE de la barre pour rester lisible quel que
+              // soit le ratio de remplissage (avant : texte blanc sur fond gris
+              // clair quand la barre ne couvrait pas toute la zone).
               <div key={i} className="flex items-center gap-2 text-[10px]">
-                <div className="w-24 text-right text-primary-600 font-medium">{s.label}</div>
+                <div className="w-24 text-right text-primary-600 dark:text-primary-300 font-medium shrink-0">{s.label}</div>
                 <div className="flex-1 bg-primary-100 dark:bg-primary-900 h-5 rounded overflow-hidden relative">
                   <div className="h-full transition-all" style={{ width: `${pct}%`, background: neg ? '#dc2626' : palette.primary }} />
-                  <span className="absolute inset-0 flex items-center justify-end pr-2 num font-semibold text-[10px]" style={{ color: pct > 50 ? '#fff' : palette.primary }}>{fmtMoney(s.value)}</span>
                 </div>
+                <div className="w-28 text-right num font-semibold tabular-nums text-primary-900 dark:text-primary-100 shrink-0">{fmtMoney(s.value)}</div>
               </div>
             );
           })}
