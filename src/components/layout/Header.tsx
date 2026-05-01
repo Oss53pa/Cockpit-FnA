@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Hash, HelpCircle, LogOut, Menu, Settings, ChevronDown } from 'lucide-react';
+import { Bell, Hash, HelpCircle, LogOut, Menu, Settings, ChevronDown, Search } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
@@ -140,6 +140,18 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* DROITE : actions */}
         <div className="flex items-center gap-1.5">
+          {/* Bouton recherche / Command palette (Cmd+K) */}
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-200/60 dark:border-primary-700 bg-surface/60 hover:bg-surface text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 text-xs transition-colors duration-150"
+            title="Recherche rapide"
+            aria-label="Ouvrir la recherche"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span>Rechercher…</span>
+            <kbd className="ml-2 font-mono text-[10px] px-1 py-0.5 rounded bg-primary-200/60 dark:bg-primary-800 text-primary-600">⌘K</kbd>
+          </button>
+
           {/* Toggle montants — segmented control discret */}
           <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-full bg-primary-200/40 dark:bg-primary-800/40">
             <button

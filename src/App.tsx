@@ -8,6 +8,7 @@ import { DemoTour } from './components/layout/DemoTour';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ToastContainer } from './components/ui/Toast';
+import { CommandPalette } from './components/ui/CommandPalette';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
@@ -98,6 +99,7 @@ function App() {
     <ErrorBoundary>
     <ToastContainer />
     <BrowserRouter>
+      <CommandPalette />
       <Routes>
         {/* Auth pages — publiques */}
         <Route path="/login" element={<Suspense fallback={<PageFallback />}><Login /></Suspense>} />
