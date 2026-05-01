@@ -200,6 +200,9 @@ export default function Landing() {
             <button onClick={toggleMode} className={`p-2 rounded-lg ${mode === 'dark' ? 'hover:bg-white/10' : 'hover:bg-gray-100'} transition-colors`} style={c.sTer} title={mode === 'dark' ? 'Mode jour' : 'Mode nuit'}>
               {mode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
+            <button onClick={() => navigate('/login')} className={`px-4 py-2 text-sm font-semibold transition-all flex items-center gap-2 hover:opacity-80`} style={c.sTer}>
+              Se connecter
+            </button>
             <button onClick={goToDemo} className={`px-4 py-2 ${c.btnSecondary} border rounded-lg text-sm font-semibold transition-all flex items-center gap-2`} style={c.sSec}>
               <Play className="w-3.5 h-3.5" /> Démo
             </button>

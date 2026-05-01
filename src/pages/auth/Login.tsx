@@ -23,7 +23,8 @@ export default function Login() {
         setMagicSent(true);
       } else {
         await signIn(email, password);
-        navigate('/');
+        // Apres connexion : page d'accueil applicative (pas la Landing publique)
+        navigate('/home');
       }
     } catch (err: any) {
       setError(err.message || 'Erreur de connexion');
