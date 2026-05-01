@@ -117,8 +117,13 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   if (rows.length === 0) {
     return { imported: 0, updated: 0, errors: ['Aucune donnée trouvée dans le fichier (toutes feuilles testées)'], sheetName };
   }
-  const colCode = headers.find((h) => /^(code|compte|cpte|n.?\s*compte|num.?\s*compte)$/i.test(h.trim())) || headers.find((h) => /code|compte/i.test(h));
-  const colLabel = headers.find((h) => /^(libell[éeè]|label|intitul[ée]?|description|d[ée]signation)$/i.test(h.trim())) || headers.find((h) => /libell|label|intitul/i.test(h));
+  // Detection robuste : Sage / Cegid / Saari / EBP utilisent des en-tetes varies
+  // Code : "Code", "Compte", "N° Compte", "Numéro", "Cpte", "Code compte"…
+  // Libellé : "Libellé", "Intitulé", "Désignation", "Description", "Nom"…
+  const colCode = headers.find((h) => /^(code|compte|cpte|n[°ºo]?\s*compte|num[ée]ro|n[°ºo]\s*cpte)$/i.test(h.trim()))
+    || headers.find((h) => /code|compte|cpte|num[ée]ro/i.test(h));
+  const colLabel = headers.find((h) => /^(libell[éeè]|label|intitul[ée]?|description|d[ée]signation|nom)$/i.test(h.trim()))
+    || headers.find((h) => /libell|label|intitul|d[ée]signation|description/i.test(h));
   const colClass = headers.find((h) => /classe/i.test(h));
   const colType = headers.find((h) => /^type$/i.test(h.trim()));
   const colSysco = headers.find((h) => /sysco/i.test(h));

@@ -111,9 +111,17 @@ export default function COA() {
                 if (!f) return;
                 try {
                   const res = await importCOAv2(f, currentOrgId);
-                  const variant = res.imported > 0 ? 'success' : 'warning';
-                  toast[variant]('Import COA terminé', `${res.imported} comptes · ${res.updated} mis à jour` + (res.errors.length ? ` · ${res.errors.length} erreurs` : ''));
-                  if (res.imported > 0) window.location.reload();
+                  if (res.imported > 0) {
+                    const desc = `${res.imported} comptes · ${res.updated} mis à jour` + (res.errors.length ? ` · ${res.errors.length} erreurs (voir F12)` : '');
+                    toast.success('Import COA terminé', desc);
+                    if (res.errors.length) console.warn('[Import COA] Erreurs:', res.errors);
+                    window.location.reload();
+                  } else {
+                    // Aucun compte importe : afficher la 1ere erreur explicite
+                    const reason = res.errors[0] ?? 'Aucune ligne valide trouvée dans le fichier';
+                    toast.error("Import impossible", reason);
+                    console.error('[Import COA] Échec — détails:', { sheetName: res.sheetName, errors: res.errors });
+                  }
                 } catch (err: any) {
                   toast.error("Erreur d'import COA", err.message);
                   console.error('[Import COA] Exception:', err);
@@ -615,10 +623,15 @@ function COAImportTab({
               if (!f) return;
               try {
                 const res = await importCOAv2(f, orgId);
-                const variant = res.imported > 0 ? 'success' : 'warning';
-                toast[variant]('Import terminé', `${res.imported} comptes · ${res.updated} mis à jour` + (res.errors.length ? ` · ${res.errors.length} erreurs` : ''));
-                onImported();
-                if (res.imported > 0) window.location.reload();
+                if (res.imported > 0) {
+                  toast.success('Import terminé', `${res.imported} comptes · ${res.updated} mis à jour`);
+                  onImported();
+                  window.location.reload();
+                } else {
+                  const reason = res.errors[0] ?? 'Aucune ligne valide trouvée dans le fichier';
+                  toast.error("Import impossible", reason);
+                  console.error('[Import COA] Échec — détails:', { sheetName: res.sheetName, errors: res.errors });
+                }
               } catch (err: any) {
                 toast.error("Erreur d'import", err.message);
               }
