@@ -1042,14 +1042,14 @@ export default function Reports() {
 
         {/* ════════════════ SIDEBAR GAUCHE — ÉDITEUR ════════════════ */}
         {leftCollapsed ? (
-          <button onClick={toggleLeft} className="self-start sticky top-20 w-10 h-12 rounded-lg bg-primary-900 dark:bg-primary-100 hover:scale-105 text-primary-50 dark:text-primary-900 shadow-md flex items-center justify-center transition font-bold text-lg" title="Déplier l'éditeur">
+          <button onClick={toggleLeft} className="self-start sticky top-20 w-10 h-12 rounded-xl bg-primary-900 dark:bg-primary-100 hover:scale-105 text-primary-50 dark:text-primary-900 shadow-sm hover:shadow flex items-center justify-center transition-all duration-200 font-semibold text-base" title="Déplier l'éditeur" aria-label="Déplier l'éditeur">
             ›
           </button>
         ) : (
-        <aside className="space-y-3 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-100px)] xl:overflow-y-auto pr-1">
-          <div className="flex items-center justify-between mb-2 px-2 py-1.5 bg-primary-200 dark:bg-primary-800 rounded-lg">
-            <p className="text-[11px] uppercase tracking-wider text-primary-700 dark:text-primary-200 font-bold">⚙ Éditeur</p>
-            <button onClick={toggleLeft} className="w-7 h-7 rounded bg-primary-50 dark:bg-primary-900 hover:bg-primary-100 dark:hover:bg-primary-950 text-primary-700 dark:text-primary-200 flex items-center justify-center font-bold shadow-sm" title="Replier l'éditeur">‹</button>
+        <aside className="space-y-3 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-100px)] xl:overflow-y-auto pr-1 animate-fade-in">
+          <div className="flex items-center justify-between mb-2 px-3 py-2 bg-primary-100/60 dark:bg-primary-800/60 rounded-xl border border-primary-200/40 dark:border-primary-700/40">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-primary-700 dark:text-primary-200 font-semibold">Éditeur</p>
+            <button onClick={toggleLeft} className="btn-icon w-7 h-7" title="Replier l'éditeur" aria-label="Replier"><span className="text-base font-medium">‹</span></button>
           </div>
 
           <Collapsible title="Identité" defaultOpen>
@@ -1204,14 +1204,14 @@ export default function Reports() {
 
         {/* ════════════════ SIDEBAR DROITE ════════════════ */}
         {rightCollapsed ? (
-          <button onClick={toggleRight} className="self-start sticky top-20 w-10 h-12 rounded-lg bg-primary-900 dark:bg-primary-100 hover:scale-105 text-primary-50 dark:text-primary-900 shadow-md flex items-center justify-center transition font-bold text-lg" title="Déplier le récapitulatif">
+          <button onClick={toggleRight} className="self-start sticky top-20 w-10 h-12 rounded-xl bg-primary-900 dark:bg-primary-100 hover:scale-105 text-primary-50 dark:text-primary-900 shadow-sm hover:shadow flex items-center justify-center transition-all duration-200 font-semibold text-base" title="Déplier le récapitulatif" aria-label="Déplier">
             ‹
           </button>
         ) : (
-        <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-100px)] xl:overflow-y-auto pr-1">
-          <div className="flex items-center justify-between mb-2 px-2 py-1.5 bg-primary-200 dark:bg-primary-800 rounded-lg">
-            <button onClick={toggleRight} className="w-7 h-7 rounded bg-primary-50 dark:bg-primary-900 hover:bg-primary-100 dark:hover:bg-primary-950 text-primary-700 dark:text-primary-200 flex items-center justify-center font-bold shadow-sm" title="Replier le récapitulatif">›</button>
-            <p className="text-[11px] uppercase tracking-wider text-primary-700 dark:text-primary-200 font-bold">📋 Récapitulatif</p>
+        <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-100px)] xl:overflow-y-auto pr-1 animate-fade-in">
+          <div className="flex items-center justify-between mb-2 px-3 py-2 bg-primary-100/60 dark:bg-primary-800/60 rounded-xl border border-primary-200/40 dark:border-primary-700/40">
+            <button onClick={toggleRight} className="btn-icon w-7 h-7" title="Replier le récapitulatif" aria-label="Replier"><span className="text-base font-medium">›</span></button>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-primary-700 dark:text-primary-200 font-semibold">Récapitulatif</p>
           </div>
           <div className="card p-4">
             <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold mb-3">Récapitulatif</p>
@@ -1743,7 +1743,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
       {dragOver && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-20 print:hidden">
           <div className="text-center">
-            <p className="text-3xl font-bold" style={{ color: palette.primary }}>📥 Déposez votre logo</p>
+            <p className="text-3xl font-semibold tracking-tight" style={{ color: palette.primary }}>Déposez votre logo</p>
             <p className="text-sm text-primary-500 mt-2">PNG · JPG · SVG</p>
           </div>
         </div>
@@ -1763,7 +1763,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
         ) : (
           <div className="text-center mt-8 print:hidden">
             <label className="inline-block border-2 border-dashed border-primary-300 rounded p-4 cursor-pointer hover:border-primary-500 transition">
-              <p className="text-xs text-primary-500">📤 Cliquez ou glissez un logo</p>
+              <p className="text-xs text-primary-500">Cliquez ou glissez un logo</p>
               <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                 const f = e.target.files?.[0]; if (!f || !setLogo) return;
                 const r = new FileReader(); r.onload = () => typeof r.result === 'string' && setLogo(r.result); r.readAsDataURL(f);
@@ -1802,7 +1802,7 @@ function CoverEditPanel({ id, setCoverProps, setBgImage }: any) {
   return (
     <div className="absolute top-2 right-2 z-30 print:hidden">
       <button onClick={() => setOpen(!open)} className="bg-primary-900/90 dark:bg-primary-100/90 text-primary-50 dark:text-primary-900 rounded-full px-3 py-1.5 text-[10px] font-semibold shadow-lg hover:scale-105 transition">
-        🎨 Personnaliser
+        Personnaliser
       </button>
       {open && (
         <div className="absolute top-10 right-0 w-72 bg-white dark:bg-primary-900 border border-primary-200 dark:border-primary-800 rounded-lg shadow-2xl p-3 space-y-3">

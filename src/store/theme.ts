@@ -204,13 +204,28 @@ type ThemeState = {
 };
 
 // Migration forcee : on bascule TOUT le monde sur la palette Twisty pendant
-// la phase de refonte design. Les anciennes valeurs ('atlas', 'graphite', etc.)
-// stockees en localStorage sont ecrasees pour qu'on voie la nouvelle identite.
-// Pour rendre la main au user : retirer ce bloc de migration.
-const TWISTY_MIGRATION_KEY = 'twisty-migration-v1';
+// la phase de refonte design. Les anciennes valeurs stockees en localStorage
+// sont ecrasees pour qu'on voie la nouvelle identite.
+//
+// IMPORTANT v2 : on PURGE aussi toute palette custom nommee 'twisty' qui
+// pourrait court-circuiter la built-in (les custom ecrasent les built-in dans
+// getAllPalettes). Sans cette purge, les utilisateurs qui ont cree une "Twisty"
+// custom (mix de vieilles couleurs marine/sable/etc.) continuent de la voir.
+const TWISTY_MIGRATION_KEY = 'twisty-migration-v2';
 try {
   if (typeof window !== 'undefined' && !localStorage.getItem(TWISTY_MIGRATION_KEY)) {
     localStorage.setItem(KEY, 'twisty');
+    // Purge la custom palette 'twisty' eventuelle
+    try {
+      const raw = localStorage.getItem(CUSTOM_KEY);
+      if (raw) {
+        const customs = JSON.parse(raw);
+        if (customs && typeof customs === 'object' && 'twisty' in customs) {
+          delete customs.twisty;
+          localStorage.setItem(CUSTOM_KEY, JSON.stringify(customs));
+        }
+      }
+    } catch { /* invalid JSON — on laisse */ }
     localStorage.setItem(TWISTY_MIGRATION_KEY, '1');
   }
 } catch { /* SSR / privacy mode */ }
