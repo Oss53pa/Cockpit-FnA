@@ -4,9 +4,14 @@
  */
 import type { DataProvider, GLFilter } from './provider';
 import type { Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine, ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate } from './schema';
-import { supabase } from '../lib/supabase';
+import { supabase as supabaseTyped } from '../lib/supabase';
 
 import { toSnake, toCamel } from './caseConvert';
+
+// Les tables fna_* ne sont pas declarees dans le type Database (qui contient
+// la version sans prefixe pour la compatibilite multi-app). On bypasse donc le
+// type checking sur from() pour ces tables — retour brut RPC standard.
+const supabase = supabaseTyped as any;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 function check<T>(result: { data: T | null; error: any }): T {
@@ -19,7 +24,7 @@ export class SupabaseProvider implements DataProvider {
   // Organizations
   async getOrganizations(): Promise<Organization[]> {
     const { data } = await supabase.from('fna_organizations').select('*');
-    return (data ?? []).map(r => toCamel(r)) as Organization[];
+    return (data ?? []).map((r: any) => toCamel(r)) as Organization[];
   }
   async getOrganization(id: string) {
     const { data } = await supabase.from('fna_organizations').select('*').eq('id', id).single();
@@ -35,7 +40,7 @@ export class SupabaseProvider implements DataProvider {
   // Fiscal years
   async getFiscalYears(orgId: string) {
     const { data } = await supabase.from('fna_fiscal_years').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as FiscalYear[];
+    return (data ?? []).map((r: any) => toCamel(r)) as FiscalYear[];
   }
   async upsertFiscalYear(fy: FiscalYear) {
     check(await supabase.from('fna_fiscal_years').upsert(toSnake(fy)));
@@ -44,7 +49,7 @@ export class SupabaseProvider implements DataProvider {
   // Periods
   async getPeriods(orgId: string) {
     const { data } = await supabase.from('fna_periods').select('*').eq('org_id', orgId).order('month');
-    return (data ?? []).map(r => toCamel(r)) as Period[];
+    return (data ?? []).map((r: any) => toCamel(r)) as Period[];
   }
   async upsertPeriod(p: Period) {
     check(await supabase.from('fna_periods').upsert(toSnake(p)));
@@ -53,7 +58,7 @@ export class SupabaseProvider implements DataProvider {
   // Accounts
   async getAccounts(orgId: string) {
     const { data } = await supabase.from('fna_accounts').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as Account[];
+    return (data ?? []).map((r: any) => toCamel(r)) as Account[];
   }
   async bulkUpsertAccounts(accounts: Account[]) {
     const rows = accounts.map(a => toSnake(a));
@@ -75,7 +80,7 @@ export class SupabaseProvider implements DataProvider {
     if (filter.fromDate) q = q.gte('date', filter.fromDate);
     if (filter.toDate) q = q.lte('date', filter.toDate);
     const { data } = await q;
-    return (data ?? []).map(r => toCamel(r)) as GLEntry[];
+    return (data ?? []).map((r: any) => toCamel(r)) as GLEntry[];
   }
   async bulkInsertGL(entries: GLEntry[]) {
     const rows = entries.map(e => toSnake(e));
@@ -90,7 +95,7 @@ export class SupabaseProvider implements DataProvider {
   // Imports
   async getImports(orgId: string) {
     const { data } = await supabase.from('fna_imports').select('*').eq('org_id', orgId).order('date', { ascending: false });
-    return (data ?? []).map(r => toCamel(r)) as ImportLog[];
+    return (data ?? []).map((r: any) => toCamel(r)) as ImportLog[];
   }
   async addImport(log: Omit<ImportLog, 'id'>): Promise<number> {
     const row = toSnake(log);
@@ -106,11 +111,11 @@ export class SupabaseProvider implements DataProvider {
   async getBudgets(orgId: string, year: number, version: string) {
     const { data } = await supabase.from('fna_budgets').select('*')
       .eq('org_id', orgId).eq('year', year).eq('version', version);
-    return (data ?? []).map(r => toCamel(r)) as BudgetLine[];
+    return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
   }
   async getAllBudgets(orgId: string) {
     const { data } = await supabase.from('fna_budgets').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as BudgetLine[];
+    return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
   }
   async bulkUpsertBudgets(lines: BudgetLine[]) {
     const rows = lines.map(l => toSnake(l));
@@ -125,7 +130,7 @@ export class SupabaseProvider implements DataProvider {
   // Reports
   async getReports(orgId: string) {
     const { data } = await supabase.from('fna_reports').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as ReportDoc[];
+    return (data ?? []).map((r: any) => toCamel(r)) as ReportDoc[];
   }
   async getReport(id: number) {
     const { data } = await supabase.from('fna_reports').select('*').eq('id', id).single();
@@ -148,7 +153,7 @@ export class SupabaseProvider implements DataProvider {
   // Templates
   async getTemplates(orgId: string) {
     const { data } = await supabase.from('fna_report_templates').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as ReportTemplate[];
+    return (data ?? []).map((r: any) => toCamel(r)) as ReportTemplate[];
   }
   async upsertTemplate(t: Omit<ReportTemplate, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(t);
@@ -167,7 +172,7 @@ export class SupabaseProvider implements DataProvider {
   // Attention points
   async getAttentionPoints(orgId: string) {
     const { data } = await supabase.from('fna_attention_points').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as AttentionPoint[];
+    return (data ?? []).map((r: any) => toCamel(r)) as AttentionPoint[];
   }
   async upsertAttentionPoint(p: Omit<AttentionPoint, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(p);
@@ -186,7 +191,7 @@ export class SupabaseProvider implements DataProvider {
   // Action plans
   async getActionPlans(orgId: string) {
     const { data } = await supabase.from('fna_action_plans').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as ActionPlan[];
+    return (data ?? []).map((r: any) => toCamel(r)) as ActionPlan[];
   }
   async upsertActionPlan(p: Omit<ActionPlan, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(p);
@@ -205,7 +210,7 @@ export class SupabaseProvider implements DataProvider {
   // Mappings
   async getMappings(orgId: string) {
     const { data } = await supabase.from('fna_account_mappings').select('*').eq('org_id', orgId);
-    return (data ?? []).map(r => toCamel(r)) as AccountMapping[];
+    return (data ?? []).map((r: any) => toCamel(r)) as AccountMapping[];
   }
   async upsertMapping(m: AccountMapping) {
     check(await supabase.from('fna_account_mappings').upsert(toSnake(m)));

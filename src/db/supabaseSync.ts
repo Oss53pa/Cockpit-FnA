@@ -11,7 +11,10 @@
  */
 import { db } from './schema';
 import { toSnake, toCamel } from './caseConvert';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase as supabaseTyped, isSupabaseConfigured } from '../lib/supabase';
+
+// Cast as any : les tables fna_* ne sont pas typees dans Database
+const supabase = supabaseTyped as any;
 
 async function fetchAll(table: string, orgId?: string) {
   let q = supabase.from(table).select('*');

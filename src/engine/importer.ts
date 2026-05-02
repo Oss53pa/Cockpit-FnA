@@ -892,7 +892,7 @@ export async function importGL(
           await assertPeriodOpen(date, opts.orgId);
         } catch (err) {
           if (err instanceof PeriodLockedError) {
-            errors.push(`Import refusé : ${err.message}`);
+            errors.push({ row: 0, reason: `Import refusé : ${err.message}` });
             throw err; // rollback Dexie
           }
           throw err;

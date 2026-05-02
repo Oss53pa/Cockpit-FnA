@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Modal } from '../components/ui/Modal';
+import { EmailPreviewModal } from '../components/ui/EmailPreviewModal';
 import { Collapsible } from '../components/ui/Collapsible';
 import { toast } from '../components/ui/Toast';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
@@ -167,6 +168,25 @@ const computeKPIs = (data: any) => {
     margePct: sig.ca ? `${((sig.resultat / sig.ca) * 100).toFixed(1)} %` : '—',
     ebePct: sig.ca ? `${((sig.ebe / sig.ca) * 100).toFixed(1)} %` : '—',
   } as Record<string, string>;
+};
+
+// Métadonnées par défaut pour chaque modèle rapide. Appliquées au config.identity
+// quand l'utilisateur clique sur le bouton — pour que le rapport ait directement
+// le bon titre / sous-titre.
+const TEMPLATE_DEFAULTS: Record<string, { title: string; subtitle?: string }> = {
+  weekly:       { title: 'Flash hebdomadaire',         subtitle: 'Indicateurs de la semaine' },
+  monthly:      { title: 'Rapport mensuel de gestion', subtitle: 'Analyse de performance financière' },
+  quarterly:    { title: 'Comité trimestriel',         subtitle: 'Rapport au comité de direction' },
+  annual:       { title: 'Rapport annuel',             subtitle: 'Synthèse de l\'exercice' },
+  interim:      { title: 'Rapport intérimaire',        subtitle: 'Synthèse de la période' },
+  cfo:          { title: 'Rapport CFO',                subtitle: 'Deep dive Direction Financière' },
+  bank:         { title: 'Pack Banque',                subtitle: 'Document à destination de la relation bancaire' },
+  audit:        { title: "Rapport au Comité d'Audit",  subtitle: "Contrôles, anomalies et plan de remédiation" },
+  shareholders: { title: 'Reporting Actionnaires',     subtitle: 'Synthèse pour les actionnaires' },
+  board:        { title: "Conseil d'Administration",   subtitle: 'Synthèse compacte 4 slides' },
+  fiscal:       { title: 'Pack Fiscal',                subtitle: 'TVA, IS, charges fiscales et risques' },
+  closing:      { title: 'Closing Mensuel',            subtitle: 'Pack de clôture et justifications' },
+  cash:         { title: 'Cash Management',            subtitle: 'Trésorerie, prévisions et optimisation' },
 };
 
 const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
@@ -667,6 +687,405 @@ const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'paragraph', text: "Points d'attention et actions correctives pour la période suivante." },
     ];
   },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // RAPPORT CFO MENSUEL — deep dive opérationnel CFO
+  // ═══════════════════════════════════════════════════════════════════════
+  cfo: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Synthèse CFO', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Tableau de bord du Directeur Financier. Vision opérationnelle profonde sur la performance, la liquidité, la rentabilité et la création de valeur." },
+      { id: uid(), type: 'kpi', items: [
+        { label: 'CA YTD', value: k.ca, subValue: 'Cumul' }, { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+        { label: 'RN', value: k.rn, subValue: `Marge ${k.margePct}` }, { label: 'Trésorerie', value: k.treso },
+      ]},
+      { id: uid(), type: 'kpi', items: [
+        { label: 'BFR', value: k.bfr }, { label: 'DSO', value: k.dso, subValue: 'Délai clients' },
+        { label: 'Total Actif', value: k.actif }, { label: 'Capitaux propres', value: k.capPropres },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Score de santé financière', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Évaluation Z-Score Altman + score Cockpit 0-100 sur les 4 familles : Rentabilité / Liquidité / Structure / Activité." },
+      { id: uid(), type: 'dashboard', dashboardId: 'zscore', title: 'Score financier global' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Cascade SIG — Du CA au Résultat Net', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'waterfall', title: 'Waterfall SIG' },
+      { id: uid(), type: 'table', source: 'sig', title: 'Soldes intermédiaires de gestion' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Working Capital Days', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Analyse du cycle d'exploitation : DSO + DIO + DPO = Cash Conversion Cycle. Levier majeur de la trésorerie." },
+      { id: uid(), type: 'dashboard', dashboardId: 'wcd', title: 'DSO / DIO / DPO / CCC' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Rolling Forecast 90 jours', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Projection trésorerie 30/60/90 jours basée sur les patterns mensuels + saisonnalité." },
+      { id: uid(), type: 'dashboard', dashboardId: 'forecast', title: 'Forecast trésorerie 90j' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Pareto des comptes (ABC)', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'pareto', title: 'Top 20% des comptes = 80% du CA/charges' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Seuil de rentabilité', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'breakeven', title: 'Point mort + marge de sécurité' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Performance vs Budget', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Actual (annuel)' },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa_monthly', title: 'Budget vs Réalisé mensuel + N-1' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Ratios financiers', inToc: true },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Tableau des ratios' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Décisions et arbitrages CFO', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Décisions structurantes du mois (financements, investissements, distribution), points d'attention, plan d'action court terme." },
+      { id: uid(), type: 'h2', text: 'Investissements & financements', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : nouveaux investissements, nouveaux financements, refinancements." },
+      { id: uid(), type: 'h2', text: 'Risques & opportunités', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : risques identifiés (clients, fournisseurs, change, fiscal), opportunités saisies." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PACK BANQUE — relation bancaire (covenants, ratios, plan trésorerie)
+  // ═══════════════════════════════════════════════════════════════════════
+  bank: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Synthèse à l\'attention de la banque', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Document destiné à la relation bancaire : structure financière, liquidité, capacité de remboursement, respect des covenants." },
+      { id: uid(), type: 'kpi', items: [
+        { label: "Chiffre d'affaires", value: k.ca, subValue: 'Cumul YTD' },
+        { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+        { label: 'Capitaux propres', value: k.capPropres },
+        { label: 'Total bilan', value: k.actif },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Position de trésorerie', inToc: true },
+      { id: uid(), type: 'paragraph', text: "État de la trésorerie active et passive, concours bancaires utilisés." },
+      { id: uid(), type: 'dashboard', dashboardId: 'tre', title: 'Trésorerie — position et flux' },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow Statement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Plan de trésorerie 13 semaines', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Projection détaillée des encaissements et décaissements sur 13 semaines glissantes — anticipation des tensions." },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashforecast', title: 'Cashflow prévisionnel 13 semaines' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Rolling Forecast 90 jours', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'forecast', title: 'Forecast 30/60/90 jours' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Capacité de remboursement', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Analyse du Service de la Dette : ratio EBE / Annuités, levier financier, autonomie." },
+      { id: uid(), type: 'dashboard', dashboardId: 'zscore', title: 'Score financier global (Z-Score)' },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios de solvabilité' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Structure financière', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_passif', title: 'Structure du Passif (CP / Dettes)' },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'FR / BFR / TN' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Bilan synthétique', inToc: true },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Compte de résultat synthétique', inToc: true },
+      { id: uid(), type: 'table', source: 'cr', title: 'CR par nature' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Cycle clients (recouvrement)', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'DSO + balance âgée' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Bank Reconciliation', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bank_recon', title: 'Rapprochement bancaire — vérification soldes' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Engagements et garanties', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : encours emprunts par établissement, échéancier, garanties consenties, covenants en vigueur et leur respect." },
+      { id: uid(), type: 'h2', text: 'Covenants à la date du rapport', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : seuils contractuels (gearing, ICR, EBE/CF), valeurs actuelles, marge vs seuil." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // COMITÉ AUDIT — contrôles, anomalies, intégrité
+  // ═══════════════════════════════════════════════════════════════════════
+  audit: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Synthèse Comité d\'Audit', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Rapport au Comité d'Audit : vérification de l'intégrité des données, conformité SYSCOHADA, anomalies détectées, plan de remédiation." },
+      { id: uid(), type: 'kpi', items: [
+        { label: "Total Actif", value: k.actif }, { label: 'Total CR', value: k.ca },
+        { label: 'Trésorerie', value: k.treso }, { label: 'Capitaux propres', value: k.capPropres },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Conformité SYSCOHADA', inToc: true },
+      { id: uid(), type: 'paragraph', text: "10 contrôles automatiques de conformité : équilibre balance, équilibre bilan, sens des classes, mapping plan comptable, soldes anormaux." },
+      { id: uid(), type: 'dashboard', dashboardId: 'compliance', title: 'Compliance SYSCOHADA — 10 contrôles' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Audit Trail — chaîne de hash SHA-256', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Vérification cryptographique de l'intégrité du Grand Livre : chaque écriture est signée par un hash chaîné. Toute altération brise la chaîne." },
+      { id: uid(), type: 'dashboard', dashboardId: 'audit_visu', title: 'Vérification chaîne de hash GL' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Carte des anomalies', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Heatmap mois × catégories d'anomalies : déséquilibres, doublons, signes inversés, comptes non mappés, écritures hors période." },
+      { id: uid(), type: 'dashboard', dashboardId: 'anomalies', title: 'Anomalies détectées' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Lettrage tiers', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Taux de lettrage par tiers (clients/fournisseurs), vieillissement créances/dettes, top tiers non lettrés." },
+      { id: uid(), type: 'dashboard', dashboardId: 'lettrage', title: 'Taux de lettrage et vieillissement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Intercos / Comptes courants associés', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Opérations intra-groupe à risque (167, 267, 4561, 462, 463) — sensibilité audit, à justifier en annexes." },
+      { id: uid(), type: 'dashboard', dashboardId: 'intercos', title: 'Comptes intra-groupe' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Justifications de clôture', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Provisions, CCA / PCA, FAE / FAP — régularisations de fin d'exercice à justifier." },
+      { id: uid(), type: 'dashboard', dashboardId: 'closing_just', title: 'Provisions et régularisations' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Pareto des comptes', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'pareto', title: 'Top 20% des comptes (priorité audit)' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Bilan détaillé', inToc: true },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Balance générale', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Balance complète à fin de période — base de l'audit." },
+      { id: uid(), type: 'table', source: 'balance', title: 'Balance générale' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Plan de remédiation', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : actions correctives sur les anomalies critiques, responsables, échéances." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // REPORTING ACTIONNAIRES — synthèse high-level + perspectives
+  // ═══════════════════════════════════════════════════════════════════════
+  shareholders: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Message aux actionnaires', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Synthèse de la performance de la société à destination des actionnaires : faits marquants, indicateurs clés, perspectives. À compléter par la Direction Générale." },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Indicateurs clés', inToc: true },
+      { id: uid(), type: 'kpi', items: [
+        { label: "Chiffre d'affaires", value: k.ca, subValue: 'Cumul' },
+        { label: 'Résultat net', value: k.rn, subValue: `Marge ${k.margePct}` },
+        { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+        { label: 'Capitaux propres', value: k.capPropres },
+      ]},
+      { id: uid(), type: 'kpi', items: [
+        { label: 'Total bilan', value: k.actif }, { label: 'Trésorerie', value: k.treso },
+        { label: 'BFR', value: k.bfr }, { label: 'DSO', value: k.dso },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Performance financière', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'exec', title: 'Vue exécutive — KPIs et radar' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Cascade SIG', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Formation du résultat à partir du chiffre d'affaires, étape par étape." },
+      { id: uid(), type: 'dashboard', dashboardId: 'waterfall', title: 'Waterfall SIG' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Structure financière', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_actif', title: "Structure de l'Actif" },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_passif', title: 'Structure du Passif' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Variation des capitaux propres', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Évolution du patrimoine des actionnaires sur l'exercice : apports, distributions, résultat." },
+      { id: uid(), type: 'table', source: 'capital', title: 'Variation des capitaux propres' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Performance vs Budget', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Réalisé' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Comparatif sectoriel', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Position de la société par rapport aux normes du secteur UEMOA OHADA." },
+      { id: uid(), type: 'dashboard', dashboardId: 'sector_bench', title: 'Comparatif sectoriel UEMOA' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Score de santé financière', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'zscore', title: 'Score Cockpit + Z-Score' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Perspectives', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : objectifs stratégiques, plan d'investissement, politique de distribution, projections de croissance." },
+      { id: uid(), type: 'h2', text: 'Politique de distribution', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : proposition de dividende, taux de distribution, montant par action." },
+      { id: uid(), type: 'h2', text: 'Décisions de l\'Assemblée Générale', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : résolutions soumises au vote (affectation du résultat, renouvellement mandats, augmentation de capital, etc.)." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CONSEIL D'ADMINISTRATION — décisions stratégiques
+  // ═══════════════════════════════════════════════════════════════════════
+  board: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Ordre du jour', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Synthèse pour le Conseil d'Administration. Format compact (4 slides clés) : indicateurs, performance, risques, décisions." },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Slide 1 — Synthèse exécutive', inToc: true },
+      { id: uid(), type: 'kpi', items: [
+        { label: "Chiffre d'affaires", value: k.ca, subValue: 'YTD' }, { label: 'Résultat net', value: k.rn, subValue: `Marge ${k.margePct}` },
+        { label: 'Trésorerie', value: k.treso }, { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+      ]},
+      { id: uid(), type: 'dashboard', dashboardId: 'board_pack', title: "Board Pack — synthèse Conseil d'Administration" },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Slide 2 — Performance financière', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Performance YTD vs budget vs N-1 sur les principaux indicateurs." },
+      { id: uid(), type: 'dashboard', dashboardId: 'is_bvsa', title: 'Budget vs Réalisé' },
+      { id: uid(), type: 'dashboard', dashboardId: 'multi_year', title: 'Évolution N / N-1 / N-2' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Slide 3 — Structure financière', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_actif', title: "Structure Actif" },
+      { id: uid(), type: 'dashboard', dashboardId: 'struct_passif', title: 'Structure Passif' },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'FR / BFR / TN' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Slide 4 — Risques & Score', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'zscore', title: 'Score de santé financière' },
+      { id: uid(), type: 'dashboard', dashboardId: 'sector_bench', title: 'Comparatif sectoriel' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Décisions soumises au Conseil', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : décisions à prendre par le Conseil d'Administration (validations, autorisations, nominations, plan stratégique)." },
+      { id: uid(), type: 'h2', text: 'Décision 1', inToc: false },
+      { id: uid(), type: 'paragraph', text: "À compléter : objet, contexte, recommandation, vote." },
+      { id: uid(), type: 'h2', text: 'Décision 2', inToc: false },
+      { id: uid(), type: 'paragraph', text: "À compléter : objet, contexte, recommandation, vote." },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Plan d\'action et suivi', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : actions du précédent Conseil + statut, nouvelles actions, échéances." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PACK FISCAL — TVA + IS + risque fiscal
+  // ═══════════════════════════════════════════════════════════════════════
+  fiscal: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Synthèse fiscale', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Pack fiscal de la société : TVA, IS, charges fiscales, situation des déclarations et risques fiscaux identifiés." },
+      { id: uid(), type: 'kpi', items: [
+        { label: 'CA HT', value: k.ca }, { label: 'Résultat fiscal', value: k.rn },
+        { label: 'EBE', value: k.ebe }, { label: 'Capitaux propres', value: k.capPropres },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Position TVA', inToc: true },
+      { id: uid(), type: 'paragraph', text: "TVA collectée (443x), TVA déductible (445x), TVA nette à payer ou crédit, suivi de la déclaration." },
+      { id: uid(), type: 'dashboard', dashboardId: 'fis', title: 'TVA collectée / déductible / nette' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Impôts sur les bénéfices (IS)', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Calcul de l'IS sur le résultat fiscal, acomptes versés, impôt à régulariser, taux effectif." },
+      { id: uid(), type: 'table', source: 'crtab_impots_a', title: 'Impôts (87, 89) — Annual' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Compte de résultat fiscal', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Résultat comptable + retraitements fiscaux (réintégrations, déductions) = résultat fiscal." },
+      { id: uid(), type: 'table', source: 'cr', title: 'CR par nature' },
+      { id: uid(), type: 'table', source: 'sig', title: 'Soldes intermédiaires' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Pression fiscale', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Charges fiscales totales (impôts + taxes 64 + IS 87/89) rapportées au CA et au résultat." },
+      { id: uid(), type: 'table', source: 'ratios', title: 'Ratios fiscaux' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Charges sociales', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'sal', title: 'Masse salariale et charges sociales (66)' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Calendrier des déclarations', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : calendrier TVA mensuelle, IS (acomptes + solde), CFE, taxes diverses. Statut de chaque déclaration." },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Risques fiscaux identifiés', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : risques de redressement, contentieux en cours, provisions fiscales, mesures de prévention." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLOSING MENSUEL — checklist + justifications
+  // ═══════════════════════════════════════════════════════════════════════
+  closing: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Closing Pack — Synthèse 1 page', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Document de clôture mensuelle : KPI principaux, points clés, alertes, faits saillants. Livrable Direction." },
+      { id: uid(), type: 'dashboard', dashboardId: 'closing_pack', title: 'Closing Pack synthétique' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. KPI de clôture', inToc: true },
+      { id: uid(), type: 'kpi', items: [
+        { label: "CA YTD", value: k.ca }, { label: 'EBE', value: k.ebe, subValue: `Taux ${k.ebePct}` },
+        { label: 'Résultat net', value: k.rn, subValue: `Marge ${k.margePct}` }, { label: 'Trésorerie', value: k.treso },
+      ]},
+      { id: uid(), type: 'kpi', items: [
+        { label: 'Total Actif', value: k.actif }, { label: 'Capitaux propres', value: k.capPropres },
+        { label: 'BFR', value: k.bfr }, { label: 'DSO', value: k.dso },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Conformité SYSCOHADA', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'compliance', title: 'Compliance SYSCOHADA — 10 contrôles' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Justifications de clôture', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Régularisations de fin de période : provisions (19), CCA (476), PCA (477), FAE (418), FAP (408)." },
+      { id: uid(), type: 'dashboard', dashboardId: 'closing_just', title: 'Provisions et régularisations' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Provisions tracking', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'provisions', title: 'Dotations / Reprises (68x / 78x)' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. Rapprochement bancaire', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bank_recon', title: 'Rapprochement banque ↔ GL' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Lettrage tiers', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'lettrage', title: 'Taux de lettrage et vieillissement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Bilan & CR de la période', inToc: true },
+      { id: uid(), type: 'table', source: 'bilan_actif', title: 'Bilan — Actif' },
+      { id: uid(), type: 'table', source: 'bilan_passif', title: 'Bilan — Passif' },
+      { id: uid(), type: 'table', source: 'cr', title: 'Compte de résultat' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Anomalies à traiter avant validation', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'anomalies', title: 'Carte des anomalies' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Checklist de clôture', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : items de la checklist (cut-off charges, cut-off produits, inventaire, lettrage tiers, dépréciations, IS estimatif…). Statut, responsable, échéance." },
+    ];
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CASH MANAGEMENT — focus trésorerie + prévisions
+  // ═══════════════════════════════════════════════════════════════════════
+  cash: (data) => {
+    const k = computeKPIs(data);
+    return [
+      { id: uid(), type: 'h1', text: '1. Position de trésorerie', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Tableau de bord trésorerie complet : position actuelle, flux, prévisions, optimisation du cash." },
+      { id: uid(), type: 'kpi', items: [
+        { label: 'Trésorerie nette', value: k.treso }, { label: 'BFR', value: k.bfr },
+        { label: 'DSO', value: k.dso, subValue: 'Délai clients' }, { label: "EBE", value: k.ebe },
+      ]},
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '2. Évolution trésorerie', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'tre', title: 'Trésorerie — position et volatilité' },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashflow', title: 'Cashflow Statement' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '3. Cashflow prévisionnel 13 semaines', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'cashforecast', title: 'Projection 13 semaines + alertes' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '4. Rolling Forecast 90 jours', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'forecast', title: 'Forecast 30/60/90j' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '5. Working Capital Days', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Le Cash Conversion Cycle = DSO + DIO − DPO. Levier majeur pour optimiser le cash." },
+      { id: uid(), type: 'dashboard', dashboardId: 'wcd', title: 'DSO / DIO / DPO / CCC' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '6. BFR — Décomposition', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'bfr', title: 'FR / BFR / TN' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '7. Cycle clients (recouvrement)', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'client', title: 'DSO + balance âgée + concentration' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '8. Cycle fournisseurs', inToc: true },
+      { id: uid(), type: 'dashboard', dashboardId: 'fr', title: 'DPO + échéancier + dépendance' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '9. Saisonnalité', inToc: true },
+      { id: uid(), type: 'paragraph', text: "Index de saisonnalité du CA — pour anticiper les pics et creux de trésorerie." },
+      { id: uid(), type: 'dashboard', dashboardId: 'seasonality', title: 'Saisonnalité du CA (base 100)' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '10. Tableau de Flux de Trésorerie (TFT)', inToc: true },
+      { id: uid(), type: 'table', source: 'tft', title: 'TFT — méthode indirecte' },
+      { id: uid(), type: 'pageBreak' },
+      { id: uid(), type: 'h1', text: '11. Plan d\'optimisation cash', inToc: true },
+      { id: uid(), type: 'paragraph', text: "À compléter : actions sur DSO (relances), DIO (rotation stocks), DPO (négociation délais), gestion des excédents." },
+    ];
+  },
 };
 
 function uid() { return Math.random().toString(36).substring(2, 11); }
@@ -727,6 +1146,8 @@ export default function Reports() {
   const { currentYear, currentOrgId } = useApp();
 
   const [config, setConfig] = useState<ReportConfig>(() => ({ ...DEFAULT_CONFIG(`Exercice ${currentYear}`), blocks: QUICK_TEMPLATES.monthly() }));
+  // Track le modèle rapide actuellement applique pour highlight visuel + toast
+  const [activeTemplate, setActiveTemplate] = useState<string>('monthly');
   const [openSend, setOpenSend] = useState(false);
   const [openSave, setOpenSave] = useState(false);
   const [openLoad, setOpenLoad] = useState(false);
@@ -747,7 +1168,10 @@ export default function Reports() {
 
   // Sauvegarder le rapport courant comme document persistant
   const saveReport = async (newSave = false) => {
-    if (!currentOrgId) return;
+    if (!currentOrgId) {
+      toast.error('Société manquante', 'Sélectionnez une société avant d\'enregistrer.');
+      return;
+    }
     const now = Date.now();
     const payload = {
       orgId: currentOrgId,
@@ -758,13 +1182,18 @@ export default function Reports() {
       content: JSON.stringify(config),
       updatedAt: now,
     };
-    if (currentReportId && !newSave) {
-      await db.reports.update(currentReportId, payload);
-      toast.success('Rapport mis à jour', config.identity.title);
-    } else {
-      const id = await db.reports.add({ ...payload, createdAt: now });
-      setCurrentReportId(id as number);
-      toast.success('Rapport enregistré', config.identity.title);
+    try {
+      if (currentReportId && !newSave) {
+        await db.reports.update(currentReportId, payload);
+        toast.success('Rapport mis à jour', config.identity.title);
+      } else {
+        const id = await db.reports.add({ ...payload, createdAt: now });
+        setCurrentReportId(id as number);
+        toast.success('Rapport enregistré', config.identity.title);
+      }
+    } catch (e: any) {
+      console.error('saveReport error', e);
+      toast.error('Erreur', e?.message ?? 'Impossible d\'enregistrer le rapport.');
     }
   };
 
@@ -774,15 +1203,21 @@ export default function Reports() {
       setConfig(cfg);
       setCurrentReportId(rep.id);
       setOpenJournal(false);
+      toast.success('Rapport chargé', rep.title);
     } catch (e: any) {
-      toast.error('Chargement impossible', e.message);
+      toast.error('Chargement impossible', e?.message ?? 'Format invalide.');
     }
   };
 
   const deleteReport = async (id: number) => {
     if (!confirm('Supprimer ce rapport définitivement ?')) return;
-    await db.reports.delete(id);
-    if (currentReportId === id) setCurrentReportId(null);
+    try {
+      await db.reports.delete(id);
+      if (currentReportId === id) setCurrentReportId(null);
+      toast.success('Rapport supprimé');
+    } catch (e: any) {
+      toast.error('Erreur', e?.message ?? 'Suppression impossible.');
+    }
   };
   // Pliage des sidebars (état persisté)
   // Migration Twisty : force les sidebars editeur+recap collapsed par defaut
@@ -853,7 +1288,66 @@ export default function Reports() {
     });
   };
 
-  const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => setConfig((c) => ({ ...c, blocks: filterConditionalBlocks(QUICK_TEMPLATES[k](data), data) }));
+  const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => {
+    const newBlocks = filterConditionalBlocks(QUICK_TEMPLATES[k](data), data);
+    const firstH1 = newBlocks.find((b: any) => b.type === 'h1');
+    setConfig((c) => ({
+      ...c,
+      identity: {
+        ...c.identity,
+        title:    TEMPLATE_DEFAULTS[k as string]?.title    ?? c.identity.title,
+        subtitle: TEMPLATE_DEFAULTS[k as string]?.subtitle ?? c.identity.subtitle,
+      },
+      blocks: newBlocks,
+    }));
+    setActiveTemplate(k as string);
+    setCurrentReportId(null);
+    const labels: Record<string, string> = {
+      weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel',
+      quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire',
+      cfo: 'Rapport CFO', bank: 'Pack Banque', audit: "Comité d'Audit",
+      shareholders: 'Reporting Actionnaires', board: "Conseil d'Administration",
+      fiscal: 'Pack Fiscal', closing: 'Closing Mensuel', cash: 'Cash Management',
+    };
+    // Compte les types de blocks pour afficher au user ce qu'il y a de DIFFERENT
+    const sections = newBlocks.filter((b: any) => b.type === 'h1').length;
+    const tables = newBlocks.filter((b: any) => b.type === 'table').length;
+    const dashboards = newBlocks.filter((b: any) => b.type === 'dashboard').length;
+    toast.success(
+      `Modèle appliqué : ${labels[k as string] ?? k}`,
+      `${sections} sections · ${tables} tables · ${dashboards} dashboards — première section : "${(firstH1 as any)?.text ?? '—'}"`,
+    );
+    // Scroll vers la PREMIÈRE SECTION (1er H1) au lieu du sommet, pour que le
+    // user voie le VRAI contenu qui differe entre templates (pas juste la cover).
+    setTimeout(() => {
+      if (firstH1) {
+        // Cherche le H1 dans le DOM par son data-block-id ou son texte
+        const allH1 = document.querySelectorAll('.report-print-area h1, .report-print-area [data-block-type="h1"]');
+        for (const el of Array.from(allH1)) {
+          if (el.textContent?.includes((firstH1 as any).text)) {
+            (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+        }
+      }
+      // Fallback : scroll au sommet
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
+  };
+
+  // Charger un modele personnel sauvegarde (db.templates) — applique le config complet
+  const applyCustomTemplate = (tpl: any) => {
+    try {
+      const cfg = JSON.parse(tpl.config);
+      setConfig(cfg);
+      setActiveTemplate(`custom:${tpl.id}`);
+      setCurrentReportId(null);
+      toast.success(`Modèle "${tpl.name}" chargé`, `${cfg.blocks?.length ?? 0} bloc(s) appliqué(s).`);
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+    } catch (e: any) {
+      toast.error('Modèle illisible', e?.message ?? 'Format invalide.');
+    }
+  };
 
   const palette = PALETTES[config.palette];
 
@@ -1204,12 +1698,74 @@ export default function Reports() {
 
           <Collapsible title="Modèles rapides" defaultOpen>
             <div className="space-y-1">
-              {Object.entries(QUICK_TEMPLATES).map(([k]) => (
-                <button key={k} onClick={() => applyTemplate(k as any)} className="w-full text-left px-2.5 py-2 rounded hover:bg-primary-200 dark:hover:bg-primary-800 text-xs font-medium">
-                  {{ weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel', quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire' }[k] ?? k}
-                </button>
-              ))}
+              {Object.entries(QUICK_TEMPLATES).map(([k]) => {
+                const isActive = activeTemplate === k;
+                const label = ({
+                  weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel',
+                  quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire',
+                  cfo: 'Rapport CFO', bank: 'Pack Banque', audit: "Comité d'Audit",
+                  shareholders: 'Reporting Actionnaires', board: "Conseil d'Administration",
+                  fiscal: 'Pack Fiscal', closing: 'Closing Mensuel', cash: 'Cash Management',
+                } as Record<string, string>)[k] ?? k;
+                const blocks = QUICK_TEMPLATES[k](data);
+                return (
+                  <button
+                    key={k}
+                    onClick={() => applyTemplate(k as any)}
+                    className={clsx(
+                      'w-full text-left px-2.5 py-2 rounded text-xs font-medium border-2 transition-all flex items-center justify-between gap-2',
+                      isActive
+                        ? 'bg-accent/10 border-accent text-accent font-semibold'
+                        : 'border-transparent hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-700 dark:text-primary-300',
+                    )}
+                    title={`${label} — ${blocks.length} blocs par défaut`}
+                  >
+                    <span className="truncate">{label}</span>
+                    <span className={clsx('shrink-0 flex items-center gap-1.5', isActive ? '' : 'opacity-60')}>
+                      <span className="text-[9px] tabular-nums">{blocks.length} blocs</span>
+                      {isActive && <span className="text-[9px] uppercase tracking-wider font-bold">Actif</span>}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            <p className="text-[10px] text-primary-400 italic mt-2 px-1">
+              Cliquez sur un modèle pour régénérer le rapport.
+            </p>
+          </Collapsible>
+
+          {/* Mes modèles personnels (db.templates) */}
+          <Collapsible title={`Mes modèles personnels (${templates.length})`} defaultOpen={templates.length > 0}>
+            {templates.length === 0 ? (
+              <p className="text-[10px] text-primary-400 italic px-1 py-2">
+                Aucun modèle personnel. Cliquez sur <strong>« Enregistrer modèle »</strong> en haut pour sauvegarder le rapport courant comme modèle réutilisable.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {templates.map((t: any) => {
+                  const isActive = activeTemplate === `custom:${t.id}`;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => applyCustomTemplate(t)}
+                      className={clsx(
+                        'w-full text-left px-2.5 py-2 rounded text-xs font-medium border-2 transition-all flex items-center justify-between gap-2',
+                        isActive
+                          ? 'bg-accent/10 border-accent text-accent font-semibold'
+                          : 'border-transparent hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-700 dark:text-primary-300',
+                      )}
+                      title={t.description || t.name}
+                    >
+                      <span className="truncate flex items-center gap-1.5">
+                        <Save className="w-3 h-3 shrink-0 text-primary-400" />
+                        {t.name}
+                      </span>
+                      {isActive && <span className="text-[9px] uppercase tracking-wider font-bold shrink-0">Actif</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </Collapsible>
         </aside>
         )}
@@ -3826,12 +4382,50 @@ function LogoUpload({ onLogo, current }: { onLogo: (d: string) => void; current?
 function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
   const [email, setEmail] = useState('');
   const [destination, setDestination] = useState<'validation' | 'final'>('validation');
+  const [comments, setComments] = useState('');
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  const sendAll = () => {
+    if (config.recipients.length === 0) {
+      toast.warning('Aucun destinataire', 'Ajoutez au moins un email avant d\'envoyer.');
+      return;
+    }
+    onValidate();
+    setPreviewIndex(0); // ouvre la preview pour le 1er destinataire
+  };
+
+  const buildContent = (recipient: string) => {
+    const recipientName = recipient.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const appUrl = typeof window !== 'undefined' ? `${window.location.origin}/reports` : 'https://cockpit-fna.app/reports';
+    if (destination === 'validation') {
+      return import('../lib/emailTemplates').then(({ buildReviewEmail }) => buildReviewEmail({
+        recipientName,
+        recipientEmail: recipient,
+        reportTitle: config.identity?.title ?? 'Rapport',
+        reportPeriod: config.identity?.period ?? 'Période',
+        authorName: config.identity?.author ?? 'Cockpit FnA',
+        reviewUrl: appUrl,
+        comments: comments.trim() || undefined,
+      }));
+    }
+    return import('../lib/emailTemplates').then(({ buildReportEmail }) => buildReportEmail({
+      recipientName,
+      recipientEmail: recipient,
+      reportTitle: config.identity?.title ?? 'Rapport',
+      reportPeriod: config.identity?.period ?? 'Période',
+      authorName: config.identity?.author ?? 'Cockpit FnA',
+      appUrl,
+      pdfAttached: true,
+      summary: comments.trim() || undefined,
+    }));
+  };
+
   return (
     <Modal open={open} onClose={onClose} title="Envoyer le rapport" subtitle="Validation interne ou diffusion finale"
       footer={<>
         <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={() => { onValidate(); onClose(); toast.info('Rapport envoyé', `${destination === 'validation' ? 'Validation interne' : 'Diffusion finale'} · ${config.recipients.length} destinataires (envoi réel au Sprint 5)`); }}>
-          <Send className="w-4 h-4" /> Envoyer
+        <button className="btn-primary" onClick={sendAll}>
+          <Send className="w-4 h-4" /> Envoyer ({config.recipients.length})
         </button>
       </>}>
       <div className="space-y-4">
@@ -3872,30 +4466,109 @@ function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
           )}
         </div>
 
+        <div>
+          <label className="text-xs uppercase tracking-wider text-primary-500 font-semibold block mb-2">
+            {destination === 'validation' ? 'Message au validateur' : 'Synthèse pour les destinataires'} (optionnel)
+          </label>
+          <textarea className="input min-h-[80px]" value={comments} onChange={(e) => setComments(e.target.value)}
+            placeholder={destination === 'validation' ? "Points d'attention pour la revue, demandes spécifiques…" : "Synthèse 2-3 lignes des principaux enseignements du rapport…"} />
+        </div>
+
         <div className="card p-3 bg-primary-100 dark:bg-primary-800 text-xs">
-          <p>📎 Le PDF sera téléchargé localement (et joint à l'email lors de l'intégration SMTP au Sprint 5).</p>
+          <p>📎 Le PDF sera téléchargé localement et l'email HTML sera envoyé via Supabase Edge Function (si configuré) ou ouvert dans votre client mail.</p>
           <p className="mt-1 text-primary-500">Format : {config.format} · Palette : {config.palette}</p>
         </div>
       </div>
+
+      {/* Email preview pour chaque destinataire (séquentiel) */}
+      {previewIndex !== null && previewIndex < config.recipients.length && (
+        <SendPreviewLoader
+          recipient={config.recipients[previewIndex]}
+          buildContent={buildContent}
+          mode={destination === 'validation' ? 'review' : 'report'}
+          onClose={() => {
+            setPreviewIndex(null);
+            onClose();
+          }}
+          onNext={() => setPreviewIndex(previewIndex + 1)}
+          isLast={previewIndex === config.recipients.length - 1}
+        />
+      )}
     </Modal>
+  );
+}
+
+// Loader async pour le contenu d'email (lazy import pour split bundle)
+function SendPreviewLoader({ recipient, buildContent, mode, onClose, onNext, isLast }: {
+  recipient: string;
+  buildContent: (r: string) => Promise<any>;
+  mode: 'review' | 'report';
+  onClose: () => void;
+  onNext: () => void;
+  isLast: boolean;
+}) {
+  const [content, setContent] = useState<any>(null);
+  useEffect(() => {
+    setContent(null);
+    buildContent(recipient).then(setContent);
+  }, [recipient]);
+
+  if (!content) return null;
+  const recipientName = recipient.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return (
+    <EmailPreviewModal
+      open={true}
+      onClose={isLast ? onClose : onNext}
+      recipient={{ name: recipientName, email: recipient }}
+      content={content}
+      options={{
+        mode,
+        supabaseFunction: mode === 'review' ? 'send-review' : 'send-report',
+      }}
+      onSent={isLast ? onClose : onNext}
+    />
   );
 }
 
 function SaveModal({ open, onClose, config, orgId }: any) {
   const [name, setName] = useState(config.identity.title);
   const [desc, setDesc] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Re-init quand on rouvre la modal
+  useEffect(() => { if (open) { setName(config.identity.title); setDesc(''); } }, [open, config.identity.title]);
+
   const save = async () => {
-    if (!name.trim()) return;
-    const now = Date.now();
-    await db.templates.add({ orgId, name: name.trim(), description: desc.trim() || undefined, config: JSON.stringify(config), createdAt: now, updatedAt: now });
-    onClose();
-    toast.success('Modèle enregistré', `"${name}" prêt à être réutilisé`);
+    if (!name.trim()) { toast.warning('Nom requis', 'Saisissez un nom pour le modèle.'); return; }
+    if (!orgId) { toast.error('Société manquante', 'Sélectionnez une société avant d\'enregistrer un modèle.'); return; }
+    setSaving(true);
+    try {
+      const now = Date.now();
+      await db.templates.add({
+        orgId,
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        config: JSON.stringify(config),
+        createdAt: now,
+        updatedAt: now,
+      });
+      toast.success('Modèle enregistré', `"${name}" prêt à être réutilisé`);
+      onClose();
+    } catch (e: any) {
+      console.error('SaveModal: erreur lors de l\'enregistrement', e);
+      toast.error('Erreur', e?.message ?? 'Impossible d\'enregistrer le modèle.');
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <Modal open={open} onClose={onClose} title="Enregistrer comme modèle"
       footer={<>
-        <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={save}><Save className="w-4 h-4" /> Enregistrer</button>
+        <button className="btn-outline" onClick={onClose} disabled={saving}>Annuler</button>
+        <button className="btn-primary" onClick={save} disabled={saving || !name.trim()}>
+          <Save className="w-4 h-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
       </>}>
       <div className="space-y-3">
         <Field label="Nom du modèle" v={name} on={setName} />
@@ -3970,13 +4643,25 @@ function CatalogModal({ open, onClose, kind, onPick }: { open: boolean; onClose:
 function LoadModal({ open, onClose, templates, onLoad }: any) {
   const remove = async (id: number) => {
     if (!confirm('Supprimer ce modèle ?')) return;
-    await db.templates.delete(id);
+    try {
+      await db.templates.delete(id);
+      toast.success('Modèle supprimé');
+    } catch (e: any) {
+      toast.error('Erreur', e?.message ?? 'Suppression impossible.');
+    }
   };
   return (
     <Modal open={open} onClose={onClose} title="Charger un modèle" size="lg"
+      subtitle={templates.length === 0 ? 'Aucun modèle pour le moment' : `${templates.length} modèle(s) disponible(s)`}
       footer={<button className="btn-outline" onClick={onClose}>Fermer</button>}>
       {templates.length === 0 ? (
-        <p className="py-12 text-center text-primary-500 text-sm">Aucun modèle enregistré. Créez-en un avec « Enregistrer comme modèle ».</p>
+        <div className="py-12 text-center">
+          <FileText className="w-12 h-12 text-primary-300 mx-auto mb-3" />
+          <p className="text-sm text-primary-500 mb-2">Aucun modèle enregistré pour cette société.</p>
+          <p className="text-xs text-primary-400 max-w-md mx-auto">
+            Créez votre premier modèle en cliquant sur <strong>« Enregistrer modèle »</strong> après avoir personnalisé un rapport. Il sera disponible ici pour être chargé en un clic.
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {templates.map((t: any) => (
@@ -3987,7 +4672,7 @@ function LoadModal({ open, onClose, templates, onLoad }: any) {
               </div>
               {t.description && <p className="text-xs text-primary-500 mb-3">{t.description}</p>}
               <p className="text-[10px] text-primary-400 mb-3">Créé le {new Date(t.createdAt).toLocaleDateString('fr-FR')}</p>
-              <button className="btn-primary w-full !py-1.5 text-xs" onClick={() => onLoad(t)}>Charger</button>
+              <button className="btn-primary w-full !py-1.5 text-xs" onClick={() => { onLoad(t); toast.success('Modèle chargé', t.name); }}>Charger</button>
             </div>
           ))}
         </div>

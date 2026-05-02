@@ -263,7 +263,20 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 <div className="py-1">
                   <MenuItem icon={<LogIn className="w-4 h-4" />} label="Se connecter" onClick={() => { setUserOpen(false); navigate('/login'); }} />
                   <MenuItem icon={<Settings className="w-4 h-4" />} label="Paramètres" onClick={() => { setUserOpen(false); navigate('/settings'); }} />
-                  <MenuItem icon={<LogOut className="w-4 h-4" />} label="Déconnexion" onClick={() => toast.info('Authentification', 'Disponible au Sprint 5 (Supabase Auth)')} />
+                  <MenuItem icon={<LogOut className="w-4 h-4" />} label="Déconnexion" onClick={async () => {
+                    setUserOpen(false);
+                    // Si Supabase configure : signOut effectif. Sinon : clear local + redirect login.
+                    try {
+                      const { supabase, isSupabaseConfigured } = await import('../../lib/supabase');
+                      if (isSupabaseConfigured) {
+                        await supabase.auth.signOut();
+                      }
+                    } catch { /* ignore */ }
+                    // Toujours nettoyer la session locale et rediriger
+                    sessionStorage.clear();
+                    toast.success('Déconnecté', 'Session fermée. À bientôt !');
+                    navigate('/login');
+                  }} />
                 </div>
               </div>
             )}

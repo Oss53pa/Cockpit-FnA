@@ -237,6 +237,33 @@ export type AnalyticBudget = {
   amount: number;
 };
 
+// ── Activity tracking : annotations / comments / corrections / validations ──
+export type ActivityKind = 'annotation' | 'comment' | 'correction' | 'validation';
+export type ActivityStatus = 'open' | 'resolved' | 'archived';
+export type Activity = {
+  id?: number;
+  orgId: string;
+  kind: ActivityKind;
+  status: ActivityStatus;
+  /** Contexte : URL ou identifiant logique (ex: '/reports/r-123', 'alert:rat-DSO'). */
+  context: string;
+  /** Libellé court du contexte (ex: 'Rapport mensuel Mai 2026'). */
+  contextLabel?: string;
+  /** Identifiant lié (rapport, point d'attention, écriture, etc.). */
+  linkedId?: string;
+  /** Auteur (email ou nom user app). */
+  author: string;
+  authorRole?: string;
+  /** Texte du commentaire / annotation / correction. */
+  content: string;
+  /** Données additionnelles (ex: avant/après pour correction, signature pour validation). */
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt?: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+};
+
 class CockpitDB extends Dexie {
   organizations!: Table<Organization, string>;
   fiscalYears!: Table<FiscalYear, string>;
@@ -255,6 +282,7 @@ class CockpitDB extends Dexie {
   analyticRules!: Table<AnalyticRule, string>;
   analyticAssignments!: Table<AnalyticAssignment, number>;
   analyticBudgets!: Table<AnalyticBudget, number>;
+  activities!: Table<Activity, number>;
 
   constructor() {
     super('CockpitFA');
@@ -287,6 +315,10 @@ class CockpitDB extends Dexie {
       analyticRules: 'id, orgId, priority, [orgId+active]',
       analyticAssignments: '++id, orgId, glEntryId, axisNumber, codeId, [orgId+glEntryId], [orgId+codeId]',
       analyticBudgets: '++id, orgId, codeId, period, [orgId+codeId]',
+    });
+    // v6 : table activities pour annotations / comments / corrections / validations
+    this.version(6).stores({
+      activities: '++id, orgId, kind, status, context, linkedId, createdAt, [orgId+createdAt], [orgId+kind], [orgId+status]',
     });
   }
 }

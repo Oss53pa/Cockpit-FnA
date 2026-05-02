@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, UploadCloud, XCircle, Users, Search } from 'lucide-react';
+import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, XCircle, Users, Search } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { toast } from '../components/ui/Toast';
 import { PageHeader } from '../components/layout/PageHeader';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
-import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
+import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
 import { detectTiersColumns, importGLTiers, migrateGLPeriods, resyncAccountLabels, parseFile, TiersMapping, TiersImportReport } from '../engine/importer';
 import { downloadTiersTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
@@ -40,8 +40,6 @@ export default function ImportTiers() {
   const org = useCurrentOrg();
   const history = useImportsHistory(currentOrgId, 'TIERS');
   const glHistory = useImportsHistory(currentOrgId, 'GL');
-  const periods = usePeriods(currentOrgId).filter((p) => p.year === currentYear && p.month >= 1);
-
   const [step, setStep] = useState<'idle' | 'mapping' | 'result'>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -225,7 +223,7 @@ export default function ImportTiers() {
                 if (result.valid) {
                   toast.success('Intégrité vérifiée', `${tiersEntries.length} écritures tiers — chaîne SHA-256 intacte`);
                 } else {
-                  toast.error('Intégrité compromise', `Rupture à l'index ${result.brokenAtIndex} — ${result.reason}`);
+                  toast.error('Intégrité compromise', `Rupture à l'index ${result.brokenIndex ?? '?'} (écriture ${result.brokenAt ?? '?'})`);
                 }
               } catch (e: any) { toast.error('Vérification impossible', e.message); }
               finally { setLoading(false); }
@@ -243,7 +241,7 @@ export default function ImportTiers() {
                 );
                 console.log('Audit GL Tiers :', tiersFindings);
                 toast.info(
-                  `Audit GL — Score ${result.score}/100`,
+                  `Audit GL — Score ${result.scoreGlobal}/100`,
                   `${tiersFindings.length} anomalie(s) tiers détectée(s) — voir console (F12)`
                 );
               } catch (e: any) { toast.error('Audit impossible', e.message); }

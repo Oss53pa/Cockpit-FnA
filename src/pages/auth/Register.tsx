@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { UserPlus, Mail, Lock, Building2, Sparkles } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Register() {
   const { signUp } = useAuth();
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [orgName, setOrgName] = useState('');

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Bot, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import { useOllama } from '../../hooks/useOllama';
+import { Bot, Loader2, ChevronUp } from 'lucide-react';
+import { useAI as useOllama } from '../../hooks/useAI';
 import { StreamingText } from './StreamingText';
 import type { FinancialContext } from '../../engine/ai/contextBuilder';
 
@@ -16,7 +16,7 @@ interface Props {
  * Génère un diagnostic + causes + recommandations.
  */
 export function AIAlertAnalysis({ alertTitle, alertDescription, context, onCreateAction }: Props) {
-  const { status, sendMessage, streaming, streamedText, cancelStream } = useOllama();
+  const { status, sendMessage, streaming, streamedText } = useOllama();
   const [analysis, setAnalysis] = useState('');
   const [expanded, setExpanded] = useState(false);
 

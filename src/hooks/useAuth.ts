@@ -3,6 +3,9 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { pullFromSupabase } from '../db/supabaseSync';
 import type { User, Session } from '@supabase/supabase-js';
 
+// Helper: les tables fna_* ne sont pas typees dans Database — bypass le typing
+const fromAny = (table: string) => (supabase as any).from(table);
+
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
 interface AuthState {
@@ -54,12 +57,11 @@ export function useAuth() {
   }, []);
 
   const loadUserOrgs = async (userId: string) => {
-    const { data } = await supabase
-      .from('fna_user_orgs')
+    const { data } = await fromAny('fna_user_orgs')
       .select('org_id, role')
       .eq('user_id', userId);
     if (data?.length) {
-      const orgIds = data.map(d => d.org_id);
+      const orgIds = data.map((d: any) => d.org_id);
       setState(s => ({
         ...s,
         role: data[0].role as UserRole,
@@ -101,14 +103,14 @@ export function useAuth() {
     // Créer l'organisation et le lien user-org
     if (data.user) {
       const orgId = `org-${Date.now()}`;
-      await supabase.from('fna_organizations').insert({
+      await fromAny('fna_organizations').insert({
         id: orgId,
         name: orgName,
         currency: 'XOF',
         sector: '',
         accounting_system: 'Normal',
       });
-      await supabase.from('fna_user_orgs').insert({
+      await fromAny('fna_user_orgs').insert({
         user_id: data.user.id,
         org_id: orgId,
         role: 'admin',

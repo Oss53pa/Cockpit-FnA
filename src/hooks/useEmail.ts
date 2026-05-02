@@ -1,6 +1,9 @@
 import { useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+// Helper: les tables fna_* ne sont pas typees dans Database — bypass via cast
+const fromAny = (table: string) => (supabase as any).from(table);
+
 interface SendReportParams {
   reportId: number;
   recipients: string[];
@@ -56,13 +59,12 @@ export function useEmail() {
   /** Récupérer l'historique des envois */
   const getEmailLogs = useCallback(async (orgId: string): Promise<EmailLog[]> => {
     if (!isSupabaseConfigured) return [];
-    const { data } = await supabase
-      .from('fna_email_logs')
+    const { data } = await fromAny('fna_email_logs')
       .select('*')
       .eq('org_id', orgId)
       .order('sent_at', { ascending: false })
       .limit(100);
-    return (data ?? []).map(r => ({
+    return (data ?? []).map((r: any) => ({
       id: r.id,
       orgId: r.org_id,
       reportId: r.report_id,
@@ -77,11 +79,10 @@ export function useEmail() {
   /** Récupérer les programmations */
   const getSchedules = useCallback(async (orgId: string): Promise<EmailSchedule[]> => {
     if (!isSupabaseConfigured) return [];
-    const { data } = await supabase
-      .from('fna_email_schedules')
+    const { data } = await fromAny('fna_email_schedules')
       .select('*')
       .eq('org_id', orgId);
-    return (data ?? []).map(r => ({
+    return (data ?? []).map((r: any) => ({
       id: r.id,
       orgId: r.org_id,
       reportType: r.report_type,
@@ -111,16 +112,16 @@ export function useEmail() {
       next_run_at: schedule.nextRunAt,
     };
     if (schedule.id) {
-      await supabase.from('fna_email_schedules').update(row).eq('id', schedule.id);
+      await fromAny('fna_email_schedules').update(row).eq('id', schedule.id);
     } else {
-      await supabase.from('fna_email_schedules').insert(row);
+      await fromAny('fna_email_schedules').insert(row);
     }
   }, []);
 
   /** Supprimer une programmation */
   const deleteSchedule = useCallback(async (id: number) => {
     if (!isSupabaseConfigured) return;
-    await supabase.from('fna_email_schedules').delete().eq('id', id);
+    await fromAny('fna_email_schedules').delete().eq('id', id);
   }, []);
 
   return { sendReport, sending, getEmailLogs, getSchedules, upsertSchedule, deleteSchedule };

@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Bot, WifiOff, StopCircle, RefreshCw, Settings2 } from 'lucide-react';
+import { Send, Bot, WifiOff, StopCircle, RefreshCw, Settings2 } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { StreamingText } from '../components/ui/StreamingText';
 import { useRatios, useStatements } from '../hooks/useFinancials';
-import { useOllama } from '../hooks/useOllama';
+import { useAI as useOllama } from '../hooks/useAI';
 import { useApp } from '../store/app';
 import { fmtMoney } from '../lib/format';
 import { saveOllamaConfig, getOllamaConfig } from '../lib/ollama';
