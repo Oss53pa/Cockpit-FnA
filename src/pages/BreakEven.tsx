@@ -170,7 +170,7 @@ export default function BreakEven() {
               axisBottom={{ format: (v: number) => fmtK(v), legend: 'Chiffre d\'affaires', legendOffset: 32, legendPosition: 'middle' }}
               axisLeft={{ format: (v: number) => fmtK(v), legend: 'XOF', legendOffset: -50, legendPosition: 'middle' }}
               theme={nivoTheme}
-              animate
+              animate={false}
               legends={[
                 { anchor: 'bottom-right', direction: 'column', translateX: 100, translateY: 0, itemWidth: 90, itemHeight: 18, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10 },
               ]}

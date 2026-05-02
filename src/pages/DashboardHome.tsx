@@ -237,7 +237,7 @@ export default function DashboardHome() {
                     arcLabelsSkipAngle={10}
                     valueFormat={(v) => fmtFull(v)}
                     theme={nivoTheme}
-                    animate
+                    animate={false}
                     legends={[{ anchor: 'bottom', direction: 'row', translateY: 35, itemWidth: 90, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' }]}
                   />
                 );

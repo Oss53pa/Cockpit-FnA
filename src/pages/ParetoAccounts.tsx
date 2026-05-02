@@ -110,7 +110,7 @@ export default function ParetoAccounts() {
             borderRadius={2}
             enableLabel={false}
             theme={nivoTheme}
-            animate
+            animate={false}
           />
         </div>
         <div style={{ height: 110 }} className="mt-2">
@@ -131,7 +131,7 @@ export default function ParetoAccounts() {
             markers={[
               { axis: 'y', value: 80, lineStyle: { stroke: '#f59e0b', strokeWidth: 1, strokeDasharray: '4 4' }, legend: '80 %', textStyle: { fontSize: 9, fill: '#f59e0b' } },
             ]}
-            animate
+            animate={false}
           />
         </div>
       </ChartCard>

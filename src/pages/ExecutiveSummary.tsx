@@ -275,8 +275,7 @@ export default function ExecutiveSummary() {
               axisLeft={{ format: (v: number) => fmtK(v) }}
               enableLabel={false}
               theme={nivoTheme}
-              animate
-              motionConfig="gentle"
+              animate={false}
               tooltip={({ data, value }) => (
                 <div style={{ background: 'rgb(var(--p-900))', color: 'rgb(var(--p-50))', padding: '8px 12px', borderRadius: 8, fontSize: 12 }}>
                   <strong>{(data as any).etape}</strong><br />{fmtFull(value)} XOF
@@ -304,7 +303,7 @@ export default function ExecutiveSummary() {
               arcLabelsTextColor="#fff"
               arcLabel={(d) => `${Math.round((d.value / bilanData.actif.reduce((s, x) => s + x.value, 0)) * 100)} %`}
               theme={nivoTheme}
-              animate
+              animate={false}
               legends={[
                 { anchor: 'bottom', direction: 'row', translateY: 30, itemWidth: 110, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' },
               ]}
@@ -327,7 +326,7 @@ export default function ExecutiveSummary() {
               arcLabelsTextColor="#fff"
               arcLabel={(d) => `${Math.round((d.value / bilanData.passif.reduce((s, x) => s + x.value, 0)) * 100)} %`}
               theme={nivoTheme}
-              animate
+              animate={false}
               legends={[
                 { anchor: 'bottom', direction: 'row', translateY: 30, itemWidth: 110, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' },
               ]}
@@ -411,8 +410,7 @@ export default function ExecutiveSummary() {
             enableGridY
             axisLeft={{ format: (v: number) => `${v}` }}
             theme={nivoTheme}
-            animate
-            motionConfig="gentle"
+            animate={false}
           />
         </div>
       </ChartCard>

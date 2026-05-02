@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx vite *)",
+      "Bash(npm run *)",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/components/ui/Gauge.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/components/ui/Gauge.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/components/ui/PerformanceGauges.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/components/ui/PerformanceGauges.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/App.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/App.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/components/layout/Sidebar.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/components/layout/Sidebar.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/hooks/useFinancials.ts\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/hooks/useFinancials.ts\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/components/ui/DataIntegrityBanner.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/components/ui/DataIntegrityBanner.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/tailwind.config.js\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/tailwind.config.js\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/index.css\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/index.css\")",
+      "Bash(grep -rn \"animate$\\\\|animate$\" \"C:/devs/Cockpit FnA/src/pages\")",
+      "Bash(grep -rnE \"^\\\\s+animate\\\\s*$\" \"C:/devs/Cockpit FnA/src/pages\")"
+    ]
+  }
+}
