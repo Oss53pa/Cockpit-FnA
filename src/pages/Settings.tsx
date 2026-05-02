@@ -1402,7 +1402,7 @@ function EmailDeliveryStatus() {
         return;
       }
       const html = `<div style="font-family:system-ui,sans-serif;padding:20px"><h2 style="color:#DA4D28">Cockpit FnA — test d'envoi</h2><p>Si vous lisez ce message, l'envoi via Resend fonctionne 🎉</p><p style="color:#666;font-size:12px">Envoyé le ${new Date().toLocaleString('fr-FR')}</p></div>`;
-      const { data, error } = await (supabase as any).functions.invoke('send-email', {
+      const { data, error } = await (supabase as any).functions.invoke('cockpit-send-email', {
         body: {
           to: testEmail,
           subject: '[Cockpit FnA] Test d\'envoi Resend',
@@ -1431,23 +1431,29 @@ function EmailDeliveryStatus() {
   };
 
   return (
-    <Card title="Configuration de l'envoi d'emails (Resend)" subtitle="3 étapes pour activer l'envoi automatique">
+    <Card title="Configuration de l'envoi d'emails (Resend)" subtitle="Edge Function cockpit-send-email — déjà déployée ✓">
       <div className="space-y-4">
         <div className="space-y-2">
-          <Step n={1} title="Récupérer une clé API Resend">
-            Créez un compte sur <a href="https://resend.com" target="_blank" rel="noopener" className="text-accent underline">resend.com</a>, vérifiez votre domaine d'envoi (DNS), puis récupérez une clé <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">re_xxx</code>.
+          <Step n={1} title="Edge Function déployée">
+            <p className="text-xs">
+              <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">cockpit-send-email</code> est active sur votre projet Supabase. Elle accepte directement le HTML construit par les templates Cockpit (pas de prefixe imposé, contrairement à <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">send-email</code> qui appartient à Liass'Pilot sur le même projet).
+            </p>
           </Step>
-          <Step n={2} title="Déployer la Edge Function send-email">
-            <pre className="text-[11px] bg-primary-950 text-primary-100 p-2 rounded mt-1 overflow-x-auto">{`supabase login
-supabase link --project-ref VOTRE_PROJET_REF
-supabase functions deploy send-email --no-verify-jwt`}</pre>
+          <Step n={2} title="Récupérer une clé API Resend">
+            <p className="text-xs">
+              Sur <a href="https://resend.com" target="_blank" rel="noopener" className="text-accent underline">resend.com</a>, vérifiez votre domaine d'envoi (DNS DKIM/SPF), puis récupérez une clé <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">re_xxx</code>.
+            </p>
           </Step>
-          <Step n={3} title="Configurer les secrets de la fonction">
-            <pre className="text-[11px] bg-primary-950 text-primary-100 p-2 rounded mt-1 overflow-x-auto">{`supabase secrets set \\
-  RESEND_API_KEY=re_xxx \\
-  RESEND_FROM="Cockpit FnA <noreply@votre-domaine.com>"`}</pre>
+          <Step n={3} title="Configurer les secrets (Dashboard Supabase)">
+            <p className="text-[11px] text-primary-500 mb-1">
+              Dashboard Supabase → Edge Functions → cockpit-send-email → <strong>Secrets</strong> :
+            </p>
+            <pre className="text-[11px] bg-primary-950 text-primary-100 p-2 rounded overflow-x-auto">{`RESEND_API_KEY=re_xxx
+RESEND_FROM_COCKPIT=Cockpit FnA <noreply@votre-domaine.com>`}</pre>
             <p className="text-[11px] text-primary-500 mt-1">
-              ⚠️ <strong>Important</strong> : la config Resend dans Supabase → Authentication ne couvre que les mails d'auth (signup/reset/magic-link). Les mails métier (invitations, rapports, validations) nécessitent <strong>cette Edge Function dédiée</strong>.
+              ⚠️ <strong>Important</strong> : la config Resend dans Supabase Authentication ne couvre que les mails d'auth (signup/reset/magic-link). Les mails métier passent par <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">cockpit-send-email</code>.
+              <br/>
+              Si <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">RESEND_API_KEY</code> est déjà défini sur le projet (utilisé par d'autres fonctions), la fonction l'hérite automatiquement.
             </p>
           </Step>
         </div>

@@ -49,9 +49,9 @@ export function EmailPreviewModal({
         toast.warning('Supabase non configuré', 'Configurez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY pour envoyer automatiquement.');
         return;
       }
-      // Une seule Edge Function generique : send-email (compatible 3 modes)
-      // Override possible via options.supabaseFunction (ex: 'send-report' pour log specifique)
-      const fnName = options.supabaseFunction ?? 'send-email';
+      // Une seule Edge Function generique : cockpit-send-email (compatible 3 modes)
+      // Le projet Supabase est partage avec d'autres apps — on utilise un nom prefixe.
+      const fnName = options.supabaseFunction ?? 'cockpit-send-email';
       const { data, error } = await (supabase as any).functions.invoke(fnName, {
         body: {
           to: recipient.email,
