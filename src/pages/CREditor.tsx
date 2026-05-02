@@ -292,6 +292,9 @@ export default function CREditorPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'section' | 'model' | 'intermediate'; id: string; label: string } | null>(null);
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [duplicateName, setDuplicateName] = useState('');
+  // Highlight de la dernière section ajoutée (visible 3s) + force-expand ancêtres
+  const [lastAddedId, setLastAddedId] = useState<string | null>(null);
+  const [forceExpand, setForceExpand] = useState<Set<string>>(new Set());
 
   // ── Chargement initial ──
   useEffect(() => {
@@ -381,12 +384,34 @@ export default function CREditorPage() {
       // Édition
       const updated = updateSection(model, editingSection.section.id, data);
       persistModel(updated);
+      setLastAddedId(editingSection.section.id);
       toast.success('Section modifiée', data.label);
     } else {
-      // Création
+      // Création — récupère l'id de la nouvelle section pour highlight + scroll
       const updated = addSection(model, data, editingSection.parentId);
+      // La dernière section ajoutée est en fin de tableau
+      const newSection = updated.sections[updated.sections.length - 1];
       persistModel(updated);
-      toast.success('Section ajoutée', data.label);
+      setLastAddedId(newSection?.id ?? null);
+      // Force-expand le parent et tous les ancêtres pour que la nouvelle section soit visible
+      if (editingSection.parentId) {
+        const ancestors = new Set<string>();
+        let pid: string | undefined = editingSection.parentId;
+        while (pid) {
+          ancestors.add(pid);
+          const parent = updated.sections.find((s) => s.id === pid);
+          pid = parent?.parentId;
+        }
+        setForceExpand(ancestors);
+      }
+      toast.success(`Sous-section ajoutée à "${editingSection.parentId ? model.sections.find((s) => s.id === editingSection.parentId)?.label : 'racine'}"`, data.label);
+      // Auto-scroll après le re-render
+      setTimeout(() => {
+        const el = document.getElementById(`section-row-${newSection?.id}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      // Le highlight disparaît après 3s
+      setTimeout(() => setLastAddedId(null), 3000);
     }
     setEditingSection(null);
   };
@@ -608,6 +633,8 @@ export default function CREditorPage() {
                 onEdit={(section) => setEditingSection({ section })}
                 onAddChild={(parentId) => setEditingSection({ parentId })}
                 onDelete={(section) => setConfirmDelete({ type: 'section', id: section.id, label: section.label })}
+                lastAddedId={lastAddedId}
+                forceExpand={forceExpand}
               />
             )}
           </ChartCard>
@@ -750,13 +777,15 @@ export default function CREditorPage() {
 // Section Tree (récursif, avec boutons explicites)
 // ─────────────────────────────────────────────────────────────────────
 
-function SectionTree({ sections, parentId, accounts, onEdit, onAddChild, onDelete }: {
+function SectionTree({ sections, parentId, accounts, onEdit, onAddChild, onDelete, lastAddedId, forceExpand }: {
   sections: CRSectionNode[];
   parentId?: string;
   accounts: { code: string; label: string; class: string }[];
   onEdit: (section: CRSectionNode) => void;
   onAddChild: (parentId: string) => void;
   onDelete: (section: CRSectionNode) => void;
+  lastAddedId?: string | null;
+  forceExpand?: Set<string>;
 }) {
   const children = sections.filter((s) => s.parentId === parentId).sort((a, b) => a.order - b.order);
   return (
@@ -770,19 +799,23 @@ function SectionTree({ sections, parentId, accounts, onEdit, onAddChild, onDelet
           onEdit={onEdit}
           onAddChild={onAddChild}
           onDelete={onDelete}
+          lastAddedId={lastAddedId}
+          forceExpand={forceExpand}
         />
       ))}
     </div>
   );
 }
 
-function SectionRow({ section, allSections, accounts, onEdit, onAddChild, onDelete }: {
+function SectionRow({ section, allSections, accounts, onEdit, onAddChild, onDelete, lastAddedId, forceExpand }: {
   section: CRSectionNode;
   allSections: CRSectionNode[];
   accounts: { code: string; label: string; class: string }[];
   onEdit: (section: CRSectionNode) => void;
   onAddChild: (parentId: string) => void;
   onDelete: (section: CRSectionNode) => void;
+  lastAddedId?: string | null;
+  forceExpand?: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = allSections.some((s) => s.parentId === section.id);
@@ -790,8 +823,23 @@ function SectionRow({ section, allSections, accounts, onEdit, onAddChild, onDele
     accounts.filter((a) => section.prefixes.some((p) => a.code.startsWith(p))).length,
   [accounts, section.prefixes]);
 
+  // Force-expand quand un descendant vient d'être ajouté
+  useEffect(() => {
+    if (forceExpand?.has(section.id)) setExpanded(true);
+  }, [forceExpand, section.id]);
+
+  const isHighlighted = lastAddedId === section.id;
+
   return (
-    <div className="rounded-xl border border-primary-200 dark:border-primary-700 hover:border-accent/50 transition-colors">
+    <div
+      id={`section-row-${section.id}`}
+      className={clsx(
+        'rounded-xl border transition-all',
+        isHighlighted
+          ? 'border-accent ring-2 ring-accent/40 bg-accent/5 animate-pulse-soft'
+          : 'border-primary-200 dark:border-primary-700 hover:border-accent/50',
+      )}
+    >
       <div className="flex items-center gap-2 p-3">
         {hasChildren ? (
           <button onClick={() => setExpanded(!expanded)} className="text-primary-500 hover:text-accent shrink-0">
@@ -849,6 +897,8 @@ function SectionRow({ section, allSections, accounts, onEdit, onAddChild, onDele
             onEdit={onEdit}
             onAddChild={onAddChild}
             onDelete={onDelete}
+            lastAddedId={lastAddedId}
+            forceExpand={forceExpand}
           />
         </div>
       )}
