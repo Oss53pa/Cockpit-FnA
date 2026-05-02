@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Download, FileSpreadsheet, Printer } from 'lucide-react';
+import { Download, FileSpreadsheet, Printer, Sparkles, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -310,6 +311,7 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
 // ─── CR PERSONNALISER — DRAG & DROP + LABELS ÉDITABLES ─────
 function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
   const { currentOrgId } = useApp();
+  const navigate = useNavigate();
   const rows = useBudgetActual();
   const [order, setOrder] = useState<CRSection[]>(() => loadOrder(currentOrgId));
   const [labels, setLabels] = useState<Record<CRSection, string>>(() => loadLabels(currentOrgId));
@@ -389,6 +391,29 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
 
   return (
     <div className="space-y-4">
+      {/* ─── Bannière vers l'éditeur avancé v3 ─── */}
+      <div className="rounded-2xl border-2 border-accent/30 bg-gradient-to-br from-accent/10 to-accent/5 p-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center shrink-0">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-primary-900 dark:text-primary-100">
+              ✨ Nouveau : Éditeur avancé avec drag & drop des comptes
+            </p>
+            <p className="text-xs text-primary-700 dark:text-primary-300 mt-0.5">
+              Sous-sections illimitées · Glissez les classes/comptes du plan comptable · Modèles multiples (Vue Direction, Investisseurs…) · Validation anti-doublon
+            </p>
+          </div>
+        </div>
+        <button
+          className="btn-primary shrink-0"
+          onClick={() => navigate('/cr-editor')}
+        >
+          Ouvrir l'éditeur avancé <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-2 flex-wrap">
           <button className="btn-primary !py-1.5 text-xs" onClick={() => setShowAdd((v) => !v)}>
@@ -398,7 +423,7 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
           <button className="btn-outline !py-1.5 text-xs" onClick={collapseAll}>Tout replier</button>
           <button className="btn-outline !py-1.5 text-xs" onClick={reset}>Réinitialiser</button>
         </div>
-        <p className="text-[11px] text-primary-500">Glissez-déposez · crayon pour renommer · +/− pour déplier · enregistrement automatique</p>
+        <p className="text-[11px] text-primary-500">Mode rapide · Glissez-déposez · crayon pour renommer · +/− pour déplier · enregistrement automatique</p>
       </div>
 
       {showAdd && (
