@@ -6,6 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { useBalance, useRatios } from '../hooks/useFinancials';
+import { useApp } from '../store/app';
 
 type ViewMode = 'list' | 'cards' | 'table' | 'kanban';
 const VIEW_KEY = 'alerts-view-mode';
@@ -13,8 +14,11 @@ const VIEW_KEY = 'alerts-view-mode';
 type Severity = 'low' | 'medium' | 'high' | 'critical';
 type Alert = { id: string; sev: Severity; title: string; msg: string; category: string };
 
+// Multi-tenant : seuils + acks scopés par société. Sans orgId, fallback global
+// (mode démo). Empêche le mélange entre sociétés.
 const THRESHOLDS_KEY = 'alert-thresholds';
 const ACK_KEY = 'alert-ack';
+const keyOrg = (base: string, orgId: string) => orgId ? `${base}:${orgId}` : base;
 
 type Thresholds = {
   liquiditeGenerale: number;
@@ -25,27 +29,34 @@ type Thresholds = {
 };
 const defaults: Thresholds = { liquiditeGenerale: 1.5, endettement: 1.0, autonomie: 0.5, dsoMax: 60, tresoMin: 0 };
 
-function loadAck(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(ACK_KEY) ?? '[]')); } catch { return new Set(); }
+function loadAck(orgId: string): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(keyOrg(ACK_KEY, orgId)) ?? '[]')); } catch { return new Set(); }
 }
-function saveAck(s: Set<string>) { localStorage.setItem(ACK_KEY, JSON.stringify([...s])); }
-function loadThresholds(): Thresholds {
-  try { return { ...defaults, ...JSON.parse(localStorage.getItem(THRESHOLDS_KEY) ?? '{}') }; } catch { return defaults; }
+function saveAck(s: Set<string>, orgId: string) { localStorage.setItem(keyOrg(ACK_KEY, orgId), JSON.stringify([...s])); }
+function loadThresholds(orgId: string): Thresholds {
+  try { return { ...defaults, ...JSON.parse(localStorage.getItem(keyOrg(THRESHOLDS_KEY, orgId)) ?? '{}') }; } catch { return defaults; }
 }
 
 export default function Alerts() {
+  const currentOrgId = useApp((s) => s.currentOrgId);
   const balance = useBalance();
   const ratios = useRatios();
-  const [ack, setAck] = useState<Set<string>>(() => loadAck());
+  const [ack, setAck] = useState<Set<string>>(() => loadAck(currentOrgId));
   const [openSettings, setOpenSettings] = useState(false);
-  const [th, setTh] = useState<Thresholds>(() => loadThresholds());
+  const [th, setTh] = useState<Thresholds>(() => loadThresholds(currentOrgId));
+
+  // Recharger ack + thresholds quand on change de société (multi-tenant)
+  useEffect(() => {
+    setAck(loadAck(currentOrgId));
+    setTh(loadThresholds(currentOrgId));
+  }, [currentOrgId]);
   const [view, setView] = useState<ViewMode>(() => {
     const v = localStorage.getItem(VIEW_KEY);
     return (v === 'cards' || v === 'table' || v === 'kanban' || v === 'list') ? v : 'cards';
   });
   const setViewMode = (v: ViewMode) => { setView(v); localStorage.setItem(VIEW_KEY, v); };
 
-  useEffect(() => saveAck(ack), [ack]);
+  useEffect(() => saveAck(ack, currentOrgId), [ack, currentOrgId]);
 
   const alerts = useMemo<Alert[]>(() => {
     const out: Alert[] = [];
@@ -80,7 +91,7 @@ export default function Alerts() {
   const resetAck = () => { setAck(new Set()); };
 
   const saveThresholds = () => {
-    localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(th));
+    localStorage.setItem(keyOrg(THRESHOLDS_KEY, currentOrgId), JSON.stringify(th));
     setOpenSettings(false);
   };
 
