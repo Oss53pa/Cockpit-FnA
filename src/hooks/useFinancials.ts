@@ -135,14 +135,52 @@ export function useRatios() {
   const fromMonth = useApp((s) => s.fromMonth);
   const toMonth = useApp((s) => s.toMonth);
   const currentYear = useApp((s) => s.currentYear);
+  const currentOrgId = useApp((s) => s.currentOrgId);
+
+  // ── Detection des mois actifs (avec activité CA réelle) ──
+  // Bug fix: si l'utilisateur sélectionne YTD (jan-déc) mais que la data du GL
+  // ne couvre que Q1, periodDays était 365 → DSO et DPO sont multipliés par
+  // ~4. Solution: détecter les mois avec mouvements 70-75 (produits) et limiter
+  // periodDays aux mois actifs.
+  const activeMonths = useLiveQuery(
+    async () => {
+      if (!currentOrgId) return null;
+      const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
+      const yearPeriods = periods.filter((p) => p.year === currentYear && p.month >= fromMonth && p.month <= toMonth);
+      const periodIds = new Set(yearPeriods.map((p) => p.id));
+      const entries = await db.gl
+        .where('orgId').equals(currentOrgId)
+        .filter((e) => periodIds.has(e.periodId) && /^7[0-5]/.test(e.account))
+        .toArray();
+      const months = new Set<number>();
+      for (const e of entries) {
+        const period = yearPeriods.find((p) => p.id === e.periodId);
+        if (period) months.add(period.month);
+      }
+      return months;
+    },
+    [currentOrgId, currentYear, fromMonth, toMonth],
+  );
+
   if (!balance || balance.length === 0) return [];
-  // Calcule le nb de jours réels de la période sélectionnée pour annualiser
-  // correctement DSO/DPO. Sans ça, sur Q1 (3 mois) DSO est multiplié par 4.
+
+  // Calcul du periodDays effectif :
+  //  - Si on a la liste des mois actifs (CA détecté), on borne aux mois avec activité réelle
+  //  - Sinon fallback sur la sélection utilisateur (fromMonth/toMonth)
   let periodDays = 0;
-  for (let m = fromMonth; m <= toMonth; m++) {
-    periodDays += new Date(currentYear, m, 0).getDate();
+  if (activeMonths && activeMonths.size > 0) {
+    // Mois actifs détectés : utiliser EXACTEMENT ceux-là
+    for (const m of activeMonths) {
+      periodDays += new Date(currentYear, m, 0).getDate();
+    }
+  } else {
+    // Fallback : période sélectionnée
+    for (let m = fromMonth; m <= toMonth; m++) {
+      periodDays += new Date(currentYear, m, 0).getDate();
+    }
   }
   if (periodDays <= 0) periodDays = 360;
+
   return computeRatios(balance, customTargets, { periodDays });
 }
 
