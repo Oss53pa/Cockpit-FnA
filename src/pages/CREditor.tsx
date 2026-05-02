@@ -391,15 +391,27 @@ export default function CREditorPage() {
     persistModel({ ...model, ...patch });
   };
 
-  if (!currentOrgId || !org) {
-    return <div className="py-20 text-center text-primary-400">Sélectionnez une société.</div>;
+  // États de chargement distincts :
+  //  - pas de currentOrgId → CTA explicite vers la sélection
+  //  - currentOrgId mais org pas encore chargé (live query Dexie) → loader
+  if (!currentOrgId) {
+    return (
+      <div className="py-20 text-center">
+        <FolderTree className="w-12 h-12 text-primary-300 mx-auto mb-3" />
+        <p className="text-sm text-primary-500 mb-3">Sélectionnez une société dans le menu en haut à gauche pour personnaliser son CR.</p>
+      </div>
+    );
+  }
+  if (!org) {
+    // Org en cours de chargement OU introuvable — on rend quand même la page
+    // avec un fallback minimal pour ne pas bloquer.
   }
 
   return (
     <div className="space-y-5 animate-fade-in-up">
       <PageHeader
         title="Personnaliser le Compte de Résultat"
-        subtitle={`${org.name} · Drag & Drop des comptes du plan vers les sections`}
+        subtitle={`${org?.name ?? 'Société'} · Drag & Drop des comptes du plan vers les sections`}
         action={
           <div className="flex items-center gap-2">
             <button className="btn-outline" onClick={() => setShowHistory(!showHistory)}><History className="w-4 h-4" /> Historique</button>

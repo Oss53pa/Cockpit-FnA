@@ -210,25 +210,28 @@ export default function DashboardHome() {
           </ChartCard>
 
           <ChartCard title="Répartition des Charges" subtitle="Top postes de dépenses" accent={ct.at(1)}>
-            <div style={{ height: 260 }}>
+            <div style={{ height: 230 }}>
               {(() => {
-                // Filtre rigoureux : pas de NaN/Infinity/valeurs nulles → évite les
-                // erreurs SVG transform de react-spring (translate vide quand value = 0).
+                // Filtre rigoureux : NaN/Infinity/0 ignorés
                 const data = chargesData
                   .filter((d) => Number.isFinite(d.value) && d.value > 0)
-                  .map((d, i) => ({ id: d.name, label: d.name, value: d.value, color: ct.at(i) }));
+                  .map((d) => ({ id: d.name, label: d.name, value: d.value }));
                 if (data.length === 0) {
                   return <div className="h-full flex items-center justify-center text-xs text-primary-400">Aucune charge à afficher</div>;
                 }
                 const total = data.reduce((s, x) => s + x.value, 0);
+                // MEME palette monochrome/harmonique que "Structure de l'Actif" :
+                // gradient du primary-900 (foncé) au primary-400 (clair) — donne un
+                // dégradé visuel cohérent au lieu de couleurs disparates.
+                const palette = [ct.at(0), ct.at(2), ct.at(3), ct.at(4), ct.at(5), ct.at(6)].slice(0, data.length);
                 return (
                   <ResponsivePie
                     data={data}
-                    margin={{ top: 20, right: 20, bottom: 50, left: 20 }}
+                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
                     innerRadius={0.6}
                     padAngle={1}
                     cornerRadius={4}
-                    colors={{ datum: 'data.color' }}
+                    colors={palette}
                     borderWidth={2}
                     borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
                     enableArcLinkLabels={false}
@@ -238,7 +241,9 @@ export default function DashboardHome() {
                     valueFormat={(v) => fmtFull(v)}
                     theme={nivoTheme}
                     animate={false}
-                    legends={[{ anchor: 'bottom', direction: 'row', translateY: 35, itemWidth: 90, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' }]}
+                    legends={[
+                      { anchor: 'bottom', direction: 'row', translateY: 30, itemWidth: 110, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' },
+                    ]}
                   />
                 );
               })()}

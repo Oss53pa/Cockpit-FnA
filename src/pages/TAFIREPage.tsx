@@ -68,61 +68,59 @@ export default function TAFIREPage() {
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* Tables Emplois / Ressources avec TOTAUX alignés au MÊME niveau vertical.
-          Méthode : on sépare les lignes "data" et "total", on padd la table la
-          plus courte avec des lignes invisibles pour que le TOTAL atterrisse au
-          bon endroit. Les deux tables ont ainsi la même hauteur et le total est
-          aligné. */}
+      {/* Tables Emplois / Ressources — TOTAUX en FOOTER fixe à hauteur égale.
+          Architecture : flex column avec data en flex-1 + total en mt-auto.
+          Garantit l'alignement même avec un nombre de lignes différent. */}
       {(() => {
         const emploisData = data.emplois.filter((e) => !(e.grand || e.total));
-        const emploisTotal = data.emplois.filter((e) => e.grand || e.total);
+        const emploisTotal = data.emplois.find((e) => e.grand || e.total);
         const ressourcesData = data.ressources.filter((r) => !(r.grand || r.total));
-        const ressourcesTotal = data.ressources.filter((r) => r.grand || r.total);
-        const maxDataRows = Math.max(emploisData.length, ressourcesData.length);
+        const ressourcesTotal = data.ressources.find((r) => r.grand || r.total);
 
         const renderRow = (r: any, key: string | number) => (
-          <tr key={key} className="border-b border-primary-100/60 dark:border-primary-800/40">
-            <td className="py-2 px-2 text-[10px] text-primary-400 num w-24">{r.code}</td>
-            <td className="py-2 px-2" style={{ paddingLeft: `${0.5 + (r.indent ?? 0) * 0.75}rem` }}>{r.label}</td>
-            <td className="text-right py-2 px-2 num">{fmtFull(r.value)}</td>
-          </tr>
+          <div key={key} className="grid grid-cols-[6rem_1fr_8rem] items-center gap-2 px-2 py-2 border-b border-primary-100/60 dark:border-primary-800/40 text-sm">
+            <span className="text-[10px] text-primary-400 num">{r.code}</span>
+            <span style={{ paddingLeft: `${(r.indent ?? 0) * 0.75}rem` }}>{r.label}</span>
+            <span className="text-right num">{fmtFull(r.value)}</span>
+          </div>
         );
-        const renderEmptyRow = (key: string) => (
-          <tr key={key} className="border-b border-primary-100/60 dark:border-primary-800/40" aria-hidden>
-            <td className="py-2 px-2">&nbsp;</td>
-            <td className="py-2 px-2">&nbsp;</td>
-            <td className="py-2 px-2">&nbsp;</td>
-          </tr>
+        const renderTotal = (r: any) => (
+          <div className="grid grid-cols-[6rem_1fr_8rem] items-center gap-2 px-2 py-3 bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-bold rounded-b-lg">
+            <span className="text-[10px] num opacity-80">{r.code}</span>
+            <span style={{ paddingLeft: `${(r.indent ?? 0) * 0.75}rem` }}>{r.label}</span>
+            <span className="text-right num">{fmtFull(r.value)}</span>
+          </div>
         );
-        const renderTotal = (r: any, key: string | number) => (
-          <tr key={key} className="font-bold bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900">
-            <td className="py-2.5 px-2 text-[10px] num opacity-80 w-24">{r.code}</td>
-            <td className="py-2.5 px-2" style={{ paddingLeft: `${0.5 + (r.indent ?? 0) * 0.75}rem` }}>{r.label}</td>
-            <td className="text-right py-2.5 px-2 num">{fmtFull(r.value)}</td>
-          </tr>
+
+        // Header (col headers) commun — rendu une fois en haut de chaque table
+        const renderHeader = () => (
+          <div className="grid grid-cols-[6rem_1fr_8rem] items-center gap-2 px-2 py-2 border-b-2 border-primary-300 dark:border-primary-700 text-[10px] uppercase tracking-wider text-primary-500 font-semibold">
+            <span>Comptes</span>
+            <span>Poste</span>
+            <span className="text-right">Montant</span>
+          </div>
         );
 
         return (
-          <div className="grid lg:grid-cols-2 gap-5">
+          <div className="grid lg:grid-cols-2 gap-5 items-stretch">
             <ChartCard title="EMPLOIS STABLES" subtitle="Où va le cash" accent={ct.at(1)}>
-              <table className="w-full text-sm">
-                <tbody>
+              <div className="flex flex-col h-full">
+                {renderHeader()}
+                <div className="flex-1">
                   {emploisData.map((e, i) => renderRow(e, `e-${e.code}-${i}`))}
-                  {/* Padding pour aligner le total */}
-                  {Array.from({ length: maxDataRows - emploisData.length }).map((_, i) => renderEmptyRow(`pad-e-${i}`))}
-                  {emploisTotal.map((e, i) => renderTotal(e, `et-${e.code}-${i}`))}
-                </tbody>
-              </table>
+                </div>
+                {emploisTotal && <div className="mt-auto">{renderTotal(emploisTotal)}</div>}
+              </div>
             </ChartCard>
 
             <ChartCard title="RESSOURCES STABLES" subtitle="D'où vient le cash" accent={ct.at(0)}>
-              <table className="w-full text-sm">
-                <tbody>
+              <div className="flex flex-col h-full">
+                {renderHeader()}
+                <div className="flex-1">
                   {ressourcesData.map((r, i) => renderRow(r, `r-${r.code}-${i}`))}
-                  {Array.from({ length: maxDataRows - ressourcesData.length }).map((_, i) => renderEmptyRow(`pad-r-${i}`))}
-                  {ressourcesTotal.map((r, i) => renderTotal(r, `rt-${r.code}-${i}`))}
-                </tbody>
-              </table>
+                </div>
+                {ressourcesTotal && <div className="mt-auto">{renderTotal(ressourcesTotal)}</div>}
+              </div>
             </ChartCard>
           </div>
         );
