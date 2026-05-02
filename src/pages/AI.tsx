@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { StreamingText } from '../components/ui/StreamingText';
 import { useRatios, useStatements } from '../hooks/useFinancials';
-import { useOllama } from '../hooks/useOllama';
+import { useAI as useOllama } from '../hooks/useAI';
 import { useApp } from '../store/app';
 import { fmtMoney } from '../lib/format';
 import { saveOllamaConfig, getOllamaConfig } from '../lib/ollama';

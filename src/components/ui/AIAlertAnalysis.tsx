@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Bot, Loader2, ChevronUp } from 'lucide-react';
-import { useOllama } from '../../hooks/useOllama';
+import { useAI as useOllama } from '../../hooks/useAI';
 import { StreamingText } from './StreamingText';
 import type { FinancialContext } from '../../engine/ai/contextBuilder';
 

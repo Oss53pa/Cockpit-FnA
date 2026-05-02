@@ -7,7 +7,11 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { EmailPreviewModal } from '../components/ui/EmailPreviewModal';
-import { buildInvitationEmail } from '../lib/emailTemplates';
+import { buildInvitationEmail, buildReviewEmail, buildReportEmail } from '../lib/emailTemplates';
+import {
+  loadConfig as loadAIConfig, saveConfig as saveAIConfig, detectStatus as detectAIStatus,
+  PROVIDER_PRESETS as AI_PRESETS, type AIConfig, type AIStatus,
+} from '../lib/aiClient';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
@@ -16,7 +20,7 @@ import { PALETTES, PaletteKey, useTheme } from '../store/theme';
 import { db } from '../db/schema';
 import { ensureSeeded } from '../db/seed';
 
-type Tab = 'apparence' | 'societes' | 'exercices' | 'ratios' | 'donnees' | 'users' | 'integrations';
+type Tab = 'apparence' | 'societes' | 'exercices' | 'ratios' | 'donnees' | 'users' | 'ia' | 'emails' | 'integrations';
 
 const SECTORS = ['Industrie', 'Commerce', 'BTP', 'Services', 'Agriculture', 'Santé', 'Banque', 'Microfinance', 'Éducation', 'Hôtellerie', 'Mines', 'Immobilier', 'Transport', 'Télécoms'];
 const CURRENCIES = ['XOF', 'XAF', 'EUR', 'USD', 'GHS', 'NGN'];
@@ -35,6 +39,8 @@ export default function Settings() {
         { key: 'ratios', label: 'Ratios de référence' },
         { key: 'donnees', label: 'Données' },
         { key: 'users', label: 'Utilisateurs & rôles' },
+        { key: 'ia', label: 'IA & Proph3t' },
+        { key: 'emails', label: "Modèles d'emails" },
         { key: 'integrations', label: 'Intégrations' },
       ]} />
 
@@ -44,6 +50,8 @@ export default function Settings() {
       {tab === 'ratios' && <TabRatios />}
       {tab === 'donnees' && <TabDonnees />}
       {tab === 'users' && <TabUsers />}
+      {tab === 'ia' && <TabAI />}
+      {tab === 'emails' && <TabEmails />}
       {tab === 'integrations' && <TabIntegrations />}
     </div>
   );
@@ -1129,6 +1137,229 @@ function InvitePreviewModal({ open, onClose, user, orgs }: {
         supabasePayload: { name: user.name, role: user.role, orgIds: user.orgIds },
       }}
     />
+  );
+}
+
+// ─── IA & PROPH3T (Ollama local OU Cloud OpenAI-compatible) ────────
+function TabAI() {
+  const [cfg, setCfg] = useState(loadAIConfig());
+  const [status, setStatus] = useState<AIStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const refresh = async () => {
+    setTesting(true);
+    setStatus(await detectAIStatus());
+    setTesting(false);
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const update = (patch: Partial<AIConfig>) => {
+    const next = saveAIConfig(patch);
+    setCfg(next);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card title="Statut IA" subtitle={`Provider actuel : ${cfg.provider === 'ollama' ? 'Ollama (local)' : cfg.provider === 'openai' ? 'Cloud (OpenAI-compatible)' : 'Aucun'}`}>
+        <div className="flex items-center gap-3">
+          {testing ? (
+            <Badge variant="info">Test en cours…</Badge>
+          ) : status?.available ? (
+            <Badge variant="low">✓ Connecté</Badge>
+          ) : (
+            <Badge variant="critical">✗ Non disponible</Badge>
+          )}
+          <button className="btn-outline !py-1 text-xs" onClick={refresh}>Tester la connexion</button>
+        </div>
+        {status && !status.available && (
+          <p className="text-xs text-error mt-2">{status.errorMessage}</p>
+        )}
+        {status && status.available && status.models.length > 0 && (
+          <div className="mt-3">
+            <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Modèle sélectionné</label>
+            <select className="input" value={cfg.provider === 'ollama' ? cfg.ollamaModel : cfg.openaiModel}
+              onChange={(e) => update(cfg.provider === 'ollama' ? { ollamaModel: e.target.value } : { openaiModel: e.target.value })}>
+              {status.models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Choix du provider" subtitle="Local pour la confidentialité, cloud pour la production déployée">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <button onClick={() => update({ provider: 'ollama' })} className={clsx('p-4 rounded-xl border-2 text-left transition-all',
+            cfg.provider === 'ollama' ? 'border-accent bg-accent/5' : 'border-primary-200 dark:border-primary-700 hover:border-primary-400')}>
+            <p className="font-semibold mb-1">🖥 Ollama (local)</p>
+            <p className="text-xs text-primary-500 leading-relaxed">LLM hébergé sur votre machine. Aucune donnée ne quitte votre poste. Llama 3 / Mistral / Phi. Ne fonctionne pas en production déployée.</p>
+          </button>
+          <button onClick={() => update({ provider: 'openai' })} className={clsx('p-4 rounded-xl border-2 text-left transition-all',
+            cfg.provider === 'openai' ? 'border-accent bg-accent/5' : 'border-primary-200 dark:border-primary-700 hover:border-primary-400')}>
+            <p className="font-semibold mb-1">☁ Cloud (OpenAI-compatible)</p>
+            <p className="text-xs text-primary-500 leading-relaxed">API compatible OpenAI : OpenAI, Mistral, Groq, Together, Anthropic via proxy. Fonctionne en production déployée. Nécessite une clé API.</p>
+          </button>
+        </div>
+
+        {cfg.provider === 'ollama' && (
+          <div className="space-y-3 pt-3 border-t border-primary-200 dark:border-primary-700">
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">URL Ollama</label>
+              <input className="input font-mono text-xs" value={cfg.ollamaUrl} onChange={(e) => update({ ollamaUrl: e.target.value })} placeholder="http://localhost:11434" />
+              <p className="text-[10px] text-primary-400 mt-1">Installer Ollama : <a href="https://ollama.ai/download" target="_blank" rel="noreferrer" className="text-accent underline">ollama.ai/download</a> · Puis : <code className="bg-primary-100 dark:bg-primary-800 px-1 rounded">ollama pull llama3.1</code></p>
+            </div>
+          </div>
+        )}
+
+        {cfg.provider === 'openai' && (
+          <div className="space-y-3 pt-3 border-t border-primary-200 dark:border-primary-700">
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-2">Provider preset</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                {AI_PRESETS.map((p) => {
+                  const active = cfg.openaiBaseUrl === p.baseUrl;
+                  return (
+                    <button key={p.id} onClick={() => update({ openaiBaseUrl: p.baseUrl, openaiModel: p.suggestedModel })}
+                      className={clsx('text-left p-2.5 rounded-lg border-2 transition-all',
+                        active ? 'border-accent bg-accent/5' : 'border-primary-200 dark:border-primary-700 hover:border-primary-400')}>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="font-semibold text-sm">{p.name}</p>
+                        <a href={p.signupUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-accent underline">obtenir clé →</a>
+                      </div>
+                      <p className="text-[10px] text-primary-500 leading-snug">{p.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Base URL</label>
+              <input className="input font-mono text-xs" value={cfg.openaiBaseUrl} onChange={(e) => update({ openaiBaseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Clé API (stockée localement, jamais envoyée à un autre serveur)</label>
+              <input type="password" className="input font-mono text-xs" value={cfg.openaiApiKey} onChange={(e) => update({ openaiApiKey: e.target.value })} placeholder="sk-..." />
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Modèle</label>
+              <input className="input font-mono text-xs" value={cfg.openaiModel} onChange={(e) => update({ openaiModel: e.target.value })} placeholder="gpt-4o-mini" />
+            </div>
+          </div>
+        )}
+
+        <div className="pt-3 mt-3 border-t border-primary-200 dark:border-primary-700">
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Température (0 = factuel, 1 = créatif)</label>
+          <input type="range" min={0} max={1} step={0.1} value={cfg.temperature} onChange={(e) => update({ temperature: Number(e.target.value) })} className="w-full" />
+          <p className="text-[10px] text-primary-500 num">{cfg.temperature.toFixed(1)}</p>
+        </div>
+      </Card>
+
+      <Card padded>
+        <div className="flex items-start gap-3">
+          <Cloud className="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold mb-1">Confidentialité</p>
+            <p className="text-xs text-primary-500 leading-relaxed">
+              <strong>Mode Ollama</strong> : aucune donnée ne quitte votre machine. Idéal pour les données sensibles. <br/>
+              <strong>Mode Cloud</strong> : les questions et le contexte financier (KPIs, ratios) sont envoyés au provider choisi. Le contexte reste minimal — aucun GL brut n'est transmis. Les clés API sont stockées localement (localStorage).
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── MODÈLES D'EMAILS ─────────────────────────────────────────────────
+function TabEmails() {
+  const [selected, setSelected] = useState<'invitation' | 'review' | 'report'>('invitation');
+
+  const sampleData = {
+    invitation: buildInvitationEmail({
+      recipientName: 'Aïcha Diallo',
+      recipientEmail: 'aicha.diallo@societe.com',
+      roleLabel: 'Directeur Financier (DAF)',
+      orgsLabel: 'SARL EXEMPLE · Filiale BTP',
+      appUrl: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://cockpit-fna.app/login',
+    }),
+    review: buildReviewEmail({
+      recipientName: 'Marc Koné',
+      recipientEmail: 'marc.kone@societe.com',
+      reportTitle: 'Rapport mensuel de gestion — Mai 2026',
+      reportPeriod: 'Mai 2026',
+      authorName: 'Direction Financière',
+      reviewUrl: typeof window !== 'undefined' ? `${window.location.origin}/reports/r-123` : 'https://cockpit-fna.app/reports/r-123',
+      deadline: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10),
+      comments: "Merci de relire en particulier la section sur la marge nette et les charges d'exploitation. Validation attendue avant le COMEX.",
+    }),
+    report: buildReportEmail({
+      recipientName: 'Jean Camara',
+      recipientEmail: 'jean.camara@conseil.com',
+      reportTitle: 'Rapport CFO — Q2 2026',
+      reportPeriod: 'Q2 2026',
+      authorName: 'Direction Financière',
+      appUrl: typeof window !== 'undefined' ? `${window.location.origin}/reports/r-456` : 'https://cockpit-fna.app/reports/r-456',
+      pdfAttached: true,
+      summary: "Performance solide au Q2 avec une croissance du CA de 12% YoY et une amélioration de la marge nette à 8.5%. La trésorerie reste positive malgré les investissements en cours.",
+      highlights: [
+        'CA Q2 : 1 250 M XOF (+12% YoY)',
+        'Marge nette : 8.5% (cible 10%)',
+        'Trésorerie nette : +185 M XOF',
+        '3 alertes ratios à traiter (DSO, autonomie financière, liquidité)',
+      ],
+      hasComments: true,
+    }),
+  };
+
+  const labels = {
+    invitation: { name: 'Invitation utilisateur', desc: 'Envoyé quand un nouvel utilisateur est ajouté' },
+    review:     { name: 'Demande de revue',        desc: 'Envoyé pour faire valider un rapport en interne' },
+    report:     { name: 'Diffusion de rapport',    desc: 'Envoyé pour transmettre un rapport finalisé' },
+  };
+
+  const current = sampleData[selected];
+
+  return (
+    <div className="space-y-4">
+      <Card title="Modèles d'emails" subtitle="Aperçu des 3 templates HTML — branding Cockpit FnA cohérent">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          {(['invitation', 'review', 'report'] as const).map((k) => (
+            <button key={k} onClick={() => setSelected(k)}
+              className={clsx('text-left p-3 rounded-xl border-2 transition-all',
+                selected === k ? 'border-accent bg-accent/5' : 'border-primary-200 dark:border-primary-700 hover:border-primary-400')}>
+              <p className="font-semibold text-sm">{labels[k].name}</p>
+              <p className="text-[11px] text-primary-500 mt-0.5">{labels[k].desc}</p>
+            </button>
+          ))}
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-2.5 rounded-lg bg-primary-100 dark:bg-primary-800">
+              <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-0.5">Sujet</p>
+              <p className="font-medium truncate" title={current.subject}>{current.subject}</p>
+            </div>
+            <div className="p-2.5 rounded-lg bg-primary-100 dark:bg-primary-800">
+              <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-0.5">Type</p>
+              <p className="font-medium capitalize">{selected}</p>
+            </div>
+          </div>
+          <div className="border border-primary-200 dark:border-primary-700 rounded-xl overflow-hidden bg-white">
+            <iframe srcDoc={current.htmlBody} className="w-full" style={{ height: 600, border: 0 }} title={`Aperçu — ${labels[selected].name}`} sandbox="" />
+          </div>
+        </div>
+      </Card>
+
+      <Card padded>
+        <div className="flex items-start gap-3">
+          <Cloud className="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold mb-1">Personnalisation</p>
+            <p className="text-xs text-primary-500 leading-relaxed">
+              Les templates HTML sont définis dans <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">src/lib/emailTemplates.ts</code>. Pour les personnaliser (logo, couleurs, signature), modifiez ce fichier. Les emails sont envoyés via 4 canaux configurables : Supabase Edge Function (production), mailto: (universel), copie HTML (Gmail/Outlook), téléchargement .eml (Apple Mail/Outlook/Thunderbird).
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>
   );
 }
 
