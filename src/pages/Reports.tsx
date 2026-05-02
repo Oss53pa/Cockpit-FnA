@@ -749,7 +749,10 @@ export default function Reports() {
 
   // Sauvegarder le rapport courant comme document persistant
   const saveReport = async (newSave = false) => {
-    if (!currentOrgId) return;
+    if (!currentOrgId) {
+      toast.error('Société manquante', 'Sélectionnez une société avant d\'enregistrer.');
+      return;
+    }
     const now = Date.now();
     const payload = {
       orgId: currentOrgId,
@@ -760,13 +763,18 @@ export default function Reports() {
       content: JSON.stringify(config),
       updatedAt: now,
     };
-    if (currentReportId && !newSave) {
-      await db.reports.update(currentReportId, payload);
-      toast.success('Rapport mis à jour', config.identity.title);
-    } else {
-      const id = await db.reports.add({ ...payload, createdAt: now });
-      setCurrentReportId(id as number);
-      toast.success('Rapport enregistré', config.identity.title);
+    try {
+      if (currentReportId && !newSave) {
+        await db.reports.update(currentReportId, payload);
+        toast.success('Rapport mis à jour', config.identity.title);
+      } else {
+        const id = await db.reports.add({ ...payload, createdAt: now });
+        setCurrentReportId(id as number);
+        toast.success('Rapport enregistré', config.identity.title);
+      }
+    } catch (e: any) {
+      console.error('saveReport error', e);
+      toast.error('Erreur', e?.message ?? 'Impossible d\'enregistrer le rapport.');
     }
   };
 
@@ -776,15 +784,21 @@ export default function Reports() {
       setConfig(cfg);
       setCurrentReportId(rep.id);
       setOpenJournal(false);
+      toast.success('Rapport chargé', rep.title);
     } catch (e: any) {
-      toast.error('Chargement impossible', e.message);
+      toast.error('Chargement impossible', e?.message ?? 'Format invalide.');
     }
   };
 
   const deleteReport = async (id: number) => {
     if (!confirm('Supprimer ce rapport définitivement ?')) return;
-    await db.reports.delete(id);
-    if (currentReportId === id) setCurrentReportId(null);
+    try {
+      await db.reports.delete(id);
+      if (currentReportId === id) setCurrentReportId(null);
+      toast.success('Rapport supprimé');
+    } catch (e: any) {
+      toast.error('Erreur', e?.message ?? 'Suppression impossible.');
+    }
   };
   // Pliage des sidebars (état persisté)
   // Migration Twisty : force les sidebars editeur+recap collapsed par defaut
@@ -3911,18 +3925,41 @@ function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
 function SaveModal({ open, onClose, config, orgId }: any) {
   const [name, setName] = useState(config.identity.title);
   const [desc, setDesc] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Re-init quand on rouvre la modal
+  useEffect(() => { if (open) { setName(config.identity.title); setDesc(''); } }, [open, config.identity.title]);
+
   const save = async () => {
-    if (!name.trim()) return;
-    const now = Date.now();
-    await db.templates.add({ orgId, name: name.trim(), description: desc.trim() || undefined, config: JSON.stringify(config), createdAt: now, updatedAt: now });
-    onClose();
-    toast.success('Modèle enregistré', `"${name}" prêt à être réutilisé`);
+    if (!name.trim()) { toast.warning('Nom requis', 'Saisissez un nom pour le modèle.'); return; }
+    if (!orgId) { toast.error('Société manquante', 'Sélectionnez une société avant d\'enregistrer un modèle.'); return; }
+    setSaving(true);
+    try {
+      const now = Date.now();
+      await db.templates.add({
+        orgId,
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        config: JSON.stringify(config),
+        createdAt: now,
+        updatedAt: now,
+      });
+      toast.success('Modèle enregistré', `"${name}" prêt à être réutilisé`);
+      onClose();
+    } catch (e: any) {
+      console.error('SaveModal: erreur lors de l\'enregistrement', e);
+      toast.error('Erreur', e?.message ?? 'Impossible d\'enregistrer le modèle.');
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <Modal open={open} onClose={onClose} title="Enregistrer comme modèle"
       footer={<>
-        <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={save}><Save className="w-4 h-4" /> Enregistrer</button>
+        <button className="btn-outline" onClick={onClose} disabled={saving}>Annuler</button>
+        <button className="btn-primary" onClick={save} disabled={saving || !name.trim()}>
+          <Save className="w-4 h-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
       </>}>
       <div className="space-y-3">
         <Field label="Nom du modèle" v={name} on={setName} />
@@ -3997,13 +4034,25 @@ function CatalogModal({ open, onClose, kind, onPick }: { open: boolean; onClose:
 function LoadModal({ open, onClose, templates, onLoad }: any) {
   const remove = async (id: number) => {
     if (!confirm('Supprimer ce modèle ?')) return;
-    await db.templates.delete(id);
+    try {
+      await db.templates.delete(id);
+      toast.success('Modèle supprimé');
+    } catch (e: any) {
+      toast.error('Erreur', e?.message ?? 'Suppression impossible.');
+    }
   };
   return (
     <Modal open={open} onClose={onClose} title="Charger un modèle" size="lg"
+      subtitle={templates.length === 0 ? 'Aucun modèle pour le moment' : `${templates.length} modèle(s) disponible(s)`}
       footer={<button className="btn-outline" onClick={onClose}>Fermer</button>}>
       {templates.length === 0 ? (
-        <p className="py-12 text-center text-primary-500 text-sm">Aucun modèle enregistré. Créez-en un avec « Enregistrer comme modèle ».</p>
+        <div className="py-12 text-center">
+          <FileText className="w-12 h-12 text-primary-300 mx-auto mb-3" />
+          <p className="text-sm text-primary-500 mb-2">Aucun modèle enregistré pour cette société.</p>
+          <p className="text-xs text-primary-400 max-w-md mx-auto">
+            Créez votre premier modèle en cliquant sur <strong>« Enregistrer modèle »</strong> après avoir personnalisé un rapport. Il sera disponible ici pour être chargé en un clic.
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {templates.map((t: any) => (
@@ -4014,7 +4063,7 @@ function LoadModal({ open, onClose, templates, onLoad }: any) {
               </div>
               {t.description && <p className="text-xs text-primary-500 mb-3">{t.description}</p>}
               <p className="text-[10px] text-primary-400 mb-3">Créé le {new Date(t.createdAt).toLocaleDateString('fr-FR')}</p>
-              <button className="btn-primary w-full !py-1.5 text-xs" onClick={() => onLoad(t)}>Charger</button>
+              <button className="btn-primary w-full !py-1.5 text-xs" onClick={() => { onLoad(t); toast.success('Modèle chargé', t.name); }}>Charger</button>
             </div>
           ))}
         </div>
