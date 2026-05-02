@@ -759,18 +759,26 @@ function TabUsers() {
   const [users, setUsers] = useState<AppUser[]>(() => loadUsers());
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
+  const [invitePreview, setInvitePreview] = useState<{ user: AppUser; orgs: { id: string; name: string }[] } | null>(null);
   const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
 
-  const handleSave = (user: AppUser) => {
+  const handleSave = (user: AppUser, sendInvite: boolean) => {
     const existing = users.findIndex((u) => u.id === user.id);
-    const next = existing >= 0
-      ? users.map((u, i) => (i === existing ? user : u))
-      : [...users, user];
+    const isNew = existing < 0;
+    const next = isNew
+      ? [...users, user]
+      : users.map((u, i) => (i === existing ? user : u));
     setUsers(next);
     saveUsers(next);
-    toast.success(existing >= 0 ? 'Utilisateur modifié' : 'Utilisateur ajouté', user.name);
     setModalOpen(false);
     setEditing(null);
+
+    if (isNew && sendInvite) {
+      // Affiche le preview de l'invitation HTML que l'admin peut envoyer
+      setInvitePreview({ user, orgs: orgs.filter((o) => user.orgIds.includes(o.id)) });
+    } else {
+      toast.success(isNew ? 'Utilisateur ajouté' : 'Utilisateur modifié', user.name);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -919,6 +927,12 @@ function TabUsers() {
         initial={editing}
         orgs={orgs}
       />
+      <InvitePreviewModal
+        open={!!invitePreview}
+        onClose={() => setInvitePreview(null)}
+        user={invitePreview?.user ?? null}
+        orgs={invitePreview?.orgs ?? []}
+      />
     </div>
   );
 }
@@ -926,7 +940,7 @@ function TabUsers() {
 function UserModal({ open, onClose, onSave, initial, orgs }: {
   open: boolean;
   onClose: () => void;
-  onSave: (u: AppUser) => void;
+  onSave: (u: AppUser, sendInvite: boolean) => void;
   initial: AppUser | null;
   orgs: { id: string; name: string }[];
 }) {
@@ -935,6 +949,7 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
   const [role, setRole] = useState<AppRole>('viewer');
   const [orgIds, setOrgIds] = useState<string[]>([]);
   const [active, setActive] = useState(true);
+  const [sendInvite, setSendInvite] = useState(true);
 
   // Re-init proprement à chaque ouverture (et quand initial change)
   useEffect(() => {
@@ -945,12 +960,14 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
       setRole(initial.role);
       setOrgIds(initial.orgIds);
       setActive(initial.active);
+      setSendInvite(false); // pas d'invitation pour une edition
     } else {
       setName('');
       setEmail('');
       setRole('viewer');
       setOrgIds([]);
       setActive(true);
+      setSendInvite(true);
     }
   }, [open, initial]);
 
@@ -973,7 +990,7 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
       createdAt: initial?.createdAt ?? Date.now(),
       lastLoginAt: initial?.lastLoginAt,
     };
-    onSave(user);
+    onSave(user, sendInvite);
   };
 
   const toggleOrg = (id: string) => {
@@ -1053,16 +1070,233 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
           )}
         </div>
 
-        <div>
+        <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
             <span className="font-semibold">Compte actif</span>
             <span className="text-xs text-primary-500">— peut se connecter et accéder aux données</span>
           </label>
+          {!initial && (
+            <label className="flex items-start gap-2 text-sm cursor-pointer p-3 rounded-xl bg-accent/5 border border-accent/20">
+              <input type="checkbox" checked={sendInvite} onChange={(e) => setSendInvite(e.target.checked)} className="mt-0.5" />
+              <div className="flex-1">
+                <span className="font-semibold">📧 Envoyer une invitation par email</span>
+                <p className="text-xs text-primary-500 mt-0.5">L'utilisateur recevra un email HTML avec le lien de l'application, son rôle, ses sociétés et un bouton de connexion.</p>
+              </div>
+            </label>
+          )}
         </div>
       </div>
     </Modal>
   );
+}
+
+// ─── INVITATION PREVIEW MODAL ──────────────────────────────────────
+// Génère l'email HTML d'invitation, permet de :
+//  1. Envoyer via Supabase Auth invite (si configure)
+//  2. Ouvrir mailto: avec le contenu pre-rempli
+//  3. Copier le HTML dans le presse-papier
+//  4. Telecharger le HTML en .eml
+function InvitePreviewModal({ open, onClose, user, orgs }: {
+  open: boolean;
+  onClose: () => void;
+  user: AppUser | null;
+  orgs: { id: string; name: string }[];
+}) {
+  if (!user) return null;
+
+  const appUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://cockpit-fna.app/login';
+  const orgsLabel = orgs.length > 0 ? orgs.map((o) => o.name).join(', ') : 'Toutes les sociétés autorisées';
+
+  const subject = `Invitation Cockpit FnA — ${user.name}`;
+  const textBody = `Bonjour ${user.name},
+
+Vous avez été invité(e) à rejoindre Cockpit FnA, l'outil de pilotage financier SYSCOHADA.
+
+Vos accès :
+• Email de connexion : ${user.email}
+• Rôle : ${ROLE_LABELS[user.role]}
+• Sociétés : ${orgsLabel}
+
+Pour vous connecter, cliquez sur le lien ci-dessous :
+${appUrl}
+
+À votre première connexion, vous recevrez un email pour définir votre mot de passe.
+
+Cordialement,
+L'équipe Cockpit FnA`;
+
+  const htmlBody = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation Cockpit FnA</title>
+</head>
+<body style="margin:0; padding:0; background:#f5f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#222834;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f7; padding:40px 0;">
+    <tr><td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <!-- Header -->
+        <tr><td style="background:#222834; padding:32px 40px; text-align:left;">
+          <p style="margin:0; color:#E7EBEE; font-size:14px; letter-spacing:0.1em; text-transform:uppercase; font-weight:600;">Cockpit FnA</p>
+          <p style="margin:8px 0 0; color:#ffffff; font-size:24px; font-weight:700; letter-spacing:-0.02em;">Invitation à rejoindre l'équipe</p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:40px;">
+          <p style="margin:0 0 16px; font-size:16px; line-height:1.6;">Bonjour <strong>${escapeHtml(user.name)}</strong>,</p>
+          <p style="margin:0 0 24px; font-size:14px; line-height:1.6; color:#525C6E;">
+            Vous avez été invité(e) à rejoindre <strong>Cockpit FnA</strong>, l'outil de pilotage financier SYSCOHADA. Voici les détails de votre compte :
+          </p>
+
+          <!-- Info card -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F8F9FB; border-radius:12px; padding:20px; margin-bottom:24px;">
+            <tr><td style="padding:8px 0; font-size:13px;">
+              <span style="color:#6E7888; display:inline-block; width:140px;">Email :</span>
+              <strong style="color:#222834;">${escapeHtml(user.email)}</strong>
+            </td></tr>
+            <tr><td style="padding:8px 0; font-size:13px;">
+              <span style="color:#6E7888; display:inline-block; width:140px;">Rôle :</span>
+              <strong style="color:#DA4D28;">${escapeHtml(ROLE_LABELS[user.role])}</strong>
+            </td></tr>
+            <tr><td style="padding:8px 0; font-size:13px;">
+              <span style="color:#6E7888; display:inline-block; width:140px;">Sociétés :</span>
+              <strong style="color:#222834;">${escapeHtml(orgsLabel)}</strong>
+            </td></tr>
+          </table>
+
+          <!-- CTA -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr><td align="center" style="padding:8px 0 24px;">
+              <a href="${appUrl}" style="display:inline-block; background:#DA4D28; color:#ffffff; text-decoration:none; padding:14px 32px; border-radius:999px; font-size:15px; font-weight:600; box-shadow:0 2px 8px rgba(218,77,40,0.25);">
+                Se connecter à Cockpit FnA →
+              </a>
+            </td></tr>
+          </table>
+
+          <p style="margin:0 0 8px; font-size:13px; line-height:1.6; color:#525C6E;">
+            Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :
+          </p>
+          <p style="margin:0; font-size:12px; word-break:break-all;">
+            <a href="${appUrl}" style="color:#DA4D28; text-decoration:underline;">${appUrl}</a>
+          </p>
+
+          <p style="margin:32px 0 0; font-size:13px; line-height:1.6; color:#525C6E; padding-top:24px; border-top:1px solid #E7EBEE;">
+            À votre première connexion, vous recevrez un email pour <strong>définir votre mot de passe</strong>. Si vous n'attendez pas cet email, ignorez ce message.
+          </p>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#F8F9FB; padding:24px 40px; text-align:center; border-top:1px solid #E7EBEE;">
+          <p style="margin:0; font-size:11px; color:#939BAA;">
+            Cockpit FnA · Pilotage financier SYSCOHADA · Confidentiel
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const mailto = `mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(textBody)}`;
+
+  const sendViaSupabase = async () => {
+    try {
+      const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+      if (!isSupabaseConfigured) {
+        toast.warning('Supabase non configuré', "Configurez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY pour envoyer l'email automatiquement.");
+        return;
+      }
+      // Tente Supabase Auth invite (admin ou edge function)
+      const { error } = await (supabase as any).auth.admin.inviteUserByEmail(user.email, {
+        data: { name: user.name, role: user.role, orgIds: user.orgIds },
+        redirectTo: appUrl,
+      });
+      if (error) throw error;
+      toast.success('Invitation envoyée', `Email Supabase Auth → ${user.email}`);
+      onClose();
+    } catch (e: any) {
+      toast.error('Envoi impossible', e?.message ?? 'Vérifiez la clé service_role et les Edge Functions.');
+    }
+  };
+
+  const copyHtml = async () => {
+    try {
+      await navigator.clipboard.writeText(htmlBody);
+      toast.success('HTML copié', 'Collez-le dans votre client mail (Gmail, Outlook, …)');
+    } catch { toast.error('Copie impossible', 'Copiez manuellement depuis l\'aperçu.'); }
+  };
+
+  const downloadEml = () => {
+    const eml = `From: noreply@cockpit-fna.app
+To: ${user.email}
+Subject: ${subject}
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+${htmlBody}`;
+    const blob = new Blob([eml], { type: 'message/rfc822' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invitation-${user.email.split('@')[0]}.eml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Fichier .eml téléchargé', 'Double-cliquez pour ouvrir dans votre client mail.');
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Invitation pour ${user.name}`}
+      subtitle={user.email}
+      size="lg"
+      footer={
+        <>
+          <button className="btn-outline" onClick={onClose}>Plus tard</button>
+          <button className="btn-outline" onClick={downloadEml}>
+            <Download className="w-4 h-4" /> Télécharger .eml
+          </button>
+          <button className="btn-outline" onClick={copyHtml}>
+            <Pencil className="w-4 h-4" /> Copier le HTML
+          </button>
+          <a className="btn-outline" href={mailto}>
+            <Cloud className="w-4 h-4" /> Ouvrir client mail
+          </a>
+          <button className="btn-primary" onClick={sendViaSupabase}>
+            <CheckCircle2 className="w-4 h-4" /> Envoyer via Supabase
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="text-xs text-primary-500 leading-relaxed">
+          Email HTML pré-rempli. <strong>4 options d'envoi</strong> :
+        </div>
+        <ul className="text-xs text-primary-700 dark:text-primary-300 space-y-1 pl-4 list-disc">
+          <li><strong>Envoyer via Supabase</strong> : Supabase Auth envoie automatiquement (nécessite la clé service_role configurée).</li>
+          <li><strong>Ouvrir client mail</strong> : ouvre Gmail/Outlook avec destinataire, sujet et corps texte pré-remplis.</li>
+          <li><strong>Copier le HTML</strong> : colle dans Gmail (ouvrez un compose, Cmd/Ctrl+V).</li>
+          <li><strong>Télécharger .eml</strong> : fichier ouvrable dans Apple Mail, Outlook, Thunderbird.</li>
+        </ul>
+        <div className="border border-primary-200 dark:border-primary-700 rounded-xl overflow-hidden bg-white">
+          <iframe
+            srcDoc={htmlBody}
+            className="w-full"
+            style={{ height: 460, border: 0 }}
+            title="Aperçu de l'invitation"
+            sandbox=""
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ─── INTÉGRATIONS ──────────────────────────────────────────────────
