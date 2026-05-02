@@ -577,6 +577,10 @@ export default function Guide() {
               </div>
             </div>
           </Card>
+
+          <p className="text-center text-[11px] text-primary-400 pt-2">
+            CockPit F&amp;A · SYSCOHADA révisé 2017 — une application <a href="https://atlas-studio.app" target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent transition-colors">Atlas Studio</a>
+          </p>
         </div>
       </div>
     </div>

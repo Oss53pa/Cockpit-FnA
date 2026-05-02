@@ -116,6 +116,11 @@ export default function Login() {
             </form>
           )}
         </div>
+
+        {/* Footer attribution */}
+        <p className="text-center text-[11px] text-primary-400 mt-6">
+          Une application <a href="https://atlas-studio.app" target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent transition-colors">Atlas Studio</a>
+        </p>
       </div>
     </div>
   );
