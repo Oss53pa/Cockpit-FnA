@@ -21,7 +21,11 @@
       "Bash(cp \"C:/devs/Cockpit FnA/src/pages/TAFIREPage.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/TAFIREPage.tsx\")",
       "Bash(cp \"C:/devs/Cockpit FnA/src/pages/CREditor.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/CREditor.tsx\")",
       "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Reports.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Reports.tsx\")",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "mcp__a58aae78-1ce6-4205-900f-0d0e6f7f4178__get_edge_function",
+      "mcp__a58aae78-1ce6-4205-900f-0d0e6f7f4178__deploy_edge_function",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/components/ui/EmailPreviewModal.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/components/ui/EmailPreviewModal.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Settings.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Settings.tsx\")"
     ]
   }
 }
