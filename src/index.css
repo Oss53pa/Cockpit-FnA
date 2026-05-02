@@ -317,7 +317,7 @@
   }
   /* Tous les ancêtres du rapport : bloc simple, zéro marge, zéro espace.
      Neutralise le layout Twisty (padding, gap, rounded shell, shadow). */
-  body, body > div, body > div > div, body > div > div > div,
+  body > div, body > div > div, body > div > div > div,
   body > div > div > div > div,
   body > div > div > div > div > div {
     display: block !important;
@@ -334,21 +334,41 @@
   }
   /* Le shell app (div.app-shell) : supprimer cadre, fond, arrondi */
   .app-shell, .app-shell > main {
+    display: block !important;
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;
     background: transparent !important;
     padding: 0 !important;
     margin: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
   }
-  /* Casser tout grid inline (le conteneur 3 colonnes) */
-  [style*="grid-template-columns"] {
+  /* Cacher TOUT dans app-shell sauf <main> (DemoBanner, etc.) */
+  .app-shell > *:not(main) {
+    display: none !important;
+  }
+  /* Conteneurs intermédiaires entre <main> et .report-print-area :
+     pas de marge/padding qui pourrait pousser la couverture sur page 2 */
+  .app-shell > main > *,
+  .app-shell > main > * > * {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    background: transparent !important;
+  }
+  /* Casser le grid LAYOUT 3 colonnes (sidebar | rapport | sidebar).
+     :has(> .report-print-area) cible UNIQUEMENT le grid qui contient le rapport,
+     PAS les grids internes (ex. couverture modern 40%/1fr). */
+  [style*="grid-template-columns"]:has(> .report-print-area) {
     display: block !important;
     width: 100% !important;
     gap: 0 !important;
   }
-  /* Cacher les sidebars (enfants du grid sauf .report-print-area) */
-  [style*="grid-template-columns"] > *:not(.report-print-area) {
+  /* Cacher les sidebars (enfants du grid layout sauf .report-print-area) */
+  [style*="grid-template-columns"]:has(> .report-print-area) > *:not(.report-print-area) {
     display: none !important;
   }
   /* Le rapport : pleine largeur, pas de gap */
@@ -403,10 +423,6 @@
     min-height: 100% !important;
     height: 100% !important;
     width: 100% !important;
-  }
-  /* Couverture modern (grid 40%/1fr) : conserver le grid en print */
-  .page-a4[data-page-type="cover"] > div > div[style*="grid-template-columns"] {
-    display: grid !important;
   }
   /* Pages spéciales : isolées */
   .report-print-area .page-a4[data-page-type="cover"] {
