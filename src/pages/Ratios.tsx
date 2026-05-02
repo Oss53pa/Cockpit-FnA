@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { LayoutGrid, Table as TableIcon, Download, CheckCircle2, AlertTriangle, XCircle, Calculator } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { LayoutGrid, Table as TableIcon, LayoutDashboard, Download, CheckCircle2, AlertTriangle, XCircle, Calculator, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -10,7 +10,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useRatios } from '../hooks/useFinancials';
 import { fmtMoney } from '../lib/format';
 
-type View = 'cards' | 'table';
+type View = 'cards' | 'table' | 'kanban';
+const VIEW_KEY = 'ratios-view-mode';
 
 function formatValue(v: number, unit: string) {
   if (unit === '%') return `${v.toFixed(1)} %`;
@@ -25,7 +26,11 @@ type Family = typeof families[number] | 'Toutes';
 
 export default function Ratios() {
   const ratios = useRatios();
-  const [view, setView] = useState<View>('cards');
+  const [view, setView] = useState<View>(() => {
+    const v = localStorage.getItem(VIEW_KEY);
+    return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
+  });
+  const setViewMode = (v: View) => { setView(v); localStorage.setItem(VIEW_KEY, v); };
   const [family, setFamily] = useState<Family>('Toutes');
   const navigate = useNavigate();
 
@@ -109,17 +114,18 @@ export default function Ratios() {
           { key: 'Toutes', label: 'Toutes' },
           ...families.map((f) => ({ key: f, label: f })),
         ]} />
-        <div className="flex gap-1 p-1 bg-primary-200 dark:bg-primary-800 rounded-lg">
-          <button onClick={() => setView('cards')}
-            className={clsx('px-3 py-1.5 text-xs rounded-md font-medium transition flex items-center gap-1.5',
-              view === 'cards' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>
-            <LayoutGrid className="w-3.5 h-3.5" /> Cartes
-          </button>
-          <button onClick={() => setView('table')}
-            className={clsx('px-3 py-1.5 text-xs rounded-md font-medium transition flex items-center gap-1.5',
-              view === 'table' ? 'bg-primary-50 dark:bg-primary-900' : 'text-primary-600 dark:text-primary-400')}>
-            <TableIcon className="w-3.5 h-3.5" /> Table
-          </button>
+        <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-primary-200/40 dark:bg-primary-800/40">
+          {([
+            { v: 'cards' as View, icon: LayoutGrid, label: 'Cartes' },
+            { v: 'table' as View, icon: TableIcon, label: 'Table' },
+            { v: 'kanban' as View, icon: LayoutDashboard, label: 'Kanban' },
+          ]).map(({ v, icon: Icon, label }) => (
+            <button key={v} onClick={() => setViewMode(v)}
+              className={clsx('px-3 py-1.5 text-xs rounded-full font-medium transition flex items-center gap-1.5',
+                view === v ? 'bg-primary-50 dark:bg-primary-900 shadow-sm' : 'text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-100')}>
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -209,6 +215,9 @@ export default function Ratios() {
         </Card>
       )}
 
+      {/* Vue Kanban — colonnes par statut */}
+      {view === 'kanban' && <KanbanView ratios={filtered} family={family} />}
+
       {/* Guide de lecture */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card><div className="p-4">
@@ -231,6 +240,122 @@ export default function Ratios() {
             Les cibles par défaut correspondent aux standards sectoriels OHADA. Personnalisables par société dans Paramètres → Seuils.
           </p>
         </div></Card>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Vue Kanban — colonnes par statut (Conforme / Vigilance / Alerte)
+// ─────────────────────────────────────────────────────────────────────
+const STATUS_COLS = [
+  { key: 'good' as const, label: 'Conforme', icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10' },
+  { key: 'warn' as const, label: 'Vigilance', icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10' },
+  { key: 'alert' as const, label: 'Alerte', icon: XCircle, color: 'text-error', bg: 'bg-error/10' },
+];
+
+function KanbanView({ ratios, family }: { ratios: ReturnType<typeof useRatios>; family: string }) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+  };
+
+  useEffect(() => {
+    updateScrollState();
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    window.addEventListener('resize', updateScrollState);
+    return () => {
+      el.removeEventListener('scroll', updateScrollState);
+      window.removeEventListener('resize', updateScrollState);
+    };
+  }, [ratios.length, family]);
+
+  const scrollBy = (dx: number) => {
+    scrollerRef.current?.scrollBy({ left: dx, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="relative">
+      {canScrollLeft && (
+        <button type="button" onClick={() => scrollBy(-360)}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-surface shadow-lg border border-primary-200 dark:border-primary-700 flex items-center justify-center hover:bg-accent hover:text-white hover:border-accent transition-all"
+          aria-label="Défiler vers la gauche">
+          <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      )}
+      {canScrollRight && (
+        <button type="button" onClick={() => scrollBy(360)}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-surface shadow-lg border border-primary-200 dark:border-primary-700 flex items-center justify-center hover:bg-accent hover:text-white hover:border-accent transition-all"
+          aria-label="Défiler vers la droite">
+          <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      )}
+      {canScrollLeft && (
+        <div aria-hidden className="pointer-events-none absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-bg-page to-transparent z-[5]" />
+      )}
+      {canScrollRight && (
+        <div aria-hidden className="pointer-events-none absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-bg-page to-transparent z-[5]" />
+      )}
+
+      <div ref={scrollerRef} className="kanban-scroller flex gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'auto' }}>
+        {STATUS_COLS.map(({ key, label, icon: Icon, color, bg }) => {
+          const items = ratios.filter((r) => r.status === key);
+          return (
+            <div key={key} className="shrink-0 w-[320px] flex flex-col">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <div className="flex items-center gap-1.5">
+                  <Icon className={clsx('w-4 h-4', color)} />
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200">{label}</h3>
+                </div>
+                <span className={clsx('text-[10px] tabular-nums px-2 py-0.5 rounded-full shrink-0', bg, color.replace('text-', 'text-'))}>
+                  {items.length}
+                </span>
+              </div>
+
+              <div className={clsx('flex flex-col gap-2 p-2 rounded-2xl min-h-[200px] flex-1 border', bg, 'border-primary-200/40 dark:border-primary-800/40')}>
+                {items.map((r) => {
+                  const ecart = r.value - r.target;
+                  return (
+                    <div key={r.code} className="card p-3 hover:shadow-md hover:-translate-y-px transition-all duration-200">
+                      <div className="flex items-start justify-between mb-1.5">
+                        <p className="font-semibold text-[12px] text-primary-900 dark:text-primary-100 leading-snug tracking-tight flex-1">{r.label}</p>
+                        <Badge variant={r.status === 'good' ? 'success' : r.status === 'warn' ? 'warning' : 'error'} showIcon>
+                          {r.family}
+                        </Badge>
+                      </div>
+                      <div className="flex items-baseline gap-2 mb-1.5">
+                        <p className="num text-xl font-bold">{formatValue(r.value, r.unit)}</p>
+                        <p className="text-[10px] text-primary-500">
+                          cible {r.unit === '%' ? `${r.target} %` : r.unit === 'j' ? `${r.target} j` : r.target}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-mono text-primary-400 leading-tight truncate max-w-[200px]" title={r.formula}>{r.formula}</p>
+                        <p className={clsx('text-[10px] num font-semibold',
+                          ecart >= 0 ? 'text-success' : 'text-error')}>
+                          {r.unit === '%' ? `${ecart >= 0 ? '+' : ''}${ecart.toFixed(1)} pts` :
+                           r.unit === 'j' ? `${ecart >= 0 ? '+' : ''}${Math.round(ecart)} j` :
+                           `${ecart >= 0 ? '+' : ''}${(r.target ? (ecart / Math.abs(r.target)) * 100 : 0).toFixed(1)} %`}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {items.length === 0 && (
+                  <p className="text-[10px] text-primary-400 italic text-center py-8">Aucun ratio</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
