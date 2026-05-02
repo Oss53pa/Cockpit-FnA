@@ -262,35 +262,34 @@
   /* Marges A4 étroites pour maximiser le contenu utile */
   @page {
     size: A4 portrait;
-    margin: 10mm 10mm 12mm 12mm;
+    margin: 8mm 8mm 10mm 8mm;
   }
-  /* Réduction de la police de 0,5 pt à l'impression pour densifier le contenu
-     sans perdre en lisibilité. Tout le texte du rapport est concerné. */
+  /* Réduction de la police de 1pt à l'impression pour densifier le contenu */
   .report-print-area {
-    font-size: calc(1em - 0.5pt) !important;
+    font-size: calc(1em - 1pt) !important;
   }
   .report-print-area, .report-print-area * {
-    line-height: 1.35 !important;
+    line-height: 1.3 !important;
   }
-  /* Titres également réduits */
-  .report-print-area h1, .report-print-area .h1-print { font-size: 17.5pt !important; }
-  .report-print-area h2, .report-print-area .h2-print { font-size: 12.5pt !important; }
-  .report-print-area h3, .report-print-area .h3-print { font-size: 10.5pt !important; }
-  /* Tables : police 9pt au lieu de 10pt */
-  .report-print-area table { font-size: 9pt !important; }
-  .report-print-area table th { font-size: 8.5pt !important; }
+  /* Titres réduits */
+  .report-print-area h1, .report-print-area .h1-print { font-size: 16pt !important; }
+  .report-print-area h2, .report-print-area .h2-print { font-size: 11.5pt !important; }
+  .report-print-area h3, .report-print-area .h3-print { font-size: 10pt !important; }
+  /* Tables : police 8.5pt */
+  .report-print-area table { font-size: 8.5pt !important; }
+  .report-print-area table th { font-size: 8pt !important; }
   /* Paragraphes */
-  .report-print-area p { font-size: 9.5pt !important; }
-  /* Petites annotations (légendes, footers) */
-  .report-print-area .text-\[10px\], .report-print-area .text-\[9px\] { font-size: 7.5pt !important; }
-  .report-print-area .text-\[11px\] { font-size: 8.5pt !important; }
-  .report-print-area .text-xs { font-size: 8.5pt !important; }
-  .report-print-area .text-sm { font-size: 9.5pt !important; }
-  .report-print-area .text-base { font-size: 10pt !important; }
-  .report-print-area .text-lg { font-size: 11.5pt !important; }
-  .report-print-area .text-xl { font-size: 13.5pt !important; }
-  .report-print-area .text-2xl { font-size: 16pt !important; }
-  .report-print-area .text-3xl { font-size: 22pt !important; }
+  .report-print-area p { font-size: 9pt !important; }
+  /* Petites annotations */
+  .report-print-area .text-\[10px\], .report-print-area .text-\[9px\] { font-size: 7pt !important; }
+  .report-print-area .text-\[11px\] { font-size: 8pt !important; }
+  .report-print-area .text-xs { font-size: 8pt !important; }
+  .report-print-area .text-sm { font-size: 9pt !important; }
+  .report-print-area .text-base { font-size: 9.5pt !important; }
+  .report-print-area .text-lg { font-size: 11pt !important; }
+  .report-print-area .text-xl { font-size: 13pt !important; }
+  .report-print-area .text-2xl { font-size: 15pt !important; }
+  .report-print-area .text-3xl { font-size: 20pt !important; }
   /* Filigrane "BROUILLON" sur les rapports en draft */
   body.report-draft::before {
     content: "BROUILLON";
@@ -311,61 +310,84 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  /* Cache tout SAUF la zone rapport. visibility:hidden (et NON position:absolute)
-     pour préserver le flux de pagination du navigateur. Le contenu masqué garde
-     son espace mais n'apparaît pas — Chromium paginate correctement le rapport. */
-  body * {
-    visibility: hidden;
+  /* Cache tout SAUF le rapport : display:none pour que rien n'occupe
+     d'espace (évite la page blanche avant la couverture). */
+  aside, header, nav, .toolbar, .floating-ai {
+    display: none !important;
   }
-  .report-print-area, .report-print-area * {
-    visibility: visible;
-  }
-  /* Réinitialise marges/largeur sur la zone rapport pour qu'elle prenne tout
-     l'espace de la page A4 (sans la SORTIR du flux — pas de position:absolute). */
-  .report-print-area {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-  }
-  /* Force tous les ancêtres de la zone rapport à passer en bloc bord-à-bord
-     pour éviter qu'un container parent (sidebar, layout flex) ne réserve un
-     espace blanc à gauche du rapport. */
-  body > div, body > main, body > div > div, body > div > main {
+  /* Tous les ancêtres du rapport : bloc simple, zéro marge, zéro espace */
+  body, body > div, body > div > div, body > div > div > div,
+  body > div > div > div > div {
     display: block !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
   }
-  /* Tables longues : autoriser la coupure entre lignes pour éviter la
-     troncature silencieuse de Chromium quand une table dépasse une page A4. */
-  .report-print-area table {
-    page-break-inside: auto;
+  /* Casser tout grid inline (le conteneur 3 colonnes) */
+  [style*="grid-template-columns"] {
+    display: block !important;
+    width: 100% !important;
+    gap: 0 !important;
   }
-  .report-print-area table tr {
-    page-break-inside: avoid;
-    page-break-after: auto;
+  /* Cacher les sidebars (enfants du grid sauf .report-print-area) */
+  [style*="grid-template-columns"] > *:not(.report-print-area) {
+    display: none !important;
   }
-  .report-print-area thead {
-    display: table-header-group; /* répète l'en-tête sur chaque page */
-  }
-  /* Pages : pas de hauteur max forcée, pas de saut systématique → contenu fluide */
-  .report-print-area > div > div {
-    box-shadow: none !important;
-    border: none !important;
+  /* Le rapport : pleine largeur, pas de gap */
+  .report-print-area {
+    display: block !important;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
+    gap: 0 !important;
+  }
+  /* Supprimer space-y-* (margin-top sur enfants successifs) */
+  .report-print-area > * + * {
+    margin-top: 0 !important;
+  }
+  /* Pages A4 : pleine largeur, pas de centrage, pas d'ombre */
+  .page-a4 {
+    margin: 0 !important;
     max-width: none !important;
     max-height: none !important;
-    min-height: 0 !important;
-    page-break-after: auto !important;
-    page-break-inside: auto !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    aspect-ratio: unset !important;
+    overflow: visible !important;
   }
-  /* Pages spéciales (couverture, sommaire, 4ème de couverture) : isolées sur
-     leur propre page A4 — jamais mélangées avec d'autres contenus. */
+  /* ── COUVERTURE & 4ÈME DE COUVERTURE ──
+     Occuper exactement une page A4 complète, identique à l'écran. */
+  .page-a4[data-page-type="cover"],
+  .page-a4[data-page-type="back"] {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+  }
+  .page-a4[data-page-type="cover"] > div,
+  .page-a4[data-page-type="back"] > div {
+    padding: 0 !important;
+    height: 100% !important;
+    gap: 0 !important;
+  }
+  /* Enfants de la cover/back : remplir toute la page */
+  .page-a4[data-page-type="cover"] > div > div,
+  .page-a4[data-page-type="back"] > div > div {
+    min-height: 100% !important;
+    height: 100% !important;
+    width: 100% !important;
+  }
+  /* Couverture modern (grid 40%/1fr) : conserver le grid en print */
+  .page-a4[data-page-type="cover"] > div > div[style*="grid-template-columns"] {
+    display: grid !important;
+  }
+  /* Pages spéciales : isolées */
   .report-print-area .page-a4[data-page-type="cover"] {
     page-break-after: always !important;
-    page-break-inside: avoid !important;
   }
   .report-print-area .page-a4[data-page-type="toc"] {
     page-break-after: always !important;
@@ -374,24 +396,52 @@
   .report-print-area .page-a4[data-page-type="back"] {
     page-break-before: always !important;
     page-break-after: avoid !important;
-    page-break-inside: avoid !important;
   }
-  /* PAS de saut de page forcé : le contenu s'enchaîne sans vide.
-     Le navigateur paginate automatiquement quand le contenu atteint la hauteur A4. */
-  /* Supprimer l'espace entre les pages A4 et leurs marges externes */
-  .report-print-area > div {
+  /* Tables longues : coupure entre lignes */
+  .report-print-area table {
+    page-break-inside: auto;
+  }
+  .report-print-area table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  .report-print-area thead {
+    display: table-header-group;
+  }
+  /* Pages contenu : pas de hauteur forcée, contenu fluide */
+  .page-a4[data-page-type="content"] > div > div,
+  .report-print-area > div > div {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    page-break-after: auto !important;
+    page-break-inside: auto !important;
+  }
+  /* Supprimer gaps entre pages et blocs */
+  .report-print-area > div,
+  .report-print-area .page-a4 > div {
     gap: 0 !important;
     margin: 0 !important;
   }
-  /* Réduire le padding interne des pages */
-  .report-print-area .p-6 {
-    padding: 0 !important;
+  .report-print-area .page-a4 > div > * + * {
+    margin-top: 0 !important;
   }
-  .report-print-area .pb-10 {
-    padding-bottom: 0 !important;
+  /* Padding interne des pages contenu réduit */
+  .report-print-area .page-a4[data-page-type="content"] .p-4,
+  .report-print-area .page-a4[data-page-type="content"] .p-6,
+  .report-print-area .page-a4[data-page-type="toc"] .p-4 {
+    padding: 2mm 4mm !important;
   }
-  /* Éviter de couper en plein milieu d'un dashboard (les tables sont gérées
-     plus haut avec `auto` pour autoriser la coupure entre lignes). */
+  .report-print-area .pb-10,
+  .report-print-area .pb-8,
+  .report-print-area .pb-2 {
+    padding-bottom: 1mm !important;
+  }
+  /* Dashboards : pas de coupure */
   .report-print-area .border-l-4 {
     page-break-inside: avoid;
   }
@@ -412,12 +462,40 @@
   .report-print-area .h-0\.5 {
     display: none !important;
   }
-  /* Sidebar, header, toolbar — caché */
-  aside, header, nav, .toolbar, .floating-ai {
-    display: none !important;
-  }
-  /* Footer de page (numéro de page) — affiché par CSS @page si possible */
+  /* Footer de page */
   .report-print-area .pointer-events-none {
     display: none !important;
   }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Kanban scroller — scrollbar horizontale TOUJOURS visible
+   Sur macOS/iOS les scrollbars sont normalement masquees, donc on force
+   leur affichage dans le catalogue Kanban pour que le user voit clairement
+   qu'il peut scroller horizontalement vers les colonnes coupees.
+   ──────────────────────────────────────────────────────────────────── */
+.kanban-scroller {
+  /* Firefox */
+  scrollbar-width: auto;
+  scrollbar-color: rgb(var(--p-400)) transparent;
+}
+.kanban-scroller::-webkit-scrollbar {
+  height: 10px;
+  -webkit-appearance: auto;
+  display: block;
+}
+.kanban-scroller::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  margin: 0 12px;
+}
+.kanban-scroller::-webkit-scrollbar-thumb {
+  background: rgb(var(--p-400));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.kanban-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--accent));
+  background-clip: padding-box;
 }

@@ -1,5 +1,5 @@
 import * as Icons from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -302,10 +302,73 @@ function KanbanView({ list, navigate, filter }: {
       })).filter((g) => g.items.length > 0)
     : [{ cat: filter, items: list }];
 
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+  };
+
+  useEffect(() => {
+    updateScrollState();
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    window.addEventListener('resize', updateScrollState);
+    return () => {
+      el.removeEventListener('scroll', updateScrollState);
+      window.removeEventListener('resize', updateScrollState);
+    };
+  }, [groups.length]);
+
+  const scrollBy = (dx: number) => {
+    scrollerRef.current?.scrollBy({ left: dx, behavior: 'smooth' });
+  };
+
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 snap-x snap-mandatory">
+    <div className="relative">
+      {/* Bouton scroll gauche */}
+      {canScrollLeft && (
+        <button
+          type="button"
+          onClick={() => scrollBy(-360)}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-surface shadow-lg border border-primary-200 dark:border-primary-700 flex items-center justify-center hover:bg-accent hover:text-white hover:border-accent transition-all"
+          aria-label="Défiler vers la gauche"
+        >
+          <Icons.ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      )}
+      {/* Bouton scroll droite */}
+      {canScrollRight && (
+        <button
+          type="button"
+          onClick={() => scrollBy(360)}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-surface shadow-lg border border-primary-200 dark:border-primary-700 flex items-center justify-center hover:bg-accent hover:text-white hover:border-accent transition-all"
+          aria-label="Défiler vers la droite"
+        >
+          <Icons.ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      )}
+      {/* Fade gauche */}
+      {canScrollLeft && (
+        <div aria-hidden className="pointer-events-none absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-bg-page to-transparent z-[5]" />
+      )}
+      {/* Fade droite */}
+      {canScrollRight && (
+        <div aria-hidden className="pointer-events-none absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-bg-page to-transparent z-[5]" />
+      )}
+
+      <div
+        ref={scrollerRef}
+        className="kanban-scroller flex gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0"
+        style={{ scrollbarWidth: 'auto' }}
+      >
       {groups.map(({ cat, items }) => (
-        <div key={cat} className="shrink-0 w-[320px] flex flex-col snap-start">
+        <div key={cat} className="shrink-0 w-[320px] flex flex-col">
           {/* Header colonne */}
           <div className="flex items-center justify-between mb-3 px-1">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200 truncate">
@@ -348,6 +411,7 @@ function KanbanView({ list, navigate, filter }: {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
