@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
+import { ActivitySidebar, ActivitySidebarToggle } from './components/layout/ActivitySidebar';
 import { DemoBanner } from './components/layout/DemoBanner';
 import { DemoTour } from './components/layout/DemoTour';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -138,6 +139,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       <FloatingAI />
       <DemoTour />
+      <ActivitySidebarToggle />
+      <ActivitySidebar />
     </div>
   );
 }

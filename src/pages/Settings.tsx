@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
+import { AdminGate } from '../components/auth/AdminGate';
+import { lockAdmin } from '../lib/adminAuth';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -26,11 +28,24 @@ const SECTORS = ['Industrie', 'Commerce', 'BTP', 'Services', 'Agriculture', 'San
 const CURRENCIES = ['XOF', 'XAF', 'EUR', 'USD', 'GHS', 'NGN'];
 
 export default function Settings() {
-  const [tab, setTab] = useState<Tab>('apparence');
+  return (
+    <AdminGate>
+      <SettingsContent />
+    </AdminGate>
+  );
+}
 
+function SettingsContent() {
+  const [tab, setTab] = useState<Tab>('apparence');
   return (
     <div>
-      <PageHeader title="Paramètres" subtitle="Apparence · Sociétés · Exercices · Ratios · Données · Utilisateurs · Intégrations" />
+      <PageHeader
+        title="Paramètres"
+        subtitle="Apparence · Sociétés · Exercices · Ratios · Données · Utilisateurs · IA · Intégrations"
+        action={<button className="btn-outline !py-1.5 text-xs" onClick={() => { lockAdmin(); window.location.reload(); }}>
+          <Lock className="w-3.5 h-3.5" /> Verrouiller
+        </button>}
+      />
 
       <TabSwitch value={tab} onChange={setTab} tabs={[
         { key: 'apparence', label: 'Apparence' },
