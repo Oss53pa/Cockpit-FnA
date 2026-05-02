@@ -26,6 +26,7 @@ import { computeBalance } from '../balance';
 import { computeBilan, computeSIG } from '../statements';
 import { computeRatios, type Ratio } from '../ratios';
 import { addObservation, getMemory } from './memory';
+import { runLearningCycle, recordPrediction, getLearningState, type LearningCycleResult, type ModelAccuracy, type RecurringPattern, type LearnedThreshold } from './learning';
 import { verifyChain } from '../../lib/auditHash';
 import { isPeriodLocked } from '../../lib/periodLock';
 
@@ -581,6 +582,16 @@ export interface IntelligenceReport {
   suggestions: Suggestion[];
   audit: AuditReport;
   insights: string[];
+  /** Résultat du cycle d'apprentissage (boucle fermée prédiction ↔ réalité). */
+  learning: LearningCycleResult;
+  /** Précision des modèles par métrique (mise à jour à chaque cycle). */
+  modelAccuracy: { [metric: string]: ModelAccuracy };
+  /** Patterns récurrents détectés sur l'historique. */
+  patterns: RecurringPattern[];
+  /** Seuils appris spécifiquement à cette entreprise (vs normes UEMOA). */
+  learnedThresholds: { [metric: string]: LearnedThreshold };
+  /** Synthèse en langage naturel de ce que Proph3t a appris. */
+  lessonsLearned: string[];
 }
 
 /**
@@ -605,6 +616,39 @@ export async function runIntelligenceAnalysis(orgId: string, year: number): Prom
     if (Number.isFinite(r.value)) addObservation(orgId, { category: 'ratio', metric: r.code.toLowerCase(), value: r.value, context: `Exercice ${year}`, severity: r.status === 'alert' ? 'critical' : r.status === 'warn' ? 'warn' : 'info' });
   }
 
+  // ── APPRENTISSAGE : boucle fermée prédiction ↔ réalité ──────────────────
+  // 1) Préparer le snapshot actuel pour résoudre les anciennes prédictions
+  const currentSnapshot: { metric: string; value: number; severity?: string }[] = [];
+  if (sig.ca > 0) currentSnapshot.push({ metric: 'ca', value: sig.ca });
+  if (sig.resultat !== 0) currentSnapshot.push({ metric: 'resultat', value: sig.resultat });
+  if (sig.ebe !== 0) currentSnapshot.push({ metric: 'ebe', value: sig.ebe });
+  for (const r of ratios.slice(0, 8)) {
+    if (Number.isFinite(r.value)) currentSnapshot.push({ metric: r.code.toLowerCase(), value: r.value, severity: r.status });
+  }
+
+  // 2) Préparer l'historique depuis Memory pour apprendre les seuils + patterns
+  const memSnapshot = getMemory(orgId);
+  const history = memSnapshot.observations.map((o) => ({ date: o.date, metric: o.metric, value: o.value, severity: o.severity }));
+
+  // 3) Enregistrer les prédictions de ce cycle pour évaluation future
+  for (const p of predictions) {
+    if (p.horizon === 'fin_exercice') {
+      recordPrediction(orgId, {
+        metric: p.metric.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+        predictedValue: p.predicted,
+        horizonDays: Math.max(7, context.daysUntilYearEnd),
+        modelVersion: 'run-rate-v1',
+        confidence: p.confidence,
+      });
+    }
+  }
+
+  // 4) Lancer le cycle d'apprentissage (résout, apprend seuils, détecte patterns)
+  const learning = runLearningCycle(orgId, currentSnapshot, history);
+
+  // 5) Récupérer l'état appris pour le rapport
+  const learnState = getLearningState(orgId);
+
   // Insights agrégés
   const insights: string[] = [];
   insights.push(`Exercice ${year} à ${context.progressPct.toFixed(0)} % — phase ${context.phase === 'opening' ? 'd\'ouverture' : context.phase === 'mid' ? 'de pleine activité' : context.phase === 'closing' ? 'de clôture' : 'clos'}.`);
@@ -613,5 +657,17 @@ export async function runIntelligenceAnalysis(orgId: string, year: number): Prom
   if (suggestions.filter((s) => s.priority === 'P0').length > 0) insights.push(`${suggestions.filter((s) => s.priority === 'P0').length} action(s) P0 (urgent) recommandée(s).`);
   for (const reco of context.recommendations.slice(0, 2)) insights.push(reco);
 
-  return { context, predictions, corrections, suggestions, audit, insights };
+  // Insights issus de l'apprentissage
+  if (learning.iteration > 1) {
+    insights.push(`Cycle d'apprentissage #${learning.iteration} — ${learning.predictionsResolved} prédiction(s) résolue(s), ${learning.thresholdsLearned} seuil(s) ajusté(s), ${learning.patternsDetected} pattern(s) détecté(s).`);
+  }
+
+  return {
+    context, predictions, corrections, suggestions, audit, insights,
+    learning,
+    modelAccuracy: learnState.accuracy,
+    patterns: learnState.patterns,
+    learnedThresholds: learnState.thresholds,
+    lessonsLearned: learnState.lessonsLearned,
+  };
 }

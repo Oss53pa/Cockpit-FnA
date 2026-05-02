@@ -16,6 +16,9 @@ export type { FinancialScore, AnomalyReport, TresoForecast, FullCommentary, Olla
 // Re-exports pour usage direct depuis pages
 export { runIntelligenceAnalysis, getTemporalContext, generateQuickPredictions, detectCorrections, generateSmartSuggestions, runComprehensiveAudit } from './intelligence';
 export type { TemporalContext, QuickPrediction, Correction, Suggestion, AuditCheck, AuditReport } from './intelligence';
+// Apprentissage (boucle fermée prédiction ↔ réalité)
+export { runLearningCycle, recordPrediction, resolvePrediction, autoResolveMetric, learnThreshold, classifyAgainstLearnedThreshold, detectRecurringPatterns, summarizeLessonsLearned, getLearningState, clearLearning } from './learning';
+export type { PredictionRecord, LearnedThreshold, RecurringPattern, ModelAccuracy, LearningState, LearningCycleResult } from './learning';
 
 export async function analyzeFinancials(orgId: string, year: number, opts: { withIntelligence?: boolean } = {}): Promise<Proph3Analysis> {
   const balance = await computeBalance({ orgId, year, includeOpening: true });
