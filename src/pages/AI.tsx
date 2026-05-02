@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Bot, WifiOff, StopCircle, RefreshCw, Settings2 } from 'lucide-react';
+import { Send, Bot, WifiOff, StopCircle, RefreshCw, Settings2 } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';

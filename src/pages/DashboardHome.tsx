@@ -5,7 +5,7 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import { ResponsivePie } from '@nivo/pie';
-import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, Banknote, Receipt, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
+import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { KPICard } from '../components/ui/KPICardV2';
@@ -14,12 +14,10 @@ import { TabSwitch } from '../components/ui/TabSwitch';
 import { SIGList } from '../components/ui/SIGList';
 import { PerformanceGauges } from '../components/ui/PerformanceGauges';
 import { AlertsCard } from '../components/ui/AlertsCard';
-import { SkeletonKPIGrid } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
-import { C } from '../lib/colors';
 import { fmtFull, fmtK } from '../lib/format';
 import { exportStatementsPDF } from '../engine/exporter';
 import { computeMonthlyBilan } from '../engine/monthly';
@@ -88,7 +86,7 @@ export default function DashboardHome() {
 
   const system = resolveSystem(org?.accountingSystem);
   const ca = sig.ca;
-  const { fr: frV, bfr: bfrV, tn: tnV, jCA } = computeStructure(bilan, ca);
+  const { fr: frV, bfr: bfrV, tn: tnV } = computeStructure(bilan, ca);
   const caData = computeCaData(monthly);
   const chargesData = computeChargesData(balance);
 

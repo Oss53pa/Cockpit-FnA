@@ -892,7 +892,7 @@ export async function importGL(
           await assertPeriodOpen(date, opts.orgId);
         } catch (err) {
           if (err instanceof PeriodLockedError) {
-            errors.push(`Import refusé : ${err.message}`);
+            errors.push({ row: 0, reason: `Import refusé : ${err.message}` });
             throw err; // rollback Dexie
           }
           throw err;
@@ -933,6 +933,12 @@ export async function importGL(
       await db.gl.bulkAdd(tagged);
     }
   });
+
+  // Push vers Supabase en arrière-plan (fire & forget)
+  import('../db/supabaseSync').then(({ pushOrgToSupabase, pushGLToSupabase }) => {
+    pushOrgToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push org failed:', e));
+    pushGLToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push GL failed:', e));
+  }).catch((e) => console.warn('[Sync] Module supabaseSync unavailable:', e));
 
   // Statistique des années présentes dans les écritures
   const yearMap = new Map<number, number>();
@@ -1060,6 +1066,11 @@ export async function importCOA(
     status: errors.length === 0 ? 'success' : (toImport.length > 0 ? 'partial' : 'error'),
     report: JSON.stringify({ updated, errors: errors.slice(0, 100) }),
   });
+
+  // Push vers Supabase en arrière-plan
+  import('../db/supabaseSync').then(({ pushOrgToSupabase }) => {
+    pushOrgToSupabase(orgId).catch((e) => console.warn('[Sync] Push COA failed:', e));
+  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
 
   return {
     totalRows: rows.length,
@@ -1211,6 +1222,11 @@ export async function importBudget(
     version: opts.version,
   });
 
+  // Push vers Supabase en arrière-plan
+  import('../db/supabaseSync').then(({ pushOrgToSupabase }) => {
+    pushOrgToSupabase(orgId).catch((e) => console.warn('[Sync] Push budget failed:', e));
+  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
+
   return {
     totalRows: rows.length,
     imported: perAccount.size,
@@ -1323,4 +1339,232 @@ export async function resyncAccountLabels(orgId: string): Promise<{ updated: num
     }
   }
   return { updated };
+}
+
+// ── Import Grand Livre Tiers (Auxiliaire) ─────────────────────────────────
+// Enrichit les écritures GL existantes avec le détail client/fournisseur.
+// Deux modes :
+//   1) ENRICHISSEMENT : rapproche chaque ligne tiers avec une écriture GL
+//      existante (date + journal + pièce + compte + montant) et remplit le
+//      champ `tiers` sans créer de doublon.
+//   2) CRÉATION : si aucun GL n'existe pour ce compte collectif, crée les
+//      écritures directement (import standalone).
+// Contrôle de cohérence : Σ soldes du tiers par compte collectif ≈ solde GL.
+
+export type TiersMapping = {
+  date: string;
+  account: string;          // compte général (411, 401)
+  codeTiers: string;        // code tiers (CLI001, FRN042)
+  labelTiers: string;       // nom du tiers
+  debit: string;
+  credit: string;
+  journal?: string;
+  piece?: string;
+  label?: string;           // libellé écriture
+};
+
+export type TiersImportReport = {
+  totalRows: number;
+  enriched: number;         // écritures GL existantes enrichies avec le code tiers
+  created: number;          // écritures créées (mode standalone)
+  skipped: number;          // lignes ignorées (déjà un tiers, ou montant 0)
+  errors: { row: number; reason: string }[];
+  coherenceCheck: {
+    account: string;
+    soldeGL: number;
+    soldeTiers: number;
+    ecart: number;
+    ok: boolean;
+  }[];
+};
+
+const tiersPatterns: Record<keyof TiersMapping, RegExp[]> = {
+  date: [/^date/i, /^jour/i, /^dt$/i],
+  account: [/^compte\s*g[ée]n/i, /^cpte\s*g/i, /^compte\s*coll/i, /^compte$/i, /^general/i, /^cpte$/i],
+  codeTiers: [/^code\s*tiers/i, /^n[°u].*tiers/i, /^tiers$/i, /^code\s*aux/i, /^auxiliaire/i, /^code\s*client/i, /^code\s*fourn/i, /^num.*tiers/i, /^compte\s*aux/i],
+  labelTiers: [/^nom\s*tiers/i, /^raison\s*soc/i, /^intitul[ée]\s*tiers/i, /^nom\s*client/i, /^nom\s*fourn/i, /^libell[ée]\s*tiers/i, /^d[ée]sign/i, /^nom$/i],
+  debit: [/^d[ée]bit$/i, /^debit$/i, /^db$/i],
+  credit: [/^cr[ée]dit$/i, /^credit$/i, /^cr$/i],
+  journal: [/^journal$/i, /^jnl/i, /^jrn/i, /journal/i],
+  piece: [/pi[èe]ce/i, /^n[°u].*pi/i, /^ref/i, /^num.*doc/i, /^num[ée]ro\s*de\s*saisi/i],
+  label: [/^libell[ée]$/i, /^description$/i, /^libelle$/i, /^label/i],
+};
+
+export function detectTiersColumns(headers: string[]): Partial<TiersMapping> {
+  const mapping: Partial<TiersMapping> = {};
+  for (const key of Object.keys(tiersPatterns) as (keyof TiersMapping)[]) {
+    const ps = tiersPatterns[key];
+    const found = headers.find((h) => ps.some((p) => p.test(h.trim())));
+    if (found) mapping[key] = found;
+  }
+  return mapping;
+}
+
+export async function importGLTiers(
+  file: File,
+  mapping: TiersMapping,
+  opts: { orgId: string; user: string; source: string },
+): Promise<TiersImportReport> {
+  const { rows } = await parseFile(file);
+  const errors: TiersImportReport['errors'] = [];
+  let enriched = 0;
+  let created = 0;
+  let skipped = 0;
+
+  // 1) Parser les lignes tiers
+  type TiersLine = {
+    date: string; account: string; codeTiers: string; labelTiers: string;
+    debit: number; credit: number; journal: string; piece: string; label: string;
+  };
+  const tiersLines: TiersLine[] = [];
+  const tiersBalanceByAccount = new Map<string, number>();
+
+  rows.forEach((r, idx) => {
+    const account = String(r[mapping.account] ?? '').trim();
+    const codeTiers = String(r[mapping.codeTiers] ?? '').trim();
+    if (!account || !codeTiers) {
+      errors.push({ row: idx + 2, reason: `Compte ou code tiers manquant` });
+      return;
+    }
+    const date = parseDate(r[mapping.date]);
+    if (!date) { errors.push({ row: idx + 2, reason: 'Date invalide' }); return; }
+    const debit = parseAmount(r[mapping.debit]);
+    const credit = parseAmount(r[mapping.credit]);
+    if (debit === 0 && credit === 0) { skipped++; return; }
+
+    const labelTiers = String(r[mapping.labelTiers] ?? '').trim();
+    const journal = mapping.journal ? String(r[mapping.journal] ?? '').trim() : '';
+    const piece = mapping.piece ? String(r[mapping.piece] ?? '').trim() : '';
+    const label = mapping.label ? String(r[mapping.label] ?? '').trim() : labelTiers;
+
+    tiersLines.push({ date, account, codeTiers, labelTiers, debit, credit, journal, piece, label });
+    tiersBalanceByAccount.set(account, (tiersBalanceByAccount.get(account) ?? 0) + debit - credit);
+  });
+
+  // 2) Charger les écritures GL existantes pour rapprochement
+  const glEntries = await db.gl.where('orgId').equals(opts.orgId).toArray();
+
+  // Index pour rapprochement rapide : clé = date|account|debit|credit
+  // (journal et pièce sont optionnels car pas toujours présents dans le tiers)
+  const glIndex = new Map<string, GLEntry[]>();
+  for (const e of glEntries) {
+    const key = `${e.date}|${e.account}|${e.debit}|${e.credit}`;
+    const arr = glIndex.get(key) ?? [];
+    arr.push(e);
+    glIndex.set(key, arr);
+  }
+
+  // 3) Rapprocher et enrichir
+  const toUpdate: GLEntry[] = [];
+  const toCreate: Omit<GLEntry, 'id'>[] = [];
+  const matched = new Set<number>(); // IDs GL déjà rapprochés (évite doublons)
+
+  // Résolution des périodes pour les créations éventuelles
+  const existingPeriods = await db.periods.where('orgId').equals(opts.orgId).toArray();
+  const periodByKey = new Map(existingPeriods.map((p) => [`${p.year}-${p.month}`, p.id]));
+
+  for (const tl of tiersLines) {
+    const key = `${tl.date}|${tl.account}|${tl.debit}|${tl.credit}`;
+    const candidates = glIndex.get(key) ?? [];
+
+    // Chercher un candidat non déjà rapproché, avec journal/pièce si disponibles
+    let best: GLEntry | undefined;
+    for (const c of candidates) {
+      if (matched.has(c.id!)) continue;
+      if (c.tiers && c.tiers !== tl.codeTiers) continue; // déjà un autre tiers
+      // Si journal/pièce fournis dans le tiers, vérifier cohérence
+      if (tl.journal && c.journal && tl.journal.toUpperCase() !== c.journal.toUpperCase()) continue;
+      if (tl.piece && c.piece && tl.piece !== c.piece) continue;
+      best = c;
+      break;
+    }
+
+    if (best) {
+      if (best.tiers) {
+        skipped++; // déjà enrichi
+      } else {
+        best.tiers = tl.codeTiers;
+        if (!best.label || best.label === '—') best.label = tl.label || tl.labelTiers;
+        toUpdate.push(best);
+        matched.add(best.id!);
+        enriched++;
+      }
+    } else {
+      // Pas de match GL → créer l'écriture (mode standalone)
+      const y = parseInt(tl.date.substring(0, 4));
+      const m = parseInt(tl.date.substring(5, 7));
+      const periodId = periodByKey.get(`${y}-${m}`) ?? '';
+      toCreate.push({
+        orgId: opts.orgId,
+        periodId,
+        date: tl.date,
+        journal: tl.journal || 'AUX',
+        piece: tl.piece || '',
+        account: tl.account,
+        label: tl.label || tl.labelTiers,
+        debit: tl.debit,
+        credit: tl.credit,
+        tiers: tl.codeTiers,
+      });
+      created++;
+    }
+  }
+
+  // 4) Écrire en base
+  await db.transaction('rw', [db.gl, db.imports], async () => {
+    const importId = await db.imports.add({
+      orgId: opts.orgId,
+      date: Date.now(),
+      user: opts.user,
+      fileName: file.name,
+      source: opts.source,
+      kind: 'TIERS',
+      count: enriched + created,
+      rejected: errors.length,
+      status: errors.length === 0 ? 'success' : (enriched + created > 0 ? 'partial' : 'error'),
+      report: JSON.stringify({ errors: errors.slice(0, 50) }),
+    });
+
+    // Mettre à jour les écritures enrichies
+    if (toUpdate.length > 0) {
+      await db.gl.bulkPut(toUpdate);
+    }
+
+    // Créer les nouvelles écritures (mode standalone)
+    if (toCreate.length > 0) {
+      const tagged = toCreate.map((e) => ({ ...e, importId: String(importId) }));
+      await db.gl.bulkAdd(tagged);
+    }
+  });
+
+  // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif
+  const coherenceCheck: TiersImportReport['coherenceCheck'] = [];
+  for (const [account, soldeTiers] of tiersBalanceByAccount) {
+    const soldeGL = glEntries
+      .filter((e) => e.account === account || e.account.startsWith(account))
+      .reduce((s, e) => s + e.debit - e.credit, 0);
+    const ecart = Math.round((soldeGL - soldeTiers) * 100) / 100;
+    coherenceCheck.push({
+      account,
+      soldeGL: Math.round(soldeGL * 100) / 100,
+      soldeTiers: Math.round(soldeTiers * 100) / 100,
+      ecart,
+      ok: Math.abs(ecart) < 1,
+    });
+  }
+
+  // Push vers Supabase en arrière-plan
+  import('../db/supabaseSync').then(({ pushOrgToSupabase, pushGLToSupabase }) => {
+    pushOrgToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push tiers org failed:', e));
+    pushGLToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push tiers GL failed:', e));
+  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
+
+  return {
+    totalRows: rows.length,
+    enriched,
+    created,
+    skipped,
+    errors,
+    coherenceCheck,
+  };
 }

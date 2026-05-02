@@ -734,8 +734,6 @@ function buildCOATree(accounts: { code: string; label: string; class: string }[]
       }
       return root.get(c1)!.children;
     })();
-    let parentNode: COANode = root.get(acc.code[0])!;
-
     // Pour chaque longueur de préfixe de 2 jusqu'à la longueur totale,
     // on crée (ou récupère) un nœud à ce niveau.
     for (let len = 2; len <= acc.code.length; len++) {
@@ -758,7 +756,6 @@ function buildCOATree(accounts: { code: string; label: string; class: string }[]
         node.label = acc.label || node.label;
         node.isLeaf = true;
       }
-      parentNode = node;
       parentChildren = node.children;
     }
   }

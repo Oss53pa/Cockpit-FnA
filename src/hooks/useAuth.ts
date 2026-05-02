@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { pullFromSupabase } from '../db/supabaseSync';
 import type { User, Session } from '@supabase/supabase-js';
+
+// Helper: les tables fna_* ne sont pas typees dans Database — bypass le typing
+const fromAny = (table: string) => (supabase as any).from(table);
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
@@ -8,6 +12,8 @@ interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  syncing: boolean;
+  syncStatus: string;
   role: UserRole;
   orgIds: string[];
 }
@@ -21,14 +27,15 @@ export function useAuth() {
     user: null,
     session: null,
     loading: true,
+    syncing: false,
+    syncStatus: '',
     role: 'admin',
     orgIds: [],
   });
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // Mode local : pas d'auth, rôle admin par défaut
-      setState({ user: null, session: null, loading: false, role: 'admin', orgIds: [] });
+      setState({ user: null, session: null, loading: false, syncing: false, syncStatus: '', role: 'admin', orgIds: [] });
       return;
     }
 
@@ -50,16 +57,28 @@ export function useAuth() {
   }, []);
 
   const loadUserOrgs = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_orgs')
+    const { data } = await fromAny('fna_user_orgs')
       .select('org_id, role')
       .eq('user_id', userId);
     if (data?.length) {
+      const orgIds = data.map((d: any) => d.org_id);
       setState(s => ({
         ...s,
         role: data[0].role as UserRole,
-        orgIds: data.map(d => d.org_id),
+        orgIds,
+        syncing: true,
+        syncStatus: 'Synchronisation...',
       }));
+      // Sync Supabase → Dexie en arrière-plan
+      try {
+        await pullFromSupabase(orgIds, (p) => {
+          setState(s => ({ ...s, syncStatus: p.step }));
+        });
+        setState(s => ({ ...s, syncing: false, syncStatus: '' }));
+      } catch (e) {
+        console.error('[Sync] Erreur pull Supabase → Dexie:', e);
+        setState(s => ({ ...s, syncing: false, syncStatus: 'Erreur sync' }));
+      }
     }
   };
 
@@ -84,14 +103,14 @@ export function useAuth() {
     // Créer l'organisation et le lien user-org
     if (data.user) {
       const orgId = `org-${Date.now()}`;
-      await supabase.from('organizations').insert({
+      await fromAny('fna_organizations').insert({
         id: orgId,
         name: orgName,
         currency: 'XOF',
         sector: '',
         accounting_system: 'Normal',
       });
-      await supabase.from('user_orgs').insert({
+      await fromAny('fna_user_orgs').insert({
         user_id: data.user.id,
         org_id: orgId,
         role: 'admin',
@@ -101,7 +120,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    setState({ user: null, session: null, loading: false, role: 'admin', orgIds: [] });
+    setState({ user: null, session: null, loading: false, syncing: false, syncStatus: '', role: 'admin', orgIds: [] });
   }, []);
 
   const resetPassword = useCallback(async (email: string) => {
@@ -115,6 +134,8 @@ export function useAuth() {
     isLocalMode: !isSupabaseConfigured,
     canEdit: state.role === 'admin' || state.role === 'editor',
     isAdmin: state.role === 'admin',
+    syncing: state.syncing,
+    syncStatus: state.syncStatus,
     signIn,
     signInWithMagicLink,
     signInWithGoogle,

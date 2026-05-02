@@ -10,7 +10,7 @@ export function Skeleton({ className }: { className?: string }) {
 
 /** Skeleton typographique (1 ligne de texte). */
 export function SkeletonText({ width = '100%', className }: { width?: string; className?: string }) {
-  return <Skeleton className={clsx('h-3', className)} />;
+  return <div style={{ width }}><Skeleton className={clsx('h-3', className)} /></div>;
 }
 
 /** Skeleton pour KPI card. */

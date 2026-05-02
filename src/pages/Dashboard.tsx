@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, AreaChart, Area, ComposedChart,
 } from 'recharts';
-import { ArrowLeft, Download, Diamond, Circle, Star, TrendingUp, TrendingDown, Target, Layers, Activity, Percent, ArrowUp, ArrowDown, AlertTriangle, CheckCircle2, Gem, Settings as SettingsIcon, Banknote, Receipt, Users } from 'lucide-react';
+import { ArrowLeft, Download, Diamond, Circle, Star, TrendingUp, TrendingDown, Target, Layers, Activity, Percent } from 'lucide-react';
 import clsx from 'clsx';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
