@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Send, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
 import { AdminGate } from '../components/auth/AdminGate';
 import { lockAdmin } from '../lib/adminAuth';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -1026,6 +1026,7 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
     <Modal
       open={open}
       onClose={onClose}
+      size="lg"
       title={initial ? `Modifier — ${initial.name}` : 'Nouvel utilisateur'}
       footer={
         <>
@@ -1036,7 +1037,7 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Nom complet</label>
@@ -1049,20 +1050,21 @@ function UserModal({ open, onClose, onSave, initial, orgs }: {
         </div>
 
         <div>
-          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-2">Rôle</label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1.5">Rôle</label>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
             {(Object.keys(ROLE_LABELS) as AppRole[]).map((r) => (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
                 className={clsx(
-                  'text-left p-3 rounded-xl border-2 transition-all',
+                  'text-left p-2 rounded-lg border-2 transition-all',
                   role === r ? 'border-accent bg-accent/5' : 'border-primary-200 dark:border-primary-700 hover:border-primary-400',
                 )}
+                title={ROLE_DESCRIPTIONS[r]}
               >
-                <p className="font-semibold text-sm">{ROLE_LABELS[r]}</p>
-                <p className="text-[11px] text-primary-500 mt-0.5 leading-relaxed">{ROLE_DESCRIPTIONS[r]}</p>
+                <p className="font-semibold text-xs">{ROLE_LABELS[r]}</p>
+                <p className="text-[10px] text-primary-500 mt-0.5 leading-tight line-clamp-2">{ROLE_DESCRIPTIONS[r]}</p>
               </button>
             ))}
           </div>
@@ -1148,7 +1150,6 @@ function InvitePreviewModal({ open, onClose, user, orgs }: {
       content={content}
       options={{
         mode: 'invitation',
-        useSupabaseInvite: true,
         supabasePayload: { name: user.name, role: user.role, orgIds: user.orgIds },
       }}
     />
@@ -1363,6 +1364,8 @@ function TabEmails() {
         </div>
       </Card>
 
+      <EmailDeliveryStatus />
+
       <Card padded>
         <div className="flex items-start gap-3">
           <Cloud className="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
@@ -1374,6 +1377,113 @@ function TabEmails() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+// ─── EmailDeliveryStatus ──────────────────────────────────────────
+// Encart de diagnostic configuration Resend / Edge Function send-email
+function EmailDeliveryStatus() {
+  const [testEmail, setTestEmail] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [lastResult, setLastResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const runTest = async () => {
+    if (!testEmail.includes('@')) {
+      toast.warning('Email invalide', 'Saisissez une adresse de test.');
+      return;
+    }
+    setTesting(true);
+    setLastResult(null);
+    try {
+      const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+      if (!isSupabaseConfigured) {
+        setLastResult({ ok: false, msg: 'Supabase non configuré (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)' });
+        return;
+      }
+      const html = `<div style="font-family:system-ui,sans-serif;padding:20px"><h2 style="color:#DA4D28">Cockpit FnA — test d'envoi</h2><p>Si vous lisez ce message, l'envoi via Resend fonctionne 🎉</p><p style="color:#666;font-size:12px">Envoyé le ${new Date().toLocaleString('fr-FR')}</p></div>`;
+      const { data, error } = await (supabase as any).functions.invoke('send-email', {
+        body: {
+          to: testEmail,
+          subject: '[Cockpit FnA] Test d\'envoi Resend',
+          html,
+          text: 'Cockpit FnA — test d\'envoi. Si vous lisez ce message, Resend fonctionne.',
+          mode: 'invitation',
+        },
+      });
+      if (error) {
+        const detail = (error as any)?.context?.error ?? (error as any)?.message ?? 'Erreur reseau';
+        setLastResult({ ok: false, msg: detail });
+        return;
+      }
+      if (data?.error) {
+        const hint = data.hint ? ` — ${data.hint}` : '';
+        setLastResult({ ok: false, msg: `${data.error}${hint}` });
+        return;
+      }
+      setLastResult({ ok: true, msg: `Email envoyé (id: ${data?.emailId ?? '—'})` });
+      toast.success('Test réussi', `Email envoyé à ${testEmail}`);
+    } catch (e: any) {
+      setLastResult({ ok: false, msg: e?.message ?? 'Erreur inconnue' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Card title="Configuration de l'envoi d'emails (Resend)" subtitle="3 étapes pour activer l'envoi automatique">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Step n={1} title="Récupérer une clé API Resend">
+            Créez un compte sur <a href="https://resend.com" target="_blank" rel="noopener" className="text-accent underline">resend.com</a>, vérifiez votre domaine d'envoi (DNS), puis récupérez une clé <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">re_xxx</code>.
+          </Step>
+          <Step n={2} title="Déployer la Edge Function send-email">
+            <pre className="text-[11px] bg-primary-950 text-primary-100 p-2 rounded mt-1 overflow-x-auto">{`supabase login
+supabase link --project-ref VOTRE_PROJET_REF
+supabase functions deploy send-email --no-verify-jwt`}</pre>
+          </Step>
+          <Step n={3} title="Configurer les secrets de la fonction">
+            <pre className="text-[11px] bg-primary-950 text-primary-100 p-2 rounded mt-1 overflow-x-auto">{`supabase secrets set \\
+  RESEND_API_KEY=re_xxx \\
+  RESEND_FROM="Cockpit FnA <noreply@votre-domaine.com>"`}</pre>
+            <p className="text-[11px] text-primary-500 mt-1">
+              ⚠️ <strong>Important</strong> : la config Resend dans Supabase → Authentication ne couvre que les mails d'auth (signup/reset/magic-link). Les mails métier (invitations, rapports, validations) nécessitent <strong>cette Edge Function dédiée</strong>.
+            </p>
+          </Step>
+        </div>
+
+        <div className="border-t border-primary-200 dark:border-primary-800 pt-3">
+          <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Test d'envoi</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input type="email" className="input flex-1" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="votre.email@exemple.com" />
+            <button className="btn-primary whitespace-nowrap" onClick={runTest} disabled={testing || !testEmail}>
+              <Send className="w-4 h-4" /> {testing ? 'Envoi…' : 'Envoyer un test'}
+            </button>
+          </div>
+          {lastResult && (
+            <div className={clsx('mt-2 p-2.5 rounded-lg text-xs flex items-start gap-2',
+              lastResult.ok
+                ? 'bg-success/10 border border-success/30 text-success'
+                : 'bg-danger/10 border border-danger/30 text-danger',
+            )}>
+              {lastResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />}
+              <span className="leading-relaxed">{lastResult.msg}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2.5">
+      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-accent text-primary-50 text-xs font-bold shrink-0">{n}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold">{title}</p>
+        <div className="text-xs text-primary-600 dark:text-primary-300 leading-relaxed">{children}</div>
+      </div>
     </div>
   );
 }

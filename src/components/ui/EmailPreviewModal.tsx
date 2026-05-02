@@ -21,11 +21,12 @@ import { buildMailto, buildEmlBlob } from '../../lib/emailTemplates';
 export interface SendOptions {
   /** Mode actuel */
   mode: 'invitation' | 'review' | 'report';
-  /** Edge function Supabase pour le mode production */
-  supabaseFunction?: string;  // ex: 'send-report'
-  /** Données complémentaires à transmettre à la Edge Function */
+  /** Override de l'Edge Function Supabase (defaut: 'send-email').
+   *  Cas particuliers : 'send-report' qui reconstruit le HTML cote serveur. */
+  supabaseFunction?: string;
+  /** Données complémentaires à transmettre à la Edge Function (orgId, reportId, …) */
   supabasePayload?: Record<string, unknown>;
-  /** Si l'invitation est en mode admin Supabase Auth (cas particulier) */
+  /** @deprecated Plus utilise — l'envoi passe par send-email. */
   useSupabaseInvite?: boolean;
 }
 
@@ -48,36 +49,35 @@ export function EmailPreviewModal({
         toast.warning('Supabase non configuré', 'Configurez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY pour envoyer automatiquement.');
         return;
       }
-      if (options.useSupabaseInvite) {
-        // Invitation utilisateur via Auth admin
-        const { error } = await (supabase as any).auth.admin.inviteUserByEmail(recipient.email, {
-          data: options.supabasePayload ?? {},
-          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined,
-        });
-        if (error) throw error;
-      } else if (options.supabaseFunction) {
-        // Edge Function dédiée (review / report)
-        const { data, error } = await (supabase as any).functions.invoke(options.supabaseFunction, {
-          body: {
-            to: recipient.email,
-            recipientName: recipient.name,
-            subject: content.subject,
-            html: content.htmlBody,
-            text: content.textBody,
-            ...options.supabasePayload,
-          },
-        });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-      } else {
-        toast.warning('Mode non configuré', 'Aucune Edge Function spécifiée pour ce template.');
-        return;
+      // Une seule Edge Function generique : send-email (compatible 3 modes)
+      // Override possible via options.supabaseFunction (ex: 'send-report' pour log specifique)
+      const fnName = options.supabaseFunction ?? 'send-email';
+      const { data, error } = await (supabase as any).functions.invoke(fnName, {
+        body: {
+          to: recipient.email,
+          recipientName: recipient.name,
+          subject: content.subject,
+          html: content.htmlBody,
+          text: content.textBody,
+          mode: options.mode,
+          ...options.supabasePayload,
+        },
+      });
+      if (error) {
+        // Erreur HTTP — extrait le message Resend si dispo
+        const detail = (error as any)?.context?.error ?? (error as any)?.message ?? 'Erreur reseau';
+        throw new Error(detail);
+      }
+      if (data?.error) {
+        const hint = data.hint ? ` (${data.hint})` : '';
+        throw new Error(`${data.error}${hint}`);
       }
       toast.success('Email envoyé', `→ ${recipient.email}`);
       onSent?.();
       onClose();
     } catch (e: any) {
-      toast.error('Envoi impossible', e?.message ?? 'Vérifiez la configuration Supabase (Edge Function ou clé service_role).');
+      const msg = e?.message ?? 'Verifiez la configuration Supabase.';
+      toast.error('Envoi impossible', msg.length > 200 ? msg.slice(0, 200) + '…' : msg);
     }
   };
 
