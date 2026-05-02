@@ -200,8 +200,14 @@ export default function DashboardHome() {
       </>}
 
       {system !== 'SMT' && tab === 'risk' && <>
+        {fr.length === 0 ? (
+          <div className="card p-8 text-center mb-4 animate-fade-in-up">
+            <p className="text-sm text-primary-500">Données mensuelles en cours de calcul depuis le Grand Livre…</p>
+            <p className="text-xs text-primary-400 mt-2">Si rien n'apparaît, vérifiez que votre import contient des écritures réparties sur plusieurs périodes.</p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 animate-fade-in-up">
-          <ChartCard title="Évolution de la Trésorerie Nette" subtitle="Cumul mensuel YTD" accent={ct.at(0)}>
+          <ChartCard title="Évolution de la Trésorerie Nette" subtitle="Cumul mensuel YTD — calculé depuis le Grand Livre" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={treso}>
                 <defs>
@@ -219,7 +225,7 @@ export default function DashboardHome() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="FR / BFR / Trésorerie Nette" subtitle="Equilibre du cycle d'exploitation" accent={ct.at(1)}>
+          <ChartCard title="FR / BFR / Trésorerie Nette" subtitle="Équilibre du cycle d'exploitation — données réelles GL" accent={ct.at(1)}>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={fr}>
                 <CartesianGrid {...ct.gridProps} />
@@ -234,6 +240,7 @@ export default function DashboardHome() {
             </ResponsiveContainer>
           </ChartCard>
         </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
           <PerformanceGauges budgetExec={budgetExec} marge={marge} ratios={ratios} />
