@@ -882,29 +882,46 @@ export default function Reports() {
 
   const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => {
     const newBlocks = filterConditionalBlocks(QUICK_TEMPLATES[k](data), data);
+    const firstH1 = newBlocks.find((b: any) => b.type === 'h1');
     setConfig((c) => ({
       ...c,
-      // Met aussi a jour le titre et la periode du rapport selon le modele
-      identity: { ...c.identity, title: TEMPLATE_DEFAULTS[k as string]?.title ?? c.identity.title },
+      identity: {
+        ...c.identity,
+        title:    TEMPLATE_DEFAULTS[k as string]?.title    ?? c.identity.title,
+        subtitle: TEMPLATE_DEFAULTS[k as string]?.subtitle ?? c.identity.subtitle,
+      },
       blocks: newBlocks,
     }));
     setActiveTemplate(k as string);
-    setCurrentReportId(null); // nouveau rapport = pas lie a un rapport sauvegarde
+    setCurrentReportId(null);
     const labels: Record<string, string> = {
       weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel',
       quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire',
     };
+    // Compte les types de blocks pour afficher au user ce qu'il y a de DIFFERENT
+    const sections = newBlocks.filter((b: any) => b.type === 'h1').length;
+    const tables = newBlocks.filter((b: any) => b.type === 'table').length;
+    const dashboards = newBlocks.filter((b: any) => b.type === 'dashboard').length;
     toast.success(
       `Modèle appliqué : ${labels[k as string] ?? k}`,
-      `${newBlocks.length} bloc(s) chargé(s) — faites défiler vers le haut pour voir le rapport.`,
+      `${sections} sections · ${tables} tables · ${dashboards} dashboards — première section : "${(firstH1 as any)?.text ?? '—'}"`,
     );
-    // Force le scroll de la preview au sommet pour que le user voie tout de suite
-    // que le rapport a change.
+    // Scroll vers la PREMIÈRE SECTION (1er H1) au lieu du sommet, pour que le
+    // user voie le VRAI contenu qui differe entre templates (pas juste la cover).
     setTimeout(() => {
+      if (firstH1) {
+        // Cherche le H1 dans le DOM par son data-block-id ou son texte
+        const allH1 = document.querySelectorAll('.report-print-area h1, .report-print-area [data-block-type="h1"]');
+        for (const el of Array.from(allH1)) {
+          if (el.textContent?.includes((firstH1 as any).text)) {
+            (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+        }
+      }
+      // Fallback : scroll au sommet
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      const main = document.querySelector('.report-print-area');
-      if (main && 'scrollIntoView' in main) (main as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    }, 100);
   };
 
   // Charger un modele personnel sauvegarde (db.templates) — applique le config complet
