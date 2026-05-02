@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import clsx from 'clsx';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -707,15 +708,360 @@ function TabDonnees() {
 }
 
 // ─── UTILISATEURS ──────────────────────────────────────────────────
+// ─── UTILISATEURS & RÔLES ──────────────────────────────────────────
+// Gestion complète : CRUD utilisateurs + rôles + permissions par module.
+// Stockage local (localStorage) en mode dev. En production avec Supabase Auth,
+// les users sont créés via signup et la table fna_user_orgs lie user→org→role.
+
+type AppRole = 'admin' | 'daf' | 'controller' | 'accountant' | 'dg' | 'auditor' | 'viewer' | 'custom';
+const ROLE_LABELS: Record<AppRole, string> = {
+  admin: 'Administrateur',
+  daf: 'Directeur Financier (DAF)',
+  controller: 'Contrôleur de gestion',
+  accountant: 'Comptable',
+  dg: 'Direction Générale',
+  auditor: 'Auditeur',
+  viewer: 'Lecture seule',
+  custom: 'Personnalisé',
+};
+const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
+  admin: 'Accès total — gestion utilisateurs, paramètres, données.',
+  daf: 'Pilotage financier complet : rapports, budget, ratios, clôture.',
+  controller: 'Contrôle de gestion : budgets, écarts, analytique, prévisions.',
+  accountant: 'Saisie GL, rapprochements, lettrage, justifications de clôture.',
+  dg: 'Vue exécutive : KPIs, board pack, comité, MD&A. Pas de modification.',
+  auditor: 'Audit trail, contrôles SYSCOHADA, anomalies. Lecture étendue + commentaires.',
+  viewer: 'Lecture seule sur les dashboards et rapports publiés.',
+  custom: 'Permissions personnalisées par module.',
+};
+
+interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  role: AppRole;
+  orgIds: string[];
+  active: boolean;
+  createdAt: number;
+  lastLoginAt?: number;
+  customPermissions?: Record<string, boolean>;
+}
+
+const USERS_KEY = 'cockpit-users';
+function loadUsers(): AppUser[] {
+  try { return JSON.parse(localStorage.getItem(USERS_KEY) ?? '[]'); } catch { return []; }
+}
+function saveUsers(users: AppUser[]) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
 function TabUsers() {
+  const [users, setUsers] = useState<AppUser[]>(() => loadUsers());
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<AppUser | null>(null);
+  const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
+
+  const handleSave = (user: AppUser) => {
+    const existing = users.findIndex((u) => u.id === user.id);
+    const next = existing >= 0
+      ? users.map((u, i) => (i === existing ? user : u))
+      : [...users, user];
+    setUsers(next);
+    saveUsers(next);
+    toast.success(existing >= 0 ? 'Utilisateur modifié' : 'Utilisateur ajouté', user.name);
+    setModalOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Supprimer cet utilisateur ? Cette action est irréversible.')) return;
+    const next = users.filter((u) => u.id !== id);
+    setUsers(next);
+    saveUsers(next);
+    toast.success('Utilisateur supprimé');
+  };
+
+  const handleToggleActive = (id: string) => {
+    const next = users.map((u) => u.id === id ? { ...u, active: !u.active } : u);
+    setUsers(next);
+    saveUsers(next);
+  };
+
+  const counts = {
+    total: users.length,
+    active: users.filter((u) => u.active).length,
+    admin: users.filter((u) => u.role === 'admin').length,
+  };
+
   return (
-    <Card title="Utilisateurs & rôles" subtitle="Authentification et permissions">
-      <div className="py-12 text-center">
-        <Users className="w-12 h-12 mx-auto text-primary-400 mb-3" />
-        <p className="font-medium text-primary-700 dark:text-primary-300">Authentification multi-utilisateurs</p>
-        <p className="text-xs text-primary-500 mt-2 max-w-md mx-auto">Prévue au Sprint 5 avec Supabase Auth · 6 rôles : Administrateur · DAF · Contrôleur · Comptable · DG · Auditeur · Personnalisé</p>
+    <div className="space-y-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card padded>
+          <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold">Utilisateurs</p>
+          <p className="num text-2xl font-bold mt-1">{counts.total}</p>
+        </Card>
+        <Card padded>
+          <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold">Actifs</p>
+          <p className="num text-2xl font-bold mt-1 text-success">{counts.active}</p>
+        </Card>
+        <Card padded>
+          <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold">Administrateurs</p>
+          <p className="num text-2xl font-bold mt-1 text-accent">{counts.admin}</p>
+        </Card>
       </div>
-    </Card>
+
+      {/* Table utilisateurs */}
+      <Card
+        title="Utilisateurs"
+        subtitle="Gestion des comptes — accès, rôles, permissions"
+        action={
+          <button className="btn-primary" onClick={() => { setEditing(null); setModalOpen(true); }}>
+            <Plus className="w-4 h-4" /> Nouvel utilisateur
+          </button>
+        }
+      >
+        {users.length === 0 ? (
+          <div className="py-12 text-center">
+            <Users className="w-12 h-12 mx-auto text-primary-400 mb-3" />
+            <p className="text-sm text-primary-500 mb-2">Aucun utilisateur configuré</p>
+            <p className="text-xs text-primary-400 max-w-md mx-auto mb-4">
+              Ajoutez votre premier utilisateur pour gérer les accès. En mode local, les comptes sont stockés dans le navigateur. En production avec Supabase, les comptes sont créés via Supabase Auth.
+            </p>
+            <button className="btn-primary" onClick={() => { setEditing(null); setModalOpen(true); }}>
+              <Plus className="w-4 h-4" /> Ajouter un utilisateur
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-4">
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase tracking-wider text-primary-500 border-b-2 border-primary-200 dark:border-primary-800">
+                <tr>
+                  <th className="text-left py-2 px-3">Nom · Email</th>
+                  <th className="text-left py-2 px-3 w-44">Rôle</th>
+                  <th className="text-center py-2 px-3 w-24">Sociétés</th>
+                  <th className="text-center py-2 px-3 w-24">Statut</th>
+                  <th className="text-right py-2 px-3 w-32">Dernière connexion</th>
+                  <th className="py-2 px-3 w-24"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                {users.map((u) => (
+                  <tr key={u.id} className="hover:bg-primary-100/40 dark:hover:bg-primary-900/40">
+                    <td className="py-2 px-3">
+                      <p className="font-medium">{u.name}</p>
+                      <p className="text-[11px] text-primary-500">{u.email}</p>
+                    </td>
+                    <td className="py-2 px-3">
+                      <Badge variant={u.role === 'admin' ? 'critical' : u.role === 'daf' || u.role === 'dg' ? 'high' : 'low'}>
+                        {ROLE_LABELS[u.role]}
+                      </Badge>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <span className="text-xs num text-primary-500">{u.orgIds.length} / {orgs.length}</span>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <button onClick={() => handleToggleActive(u.id)} className={clsx('text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold', u.active ? 'bg-success/10 text-success' : 'bg-primary-200/60 text-primary-600')}>
+                        {u.active ? 'Actif' : 'Inactif'}
+                      </button>
+                    </td>
+                    <td className="py-2 px-3 text-right text-xs text-primary-500 num">
+                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('fr-FR') : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      <button className="btn-ghost !p-1 text-primary-500 hover:text-accent" onClick={() => { setEditing(u); setModalOpen(true); }} title="Modifier">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button className="btn-ghost !p-1 text-primary-500 hover:text-error" onClick={() => handleDelete(u.id)} title="Supprimer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Carte des rôles disponibles */}
+      <Card title="Rôles disponibles" subtitle="Description des 8 rôles standards">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => (
+            <div key={role} className="p-3 rounded-xl border border-primary-200 dark:border-primary-700">
+              <div className="flex items-center justify-between mb-1.5">
+                <Badge variant={role === 'admin' ? 'critical' : role === 'daf' || role === 'dg' ? 'high' : 'low'}>{ROLE_LABELS[role]}</Badge>
+                <span className="text-[10px] num text-primary-400">{users.filter((u) => u.role === role).length} user(s)</span>
+              </div>
+              <p className="text-xs text-primary-600 dark:text-primary-400 leading-relaxed">{ROLE_DESCRIPTIONS[role]}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Note Supabase */}
+      <Card padded>
+        <div className="flex items-start gap-3">
+          <Cloud className="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold mb-1">Mode hybride local / Supabase Auth</p>
+            <p className="text-xs text-primary-500 leading-relaxed">
+              En mode local (sans Supabase), les utilisateurs sont stockés dans le navigateur (localStorage). En production avec Supabase configuré (variables <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">VITE_SUPABASE_URL</code> et <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">VITE_SUPABASE_ANON_KEY</code>), les comptes sont gérés via Supabase Auth (email/mot de passe, magic link, OAuth Google) et les rôles via la table <code className="text-[10px] bg-primary-100 dark:bg-primary-800 px-1 rounded">fna_user_orgs</code>. Les permissions par rôle sont appliquées via Row-Level Security (RLS) Postgres.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <UserModal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setEditing(null); }}
+        onSave={handleSave}
+        initial={editing}
+        orgs={orgs}
+      />
+    </div>
+  );
+}
+
+function UserModal({ open, onClose, onSave, initial, orgs }: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (u: AppUser) => void;
+  initial: AppUser | null;
+  orgs: { id: string; name: string }[];
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<AppRole>('viewer');
+  const [orgIds, setOrgIds] = useState<string[]>([]);
+  const [active, setActive] = useState(true);
+
+  // Re-init proprement à chaque ouverture (et quand initial change)
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      setName(initial.name);
+      setEmail(initial.email);
+      setRole(initial.role);
+      setOrgIds(initial.orgIds);
+      setActive(initial.active);
+    } else {
+      setName('');
+      setEmail('');
+      setRole('viewer');
+      setOrgIds([]);
+      setActive(true);
+    }
+  }, [open, initial]);
+
+  const handleSubmit = () => {
+    if (!email.trim() || !email.includes('@')) {
+      toast.warning('Email invalide', 'Saisissez une adresse email valide.');
+      return;
+    }
+    if (!name.trim()) {
+      toast.warning('Nom requis', 'Saisissez un nom complet.');
+      return;
+    }
+    const user: AppUser = {
+      id: initial?.id ?? `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      role,
+      orgIds,
+      active,
+      createdAt: initial?.createdAt ?? Date.now(),
+      lastLoginAt: initial?.lastLoginAt,
+    };
+    onSave(user);
+  };
+
+  const toggleOrg = (id: string) => {
+    setOrgIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={initial ? `Modifier — ${initial.name}` : 'Nouvel utilisateur'}
+      footer={
+        <>
+          <button className="btn-outline" onClick={onClose}>Annuler</button>
+          <button className="btn-primary" onClick={handleSubmit}>
+            <CheckCircle2 className="w-4 h-4" /> {initial ? 'Enregistrer' : 'Créer'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Nom complet</label>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Prénom Nom" autoFocus />
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-1">Email</label>
+            <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="prenom.nom@societe.com" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-2">Rôle</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {(Object.keys(ROLE_LABELS) as AppRole[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                className={clsx(
+                  'text-left p-3 rounded-xl border-2 transition-all',
+                  role === r ? 'border-accent bg-accent/5' : 'border-primary-200 dark:border-primary-700 hover:border-primary-400',
+                )}
+              >
+                <p className="font-semibold text-sm">{ROLE_LABELS[r]}</p>
+                <p className="text-[11px] text-primary-500 mt-0.5 leading-relaxed">{ROLE_DESCRIPTIONS[r]}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold block mb-2">
+            Sociétés accessibles ({orgIds.length} / {orgs.length})
+          </label>
+          {orgs.length === 0 ? (
+            <p className="text-xs text-primary-400 italic">Aucune société. Créez-en une dans l'onglet Sociétés.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-40 overflow-y-auto p-2 border border-primary-200 dark:border-primary-700 rounded-lg">
+              <label className="flex items-center gap-2 text-sm cursor-pointer pb-2 border-b border-primary-200/60 dark:border-primary-800/40">
+                <input
+                  type="checkbox"
+                  checked={orgIds.length === orgs.length}
+                  onChange={(e) => setOrgIds(e.target.checked ? orgs.map((o) => o.id) : [])}
+                />
+                <span className="text-primary-700 dark:text-primary-300 font-semibold">Toutes les sociétés</span>
+              </label>
+              {orgs.map((o) => (
+                <label key={o.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={orgIds.includes(o.id)} onChange={() => toggleOrg(o.id)} />
+                  <Building2 className="w-3.5 h-3.5 text-primary-400" />
+                  {o.name}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            <span className="font-semibold">Compte actif</span>
+            <span className="text-xs text-primary-500">— peut se connecter et accéder aux données</span>
+          </label>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
