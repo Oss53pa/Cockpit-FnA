@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Download, Coins, TrendingUp, TrendingDown, Layers } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
@@ -30,8 +30,8 @@ export default function CapitalVariationPage() {
   const totals = useMemo(() => data.reduce(
     (acc, r) => ({
       ouverture: acc.ouverture + r.ouverture,
-      augmentations: acc.augmentations + r.augmentations,
-      diminutions: acc.diminutions + r.diminutions,
+      augmentations: acc.augmentations + r.augmentation,
+      diminutions: acc.diminutions + r.diminution,
       affectationResN1: acc.affectationResN1 + (r.affectationResN1 ?? 0),
       resultatExercice: acc.resultatExercice + (r.resultatExercice ?? 0),
       cloture: acc.cloture + r.cloture,
@@ -41,7 +41,7 @@ export default function CapitalVariationPage() {
 
   // Chart : ouverture vs clôture par rubrique
   const chartData = data.map((r) => ({
-    name: r.label,
+    name: r.rubrique,
     Ouverture: r.ouverture,
     Clôture: r.cloture,
   }));
@@ -49,7 +49,7 @@ export default function CapitalVariationPage() {
   const exportCSV = () => {
     const head = ['Rubrique', 'Comptes', 'Ouverture', 'Augmentations', 'Diminutions', 'Affectation N-1', 'Résultat N', 'Clôture'].join(';');
     const rows = data.map((r) => [
-      `"${r.label}"`, r.accountCodes ?? '', r.ouverture, r.augmentations, r.diminutions,
+      `"${r.rubrique}"`, r.accountCodes ?? '', r.ouverture, r.augmentation, r.diminution,
       r.affectationResN1 ?? 0, r.resultatExercice ?? 0, r.cloture,
     ].join(';'));
     const csv = [head, ...rows].join('\n');
@@ -146,11 +146,11 @@ export default function CapitalVariationPage() {
                 <tbody>
                   {data.map((r, i) => (
                     <tr key={i} className="border-b border-primary-100/60 dark:border-primary-800/40 table-row-hover">
-                      <td className="py-2.5 px-3 font-medium">{r.label}</td>
+                      <td className="py-2.5 px-3 font-medium">{r.rubrique}</td>
                       <td className="py-2.5 px-3 text-xs text-primary-500 num">{r.accountCodes}</td>
                       <td className="text-right py-2.5 px-3 num">{fmtFull(r.ouverture)}</td>
-                      <td className="text-right py-2.5 px-3 num text-success">{r.augmentations > 0 ? `+${fmtFull(r.augmentations)}` : '—'}</td>
-                      <td className="text-right py-2.5 px-3 num text-error">{r.diminutions > 0 ? `−${fmtFull(r.diminutions)}` : '—'}</td>
+                      <td className="text-right py-2.5 px-3 num text-success">{r.augmentation > 0 ? `+${fmtFull(r.augmentation)}` : '—'}</td>
+                      <td className="text-right py-2.5 px-3 num text-error">{r.diminution > 0 ? `−${fmtFull(r.diminution)}` : '—'}</td>
                       <td className="text-right py-2.5 px-3 num text-primary-500">{r.affectationResN1 ? fmtFull(r.affectationResN1) : '—'}</td>
                       <td className="text-right py-2.5 px-3 num text-primary-500">{r.resultatExercice ? fmtFull(r.resultatExercice) : '—'}</td>
                       <td className="text-right py-2.5 px-3 num font-semibold bg-primary-50/50 dark:bg-primary-900/50">{fmtFull(r.cloture)}</td>

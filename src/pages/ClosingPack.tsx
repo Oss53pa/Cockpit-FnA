@@ -9,13 +9,13 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, BarChart, Bar, Cell } from
 import { PageHeader } from '../components/layout/PageHeader';
 import { useApp } from '../store/app';
 import { useStatements, useRatios, useMonthlyCA, useCurrentOrg } from '../hooks/useFinancials';
-import { fmtFull, fmtK, fmtPct } from '../lib/format';
+import { fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 
 export default function ClosingPackPage() {
   const { currentYear, fromMonth, toMonth } = useApp();
   const org = useCurrentOrg();
-  const { sig, bilan, balance } = useStatements();
+  const { sig, bilan } = useStatements();
   const ratios = useRatios();
   const monthly = useMonthlyCA();
   const ct = useChartTheme();

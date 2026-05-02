@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
+import { ResponsiveContainer, Area, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';

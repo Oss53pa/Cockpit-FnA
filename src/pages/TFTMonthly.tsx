@@ -3,7 +3,7 @@
  * Design dernière génération : KPI hero, charts élégants, hiérarchie forte.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Download, ArrowDownToLine, ArrowUpFromLine, Banknote, Activity, TrendingUp } from 'lucide-react';
+import { Download, ArrowUpFromLine, Banknote, Activity, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ChartCard } from '../components/ui/ChartCard';

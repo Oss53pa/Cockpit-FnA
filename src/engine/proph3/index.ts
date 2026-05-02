@@ -9,11 +9,15 @@ import { generateCommentary, type FullCommentary } from './commentator';
 import { checkOllamaStatus, chatWithOllama, buildSystemPrompt, type OllamaStatus } from './ollama';
 import { searchKnowledge } from '../../syscohada/knowledge';
 import { fmtMoney } from '../../lib/format';
+import { runIntelligenceAnalysis, type IntelligenceReport } from './intelligence';
 
-export interface Proph3Analysis { score: FinancialScore; anomalies: AnomalyReport; predictions: TresoForecast; commentary: FullCommentary; sig: SIG; ratios: Ratio[]; bilanActif: Line[]; bilanPassif: Line[]; }
-export type { FinancialScore, AnomalyReport, TresoForecast, FullCommentary, OllamaStatus };
+export interface Proph3Analysis { score: FinancialScore; anomalies: AnomalyReport; predictions: TresoForecast; commentary: FullCommentary; sig: SIG; ratios: Ratio[]; bilanActif: Line[]; bilanPassif: Line[]; intelligence?: IntelligenceReport; }
+export type { FinancialScore, AnomalyReport, TresoForecast, FullCommentary, OllamaStatus, IntelligenceReport };
+// Re-exports pour usage direct depuis pages
+export { runIntelligenceAnalysis, getTemporalContext, generateQuickPredictions, detectCorrections, generateSmartSuggestions, runComprehensiveAudit } from './intelligence';
+export type { TemporalContext, QuickPrediction, Correction, Suggestion, AuditCheck, AuditReport } from './intelligence';
 
-export async function analyzeFinancials(orgId: string, year: number): Promise<Proph3Analysis> {
+export async function analyzeFinancials(orgId: string, year: number, opts: { withIntelligence?: boolean } = {}): Promise<Proph3Analysis> {
   const balance = await computeBalance({ orgId, year, includeOpening: true });
   const { actif: bilanActif, passif: bilanPassif } = computeBilan(balance);
   const { sig } = computeSIG(balance);
@@ -22,7 +26,10 @@ export async function analyzeFinancials(orgId: string, year: number): Promise<Pr
   const anomalies = await detectAnomalies(orgId, year, balance);
   const predictions = await forecastTresorerie(orgId, year);
   const commentary = generateCommentary(sig, bilanActif, bilanPassif, ratios, score, anomalies);
-  return { score, anomalies, predictions, commentary, sig, ratios, bilanActif, bilanPassif };
+  // Intelligence enrichie (date-aware, predict, correct, suggest, audit) — optionnelle pour ne pas
+  // ralentir les appels où elle n'est pas nécessaire.
+  const intelligence = opts.withIntelligence ? await runIntelligenceAnalysis(orgId, year) : undefined;
+  return { score, anomalies, predictions, commentary, sig, ratios, bilanActif, bilanPassif, intelligence };
 }
 
 export async function askProph3(question: string, analysis: Proph3Analysis | null, companyName?: string, country?: string, currency?: string): Promise<string> {

@@ -112,6 +112,30 @@ const DASHBOARD_CATALOG: Array<{ id: string; name: string; cat: string; desc: st
   { id: 'ana_centres', name: 'Centres de coûts / profit', cat: 'Analytique', desc: 'Charges & produits par centre' },
   { id: 'ana_projets', name: 'Suivi par projet', cat: 'Analytique', desc: 'Rentabilité, marge, avancement' },
   { id: 'ana_axes', name: 'Axes analytiques', cat: 'Analytique', desc: 'Analyse multi-axes' },
+  // ─── États SYSCOHADA + Reporting avancé (Phase 4) ───
+  { id: 'tft_monthly', name: 'TFT mensuel ★', cat: 'SYSCOHADA', desc: 'Tableau Flux Trésorerie 12 mois — exploitation/investissement/financement' },
+  { id: 'cap_var', name: 'Variation capitaux propres ★', cat: 'SYSCOHADA', desc: 'État obligatoire — apports, distributions, affectation résultat' },
+  { id: 'closing_pack', name: 'Closing Pack ★', cat: 'SYSCOHADA', desc: 'Synthèse 1 page A4 — KPIs, charts, alertes' },
+  { id: 'tafire', name: 'TAFIRE ★', cat: 'SYSCOHADA', desc: 'Tableau Financier Ressources & Emplois (art. 29-37)' },
+  { id: 'bilan_monthly', name: 'Bilan mensuel ★', cat: 'SYSCOHADA', desc: 'Évolution actif/passif sur 12 mois' },
+  { id: 'caf', name: 'CAF mensuelle ★', cat: 'SYSCOHADA', desc: 'Capacité d\'autofinancement mensuelle' },
+  { id: 'multi_year', name: 'Comparaison N / N-1 / N-2 ★', cat: 'SYSCOHADA', desc: 'Évolution pluriannuelle SIG, ratios et structure' },
+  { id: 'bank_recon', name: 'Rapprochement bancaire', cat: 'Audit', desc: 'État de rapprochement GL ↔ relevé' },
+  { id: 'closing_just', name: 'Justification de clôture', cat: 'Audit', desc: 'Provisions, CCA/PCA, FAE/FAP' },
+  { id: 'audit_visu', name: 'Audit Trail visualizer ★', cat: 'Audit', desc: 'Vérification chaîne de hash SHA-256 du GL' },
+  { id: 'anomalies', name: 'Carte des anomalies ★', cat: 'Audit', desc: 'Heatmap mois × catégories d\'anomalies' },
+  { id: 'lettrage', name: 'Lettrage tiers', cat: 'Audit', desc: 'Taux de lettrage et vieillissement par tiers' },
+  { id: 'zscore', name: 'Score de santé financière ★', cat: 'Premium', desc: 'Z-Score Altman + score Cockpit 0-100' },
+  { id: 'forecast', name: 'Rolling Forecast 90j ★', cat: 'Premium', desc: 'Projection trésorerie 30/60/90 jours' },
+  { id: 'wcd', name: 'Working Capital Days ★', cat: 'Premium', desc: 'DSO + DIO + DPO + Cash Conversion Cycle' },
+  { id: 'seasonality', name: 'Saisonnalité', cat: 'Pilotage', desc: 'Index de saisonnalité du CA — base 100' },
+  { id: 'whatif', name: 'What-If / Sensibilité', cat: 'Pilotage', desc: 'Simulation tarifaire — sliders CA/marge/charges' },
+  { id: 'provisions', name: 'Provisions tracking', cat: 'Pilotage', desc: 'Suivi dotations / reprises (68x/78x)' },
+  { id: 'intercos', name: 'Intercos / CCA', cat: 'Pilotage', desc: 'Comptes courants associés intra-groupe' },
+  { id: 'weekly', name: 'Flash hebdo ★', cat: 'Direction', desc: 'Tableau bord hebdomadaire Direction' },
+  { id: 'mda', name: 'MD&A auto-généré ★', cat: 'Direction', desc: 'Management Discussion & Analysis — narratif Proph3t' },
+  { id: 'board_pack', name: 'Board Pack ★', cat: 'Direction', desc: 'Synthèse 4 slides Conseil d\'Administration' },
+  { id: 'sector_bench', name: 'Comparatif sectoriel ★', cat: 'Direction', desc: 'Ratios vs normes UEMOA OHADA par secteur' },
 ];
 
 // Helper pour KPIs calculés
@@ -2692,6 +2716,248 @@ function DashboardSnippet({ id, data, palette }: any) {
         { label: 'Résultat', value: fmtMoney(rn) },
         { label: 'Données analytiques', value: data.hasAnalytical ? '✓ Disponibles' : '⚠ Non saisies' },
         { label: 'Voir page Analytique', value: '→ /analytical' },
+      ];
+    }
+
+    // ─── ÉTATS SYSCOHADA + REPORTING AVANCÉ (Phase 4) ───
+    if (id === 'tafire') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const caf = (data.sig?.resultat ?? 0) + sumD('68') - sumC('78');
+      return [
+        { label: 'CAF', value: fmtMoney(caf), subValue: 'RN + dotations - reprises' },
+        { label: 'Résultat net', value: fmtMoney(rn) },
+        { label: 'Trésorerie', value: fmtMoney(treso) },
+        { label: 'Référence', value: 'Art. 29-37 SYSCOHADA' },
+      ];
+    }
+    if (id === 'bilan_monthly') {
+      const totA = data.bilanActif?.find((l: any) => l.code === '_BZ')?.value ?? 0;
+      const totP = data.bilanPassif?.find((l: any) => l.code === '_DZ')?.value ?? 0;
+      const cp = data.bilanPassif?.find((l: any) => l.code === '_CP')?.value ?? 0;
+      return [
+        { label: 'Total Actif', value: fmtMoney(totA) },
+        { label: 'Total Passif', value: fmtMoney(totP) },
+        { label: 'Capitaux propres', value: fmtMoney(cp), subValue: totA > 0 ? `${((cp/totA)*100).toFixed(1)}% du total` : '—' },
+        { label: 'Équilibre', value: Math.abs(totA - totP) < 1 ? '✓ OK' : '⚠ écart' },
+      ];
+    }
+    if (id === 'caf') {
+      const caf = (data.sig?.resultat ?? 0) + sumD('68') - sumC('78');
+      const tauxCAF = ca > 0 ? (caf / ca) * 100 : 0;
+      return [
+        { label: 'CAF exercice', value: fmtMoney(caf), subValue: 'RN + dotations - reprises' },
+        { label: 'CA', value: fmtMoney(ca) },
+        { label: 'Taux CAF / CA', value: `${tauxCAF.toFixed(1)} %` },
+        { label: 'Résultat net', value: fmtMoney(rn) },
+      ];
+    }
+    if (id === 'multi_year') {
+      return [
+        { label: 'CA N', value: fmtMoney(ca) },
+        { label: 'RN N', value: fmtMoney(rn) },
+        { label: 'EBE N', value: fmtMoney(data.sig?.ebe ?? 0) },
+        { label: 'Comparaison', value: 'N / N-1 / N-2 / N-3' },
+      ];
+    }
+    if (id === 'bank_recon') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const banques = sumD('52');
+      return [
+        { label: 'Solde GL banques (52)', value: fmtMoney(banques) },
+        { label: 'Trésorerie active', value: fmtMoney(treso) },
+        { label: 'Suspens à régulariser', value: fmtMoney(treso - banques) },
+        { label: 'Statut', value: Math.abs(treso - banques) < 1 ? '✓ Rapproché' : '⚠ Écart' },
+      ];
+    }
+    if (id === 'closing_just') {
+      const provisions = sumC('19');
+      const cca = sumD('476');
+      const pca = sumC('477');
+      const fae = sumD('418');
+      return [
+        { label: 'Provisions risques (19)', value: fmtMoney(provisions) },
+        { label: 'CCA (476)', value: fmtMoney(cca), subValue: 'Charges constatées d\'avance' },
+        { label: 'PCA (477)', value: fmtMoney(pca), subValue: 'Produits constatés d\'avance' },
+        { label: 'FAE (418)', value: fmtMoney(fae), subValue: 'Factures à établir' },
+      ];
+    }
+    if (id === 'audit_visu') {
+      const total = (data.glCount ?? data.balance?.length ?? 0);
+      return [
+        { label: 'Écritures GL', value: String(total) },
+        { label: 'Hash chain', value: 'SHA-256' },
+        { label: 'Méthode', value: 'Web Crypto API' },
+        { label: 'Voir intégrité', value: '→ /dashboard/audit-trail' },
+      ];
+    }
+    if (id === 'anomalies') {
+      const ratios = data.ratios ?? [];
+      const alertes = ratios.filter((r: any) => r.status === 'alert').length;
+      const warn = ratios.filter((r: any) => r.status === 'warn').length;
+      return [
+        { label: 'Alertes critiques', value: String(alertes) },
+        { label: 'Vigilance', value: String(warn) },
+        { label: 'Conformes', value: String(ratios.length - alertes - warn) },
+        { label: 'Voir heatmap', value: '→ /dashboard/anomalies' },
+      ];
+    }
+    if (id === 'lettrage') {
+      const clients = sumD('41');
+      const fournisseurs = sumC('40');
+      return [
+        { label: 'Encours clients (41)', value: fmtMoney(clients) },
+        { label: 'Encours fournisseurs (40)', value: fmtMoney(fournisseurs) },
+        { label: 'Voir taux', value: '→ /dashboard/lettrage' },
+        { label: 'Vieillissement', value: '0-30 / 30-60 / 60-90 / 90+ j' },
+      ];
+    }
+    if (id === 'zscore') {
+      // Z-Score Altman simplifié
+      const a = data.bilanActif ?? [];
+      const p = data.bilanPassif ?? [];
+      const get = (lines: any[], c: string) => lines.find((l: any) => l.code === c)?.value ?? 0;
+      const totA = get(a, '_BZ');
+      const cp = get(p, '_CP');
+      const ratioCP = totA > 0 ? (cp / totA) * 100 : 0;
+      return [
+        { label: 'Autonomie financière', value: `${ratioCP.toFixed(1)} %`, subValue: 'CP / Total Actif' },
+        { label: 'Marge nette', value: ca > 0 ? `${((rn / ca) * 100).toFixed(1)} %` : '—' },
+        { label: 'Score Cockpit', value: '0-100', subValue: 'Voir détail' },
+        { label: 'Famille', value: 'Rentabilité, Liquidité, Structure, Activité' },
+      ];
+    }
+    if (id === 'forecast') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      return [
+        { label: 'Cash actuel', value: fmtMoney(treso) },
+        { label: 'Horizon 30 j', value: 'Projection' },
+        { label: 'Horizon 60 j', value: 'Projection' },
+        { label: 'Horizon 90 j', value: 'Projection' },
+      ];
+    }
+    if (id === 'wcd') {
+      const ca = data.sig?.ca ?? 0;
+      const periodDays = (data as any).periodDays ?? 360;
+      const stocks = data.bilanActif?.find((l: any) => l.code === 'BB')?.value ?? 0;
+      const creances = data.bilanActif?.find((l: any) => l.code === 'BH')?.value ?? 0;
+      const dettes = sumC('40');
+      const achats = balance.filter((r: any) => /^(60|61|62|63)/.test(r.account) && !r.account?.startsWith('603')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
+      const dso = ca > 0 ? Math.round((creances / (ca * 1.18)) * periodDays) : 0;
+      const dio = ca > 0 ? Math.round((stocks / ca) * periodDays) : 0;
+      const dpo = achats > 0 ? Math.round((dettes / (achats * 1.18)) * periodDays) : 0;
+      return [
+        { label: 'DSO', value: `${dso} j`, subValue: 'Délai clients' },
+        { label: 'DIO', value: `${dio} j`, subValue: 'Délai stocks' },
+        { label: 'DPO', value: `${dpo} j`, subValue: 'Délai fournisseurs' },
+        { label: 'CCC', value: `${dso + dio - dpo} j`, subValue: 'Cash Conversion Cycle' },
+      ];
+    }
+    if (id === 'tft_monthly') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      return [
+        { label: 'Trésorerie clôture', value: fmtMoney(treso) },
+        { label: 'Période', value: '12 mois' },
+        { label: 'Sections', value: 'Exploit / Invest / Financ' },
+        { label: 'Référence', value: 'SYSCOHADA art. 38' },
+      ];
+    }
+    if (id === 'cap_var') {
+      const cp = data.bilanPassif?.find((l: any) => l.code === '_CP')?.value ?? 0;
+      return [
+        { label: 'Capitaux propres', value: fmtMoney(cp) },
+        { label: 'Résultat de l\'exercice', value: fmtMoney(rn) },
+        { label: 'Mouvements', value: 'Apports + Distributions + Affectation' },
+        { label: 'État obligatoire', value: 'SYSCOHADA' },
+      ];
+    }
+    if (id === 'closing_pack') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const alertes = (data.ratios || []).filter((r: any) => r.status === 'alert').length;
+      return [
+        { label: 'CA', value: fmtMoney(ca) },
+        { label: 'Résultat net', value: fmtMoney(rn) },
+        { label: 'Trésorerie', value: fmtMoney(treso) },
+        { label: 'Alertes', value: String(alertes) },
+      ];
+    }
+    if (id === 'seasonality') {
+      const monthly = (data as any).monthlyCA ?? [];
+      const avg = monthly.length > 0 ? monthly.reduce((s: number, m: any) => s + (m.realise ?? 0), 0) / monthly.length : 0;
+      const max = monthly.length > 0 ? Math.max(...monthly.map((m: any) => m.realise ?? 0)) : 0;
+      const min = monthly.length > 0 ? Math.min(...monthly.map((m: any) => m.realise ?? 0)) : 0;
+      return [
+        { label: 'CA moyen mensuel', value: fmtMoney(avg) },
+        { label: 'Pic max', value: fmtMoney(max), subValue: avg > 0 ? `Index ${((max/avg)*100).toFixed(0)}` : '—' },
+        { label: 'Creux min', value: fmtMoney(min), subValue: avg > 0 ? `Index ${((min/avg)*100).toFixed(0)}` : '—' },
+        { label: 'Amplitude', value: avg > 0 ? `${(((max-min)/avg)*100).toFixed(0)} %` : '—' },
+      ];
+    }
+    if (id === 'whatif') {
+      return [
+        { label: 'CA actuel', value: fmtMoney(ca) },
+        { label: 'Marge actuelle', value: ca > 0 ? `${((rn/ca)*100).toFixed(1)} %` : '—' },
+        { label: 'Charges actuelles', value: fmtMoney(ca - rn) },
+        { label: 'Simulation', value: '→ /dashboard/whatif' },
+      ];
+    }
+    if (id === 'provisions') {
+      const dotations = sumD('68');
+      const reprises = sumC('78');
+      return [
+        { label: 'Dotations (68)', value: fmtMoney(dotations) },
+        { label: 'Reprises (78)', value: fmtMoney(reprises) },
+        { label: 'Solde net', value: fmtMoney(dotations - reprises) },
+        { label: 'Impact résultat', value: fmtMoney(-(dotations - reprises)), subValue: 'Charge nette' },
+      ];
+    }
+    if (id === 'intercos') {
+      const avances = sumC('167');
+      const titres = sumD('267');
+      const cca = sumD('4561');
+      const intra = sumD('462') - sumC('463');
+      return [
+        { label: 'Avances reçues (167)', value: fmtMoney(avances) },
+        { label: 'Titres participation (267)', value: fmtMoney(titres) },
+        { label: 'Apports CCA (4561)', value: fmtMoney(cca) },
+        { label: 'Solde net intra-groupe', value: fmtMoney(intra) },
+      ];
+    }
+    if (id === 'weekly') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const alertes = (data.ratios || []).filter((r: any) => r.status !== 'good').length;
+      return [
+        { label: 'CA YTD', value: fmtMoney(ca) },
+        { label: 'Trésorerie', value: fmtMoney(treso) },
+        { label: 'Résultat', value: fmtMoney(rn) },
+        { label: 'Alertes', value: `${alertes} / ${(data.ratios || []).length}` },
+      ];
+    }
+    if (id === 'mda') {
+      return [
+        { label: 'CA', value: fmtMoney(ca) },
+        { label: 'Résultat net', value: fmtMoney(rn) },
+        { label: 'Marge nette', value: ca > 0 ? `${((rn/ca)*100).toFixed(1)} %` : '—' },
+        { label: 'Narratif', value: 'Auto-généré' },
+      ];
+    }
+    if (id === 'board_pack') {
+      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const cp = data.bilanPassif?.find((l: any) => l.code === '_CP')?.value ?? 0;
+      return [
+        { label: 'CA', value: fmtMoney(ca) },
+        { label: 'Résultat net', value: fmtMoney(rn) },
+        { label: 'Trésorerie', value: fmtMoney(treso) },
+        { label: 'Capitaux propres', value: fmtMoney(cp) },
+      ];
+    }
+    if (id === 'sector_bench') {
+      const ratios = data.ratios ?? [];
+      const conformes = ratios.filter((r: any) => r.status === 'good').length;
+      return [
+        { label: 'Score sectoriel', value: `${conformes} / ${ratios.length}` },
+        { label: 'Secteur', value: data.org?.sector ?? 'Commerce' },
+        { label: 'Référentiel', value: 'UEMOA OHADA' },
+        { label: 'Voir détail', value: '→ /dashboard/sector-benchmark' },
       ];
     }
 

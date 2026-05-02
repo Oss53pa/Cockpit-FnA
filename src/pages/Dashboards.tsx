@@ -64,6 +64,29 @@ const dashboards = [
   { id: 'zscore',       route: '/dashboard/zscore',            name: 'Score de santé financière ★',  desc: 'Z-Score Altman + score Cockpit 0-100 par famille (Rentabilité/Liquidité/Structure/Activité)',                     icon: 'Award',          cat: 'Standard'  },
   { id: 'forecast',     route: '/dashboard/forecast',          name: 'Rolling Forecast 90j ★',       desc: 'Projection trésorerie 30/60/90 jours, modèle Prophet-like + bandes de confiance + alerte rupture',                icon: 'TrendingUp',     cat: 'Standard'  },
   { id: 'wcd',          route: '/dashboard/wcd',               name: 'Working Capital Days ★',       desc: 'DSO + DIO + DPO + Cash Conversion Cycle — efficacité du cycle d\'exploitation',                                    icon: 'Clock',          cat: 'Standard'  },
+  // ─── États SYSCOHADA + Reporting avancé (Phase 4) ──────────────
+  { id: 'tafire',       route: '/dashboard/tafire',            name: 'TAFIRE ★',                     desc: 'Tableau Financier des Ressources & Emplois — état SYSCOHADA obligatoire (art. 29-37)',                            icon: 'GitMerge',       cat: 'Reporting' },
+  { id: 'bilan_monthly',route: '/dashboard/bilan-monthly',     name: 'Bilan mensuel ★',              desc: 'Évolution actif/passif sur 12 mois — area chart stacked + suivi capitaux propres',                                icon: 'BarChartHorizontal', cat: 'Reporting' },
+  { id: 'caf',          route: '/dashboard/caf',               name: 'CAF mensuelle ★',              desc: 'Capacité d\'autofinancement mensuelle — résultat net + dotations - reprises - cessions',                          icon: 'PiggyBank',      cat: 'Reporting' },
+  { id: 'multi_year',   route: '/dashboard/multi-year',        name: 'Comparaison N / N-1 / N-2 ★',  desc: 'Évolution pluriannuelle des SIG, ratios et structure — analyse tendance',                                        icon: 'CalendarRange',  cat: 'Reporting' },
+  { id: 'bank_recon',   route: '/dashboard/bank-reconciliation', name: 'Rapprochement bancaire',     desc: 'État de rapprochement GL ↔ relevé : suspens, dates de valeur, écarts à régulariser',                              icon: 'Scale',          cat: 'Reporting' },
+  { id: 'closing_just', route: '/dashboard/closing-justification', name: 'Justification de clôture', desc: 'Provisions, CCA/PCA, FAE/FAP — régularisations de fin d\'exercice',                                              icon: 'ClipboardList',  cat: 'Reporting' },
+  // ─── Audit, conformité & qualité ────────────────────────────────
+  { id: 'audit_visu',   route: '/dashboard/audit-trail',       name: 'Audit Trail visualizer ★',     desc: 'Vérification de la chaîne de hash SHA-256 des écritures — intégrité cryptographique GL',                          icon: 'ShieldCheck',    cat: 'Audit' },
+  { id: 'anomalies',    route: '/dashboard/anomalies',         name: 'Carte des anomalies ★',        desc: 'Heatmap mois × catégories d\'anomalies (déséquilibres, doublons, signes inversés)',                              icon: 'AlertOctagon',   cat: 'Audit' },
+  { id: 'lettrage',     route: '/dashboard/lettrage',          name: 'Lettrage tiers',               desc: 'Taux de lettrage par tiers, vieillissement créances/dettes, top tiers non lettrés',                              icon: 'Link2',          cat: 'Audit' },
+  // ─── Pilotage avancé ────────────────────────────────────────────
+  { id: 'seasonality',  route: '/dashboard/seasonality',       name: 'Saisonnalité',                 desc: 'Index de saisonnalité du CA — détection des pics et creux mensuels (base 100)',                                  icon: 'CalendarClock',  cat: 'Pilotage' },
+  { id: 'whatif',       route: '/dashboard/whatif',            name: 'What-If / Sensibilité',        desc: 'Simulation tarifaire : sliders CA / marge / charges — impact en temps réel sur le résultat',                     icon: 'Sliders',        cat: 'Pilotage' },
+  { id: 'provisions',   route: '/dashboard/provisions',        name: 'Provisions tracking',          desc: 'Suivi des dotations / reprises de provisions et amortissements (comptes 68x/78x)',                               icon: 'Vault',          cat: 'Pilotage' },
+  { id: 'intercos',     route: '/dashboard/intercos',          name: 'Intercos / CCA',               desc: 'Comptes courants associés — opérations intra-groupe (167, 267, 4561, 462, 463)',                                  icon: 'Network',        cat: 'Pilotage' },
+  // ─── Direction & Board ──────────────────────────────────────────
+  { id: 'weekly',       route: '/dashboard/weekly',            name: 'Flash hebdo ★',                desc: 'Tableau de bord hebdomadaire Direction — CA, cash, alertes, top points de vigilance',                            icon: 'Zap',            cat: 'Direction' },
+  { id: 'mda',          route: '/dashboard/mda',               name: 'MD&A auto-généré ★',           desc: 'Management Discussion & Analysis — narratif synthétique généré par règles (Proph3t)',                              icon: 'Sparkles',       cat: 'Direction' },
+  { id: 'board_pack',   route: '/dashboard/board-pack',        name: 'Board Pack ★',                 desc: 'Synthèse trimestrielle 4 slides Conseil d\'Administration — print-ready A4',                                      icon: 'Presentation',   cat: 'Direction' },
+  { id: 'sector_bench', route: '/dashboard/sector-benchmark',  name: 'Comparatif sectoriel ★',       desc: 'Ratios entreprise vs normes UEMOA OHADA par secteur (Industrie, BTP, Commerce, Services…)',                       icon: 'Building2',      cat: 'Direction' },
+  // ─── Proph3t Intelligence avancée ──────────────────────────────
+  { id: 'proph3t',      route: '/dashboard/proph3t',           name: 'Proph3t · Intelligence ★★',    desc: 'Date-aware · Predict · Correct · Suggest · Audit · Memorize — orchestrateur d\'IA financière déterministe',           icon: 'Brain',          cat: 'Direction' },
   // ─── Builder personnalisé (Sprint 4) ──────────────────────────
   { id: 'builder',      route: '/builder',                     name: 'Mes dashboards personnalisés', desc: 'Composez vos propres dashboards par drag & drop : KPIs, charts, tables. Persistance locale.',                  icon: 'LayoutGrid',     cat: 'Custom'    },
 ];
@@ -71,7 +94,7 @@ const dashboards = [
 type ViewMode = 'cards' | 'table' | 'kanban';
 const VIEW_KEY = 'dashboards-view-mode';
 
-const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique', 'Custom'] as const;
+const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'Audit', 'Direction', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique', 'Custom'] as const;
 type Category = typeof CATEGORIES[number];
 
 export default function Dashboards() {
@@ -280,15 +303,15 @@ function KanbanView({ list, navigate, filter }: {
     : [{ cat: filter, items: list }];
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0">
+    <div className="flex gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 snap-x snap-mandatory">
       {groups.map(({ cat, items }) => (
-        <div key={cat} className="shrink-0 w-72 flex flex-col">
+        <div key={cat} className="shrink-0 w-[320px] flex flex-col snap-start">
           {/* Header colonne */}
           <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200 truncate">
               {cat}
             </h3>
-            <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-full bg-primary-200/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300">
+            <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-full bg-primary-200/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300 shrink-0">
               {items.length}
             </span>
           </div>
@@ -301,17 +324,17 @@ function KanbanView({ list, navigate, filter }: {
                 <button
                   key={d.id}
                   onClick={() => navigate(d.route)}
-                  className="group text-left card p-3 hover:shadow-md hover:-translate-y-px transition-all duration-200"
+                  className="group text-left card p-3 hover:shadow-md hover:-translate-y-px transition-all duration-200 w-full"
                 >
-                  <div className="flex items-center gap-2.5 mb-1.5">
+                  <div className="flex items-start gap-2.5 mb-2">
                     <div className="w-8 h-8 rounded-lg bg-primary-200/80 dark:bg-primary-800/80 flex items-center justify-center text-primary-700 dark:text-primary-200 shrink-0 group-hover:bg-primary-900 group-hover:text-primary-50 dark:group-hover:bg-primary-100 dark:group-hover:text-primary-900 transition-colors">
                       <Icon className="w-3.5 h-3.5" strokeWidth={2} />
                     </div>
-                    <p className="font-semibold text-[12px] text-primary-900 dark:text-primary-100 leading-tight tracking-tight line-clamp-2 flex-1">
+                    <p className="font-semibold text-[12px] text-primary-900 dark:text-primary-100 leading-snug tracking-tight flex-1 break-words">
                       {d.name}
                     </p>
                   </div>
-                  <p className="text-[10px] text-primary-500 leading-relaxed line-clamp-2 pl-[42px]">
+                  <p className="text-[10px] text-primary-500 leading-relaxed break-words">
                     {d.desc}
                   </p>
                 </button>

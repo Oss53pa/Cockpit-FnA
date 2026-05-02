@@ -21,8 +21,8 @@ export default function WorkingCapitalDaysPage() {
     const dso = ratios.find((r) => r.code === 'DSO')?.value ?? 0;
     const dpo = ratios.find((r) => r.code === 'DPO')?.value ?? 0;
     // DIO = (Stocks / Coût des achats) × 360
-    const get = (lines: any[], code: string) => lines?.find((l: any) => l.code === code)?.value ?? 0;
-    const stocks = get(bilan?.actif, 'BB') ?? 0;
+    const get = (lines: any[] | undefined, code: string) => lines?.find((l: any) => l.code === code)?.value ?? 0;
+    const stocks = get(bilan?.actif ?? [], 'BB') ?? 0;
     const achats = sig?.ca && sig?.margeBrute ? sig.ca - sig.margeBrute : 1;
     const dio = achats > 0 ? (stocks / achats) * 360 : 0;
     const ccc = dso + dio - dpo;
