@@ -4524,7 +4524,7 @@ function SendPreviewLoader({ recipient, buildContent, mode, onClose, onNext, isL
       content={content}
       options={{
         mode,
-        supabaseFunction: mode === 'review' ? 'send-review' : 'send-report',
+        // Edge Function generique 'send-email' (defaut). Voir Settings → Modèles d'emails pour la config Resend.
       }}
       onSent={isLast ? onClose : onNext}
     />
