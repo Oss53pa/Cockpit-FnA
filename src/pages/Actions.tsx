@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { AlertTriangle, CheckCircle2, Clock, Link2, Plus, Target, Trash2, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Link2, Plus, Target, Trash2, Zap, LayoutGrid, Rows3, LayoutDashboard } from 'lucide-react';
 import clsx from 'clsx';
+
+type ViewMode = 'cards' | 'table' | 'kanban';
+const VIEW_KEY_POINTS = 'attention-points-view';
+const VIEW_KEY_PLANS  = 'action-plans-view';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -86,17 +90,30 @@ function PointsView({ points, plans }: { points: AttentionPoint[]; plans: Action
   const [editing, setEditing] = useState<AttentionPoint | null>(null);
   const [filter, setFilter] = useState<'all' | AttentionPoint['status']>('all');
   const [sevFilter, setSevFilter] = useState<'all' | AttentionPoint['severity']>('all');
+  const [view, setView] = useState<ViewMode>(() => {
+    const v = localStorage.getItem(VIEW_KEY_POINTS);
+    return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
+  });
+  const setViewMode = (v: ViewMode) => { setView(v); localStorage.setItem(VIEW_KEY_POINTS, v); };
 
   const filtered = points.filter((p) =>
     (filter === 'all' || p.status === filter) &&
     (sevFilter === 'all' || p.severity === sevFilter)
   );
 
+  const linkedFor = (pid?: number) => plans.filter((pl) => pl.attentionPointId === pid).length;
+  const onEdit = (p: AttentionPoint) => { setEditing(p); setOpen(true); };
+  const onDelete = async (p: AttentionPoint) => { if (confirm('Supprimer ?')) await db.attentionPoints.delete(p.id!); };
+  const onStatusChange = async (p: AttentionPoint, s: AttentionPoint['status']) => await db.attentionPoints.update(p.id!, { status: s, resolvedAt: s === 'resolved' ? Date.now() : undefined });
+
   return (
     <Card
       title="Points d'attention"
       subtitle="Problèmes, risques, anomalies identifiés"
-      action={<button className="btn-primary" onClick={() => { setEditing(null); setOpen(true); }}><Plus className="w-4 h-4" /> Nouveau point</button>}
+      action={<div className="flex items-center gap-2">
+        <ViewSwitcher view={view} onChange={setViewMode} />
+        <button className="btn-primary" onClick={() => { setEditing(null); setOpen(true); }}><Plus className="w-4 h-4" /> Nouveau point</button>
+      </div>}
     >
       <div className="flex flex-wrap gap-2 mb-3">
         <div className="flex gap-1">
@@ -121,16 +138,19 @@ function PointsView({ points, plans }: { points: AttentionPoint[]; plans: Action
 
       {filtered.length === 0 ? (
         <Empty icon={<AlertTriangle className="w-10 h-10" />} msg="Aucun point" onCreate={() => { setEditing(null); setOpen(true); }} />
-      ) : (
+      ) : view === 'cards' ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {filtered.map((p) => (
-            <PointCard key={p.id} point={p} linkedCount={plans.filter((pl) => pl.attentionPointId === p.id).length}
-              onEdit={() => { setEditing(p); setOpen(true); }}
-              onDelete={async () => { if (confirm('Supprimer ?')) await db.attentionPoints.delete(p.id!); }}
-              onStatusChange={async (s) => await db.attentionPoints.update(p.id!, { status: s, resolvedAt: s === 'resolved' ? Date.now() : undefined })}
+            <PointCard key={p.id} point={p} linkedCount={linkedFor(p.id)}
+              onEdit={() => onEdit(p)} onDelete={() => onDelete(p)}
+              onStatusChange={(s) => onStatusChange(p, s)}
             />
           ))}
         </div>
+      ) : view === 'table' ? (
+        <PointsTable points={filtered} linkedFor={linkedFor} onEdit={onEdit} onDelete={onDelete} onStatusChange={onStatusChange} />
+      ) : (
+        <PointsKanban points={filtered} linkedFor={linkedFor} onEdit={onEdit} onDelete={onDelete} onStatusChange={onStatusChange} />
       )}
 
       <PointModal
@@ -144,6 +164,152 @@ function PointsView({ points, plans }: { points: AttentionPoint[]; plans: Action
         }}
       />
     </Card>
+  );
+}
+
+// ─── Vue Table — Points d'attention ──────────────────────────────────
+function PointsTable({ points, linkedFor, onEdit, onDelete, onStatusChange }: {
+  points: AttentionPoint[];
+  linkedFor: (id?: number) => number;
+  onEdit: (p: AttentionPoint) => void;
+  onDelete: (p: AttentionPoint) => void;
+  onStatusChange: (p: AttentionPoint, s: AttentionPoint['status']) => void;
+}) {
+  return (
+    <div className="overflow-x-auto -mx-4">
+      <table className="w-full text-sm">
+        <thead className="text-[11px] uppercase tracking-wider text-primary-500 border-b-2 border-primary-200 dark:border-primary-800">
+          <tr>
+            <th className="text-left py-2 px-3">Titre</th>
+            <th className="text-left py-2 px-3 w-24">Sévérité</th>
+            <th className="text-left py-2 px-3 w-32">Catégorie</th>
+            <th className="text-left py-2 px-3 w-32">Statut</th>
+            <th className="text-center py-2 px-3 w-16">Plans</th>
+            <th className="text-right py-2 px-3 w-32">Détecté le</th>
+            <th className="py-2 px-3 w-20"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+          {points.map((p) => (
+            <tr key={p.id} className="hover:bg-primary-100/40 dark:hover:bg-primary-900/40 cursor-pointer" onClick={() => onEdit(p)}>
+              <td className="py-2 px-3 font-medium">
+                <div className="line-clamp-1">{p.title}</div>
+                {p.description && <p className="text-[10px] text-primary-500 line-clamp-1">{p.description}</p>}
+              </td>
+              <td className="py-2 px-3"><Badge variant={p.severity}>{SEV_LABELS[p.severity]}</Badge></td>
+              <td className="py-2 px-3"><Badge>{p.category}</Badge></td>
+              <td className="py-2 px-3">
+                <select className="input !py-1 text-xs" value={p.status} onClick={(e) => e.stopPropagation()} onChange={(e) => onStatusChange(p, e.target.value as AttentionPoint['status'])}>
+                  {Object.entries(POINT_STATUS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </select>
+              </td>
+              <td className="py-2 px-3 text-center num text-primary-500">{linkedFor(p.id)}</td>
+              <td className="py-2 px-3 text-right text-xs text-primary-500 num">{new Date(p.detectedAt).toLocaleDateString('fr-FR')}</td>
+              <td className="py-2 px-3 text-center">
+                <button className="btn-ghost !p-1 text-primary-500 hover:text-error" onClick={(e) => { e.stopPropagation(); onDelete(p); }}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Vue Kanban — Points d'attention (colonnes par statut) ───────────
+function PointsKanban({ points, linkedFor, onEdit, onDelete, onStatusChange }: {
+  points: AttentionPoint[];
+  linkedFor: (id?: number) => number;
+  onEdit: (p: AttentionPoint) => void;
+  onDelete: (p: AttentionPoint) => void;
+  onStatusChange: (p: AttentionPoint, s: AttentionPoint['status']) => void;
+}) {
+  const COLUMNS: { status: AttentionPoint['status']; label: string }[] = [
+    { status: 'open', label: 'Ouvert' },
+    { status: 'in_progress', label: 'En traitement' },
+    { status: 'escalated', label: 'Escaladé' },
+    { status: 'resolved', label: 'Résolu' },
+    { status: 'ignored', label: 'Ignoré' },
+  ];
+
+  const onDragStart = (e: React.DragEvent, p: AttentionPoint) => {
+    e.dataTransfer.setData('text/plain', String(p.id));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const onDrop = (e: React.DragEvent, status: AttentionPoint['status']) => {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('text/plain'));
+    const p = points.find((x) => x.id === id);
+    if (p && p.status !== status) onStatusChange(p, status);
+  };
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4">
+      {COLUMNS.map((col) => {
+        const items = points.filter((p) => p.status === col.status);
+        return (
+          <div key={col.status} className="shrink-0 w-[280px] flex flex-col"
+               onDragOver={(e) => e.preventDefault()}
+               onDrop={(e) => onDrop(e, col.status)}>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200">{col.label}</h3>
+              <span className="text-[10px] num px-2 py-0.5 rounded-full bg-primary-200/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300">{items.length}</span>
+            </div>
+            <div className="flex flex-col gap-2 bg-primary-100/30 dark:bg-primary-900/30 p-2 rounded-2xl min-h-[200px] flex-1 border border-primary-200/40 dark:border-primary-800/40">
+              {items.length === 0 ? (
+                <p className="text-[10px] text-primary-400 italic text-center py-4">Aucun point</p>
+              ) : items.map((p) => (
+                <div key={p.id}
+                     draggable
+                     onDragStart={(e) => onDragStart(e, p)}
+                     onClick={() => onEdit(p)}
+                     className="card p-2.5 cursor-move hover:shadow-md transition-all">
+                  <div className="flex items-center justify-between mb-1">
+                    <Badge variant={p.severity}>{SEV_LABELS[p.severity]}</Badge>
+                    <button className="btn-ghost !p-0.5 text-primary-400 hover:text-error" onClick={(e) => { e.stopPropagation(); onDelete(p); }}>
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <p className="font-semibold text-xs leading-snug mb-1 line-clamp-2">{p.title}</p>
+                  {p.description && <p className="text-[10px] text-primary-500 leading-relaxed line-clamp-2 mb-1">{p.description}</p>}
+                  <div className="flex items-center justify-between text-[10px] text-primary-500">
+                    <Badge>{p.category}</Badge>
+                    {linkedFor(p.id) > 0 && <span className="flex items-center gap-1"><Link2 className="w-2.5 h-2.5" />{linkedFor(p.id)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ViewSwitcher partagé Points + Plans ─────────────────────────────
+function ViewSwitcher({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
+  const buttons: { v: ViewMode; icon: any; label: string }[] = [
+    { v: 'cards',  icon: LayoutGrid,        label: 'Cartes' },
+    { v: 'table',  icon: Rows3,             label: 'Table' },
+    { v: 'kanban', icon: LayoutDashboard,   label: 'Kanban' },
+  ];
+  return (
+    <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-primary-200/40 dark:bg-primary-800/40">
+      {buttons.map((b) => {
+        const active = view === b.v;
+        return (
+          <button key={b.v} type="button" onClick={() => onChange(b.v)}
+            className={clsx('flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold transition-all',
+              active ? 'bg-surface text-primary-900 shadow-sm dark:bg-primary-100 dark:text-primary-900' : 'text-primary-500 hover:text-primary-900 dark:hover:text-primary-100')}
+            aria-pressed={active} title={`Vue ${b.label}`}>
+            <b.icon className="w-3.5 h-3.5" strokeWidth={2} />
+            <span className="hidden sm:inline">{b.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -202,6 +368,11 @@ function PlanView({ plans, points }: { plans: ActionPlan[]; points: AttentionPoi
   const [editing, setEditing] = useState<ActionPlan | null>(null);
   const [filter, setFilter] = useState<'all' | ActionPlan['status']>('all');
   const [prioFilter, setPrioFilter] = useState<'all' | ActionPlan['priority']>('all');
+  const [view, setView] = useState<ViewMode>(() => {
+    const v = localStorage.getItem(VIEW_KEY_PLANS);
+    return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
+  });
+  const setViewMode = (v: ViewMode) => { setView(v); localStorage.setItem(VIEW_KEY_PLANS, v); };
 
   const today = new Date().toISOString().substring(0, 10);
   const filtered = plans.filter((p) =>
@@ -209,12 +380,19 @@ function PlanView({ plans, points }: { plans: ActionPlan[]; points: AttentionPoi
     (prioFilter === 'all' || p.priority === prioFilter)
   );
   const isLate = (p: ActionPlan) => p.status !== 'done' && p.status !== 'cancelled' && p.dueDate && p.dueDate < today;
+  const onEdit = (p: ActionPlan) => { setEditing(p); setOpen(true); };
+  const onDelete = async (p: ActionPlan) => { if (confirm('Supprimer ?')) await db.actionPlans.delete(p.id!); };
+  const onStatusChange = async (p: ActionPlan, s: ActionPlan['status']) => await db.actionPlans.update(p.id!, { status: s, updatedAt: Date.now(), completedAt: s === 'done' ? Date.now() : undefined });
+  const onProgressChange = async (p: ActionPlan, v: number) => await db.actionPlans.update(p.id!, { progress: v, updatedAt: Date.now() });
 
   return (
     <Card
       title="Plan d'action"
       subtitle="Actions à mettre en œuvre — responsable · échéance · avancement · budget"
-      action={<button className="btn-primary" onClick={() => { setEditing(null); setOpen(true); }}><Plus className="w-4 h-4" /> Nouvelle action</button>}
+      action={<div className="flex items-center gap-2">
+        <ViewSwitcher view={view} onChange={setViewMode} />
+        <button className="btn-primary" onClick={() => { setEditing(null); setOpen(true); }}><Plus className="w-4 h-4" /> Nouvelle action</button>
+      </div>}
     >
       <div className="flex flex-wrap gap-2 mb-3">
         <div className="flex gap-1">
@@ -239,17 +417,22 @@ function PlanView({ plans, points }: { plans: ActionPlan[]; points: AttentionPoi
 
       {filtered.length === 0 ? (
         <Empty icon={<Target className="w-10 h-10" />} msg="Aucune action" onCreate={() => { setEditing(null); setOpen(true); }} />
-      ) : (
+      ) : view === 'cards' ? (
         <div className="space-y-2">
           {filtered.map((p) => (
             <PlanCard key={p.id} plan={p} point={points.find((pt) => pt.id === p.attentionPointId)} late={!!isLate(p)}
-              onEdit={() => { setEditing(p); setOpen(true); }}
-              onDelete={async () => { if (confirm('Supprimer ?')) await db.actionPlans.delete(p.id!); }}
-              onStatusChange={async (s) => await db.actionPlans.update(p.id!, { status: s, updatedAt: Date.now(), completedAt: s === 'done' ? Date.now() : undefined })}
-              onProgressChange={async (v) => await db.actionPlans.update(p.id!, { progress: v, updatedAt: Date.now() })}
+              onEdit={() => onEdit(p)} onDelete={() => onDelete(p)}
+              onStatusChange={(s) => onStatusChange(p, s)}
+              onProgressChange={(v) => onProgressChange(p, v)}
             />
           ))}
         </div>
+      ) : view === 'table' ? (
+        <PlansTable plans={filtered} points={points} isLate={isLate}
+          onEdit={onEdit} onDelete={onDelete} onStatusChange={onStatusChange} />
+      ) : (
+        <PlansKanban plans={filtered} isLate={isLate}
+          onEdit={onEdit} onDelete={onDelete} onStatusChange={onStatusChange} />
       )}
 
       <PlanModal
@@ -595,6 +778,151 @@ function Empty({ icon, msg, onCreate }: { icon: React.ReactNode; msg: string; on
       <div className="mx-auto text-primary-400 mb-3">{icon}</div>
       <p className="text-sm text-primary-500">{msg}</p>
       <button className="btn-primary mt-4" onClick={onCreate}><Plus className="w-4 h-4" /> Créer</button>
+    </div>
+  );
+}
+
+// ─── Vue Table — Plans d'action ──────────────────────────────────────
+function PlansTable({ plans, points, isLate, onEdit, onDelete, onStatusChange }: {
+  plans: ActionPlan[];
+  points: AttentionPoint[];
+  isLate: (p: ActionPlan) => boolean | string | undefined;
+  onEdit: (p: ActionPlan) => void;
+  onDelete: (p: ActionPlan) => void;
+  onStatusChange: (p: ActionPlan, s: ActionPlan['status']) => void;
+}) {
+  return (
+    <div className="overflow-x-auto -mx-4">
+      <table className="w-full text-sm">
+        <thead className="text-[11px] uppercase tracking-wider text-primary-500 border-b-2 border-primary-200 dark:border-primary-800">
+          <tr>
+            <th className="text-left py-2 px-3">Action</th>
+            <th className="text-left py-2 px-3 w-28">Priorité</th>
+            <th className="text-left py-2 px-3 w-32">Statut</th>
+            <th className="text-left py-2 px-3 w-32">Responsable</th>
+            <th className="text-left py-2 px-3 w-28">Échéance</th>
+            <th className="text-left py-2 px-3 w-24">Avancement</th>
+            <th className="text-left py-2 px-3 w-28">Lien point</th>
+            <th className="py-2 px-3 w-20"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+          {plans.map((p) => {
+            const linkedPoint = points.find((pt) => pt.id === p.attentionPointId);
+            const late = isLate(p);
+            return (
+              <tr key={p.id} className={clsx('hover:bg-primary-100/40 dark:hover:bg-primary-900/40 cursor-pointer', late && 'bg-error/5')} onClick={() => onEdit(p)}>
+                <td className="py-2 px-3 font-medium">
+                  <div className="line-clamp-1">{p.title}</div>
+                  {p.description && <p className="text-[10px] text-primary-500 line-clamp-1">{p.description}</p>}
+                </td>
+                <td className="py-2 px-3"><Badge variant={p.priority}>{PRIORITY_LABELS[p.priority]}</Badge></td>
+                <td className="py-2 px-3">
+                  <select className="input !py-1 text-xs" value={p.status} onClick={(e) => e.stopPropagation()} onChange={(e) => onStatusChange(p, e.target.value as ActionPlan['status'])}>
+                    {Object.entries(PLAN_STATUS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                  </select>
+                </td>
+                <td className="py-2 px-3 text-xs">{p.owner || '—'}</td>
+                <td className={clsx('py-2 px-3 text-xs num', late && 'text-error font-semibold')}>
+                  {p.dueDate ? new Date(p.dueDate).toLocaleDateString('fr-FR') : '—'}
+                </td>
+                <td className="py-2 px-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-primary-200 dark:bg-primary-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary-900 dark:bg-primary-100" style={{ width: `${p.progress ?? 0}%` }} />
+                    </div>
+                    <span className="text-[10px] num text-primary-500">{p.progress ?? 0}%</span>
+                  </div>
+                </td>
+                <td className="py-2 px-3 text-xs text-primary-500 truncate max-w-[120px]">{linkedPoint?.title ?? '—'}</td>
+                <td className="py-2 px-3 text-center">
+                  <button className="btn-ghost !p-1 text-primary-500 hover:text-error" onClick={(e) => { e.stopPropagation(); onDelete(p); }}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Vue Kanban — Plans d'action (colonnes par statut) ───────────────
+function PlansKanban({ plans, isLate, onEdit, onDelete, onStatusChange }: {
+  plans: ActionPlan[];
+  isLate: (p: ActionPlan) => boolean | string | undefined;
+  onEdit: (p: ActionPlan) => void;
+  onDelete: (p: ActionPlan) => void;
+  onStatusChange: (p: ActionPlan, s: ActionPlan['status']) => void;
+}) {
+  const COLUMNS: { status: ActionPlan['status']; label: string; color: string }[] = [
+    { status: 'todo',      label: 'À faire',   color: 'border-primary-300' },
+    { status: 'doing',     label: 'En cours',  color: 'border-warning' },
+    { status: 'blocked',   label: 'Bloqué',    color: 'border-error' },
+    { status: 'done',      label: 'Fait',      color: 'border-success' },
+    { status: 'cancelled', label: 'Annulé',    color: 'border-primary-300' },
+  ];
+
+  const onDragStart = (e: React.DragEvent, p: ActionPlan) => {
+    e.dataTransfer.setData('text/plain', String(p.id));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const onDrop = (e: React.DragEvent, status: ActionPlan['status']) => {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('text/plain'));
+    const p = plans.find((x) => x.id === id);
+    if (p && p.status !== status) onStatusChange(p, status);
+  };
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4">
+      {COLUMNS.map((col) => {
+        const items = plans.filter((p) => p.status === col.status);
+        return (
+          <div key={col.status} className="shrink-0 w-[280px] flex flex-col"
+               onDragOver={(e) => e.preventDefault()}
+               onDrop={(e) => onDrop(e, col.status)}>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-200">{col.label}</h3>
+              <span className="text-[10px] num px-2 py-0.5 rounded-full bg-primary-200/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300">{items.length}</span>
+            </div>
+            <div className={clsx('flex flex-col gap-2 bg-primary-100/30 dark:bg-primary-900/30 p-2 rounded-2xl min-h-[200px] flex-1 border-l-4', col.color)}>
+              {items.length === 0 ? (
+                <p className="text-[10px] text-primary-400 italic text-center py-4">Aucune action</p>
+              ) : items.map((p) => {
+                const late = isLate(p);
+                return (
+                  <div key={p.id}
+                       draggable
+                       onDragStart={(e) => onDragStart(e, p)}
+                       onClick={() => onEdit(p)}
+                       className={clsx('card p-2.5 cursor-move hover:shadow-md transition-all', late && 'border-l-2 border-l-error')}>
+                    <div className="flex items-center justify-between mb-1">
+                      <Badge variant={p.priority}>{PRIORITY_LABELS[p.priority]}</Badge>
+                      <button className="btn-ghost !p-0.5 text-primary-400 hover:text-error" onClick={(e) => { e.stopPropagation(); onDelete(p); }}>
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <p className="font-semibold text-xs leading-snug mb-1 line-clamp-2">{p.title}</p>
+                    <div className="flex items-center justify-between text-[10px] text-primary-500 mb-1">
+                      <span className="truncate">{p.owner || '—'}</span>
+                      {p.dueDate && <span className={clsx('num shrink-0', late && 'text-error font-semibold')}>{new Date(p.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 h-1 bg-primary-200 dark:bg-primary-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-primary-900 dark:bg-primary-100" style={{ width: `${p.progress ?? 0}%` }} />
+                      </div>
+                      <span className="text-[9px] num text-primary-500">{p.progress ?? 0}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
