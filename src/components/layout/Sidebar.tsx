@@ -3,6 +3,7 @@ import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
   X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search, Users, FileEdit,
+  HelpCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -42,6 +43,7 @@ const sections = [
     items: [
       { to: '/settings', icon: Settings, label: 'Paramètres' },
       { to: '/audit', icon: ClipboardList, label: 'Audit trail' },
+      { to: '/guide', icon: HelpCircle, label: "Guide d'utilisation" },
     ],
   },
 ];
@@ -68,15 +70,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
     <>
       {/* Header — wordmark Grand Hotel (signature unique de l'app) */}
       <div className="px-5 pt-6 pb-5 flex items-center justify-between gap-2">
-        <div className="min-w-0 flex items-center gap-2.5">
-          <div className="relative w-9 h-9 rounded-2xl bg-primary-900 dark:bg-primary-100 flex items-center justify-center shrink-0 shadow-sm">
-            <span className="text-primary-50 dark:text-primary-900 text-xs font-semibold tracking-tight">FA</span>
-            <span aria-hidden className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-shell" />
-          </div>
-          <div className="min-w-0">
-            <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit</p>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-primary-400 mt-1.5 font-medium">SYSCOHADA 2017</p>
-          </div>
+        <div className="min-w-0">
+          <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-primary-400 mt-1.5 font-medium">SYSCOHADA 2017</p>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           {onToggleCollapse && (
@@ -179,10 +175,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
   const collapsedNav = (
     <>
       <div className="pt-5 pb-3 flex justify-center">
-        <div className="relative w-9 h-9 rounded-2xl bg-primary-900 dark:bg-primary-100 flex items-center justify-center shadow-sm">
-          <span className="text-primary-50 dark:text-primary-900 text-xs font-semibold tracking-tight">FA</span>
-          <span aria-hidden className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-shell" />
-        </div>
+        <p className="font-display text-xl leading-none text-primary-900 dark:text-primary-50">C</p>
       </div>
       <nav className="flex-1 overflow-y-auto py-3 px-1.5 space-y-1">
         {sections.flatMap((sec) => sec.items).map((it) => (

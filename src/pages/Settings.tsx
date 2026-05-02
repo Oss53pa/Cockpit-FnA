@@ -786,6 +786,7 @@ function TabUsers() {
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [invitePreview, setInvitePreview] = useState<{ user: AppUser; orgs: { id: string; name: string }[] } | null>(null);
   const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
+  const { currentOrgId } = useApp();
 
   const handleSave = (user: AppUser, sendInvite: boolean) => {
     const existing = users.findIndex((u) => u.id === user.id);
@@ -801,17 +802,23 @@ function TabUsers() {
     if (isNew && sendInvite) {
       // Affiche le preview de l'invitation HTML que l'admin peut envoyer
       setInvitePreview({ user, orgs: orgs.filter((o) => user.orgIds.includes(o.id)) });
+      void import('../engine/auditLog').then(({ audit }) => audit.userInvited(currentOrgId ?? 'global', user.email, user.role));
     } else {
       toast.success(isNew ? 'Utilisateur ajouté' : 'Utilisateur modifié', user.name);
+      if (!isNew) {
+        void import('../engine/auditLog').then(({ audit }) => audit.userUpdated(currentOrgId ?? 'global', user.email, ['role/active/orgs']));
+      }
     }
   };
 
   const handleDelete = (id: string) => {
+    const target = users.find((u) => u.id === id);
     if (!confirm('Supprimer cet utilisateur ? Cette action est irréversible.')) return;
     const next = users.filter((u) => u.id !== id);
     setUsers(next);
     saveUsers(next);
     toast.success('Utilisateur supprimé');
+    if (target) void import('../engine/auditLog').then(({ audit }) => audit.userDeleted(currentOrgId ?? 'global', target.email));
   };
 
   const handleToggleActive = (id: string) => {

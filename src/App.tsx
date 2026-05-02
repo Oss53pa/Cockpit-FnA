@@ -40,6 +40,7 @@ const GrandLivre     = lazyWithRetry(() => import('./pages/GrandLivre'));
 const Analytical     = lazyWithRetry(() => import('./pages/Analytical'));
 const AuditTrail     = lazyWithRetry(() => import('./pages/AuditTrail'));
 const Settings       = lazyWithRetry(() => import('./pages/Settings'));
+const Guide          = lazyWithRetry(() => import('./pages/Guide'));
 const ExecutiveSummary = lazyWithRetry(() => import('./pages/ExecutiveSummary'));
 const ComplianceSyscohada = lazyWithRetry(() => import('./pages/ComplianceSyscohada'));
 const BreakEven = lazyWithRetry(() => import('./pages/BreakEven'));
@@ -182,6 +183,7 @@ function App() {
         <Route path="/analytical" element={<ProtectedRoute><AppLayout><Analytical /></AppLayout></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute><AppLayout><AuditTrail /></AppLayout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
+        <Route path="/guide" element={<ProtectedRoute><AppLayout><Guide /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/exec" element={<ProtectedRoute><AppLayout><ExecutiveSummary /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/compliance" element={<ProtectedRoute><AppLayout><ComplianceSyscohada /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/breakeven" element={<ProtectedRoute><AppLayout><BreakEven /></AppLayout></ProtectedRoute>} />

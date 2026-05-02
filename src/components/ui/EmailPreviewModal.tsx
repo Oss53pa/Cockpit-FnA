@@ -73,6 +73,12 @@ export function EmailPreviewModal({
         throw new Error(`${data.error}${hint}`);
       }
       toast.success('Email envoyé', `→ ${recipient.email}`);
+      // Audit trail
+      try {
+        const { audit } = await import('../../engine/auditLog');
+        const orgId = (options.supabasePayload as any)?.orgId ?? 'global';
+        await audit.emailSent(orgId, recipient.email, options.mode, content.subject);
+      } catch { /* ignore */ }
       onSent?.();
       onClose();
     } catch (e: any) {
