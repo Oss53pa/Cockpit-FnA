@@ -2,6 +2,7 @@
 import { db } from '../db/schema';
 import { findSyscoAccount } from '../syscohada/coa';
 import { Line } from './statements';
+import { getActiveModel, modelToSectionDefs, modelToOrder, migrateLegacySettings } from './crModels';
 
 export type BudgetActualRow = {
   code: string;
@@ -119,18 +120,49 @@ export function saveOrder(orgId: string, order: CRSection[]) {
   localStorage.setItem(`${KEY_ORDER}:${orgId}`, JSON.stringify(order));
 }
 
-// CR_SECTIONS dynamique selon labels custom + sections custom
+// CR_SECTIONS dynamique — lit le MODÈLE ACTIF du module crModels (Phase 3 / propagation).
+// Fallback : si aucun modèle (ou orgId manquant), retombe sur les defaults SYSCOHADA.
+//
+// Le modèle actif est sélectionné dans l'éditeur CR (page /cr-editor). Tous les
+// engines (statements, monthly, budgetActual, reports) consomment cette fonction
+// comme point pivot unique — un changement de modèle se propage à tout Cockpit.
 export function getSectionDefs(orgId?: string): Record<string, { label: string; prefixes: string[]; isCharge: boolean }> {
   if (!orgId) return { ...DEFAULT_SECTION_DEFS };
-  const labels = loadLabels(orgId);
-  const out: Record<string, { label: string; prefixes: string[]; isCharge: boolean }> = {};
-  for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
-    out[k] = { ...DEFAULT_SECTION_DEFS[k], label: labels[k] ?? DEFAULT_SECTION_DEFS[k].label };
+
+  // Migration douce depuis l'ancien système localStorage (idempotente)
+  try { migrateLegacySettings(orgId); } catch { /* ignore */ }
+
+  // Lecture du modèle actif (Vue Direction / Vue Fiscale / etc.)
+  try {
+    const model = getActiveModel(orgId);
+    return modelToSectionDefs(model);
+  } catch (e) {
+    // Sécurité : si crModels échoue, on retombe sur l'ancien système legacy
+    console.warn('CR Models indisponible, fallback sur localStorage legacy', e);
+    const labels = loadLabels(orgId);
+    const out: Record<string, { label: string; prefixes: string[]; isCharge: boolean }> = {};
+    for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
+      out[k] = { ...DEFAULT_SECTION_DEFS[k], label: labels[k] ?? DEFAULT_SECTION_DEFS[k].label };
+    }
+    for (const c of loadCustomSections(orgId)) {
+      out[c.id] = { label: labels[c.id] ?? c.label, prefixes: c.prefixes, isCharge: c.isCharge };
+    }
+    return out;
   }
-  for (const c of loadCustomSections(orgId)) {
-    out[c.id] = { label: labels[c.id] ?? c.label, prefixes: c.prefixes, isCharge: c.isCharge };
+}
+
+/**
+ * Ordre d'affichage des sections selon le modèle actif (DFS sur la hiérarchie).
+ * Remplace progressivement loadOrder() qui lisait localStorage directement.
+ */
+export function getSectionOrder(orgId?: string): string[] {
+  if (!orgId) return Object.keys(DEFAULT_SECTION_DEFS);
+  try {
+    const model = getActiveModel(orgId);
+    return modelToOrder(model);
+  } catch {
+    return loadOrder(orgId);
   }
-  return out;
 }
 
 // Compat : utilisation directe des defaults
@@ -410,6 +442,37 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
       arr[l.month - 1] += l.amount;
       budgetMonthly.set(l.account, arr);
     }
+  }
+
+  // Roll-up budget parent → enfants du réalisé (même logique que computeBudgetActual)
+  // Le budget peut être saisi sur un code court (60, 622) et le réalisé sur un
+  // sous-compte détaillé (605118, 622100). On distribue mois par mois.
+  const allRealKeys = new Set([...realise.keys(), ...realiseN1.keys()]);
+  const budgetCodes = Array.from(budgetMonthly.keys());
+  const absorbedChildren = new Set<string>();
+  const sortedBudCodes = [...budgetCodes].sort((a, b) => a.length - b.length);
+  for (const budCode of sortedBudCodes) {
+    if (allRealKeys.has(budCode)) continue; // exact match existe
+    const children = Array.from(allRealKeys).filter(
+      (c) => c.startsWith(budCode) && c.length > budCode.length && !absorbedChildren.has(c),
+    );
+    if (children.length === 0) continue;
+    const budArr = budgetMonthly.get(budCode) ?? Array(12).fill(0);
+    // Distribuer chaque mois proportionnellement au réalisé
+    for (let m = 0; m < 12; m++) {
+      if (budArr[m] === 0) continue;
+      let totalChildReal = 0;
+      for (const c of children) totalChildReal += Math.abs((realise.get(c) ?? Array(12).fill(0))[m]);
+      for (const c of children) {
+        const childReal = Math.abs((realise.get(c) ?? Array(12).fill(0))[m]);
+        const share = totalChildReal > 0 ? (childReal / totalChildReal) * budArr[m] : budArr[m] / children.length;
+        const arr = budgetMonthly.get(c) ?? Array(12).fill(0);
+        arr[m] += share;
+        budgetMonthly.set(c, arr);
+      }
+    }
+    budgetMonthly.delete(budCode); // supprimer le parent (distribué)
+    for (const c of children) absorbedChildren.add(c);
   }
 
   // Fusionner tous les comptes
