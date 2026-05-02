@@ -169,6 +169,17 @@ const computeKPIs = (data: any) => {
   } as Record<string, string>;
 };
 
+// Métadonnées par défaut pour chaque modèle rapide. Appliquées au config.identity
+// quand l'utilisateur clique sur le bouton — pour que le rapport ait directement
+// le bon titre / sous-titre.
+const TEMPLATE_DEFAULTS: Record<string, { title: string; subtitle?: string }> = {
+  weekly:    { title: 'Flash hebdomadaire',     subtitle: 'Indicateurs de la semaine' },
+  monthly:   { title: 'Rapport mensuel de gestion', subtitle: 'Analyse de performance financière' },
+  quarterly: { title: 'Comité trimestriel',     subtitle: 'Rapport au comité de direction' },
+  annual:    { title: 'Rapport annuel',         subtitle: 'Synthèse de l\'exercice' },
+  interim:   { title: 'Rapport intérimaire',    subtitle: 'Synthèse de la période' },
+};
+
 const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
   weekly: (data) => {
     const k = computeKPIs(data);
@@ -870,13 +881,44 @@ export default function Reports() {
   };
 
   const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => {
-    setConfig((c) => ({ ...c, blocks: filterConditionalBlocks(QUICK_TEMPLATES[k](data), data) }));
+    const newBlocks = filterConditionalBlocks(QUICK_TEMPLATES[k](data), data);
+    setConfig((c) => ({
+      ...c,
+      // Met aussi a jour le titre et la periode du rapport selon le modele
+      identity: { ...c.identity, title: TEMPLATE_DEFAULTS[k as string]?.title ?? c.identity.title },
+      blocks: newBlocks,
+    }));
     setActiveTemplate(k as string);
+    setCurrentReportId(null); // nouveau rapport = pas lie a un rapport sauvegarde
     const labels: Record<string, string> = {
       weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel',
       quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire',
     };
-    toast.success(`Modèle appliqué : ${labels[k as string] ?? k}`, 'Le rapport a été régénéré avec ce template.');
+    toast.success(
+      `Modèle appliqué : ${labels[k as string] ?? k}`,
+      `${newBlocks.length} bloc(s) chargé(s) — faites défiler vers le haut pour voir le rapport.`,
+    );
+    // Force le scroll de la preview au sommet pour que le user voie tout de suite
+    // que le rapport a change.
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const main = document.querySelector('.report-print-area');
+      if (main && 'scrollIntoView' in main) (main as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  // Charger un modele personnel sauvegarde (db.templates) — applique le config complet
+  const applyCustomTemplate = (tpl: any) => {
+    try {
+      const cfg = JSON.parse(tpl.config);
+      setConfig(cfg);
+      setActiveTemplate(`custom:${tpl.id}`);
+      setCurrentReportId(null);
+      toast.success(`Modèle "${tpl.name}" chargé`, `${cfg.blocks?.length ?? 0} bloc(s) appliqué(s).`);
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+    } catch (e: any) {
+      toast.error('Modèle illisible', e?.message ?? 'Format invalide.');
+    }
   };
 
   const palette = PALETTES[config.palette];
@@ -1231,6 +1273,7 @@ export default function Reports() {
               {Object.entries(QUICK_TEMPLATES).map(([k]) => {
                 const isActive = activeTemplate === k;
                 const label = { weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel', quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire' }[k] ?? k;
+                const blocks = QUICK_TEMPLATES[k](data);
                 return (
                   <button
                     key={k}
@@ -1241,9 +1284,13 @@ export default function Reports() {
                         ? 'bg-accent/10 border-accent text-accent font-semibold'
                         : 'border-transparent hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-700 dark:text-primary-300',
                     )}
+                    title={`${label} — ${blocks.length} blocs par défaut`}
                   >
                     <span className="truncate">{label}</span>
-                    {isActive && <span className="text-[9px] uppercase tracking-wider font-bold shrink-0">Actif</span>}
+                    <span className={clsx('shrink-0 flex items-center gap-1.5', isActive ? '' : 'opacity-60')}>
+                      <span className="text-[9px] tabular-nums">{blocks.length} blocs</span>
+                      {isActive && <span className="text-[9px] uppercase tracking-wider font-bold">Actif</span>}
+                    </span>
                   </button>
                 );
               })}
@@ -1251,6 +1298,40 @@ export default function Reports() {
             <p className="text-[10px] text-primary-400 italic mt-2 px-1">
               Cliquez sur un modèle pour régénérer le rapport.
             </p>
+          </Collapsible>
+
+          {/* Mes modèles personnels (db.templates) */}
+          <Collapsible title={`Mes modèles personnels (${templates.length})`} defaultOpen={templates.length > 0}>
+            {templates.length === 0 ? (
+              <p className="text-[10px] text-primary-400 italic px-1 py-2">
+                Aucun modèle personnel. Cliquez sur <strong>« Enregistrer modèle »</strong> en haut pour sauvegarder le rapport courant comme modèle réutilisable.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {templates.map((t: any) => {
+                  const isActive = activeTemplate === `custom:${t.id}`;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => applyCustomTemplate(t)}
+                      className={clsx(
+                        'w-full text-left px-2.5 py-2 rounded text-xs font-medium border-2 transition-all flex items-center justify-between gap-2',
+                        isActive
+                          ? 'bg-accent/10 border-accent text-accent font-semibold'
+                          : 'border-transparent hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-700 dark:text-primary-300',
+                      )}
+                      title={t.description || t.name}
+                    >
+                      <span className="truncate flex items-center gap-1.5">
+                        <Save className="w-3 h-3 shrink-0 text-primary-400" />
+                        {t.name}
+                      </span>
+                      {isActive && <span className="text-[9px] uppercase tracking-wider font-bold shrink-0">Actif</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </Collapsible>
         </aside>
         )}
