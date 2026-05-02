@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, Banknote, Receipt, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
 import { TabSwitch } from '../components/ui/TabSwitch';
@@ -82,7 +83,24 @@ export default function DashboardHome() {
   const { fr: frV, bfr: bfrV, tn: tnV, jCA } = computeStructure(bilan, ca);
   const caData = computeCaData(monthly);
   const chargesData = computeChargesData(balance);
-  const treso = fr.map((r) => ({ mois: r.mois, solde: r.tn }));
+
+  // ── Filtrage des mois actifs sur les charts ──────────────────────────
+  // Bug: les charts affichaient tous les 12 mois même quand les données du
+  // GL s'arrêtaient en avril → ligne plate de avril à décembre, donnant
+  // l'impression de valeurs aberrantes (ex: trésorerie qui semble rester
+  // figée à 1.8B). Solution : trouver le dernier mois avec activité réelle
+  // (CA non-zéro dans `monthly`) et borner les charts à ce mois.
+  const lastActiveMonthIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < monthly.length; i++) {
+      if (monthly[i].realise && monthly[i].realise !== 0) last = i;
+    }
+    return last;
+  })();
+  // On garde au moins jusqu'au mois courant si CA détecté, sinon montre tout.
+  // Note : monthly est borné par fromMonth/toMonth donc l'index correspond.
+  const activeFr = lastActiveMonthIdx >= 0 ? fr.slice(0, lastActiveMonthIdx + 1) : fr;
+  const treso = activeFr.map((r) => ({ mois: r.mois, solde: r.tn }));
 
   const caN1 = caData.reduce((s, m) => s + m.n1, 0);
   const caBudget = caData.reduce((s, m) => s + m.budget, 0);
@@ -112,6 +130,8 @@ export default function DashboardHome() {
           </div>
         }
       />
+
+      <DataIntegrityBanner />
 
       {system === 'SMT' && (
         <>
@@ -227,7 +247,7 @@ export default function DashboardHome() {
 
           <ChartCard title="FR / BFR / Trésorerie Nette" subtitle="Équilibre du cycle d'exploitation — données réelles GL" accent={ct.at(1)}>
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={fr}>
+              <LineChart data={activeFr}>
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="mois" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />

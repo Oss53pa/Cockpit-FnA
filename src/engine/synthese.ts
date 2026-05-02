@@ -4,7 +4,7 @@ type Line = { code: string; value: number };
 type MonthlyLine = { code: string; values: number[] };
 type BalanceRow = { account: string; debit: number; credit: number; soldeC: number };
 type Ratio = { code: string; label: string; family: string; value: number; target: number | string; unit: string; status: string };
-type MonthlyCA = { mois: string; realise: number };
+type MonthlyCA = { mois: string; realise: number; budget?: number; n1?: number };
 type MonthlyBilan = { months: string[]; actif: MonthlyLine[]; passif: MonthlyLine[] };
 
 export type Alert = { severity: 'high' | 'medium' | 'low'; type: string; message: string };
@@ -43,8 +43,10 @@ export function computeCaData(monthly: MonthlyCA[], budget?: number[], n1?: numb
   return monthly.map((m, i) => ({
     mois: m.mois,
     realise: m.realise,
-    budget: budget?.[i] ?? 0,
-    n1: n1?.[i] ?? 0,
+    // Budget : prioritairement celui inclus dans monthly (depuis useMonthlyCA enrichi),
+    // sinon le tableau optionnel passé séparément, sinon 0.
+    budget: m.budget ?? budget?.[i] ?? 0,
+    n1: m.n1 ?? n1?.[i] ?? 0,
   }));
 }
 
