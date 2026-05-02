@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Send, Settings as SettingsIcon, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Send, Settings as SettingsIcon, Shield, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
 import { AdminGate } from '../components/auth/AdminGate';
 import { lockAdmin } from '../lib/adminAuth';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -1395,6 +1395,43 @@ function EmailDeliveryStatus() {
   const [testing, setTesting] = useState(false);
   const [lastResult, setLastResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  const runDiag = async () => {
+    setTesting(true);
+    setLastResult(null);
+    try {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!SUPABASE_URL || !SUPABASE_ANON) {
+        setLastResult({ ok: false, msg: 'VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY non configures' });
+        return;
+      }
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/cockpit-send-email?debug=1`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON}`,
+          'apikey': SUPABASE_ANON,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      const data = await res.json();
+      const env = data.env ?? {};
+      const lines = [
+        `RESEND_API_KEY : ${env.RESEND_API_KEY_set ? `✓ définie (${env.RESEND_API_KEY_prefix}, ${env.RESEND_API_KEY_length} car.)` : '✗ MANQUANTE'}`,
+        `From utilisé : ${env.RESEND_FROM_USED}`,
+        `RESEND_FROM_COCKPIT : ${env.RESEND_FROM_COCKPIT_set ? '✓' : '—'}`,
+        `RESEND_FROM : ${env.RESEND_FROM_set ? '✓' : '—'}`,
+        `FROM_EMAIL : ${env.FROM_EMAIL_set ? `✓ (${env.FROM_EMAIL_value})` : '—'}`,
+        `SERVICE_ROLE_KEY : ${env.SUPABASE_SERVICE_ROLE_KEY_set ? '✓' : '—'}`,
+      ].join('\n');
+      setLastResult({ ok: env.RESEND_API_KEY_set, msg: lines });
+    } catch (e: any) {
+      setLastResult({ ok: false, msg: e?.message ?? 'Erreur inconnue' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const runTest = async () => {
     if (!testEmail.includes('@')) {
       toast.warning('Email invalide', 'Saisissez une adresse de test.');
@@ -1409,26 +1446,46 @@ function EmailDeliveryStatus() {
         return;
       }
       const html = `<div style="font-family:system-ui,sans-serif;padding:20px"><h2 style="color:#DA4D28">Cockpit FnA — test d'envoi</h2><p>Si vous lisez ce message, l'envoi via Resend fonctionne 🎉</p><p style="color:#666;font-size:12px">Envoyé le ${new Date().toLocaleString('fr-FR')}</p></div>`;
-      const { data, error } = await (supabase as any).functions.invoke('cockpit-send-email', {
-        body: {
+
+      // Appel direct via fetch pour avoir le body en clair
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const session = await (supabase as any).auth.getSession();
+      const accessToken = session?.data?.session?.access_token ?? SUPABASE_ANON;
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/cockpit-send-email`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'apikey': SUPABASE_ANON,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           to: testEmail,
           subject: '[Cockpit FnA] Test d\'envoi Resend',
           html,
           text: 'Cockpit FnA — test d\'envoi. Si vous lisez ce message, Resend fonctionne.',
           mode: 'invitation',
-        },
+        }),
       });
-      if (error) {
-        const detail = (error as any)?.context?.error ?? (error as any)?.message ?? 'Erreur reseau';
-        setLastResult({ ok: false, msg: detail });
+
+      const responseBody = await res.json().catch(() => ({}));
+
+      // La fonction retourne 200 même en cas d'erreur Resend (avec success: false)
+      // pour que le body soit lisible.
+      if (!res.ok || responseBody.success === false) {
+        const errMsg = responseBody.error ?? `HTTP ${res.status}`;
+        const hint = responseBody.hint ? `\n→ ${responseBody.hint}` : '';
+        const fromInfo = responseBody.from ? `\nFrom utilisé : ${responseBody.from}` : '';
+        const resendStatus = responseBody.resendStatus ? `\nStatut Resend : ${responseBody.resendStatus}` : '';
+        const resendBody = responseBody.resendBody
+          ? `\nRéponse Resend : ${JSON.stringify(responseBody.resendBody).slice(0, 400)}`
+          : '';
+        setLastResult({ ok: false, msg: `${errMsg}${hint}${fromInfo}${resendStatus}${resendBody}` });
         return;
       }
-      if (data?.error) {
-        const hint = data.hint ? ` — ${data.hint}` : '';
-        setLastResult({ ok: false, msg: `${data.error}${hint}` });
-        return;
-      }
-      setLastResult({ ok: true, msg: `Email envoyé (id: ${data?.emailId ?? '—'})` });
+
+      setLastResult({ ok: true, msg: `Email envoyé (id: ${responseBody.emailId ?? '—'})\nFrom : ${responseBody.from ?? '—'}` });
       toast.success('Test réussi', `Email envoyé à ${testEmail}`);
     } catch (e: any) {
       setLastResult({ ok: false, msg: e?.message ?? 'Erreur inconnue' });
@@ -1469,18 +1526,21 @@ RESEND_FROM_COCKPIT=Cockpit FnA <noreply@votre-domaine.com>`}</pre>
           <p className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Test d'envoi</p>
           <div className="flex flex-col sm:flex-row gap-2">
             <input type="email" className="input flex-1" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="votre.email@exemple.com" />
+            <button className="btn-outline whitespace-nowrap" onClick={runDiag} disabled={testing} title="Vérifie quels secrets sont configurés">
+              <Shield className="w-4 h-4" /> Diagnostiquer
+            </button>
             <button className="btn-primary whitespace-nowrap" onClick={runTest} disabled={testing || !testEmail}>
               <Send className="w-4 h-4" /> {testing ? 'Envoi…' : 'Envoyer un test'}
             </button>
           </div>
           {lastResult && (
-            <div className={clsx('mt-2 p-2.5 rounded-lg text-xs flex items-start gap-2',
+            <div className={clsx('mt-2 p-3 rounded-lg text-xs flex items-start gap-2',
               lastResult.ok
                 ? 'bg-success/10 border border-success/30 text-success'
                 : 'bg-danger/10 border border-danger/30 text-danger',
             )}>
               {lastResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />}
-              <span className="leading-relaxed">{lastResult.msg}</span>
+              <pre className="leading-relaxed whitespace-pre-wrap break-words text-[11px] flex-1 font-sans">{lastResult.msg}</pre>
             </div>
           )}
         </div>
