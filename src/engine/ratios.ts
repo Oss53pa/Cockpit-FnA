@@ -101,9 +101,12 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   const dettesFourn = get(passif, 'DJ');
 
   // FR / BFR / TN
+  // Bug fix: TN doit utiliser la VRAIE tresorerie (tresoActive - tresoPass),
+  // pas fr - bfr. Si bilan a un ecart d'equilibre, fr-bfr donne un TN errone
+  // (observation user: TN reelle 372M, fr-bfr = 1.9B).
   const fr = ressStables - actifImmo;
   const bfr = stocks + creancesClients + autresCreances - passifCirc;
-  const tn = fr - bfr;
+  const tn = tresoActive - tresoPass;
 
   // CAF SYSCOHADA (méthode additive simplifiée) :
   //   CAF = Résultat net

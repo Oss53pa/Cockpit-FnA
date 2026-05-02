@@ -35,7 +35,12 @@ export function computeFRBFRMonthly(mb: MonthlyBilan): FRBFRRow[] {
   return mb.months.map((mois, i) => {
     const fr = getM(mb.passif, '_DF', i) - getM(mb.actif, '_AZ', i);
     const bfr = getM(mb.actif, '_BK', i) - getM(mb.passif, '_DP', i);
-    return { mois, fr, bfr, tn: fr - bfr };
+    // Bug fix: TN doit etre la VRAIE tresorerie nette (tresoActive - tresoPass),
+    // PAS la valeur derivee fr - bfr. En theorie l'equation FR = BFR + TN tient,
+    // mais des qu'un compte n'est pas mappe (ex: imbalance bilan), fr - bfr
+    // donne un faux TN gonfle (observation user: TN reelle 372M, fr-bfr = 1.9B).
+    const tn = getM(mb.actif, '_BT', i) - getM(mb.passif, 'DV', i);
+    return { mois, fr, bfr, tn };
   });
 }
 
