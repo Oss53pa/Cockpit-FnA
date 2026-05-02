@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Modal } from '../components/ui/Modal';
+import { EmailPreviewModal } from '../components/ui/EmailPreviewModal';
 import { Collapsible } from '../components/ui/Collapsible';
 import { toast } from '../components/ui/Toast';
 import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
@@ -4381,12 +4382,50 @@ function LogoUpload({ onLogo, current }: { onLogo: (d: string) => void; current?
 function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
   const [email, setEmail] = useState('');
   const [destination, setDestination] = useState<'validation' | 'final'>('validation');
+  const [comments, setComments] = useState('');
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  const sendAll = () => {
+    if (config.recipients.length === 0) {
+      toast.warning('Aucun destinataire', 'Ajoutez au moins un email avant d\'envoyer.');
+      return;
+    }
+    onValidate();
+    setPreviewIndex(0); // ouvre la preview pour le 1er destinataire
+  };
+
+  const buildContent = (recipient: string) => {
+    const recipientName = recipient.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const appUrl = typeof window !== 'undefined' ? `${window.location.origin}/reports` : 'https://cockpit-fna.app/reports';
+    if (destination === 'validation') {
+      return import('../lib/emailTemplates').then(({ buildReviewEmail }) => buildReviewEmail({
+        recipientName,
+        recipientEmail: recipient,
+        reportTitle: config.identity?.title ?? 'Rapport',
+        reportPeriod: config.identity?.period ?? 'Période',
+        authorName: config.identity?.author ?? 'Cockpit FnA',
+        reviewUrl: appUrl,
+        comments: comments.trim() || undefined,
+      }));
+    }
+    return import('../lib/emailTemplates').then(({ buildReportEmail }) => buildReportEmail({
+      recipientName,
+      recipientEmail: recipient,
+      reportTitle: config.identity?.title ?? 'Rapport',
+      reportPeriod: config.identity?.period ?? 'Période',
+      authorName: config.identity?.author ?? 'Cockpit FnA',
+      appUrl,
+      pdfAttached: true,
+      summary: comments.trim() || undefined,
+    }));
+  };
+
   return (
     <Modal open={open} onClose={onClose} title="Envoyer le rapport" subtitle="Validation interne ou diffusion finale"
       footer={<>
         <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={() => { onValidate(); onClose(); toast.info('Rapport envoyé', `${destination === 'validation' ? 'Validation interne' : 'Diffusion finale'} · ${config.recipients.length} destinataires (envoi réel au Sprint 5)`); }}>
-          <Send className="w-4 h-4" /> Envoyer
+        <button className="btn-primary" onClick={sendAll}>
+          <Send className="w-4 h-4" /> Envoyer ({config.recipients.length})
         </button>
       </>}>
       <div className="space-y-4">
@@ -4427,12 +4466,68 @@ function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
           )}
         </div>
 
+        <div>
+          <label className="text-xs uppercase tracking-wider text-primary-500 font-semibold block mb-2">
+            {destination === 'validation' ? 'Message au validateur' : 'Synthèse pour les destinataires'} (optionnel)
+          </label>
+          <textarea className="input min-h-[80px]" value={comments} onChange={(e) => setComments(e.target.value)}
+            placeholder={destination === 'validation' ? "Points d'attention pour la revue, demandes spécifiques…" : "Synthèse 2-3 lignes des principaux enseignements du rapport…"} />
+        </div>
+
         <div className="card p-3 bg-primary-100 dark:bg-primary-800 text-xs">
-          <p>📎 Le PDF sera téléchargé localement (et joint à l'email lors de l'intégration SMTP au Sprint 5).</p>
+          <p>📎 Le PDF sera téléchargé localement et l'email HTML sera envoyé via Supabase Edge Function (si configuré) ou ouvert dans votre client mail.</p>
           <p className="mt-1 text-primary-500">Format : {config.format} · Palette : {config.palette}</p>
         </div>
       </div>
+
+      {/* Email preview pour chaque destinataire (séquentiel) */}
+      {previewIndex !== null && previewIndex < config.recipients.length && (
+        <SendPreviewLoader
+          recipient={config.recipients[previewIndex]}
+          buildContent={buildContent}
+          mode={destination === 'validation' ? 'review' : 'report'}
+          onClose={() => {
+            setPreviewIndex(null);
+            onClose();
+          }}
+          onNext={() => setPreviewIndex(previewIndex + 1)}
+          isLast={previewIndex === config.recipients.length - 1}
+        />
+      )}
     </Modal>
+  );
+}
+
+// Loader async pour le contenu d'email (lazy import pour split bundle)
+function SendPreviewLoader({ recipient, buildContent, mode, onClose, onNext, isLast }: {
+  recipient: string;
+  buildContent: (r: string) => Promise<any>;
+  mode: 'review' | 'report';
+  onClose: () => void;
+  onNext: () => void;
+  isLast: boolean;
+}) {
+  const [content, setContent] = useState<any>(null);
+  useEffect(() => {
+    setContent(null);
+    buildContent(recipient).then(setContent);
+  }, [recipient]);
+
+  if (!content) return null;
+  const recipientName = recipient.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return (
+    <EmailPreviewModal
+      open={true}
+      onClose={isLast ? onClose : onNext}
+      recipient={{ name: recipientName, email: recipient }}
+      content={content}
+      options={{
+        mode,
+        supabaseFunction: mode === 'review' ? 'send-review' : 'send-report',
+      }}
+      onSent={isLast ? onClose : onNext}
+    />
   );
 }
 
