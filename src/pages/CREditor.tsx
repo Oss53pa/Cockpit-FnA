@@ -1,25 +1,18 @@
 /**
- * CR Editor — Personnalisation du Compte de Résultat
+ * CR Editor v2 — Personnalisation du Compte de Résultat
  *
- * Interface complète pour gérer les modèles CR personnalisés :
- *  - Liste des modèles + sélecteur du modèle actif
- *  - Édition de la hiérarchie (sections, sous-sections)
- *  - Drag & drop pour réorganiser
- *  - Picker de comptes depuis le plan comptable
- *  - Validation anti-double comptage en temps réel
- *  - Formules personnalisées (entre sections)
- *  - Audit trail (journal des modifications)
- *  - Preview avant publication
- *
- * Connecté au Grand Livre via crModels.ts qui devient le point pivot unique
- * pour getSectionDefs() — tous les dashboards/rapports consomment le modèle
- * actif automatiquement.
+ * UX améliorée :
+ *  - AUTO-SAVE : chaque modification est persistée immédiatement (plus de confusion brouillon/sauvegardé)
+ *  - MODAL explicite pour créer/éditer une section
+ *  - Boutons Edit / Delete visibles sur chaque ligne (plus d'icônes cachées)
+ *  - Toast de confirmation sur chaque action
+ *  - Picker de comptes intégré au modal
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, Save, Eye, Trash2, Copy, Star, GripVertical, ChevronDown, ChevronRight,
+  Plus, Eye, Trash2, Copy, Star, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, FolderTree, FileEdit, History, Settings as SettingsIcon,
-  Search, X, Calculator,
+  Search, X, Calculator, Edit2, Check,
 } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -30,11 +23,256 @@ import { useCurrentOrg } from '../hooks/useFinancials';
 import { db } from '../db/schema';
 import {
   listModels, saveModel, publishModel, activateModel, duplicateModel,
-  deleteModel, addSection, updateSection, removeSection, moveSection, validateModel,
+  deleteModel, addSection, updateSection, removeSection, validateModel,
   evaluateFormula, getModelHistory, listCRAccounts,
   type CRModel, type CRSectionNode, type CRIntermediateNode, type ValidationReport,
 } from '../engine/crModels';
 import clsx from 'clsx';
+
+// ─────────────────────────────────────────────────────────────────────
+// Modal générique
+// ─────────────────────────────────────────────────────────────────────
+function Modal({ open, onClose, title, children, footer }: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-primary-900 rounded-2xl shadow-2xl border border-primary-200 dark:border-primary-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-primary-200 dark:border-primary-700 sticky top-0 bg-white dark:bg-primary-900 z-10">
+          <h2 className="text-lg font-bold">{title}</h2>
+          <button onClick={onClose} className="text-primary-400 hover:text-error">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+        {footer && <div className="px-5 py-4 border-t border-primary-200 dark:border-primary-700 flex justify-end gap-2 sticky bottom-0 bg-white dark:bg-primary-900">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Section Edit Modal (création + édition)
+// ─────────────────────────────────────────────────────────────────────
+function SectionEditModal({ open, onClose, onSave, initial, accounts, parentLabel }: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (data: { label: string; prefixes: string[]; isCharge: boolean }) => void;
+  initial?: { label: string; prefixes: string[]; isCharge: boolean };
+  accounts: { code: string; label: string; class: string }[];
+  parentLabel?: string;
+}) {
+  const [label, setLabel] = useState('');
+  const [prefixes, setPrefixes] = useState<string[]>([]);
+  const [isCharge, setIsCharge] = useState(false);
+  const [prefixInput, setPrefixInput] = useState('');
+  const [accountSearch, setAccountSearch] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setLabel(initial?.label ?? '');
+      setPrefixes(initial?.prefixes ?? []);
+      setIsCharge(initial?.isCharge ?? false);
+      setPrefixInput('');
+      setAccountSearch('');
+    }
+  }, [open, initial]);
+
+  const filteredAccounts = useMemo(() => {
+    if (!accountSearch) return accounts.slice(0, 50);
+    const q = accountSearch.toLowerCase();
+    return accounts.filter((a) => a.code.startsWith(accountSearch) || a.label.toLowerCase().includes(q)).slice(0, 50);
+  }, [accounts, accountSearch]);
+
+  const addPrefix = (p: string) => {
+    const trimmed = p.trim();
+    if (!trimmed || prefixes.includes(trimmed)) return;
+    setPrefixes([...prefixes, trimmed]);
+  };
+
+  const handleSave = () => {
+    if (!label.trim()) { toast.warning('Nom requis', 'Saisissez un nom pour la section.'); return; }
+    onSave({ label: label.trim(), prefixes, isCharge });
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={initial ? 'Modifier la section' : 'Nouvelle section'}
+      footer={
+        <>
+          <button className="btn-outline" onClick={onClose}>Annuler</button>
+          <button className="btn-primary" onClick={handleSave}>
+            <Check className="w-4 h-4" /> {initial ? 'Enregistrer' : 'Créer'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {parentLabel && (
+          <p className="text-xs text-primary-500 italic">Sous-section de : <strong>{parentLabel}</strong></p>
+        )}
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Nom de la section</label>
+          <input
+            className="input mt-1 w-full"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="ex: Produits d'exploitation, Charges variables…"
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Type</label>
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              className={clsx(
+                'flex-1 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-all',
+                !isCharge ? 'border-success bg-success/10 text-success' : 'border-primary-200 dark:border-primary-700 text-primary-500',
+              )}
+              onClick={() => setIsCharge(false)}
+            >
+              Produit (classe 7)
+            </button>
+            <button
+              type="button"
+              className={clsx(
+                'flex-1 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-all',
+                isCharge ? 'border-error bg-error/10 text-error' : 'border-primary-200 dark:border-primary-700 text-primary-500',
+              )}
+              onClick={() => setIsCharge(true)}
+            >
+              Charge (classe 6)
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">
+            Préfixes de comptes affectés ({prefixes.length})
+          </label>
+          <div className="flex flex-wrap gap-1.5 mt-1 mb-2 min-h-[2rem]">
+            {prefixes.map((p) => (
+              <span key={p} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent/10 text-accent text-xs font-semibold num">
+                {p}
+                <button type="button" onClick={() => setPrefixes(prefixes.filter((x) => x !== p))} className="hover:text-error">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {prefixes.length === 0 && <span className="text-xs text-primary-400 italic">Aucun préfixe — la section sera vide.</span>}
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              value={prefixInput}
+              onChange={(e) => setPrefixInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); addPrefix(prefixInput); setPrefixInput(''); }
+              }}
+              placeholder="ex: 70, 706, 7061…"
+            />
+            <button type="button" className="btn-outline" onClick={() => { addPrefix(prefixInput); setPrefixInput(''); }}>
+              <Plus className="w-4 h-4" /> Ajouter
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">
+            Picker comptes du plan comptable
+          </label>
+          <div className="relative mt-1">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-primary-400" />
+            <input
+              className="input w-full pl-9"
+              value={accountSearch}
+              onChange={(e) => setAccountSearch(e.target.value)}
+              placeholder="Rechercher un compte (ex: 706, ventes…)"
+            />
+          </div>
+          <div className="mt-2 max-h-40 overflow-y-auto border border-primary-200 dark:border-primary-700 rounded-lg">
+            {filteredAccounts.length === 0 ? (
+              <p className="p-3 text-xs text-primary-400 italic text-center">Aucun compte trouvé</p>
+            ) : (
+              filteredAccounts.map((a) => {
+                const matched = prefixes.some((p) => a.code.startsWith(p));
+                return (
+                  <button
+                    key={a.code}
+                    type="button"
+                    onClick={() => { if (!prefixes.includes(a.code)) addPrefix(a.code); }}
+                    className={clsx(
+                      'w-full text-left px-3 py-1.5 text-xs hover:bg-primary-100 dark:hover:bg-primary-800 flex items-center gap-2 border-b border-primary-100/60 dark:border-primary-800/60 last:border-0',
+                      matched && 'bg-accent/5',
+                    )}
+                  >
+                    <span className="num font-semibold w-16 shrink-0">{a.code}</span>
+                    <span className="flex-1 truncate text-primary-700 dark:text-primary-300">{a.label}</span>
+                    {matched && <Check className="w-3 h-3 text-accent shrink-0" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Confirm Modal
+// ─────────────────────────────────────────────────────────────────────
+function ConfirmModal({ open, onClose, onConfirm, title, message, danger }: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  danger?: boolean;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      footer={
+        <>
+          <button className="btn-outline" onClick={onClose}>Annuler</button>
+          <button
+            className={clsx(danger ? 'btn-primary !bg-error hover:!bg-error/90' : 'btn-primary')}
+            onClick={() => { onConfirm(); onClose(); }}
+          >
+            Confirmer
+          </button>
+        </>
+      }
+    >
+      <p className="text-sm text-primary-700 dark:text-primary-300">{message}</p>
+    </Modal>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Page principale
+// ═════════════════════════════════════════════════════════════════════
 
 export default function CREditorPage() {
   const { currentOrgId } = useApp();
@@ -48,7 +286,12 @@ export default function CREditorPage() {
   const [glAccounts, setGlAccounts] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
-  const [search, setSearch] = useState('');
+
+  // Modals
+  const [editingSection, setEditingSection] = useState<{ section?: CRSectionNode; parentId?: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'section' | 'model' | 'intermediate'; id: string; label: string } | null>(null);
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicateName, setDuplicateName] = useState('');
 
   // ── Chargement initial ──
   useEffect(() => {
@@ -60,9 +303,7 @@ export default function CREditorPage() {
       setSelectedId(active.id);
       setModel(JSON.parse(JSON.stringify(active)));
     }
-    // Charger les comptes du plan comptable
     listCRAccounts(currentOrgId).then(setAccounts);
-    // Charger les codes utilisés dans le GL pour la validation
     db.gl.where('orgId').equals(currentOrgId).toArray()
       .then((entries) => setGlAccounts([...new Set(entries.map((e) => e.account))]));
   }, [currentOrgId]);
@@ -73,6 +314,14 @@ export default function CREditorPage() {
     setValidation(validateModel(model, glAccounts));
   }, [model, glAccounts]);
 
+  // ── AUTO-SAVE : persiste chaque modification immédiatement ──
+  // Évite la confusion brouillon/sauvegardé. L'utilisateur n'a plus à cliquer "Enregistrer".
+  const persistModel = (updated: CRModel) => {
+    setModel(updated);
+    saveModel(updated);
+    setModels(listModels(currentOrgId!));
+  };
+
   const handleSelectModel = (id: string) => {
     const m = models.find((x) => x.id === id);
     if (!m) return;
@@ -80,49 +329,40 @@ export default function CREditorPage() {
     setModel(JSON.parse(JSON.stringify(m)));
   };
 
-  const handleSave = () => {
-    if (!model) return;
-    const saved = saveModel({ ...model, status: 'draft' });
-    setModels(listModels(currentOrgId!));
-    setModel(JSON.parse(JSON.stringify(saved)));
-    toast.success('Modèle enregistré', `"${saved.name}" sauvegardé en brouillon`);
-  };
-
   const handlePublish = () => {
     if (!model || !validation) return;
     if (!validation.valid) {
-      toast.warning('Validation requise', 'Corrigez les doublons et orphelins avant de publier.');
+      toast.warning('Corrigez les avertissements', 'Doublons ou comptes orphelins à régler avant publication.');
       return;
     }
     saveModel(model);
     publishModel(currentOrgId!, model.id);
     setModels(listModels(currentOrgId!));
-    toast.success('Modèle publié', `"${model.name}" v${model.version + 1} publié et appliqué.`);
+    toast.success('Modèle publié', `"${model.name}" v${model.version + 1} appliqué.`);
   };
 
   const handleActivate = (id: string) => {
     if (!currentOrgId) return;
     activateModel(currentOrgId, id);
     setModels(listModels(currentOrgId));
-    toast.success('Modèle activé', 'Tous les dashboards et rapports utiliseront ce modèle.');
+    toast.success('Modèle activé', 'Tous les dashboards et rapports utilisent désormais ce modèle.');
   };
 
   const handleDuplicate = () => {
-    if (!model || !currentOrgId) return;
-    const name = prompt('Nom du nouveau modèle ?', `${model.name} (copie)`);
-    if (!name) return;
-    const dup = duplicateModel(currentOrgId, model.id, name);
+    if (!model || !currentOrgId || !duplicateName.trim()) return;
+    const dup = duplicateModel(currentOrgId, model.id, duplicateName.trim());
     if (dup) {
       setModels(listModels(currentOrgId));
       setSelectedId(dup.id);
       setModel(JSON.parse(JSON.stringify(dup)));
-      toast.success('Modèle dupliqué', `"${name}" créé en brouillon.`);
+      toast.success('Modèle dupliqué', `"${dup.name}" créé.`);
     }
+    setDuplicateModalOpen(false);
+    setDuplicateName('');
   };
 
-  const handleDelete = () => {
+  const handleDeleteModel = () => {
     if (!model || !currentOrgId) return;
-    if (!confirm(`Supprimer le modèle "${model.name}" ?`)) return;
     const result = deleteModel(currentOrgId, model.id);
     if (result.success) {
       const list = listModels(currentOrgId);
@@ -135,30 +375,60 @@ export default function CREditorPage() {
     }
   };
 
-  const handleAddSection = (parentId?: string) => {
-    if (!model) return;
-    const next = addSection(model, {
-      label: 'Nouvelle section',
-      prefixes: [],
-      isCharge: false,
-    }, parentId);
-    setModel(next);
+  const handleSaveSection = (data: { label: string; prefixes: string[]; isCharge: boolean }) => {
+    if (!model || !editingSection) return;
+    if (editingSection.section) {
+      // Édition
+      const updated = updateSection(model, editingSection.section.id, data);
+      persistModel(updated);
+      toast.success('Section modifiée', data.label);
+    } else {
+      // Création
+      const updated = addSection(model, data, editingSection.parentId);
+      persistModel(updated);
+      toast.success('Section ajoutée', data.label);
+    }
+    setEditingSection(null);
   };
 
-  const handleUpdateSection = (sectionId: string, patch: Partial<CRSectionNode>) => {
+  const handleDeleteSection = (sectionId: string) => {
     if (!model) return;
-    setModel(updateSection(model, sectionId, patch));
+    const updated = removeSection(model, sectionId);
+    persistModel(updated);
+    toast.success('Section supprimée');
   };
 
-  const handleRemoveSection = (sectionId: string) => {
+  const handleAddIntermediate = () => {
     if (!model) return;
-    if (!confirm('Supprimer cette section et toutes ses sous-sections ?')) return;
-    setModel(removeSection(model, sectionId));
+    const newInter: CRIntermediateNode = {
+      id: `inter-${Date.now()}`,
+      label: 'Nouveau sous-total',
+      formula: '',
+      format: 'currency',
+      order: model.intermediates.length,
+    };
+    persistModel({ ...model, intermediates: [...model.intermediates, newInter] });
   };
 
-  const handleMoveSection = (sectionId: string, newParentId: string | undefined, newOrder: number) => {
+  const handleUpdateIntermediate = (id: string, patch: Partial<CRIntermediateNode>) => {
     if (!model) return;
-    setModel(moveSection(model, sectionId, newParentId, newOrder));
+    persistModel({
+      ...model,
+      intermediates: model.intermediates.map((x) => x.id === id ? { ...x, ...patch } : x),
+    });
+  };
+
+  const handleDeleteIntermediate = (id: string) => {
+    if (!model) return;
+    persistModel({
+      ...model,
+      intermediates: model.intermediates.filter((x) => x.id !== id),
+    });
+  };
+
+  const handleUpdateModelField = (patch: Partial<CRModel>) => {
+    if (!model) return;
+    persistModel({ ...model, ...patch });
   };
 
   if (!currentOrgId || !org) {
@@ -173,7 +443,7 @@ export default function CREditorPage() {
     <div className="space-y-5 animate-fade-in-up">
       <PageHeader
         title="Personnaliser le Compte de Résultat"
-        subtitle={`${org.name} · Modèles CR personnalisés — propagés à tous les dashboards et rapports`}
+        subtitle={`${org.name} · Auto-sauvegarde — propagé à tous les dashboards et rapports`}
         action={
           <div className="flex items-center gap-2">
             <button className="btn-outline" onClick={() => setShowHistory(!showHistory)}>
@@ -182,11 +452,11 @@ export default function CREditorPage() {
             <button className="btn-outline" onClick={() => setPreviewMode(!previewMode)}>
               <Eye className="w-4 h-4" /> {previewMode ? 'Quitter aperçu' : 'Aperçu'}
             </button>
-            <button className="btn-outline" onClick={handleDuplicate} disabled={!model}>
+            <button className="btn-outline" onClick={() => { setDuplicateName(`${model?.name ?? 'Modèle'} (copie)`); setDuplicateModalOpen(true); }} disabled={!model}>
               <Copy className="w-4 h-4" /> Dupliquer
             </button>
-            <button className="btn-primary" onClick={handleSave} disabled={!model || previewMode}>
-              <Save className="w-4 h-4" /> Enregistrer
+            <button className="btn-primary" onClick={handlePublish} disabled={!model || !validation?.valid}>
+              <CheckCircle2 className="w-4 h-4" /> Publier
             </button>
           </div>
         }
@@ -243,13 +513,13 @@ export default function CREditorPage() {
         <Card className={clsx('p-4 border-l-4', validation.valid ? 'border-l-success' : 'border-l-warning')}>
           <div className="flex items-center gap-2 mb-2">
             {validation.valid ? (
-              <><CheckCircle2 className="w-4 h-4 text-success" /><p className="text-sm font-semibold text-success">Modèle valide</p></>
+              <><CheckCircle2 className="w-4 h-4 text-success" /><p className="text-sm font-semibold text-success">Modèle valide — prêt à publier</p></>
             ) : (
               <><AlertTriangle className="w-4 h-4 text-warning" /><p className="text-sm font-semibold text-warning">Avertissements de validation</p></>
             )}
           </div>
           {validation.warnings.length === 0 ? (
-            <p className="text-xs text-primary-500">Aucun double comptage, aucun compte orphelin. Tous les comptes du Grand Livre sont rattachés.</p>
+            <p className="text-xs text-primary-500">Aucun double comptage, aucun compte orphelin.</p>
           ) : (
             <ul className="text-xs text-primary-700 dark:text-primary-300 space-y-1">
               {validation.warnings.map((w, i) => <li key={i}>• {w}</li>)}
@@ -261,17 +531,11 @@ export default function CREditorPage() {
               <ul className="ml-3 space-y-0.5">
                 {validation.duplicateAccounts.slice(0, 5).map((d) => (
                   <li key={d.account}>
-                    <span className="num">{d.account}</span> dans {d.sections.length} sections : {d.sections.join(', ')}
+                    <span className="num">{d.account}</span> dans : {d.sections.join(', ')}
                   </li>
                 ))}
-                {validation.duplicateAccounts.length > 5 && <li className="italic">…et {validation.duplicateAccounts.length - 5} autre(s)</li>}
+                {validation.duplicateAccounts.length > 5 && <li className="italic">…+ {validation.duplicateAccounts.length - 5} autre(s)</li>}
               </ul>
-            </div>
-          )}
-          {validation.orphanAccounts.length > 0 && (
-            <div className="mt-2 text-[11px] text-warning">
-              <p className="font-semibold mb-1">Comptes orphelins (non rattachés) :</p>
-              <p className="ml-3 num">{validation.orphanAccounts.slice(0, 8).join(', ')}{validation.orphanAccounts.length > 8 ? '…' : ''}</p>
             </div>
           )}
         </Card>
@@ -289,7 +553,7 @@ export default function CREditorPage() {
           <Card className="p-4">
             <p className="text-xs uppercase tracking-wider text-primary-500 font-semibold mb-3">
               <FileEdit className="w-3.5 h-3.5 inline mr-1" />
-              Informations du modèle
+              Informations du modèle (auto-sauvegardé)
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -297,8 +561,9 @@ export default function CREditorPage() {
                 <input
                   className="input mt-1"
                   value={model.name}
-                  onChange={(e) => setModel({ ...model, name: e.target.value })}
+                  onChange={(e) => handleUpdateModelField({ name: e.target.value })}
                   disabled={model.isDefault}
+                  title={model.isDefault ? 'Le modèle SYSCOHADA par défaut ne peut pas être renommé. Dupliquez-le pour personnaliser.' : ''}
                 />
               </div>
               <div>
@@ -306,43 +571,45 @@ export default function CREditorPage() {
                 <input
                   className="input mt-1"
                   value={model.description ?? ''}
-                  onChange={(e) => setModel({ ...model, description: e.target.value })}
+                  onChange={(e) => handleUpdateModelField({ description: e.target.value })}
                 />
               </div>
             </div>
           </Card>
 
-          {/* Sections — arbre hiérarchique */}
+          {/* Sections */}
           <ChartCard
             title={`Sections (${model.sections.length})`}
-            subtitle="Hiérarchie multi-niveaux · Drag & drop pour réorganiser"
+            subtitle="Hiérarchie multi-niveaux · Cliquez sur une section pour la modifier"
             accent="rgb(var(--accent))"
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 flex-1 max-w-md">
-                <Search className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-                <input
-                  className="input !py-1.5 text-xs"
-                  placeholder="Rechercher une section…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {search && <button onClick={() => setSearch('')} className="text-primary-400 hover:text-error"><X className="w-3.5 h-3.5" /></button>}
-              </div>
-              <button className="btn-primary !py-1.5 !text-xs" onClick={() => handleAddSection()}>
-                <Plus className="w-3.5 h-3.5" /> Section racine
+            <div className="flex justify-end mb-3">
+              <button
+                className="btn-primary"
+                onClick={() => setEditingSection({ parentId: undefined })}
+              >
+                <Plus className="w-4 h-4" /> Ajouter une section
               </button>
             </div>
-            <SectionTree
-              sections={model.sections}
-              parentId={undefined}
-              accounts={accounts}
-              search={search}
-              onUpdate={handleUpdateSection}
-              onRemove={handleRemoveSection}
-              onMove={handleMoveSection}
-              onAddChild={handleAddSection}
-            />
+
+            {model.sections.length === 0 ? (
+              <div className="py-12 text-center">
+                <FolderTree className="w-12 h-12 text-primary-300 mx-auto mb-3" />
+                <p className="text-sm text-primary-500 mb-3">Aucune section dans ce modèle.</p>
+                <button className="btn-primary" onClick={() => setEditingSection({ parentId: undefined })}>
+                  <Plus className="w-4 h-4" /> Créer la première section
+                </button>
+              </div>
+            ) : (
+              <SectionTree
+                sections={model.sections}
+                parentId={undefined}
+                accounts={accounts}
+                onEdit={(section) => setEditingSection({ section })}
+                onAddChild={(parentId) => setEditingSection({ parentId })}
+                onDelete={(section) => setConfirmDelete({ type: 'section', id: section.id, label: section.label })}
+              />
+            )}
           </ChartCard>
 
           {/* Intermédiaires & Formules */}
@@ -353,58 +620,37 @@ export default function CREditorPage() {
                   key={it.id}
                   intermediate={it}
                   sections={model.sections}
-                  onChange={(patch) => setModel({
-                    ...model,
-                    intermediates: model.intermediates.map((x) => x.id === it.id ? { ...x, ...patch } : x),
-                  })}
-                  onRemove={() => setModel({
-                    ...model,
-                    intermediates: model.intermediates.filter((x) => x.id !== it.id),
-                  })}
+                  onChange={(patch) => handleUpdateIntermediate(it.id, patch)}
+                  onRemove={() => handleDeleteIntermediate(it.id)}
                 />
               ))}
               <button
                 className="w-full p-3 rounded-xl border-2 border-dashed border-primary-200 dark:border-primary-700 text-xs text-primary-500 hover:border-accent hover:text-accent transition-colors"
-                onClick={() => setModel({
-                  ...model,
-                  intermediates: [...model.intermediates, {
-                    id: `inter-${Date.now()}`,
-                    label: 'Nouveau sous-total',
-                    formula: '',
-                    format: 'currency',
-                    order: model.intermediates.length,
-                  }],
-                })}
+                onClick={handleAddIntermediate}
               >
                 <Plus className="w-3.5 h-3.5 inline mr-1" /> Ajouter un sous-total intermédiaire
               </button>
             </div>
           </ChartCard>
 
-          {/* Actions de publication */}
-          <Card className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold">Publier le modèle</p>
-              <p className="text-xs text-primary-500 mt-0.5">
-                Une fois publié, ce modèle peut être activé pour qu'il s'applique automatiquement aux dashboards, tables CR et rapports.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {!model.isActive && (
-                <button className="btn-outline" onClick={() => handleActivate(model.id)}>
-                  <Star className="w-4 h-4" /> Activer
-                </button>
-              )}
-              <button className="btn-primary" onClick={handlePublish} disabled={!validation?.valid}>
-                <CheckCircle2 className="w-4 h-4" /> Publier v{model.version + 1}
+          {/* Actions du modèle */}
+          {!model.isDefault && (
+            <Card className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Actions sur ce modèle</p>
+                <p className="text-xs text-primary-500 mt-0.5">
+                  {model.isActive ? 'Modèle actif — désactivez avant de supprimer.' : 'Modèle inactif — peut être supprimé.'}
+                </p>
+              </div>
+              <button
+                className="btn-outline text-error"
+                disabled={model.isActive}
+                onClick={() => setConfirmDelete({ type: 'model', id: model.id, label: model.name })}
+              >
+                <Trash2 className="w-4 h-4" /> Supprimer ce modèle
               </button>
-              {!model.isDefault && !model.isActive && (
-                <button className="btn-outline text-error" onClick={handleDelete}>
-                  <Trash2 className="w-4 h-4" /> Supprimer
-                </button>
-              )}
-            </div>
-          </Card>
+            </Card>
+          )}
         </>
       )}
 
@@ -443,199 +689,166 @@ export default function CREditorPage() {
           Comment ça marche
         </div>
         <ul className="text-xs text-primary-500 space-y-1">
-          <li>• Le modèle <strong>actif</strong> est consommé par tous les dashboards (KPIs, charts), les tables CR (vues N/N-1, Budget vs Réalisé) et les rapports/exports (PDF, Excel).</li>
-          <li>• La validation détecte le double comptage et les comptes du Grand Livre non rattachés (orphelins).</li>
-          <li>• Les sous-totaux intermédiaires acceptent des formules : <code className="bg-primary-100 dark:bg-primary-800 px-1 rounded">produits_expl - charges_expl</code> ou <code className="bg-primary-100 dark:bg-primary-800 px-1 rounded">(ca - achats) / ca</code>.</li>
-          <li>• Le modèle SYSCOHADA par défaut ne peut pas être supprimé mais peut être dupliqué comme base de travail.</li>
-          <li>• L'historique trace chaque modification avec horodatage — preview avant publication via le bouton "Aperçu".</li>
+          <li>• <strong>Auto-sauvegarde</strong> : chaque modification est persistée immédiatement.</li>
+          <li>• Le modèle <strong>actif</strong> est consommé par tous les dashboards (KPIs, charts), tables CR (vues N/N-1, Budget vs Réalisé) et rapports/exports (PDF, Excel).</li>
+          <li>• La validation détecte le double comptage et les comptes orphelins.</li>
+          <li>• Les sous-totaux acceptent des formules : <code className="bg-primary-100 dark:bg-primary-800 px-1 rounded">produits_expl - charges_expl</code>.</li>
+          <li>• Le modèle SYSCOHADA par défaut ne peut pas être supprimé mais peut être dupliqué.</li>
         </ul>
       </Card>
+
+      {/* ─── Modals ─── */}
+      <SectionEditModal
+        open={!!editingSection}
+        onClose={() => setEditingSection(null)}
+        onSave={handleSaveSection}
+        initial={editingSection?.section}
+        accounts={accounts}
+        parentLabel={editingSection?.parentId ? model?.sections.find((s) => s.id === editingSection.parentId)?.label : undefined}
+      />
+
+      <ConfirmModal
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          if (confirmDelete.type === 'section') handleDeleteSection(confirmDelete.id);
+          else if (confirmDelete.type === 'model') handleDeleteModel();
+        }}
+        title={`Supprimer ${confirmDelete?.type === 'model' ? 'le modèle' : 'la section'}`}
+        message={`Confirmer la suppression de "${confirmDelete?.label}" ${confirmDelete?.type === 'section' ? 'et toutes ses sous-sections' : ''} ? Cette action est irréversible.`}
+        danger
+      />
+
+      <Modal
+        open={duplicateModalOpen}
+        onClose={() => setDuplicateModalOpen(false)}
+        title="Dupliquer ce modèle"
+        footer={
+          <>
+            <button className="btn-outline" onClick={() => setDuplicateModalOpen(false)}>Annuler</button>
+            <button className="btn-primary" onClick={handleDuplicate} disabled={!duplicateName.trim()}>
+              <Copy className="w-4 h-4" /> Dupliquer
+            </button>
+          </>
+        }
+      >
+        <label className="text-[11px] uppercase tracking-wider text-primary-500 font-semibold">Nom du nouveau modèle</label>
+        <input
+          className="input mt-1 w-full"
+          value={duplicateName}
+          onChange={(e) => setDuplicateName(e.target.value)}
+          placeholder="ex: Vue Direction, Vue Investisseurs…"
+          autoFocus
+        />
+      </Modal>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Section Tree (drag & drop hiérarchique)
+// Section Tree (récursif, avec boutons explicites)
 // ─────────────────────────────────────────────────────────────────────
 
-function SectionTree({ sections, parentId, accounts, search, onUpdate, onRemove, onMove, onAddChild }: {
+function SectionTree({ sections, parentId, accounts, onEdit, onAddChild, onDelete }: {
   sections: CRSectionNode[];
   parentId?: string;
   accounts: { code: string; label: string; class: string }[];
-  search: string;
-  onUpdate: (id: string, patch: Partial<CRSectionNode>) => void;
-  onRemove: (id: string) => void;
-  onMove: (id: string, newParentId: string | undefined, newOrder: number) => void;
+  onEdit: (section: CRSectionNode) => void;
   onAddChild: (parentId: string) => void;
+  onDelete: (section: CRSectionNode) => void;
 }) {
   const children = sections.filter((s) => s.parentId === parentId).sort((a, b) => a.order - b.order);
   return (
     <div className={clsx('space-y-1.5', parentId && 'pl-6 border-l border-primary-200 dark:border-primary-700 ml-3')}>
-      {children.map((s) => {
-        const visible = !search || s.label.toLowerCase().includes(search.toLowerCase()) || s.prefixes.some((p) => p.includes(search));
-        if (!visible && !sections.some((x) => x.parentId === s.id && x.label.toLowerCase().includes(search.toLowerCase()))) return null;
-        return (
-          <SectionRow
-            key={s.id}
-            section={s}
-            allSections={sections}
-            accounts={accounts}
-            search={search}
-            onUpdate={onUpdate}
-            onRemove={onRemove}
-            onMove={onMove}
-            onAddChild={onAddChild}
-          />
-        );
-      })}
+      {children.map((s) => (
+        <SectionRow
+          key={s.id}
+          section={s}
+          allSections={sections}
+          accounts={accounts}
+          onEdit={onEdit}
+          onAddChild={onAddChild}
+          onDelete={onDelete}
+        />
+      ))}
     </div>
   );
 }
 
-function SectionRow({ section, allSections, accounts, search, onUpdate, onRemove, onMove, onAddChild }: {
+function SectionRow({ section, allSections, accounts, onEdit, onAddChild, onDelete }: {
   section: CRSectionNode;
   allSections: CRSectionNode[];
   accounts: { code: string; label: string; class: string }[];
-  search: string;
-  onUpdate: (id: string, patch: Partial<CRSectionNode>) => void;
-  onRemove: (id: string) => void;
-  onMove: (id: string, newParentId: string | undefined, newOrder: number) => void;
+  onEdit: (section: CRSectionNode) => void;
   onAddChild: (parentId: string) => void;
+  onDelete: (section: CRSectionNode) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const [showAccountPicker, setShowAccountPicker] = useState(false);
-  const [draggingOver, setDraggingOver] = useState(false);
   const hasChildren = allSections.some((s) => s.parentId === section.id);
-  const matchingAccounts = useMemo(() => {
-    return accounts.filter((a) => section.prefixes.some((p) => a.code.startsWith(p)));
-  }, [accounts, section.prefixes]);
+  const matchingCount = useMemo(() =>
+    accounts.filter((a) => section.prefixes.some((p) => a.code.startsWith(p))).length,
+  [accounts, section.prefixes]);
 
   return (
-    <div
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/plain', section.id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
-      onDragLeave={() => setDraggingOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDraggingOver(false);
-        const draggedId = e.dataTransfer.getData('text/plain');
-        if (draggedId && draggedId !== section.id) {
-          const sameParentSiblings = allSections.filter((s) => s.parentId === section.parentId).sort((a, b) => a.order - b.order);
-          const newOrder = sameParentSiblings.findIndex((s) => s.id === section.id);
-          onMove(draggedId, section.parentId, newOrder);
-        }
-      }}
-      className={clsx(
-        'rounded-xl border transition-all',
-        draggingOver ? 'border-accent ring-2 ring-accent/30' : 'border-primary-200 dark:border-primary-700',
-      )}
-    >
-      <div className="flex items-center gap-2 p-2.5">
-        <span className="cursor-move text-primary-400 hover:text-primary-600">
-          <GripVertical className="w-4 h-4" />
-        </span>
-        {hasChildren && (
-          <button onClick={() => setExpanded(!expanded)} className="text-primary-500 hover:text-accent">
-            {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+    <div className="rounded-xl border border-primary-200 dark:border-primary-700 hover:border-accent/50 transition-colors">
+      <div className="flex items-center gap-2 p-3">
+        {hasChildren ? (
+          <button onClick={() => setExpanded(!expanded)} className="text-primary-500 hover:text-accent shrink-0">
+            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
+        ) : (
+          <span className="w-4 h-4 shrink-0" />
         )}
-        <input
-          className="flex-1 bg-transparent border-0 text-sm font-medium focus:outline-none focus:ring-0"
-          value={section.label}
-          onChange={(e) => onUpdate(section.id, { label: e.target.value })}
-          placeholder="Nom de la section"
-        />
-        <select
-          className="text-[10px] px-2 py-1 rounded-lg border border-primary-200 dark:border-primary-700 bg-transparent"
-          value={section.isCharge ? 'charge' : 'produit'}
-          onChange={(e) => onUpdate(section.id, { isCharge: e.target.value === 'charge' })}
-        >
-          <option value="produit">Produit</option>
-          <option value="charge">Charge</option>
-        </select>
+
+        <div className={clsx(
+          'shrink-0 w-2 h-2 rounded-full',
+          section.isCharge ? 'bg-error' : 'bg-success',
+        )} title={section.isCharge ? 'Charge' : 'Produit'} />
+
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{section.label}</p>
+          <p className="text-[11px] text-primary-500 truncate">
+            {section.prefixes.length > 0 ? (
+              <>Préfixes : <span className="num">{section.prefixes.join(', ')}</span> · {matchingCount} compte(s)</>
+            ) : (
+              <span className="text-warning">⚠ Aucun préfixe affecté</span>
+            )}
+          </p>
+        </div>
+
         <button
-          className="text-[10px] px-2 py-1 rounded-lg border border-primary-200 dark:border-primary-700 hover:border-accent hover:text-accent"
-          onClick={() => setShowAccountPicker(!showAccountPicker)}
+          className="btn-outline !py-1 !px-2 text-xs shrink-0"
+          onClick={() => onEdit(section)}
+          title="Modifier cette section"
         >
-          {section.prefixes.length} compte(s)
+          <Edit2 className="w-3 h-3" /> Modifier
         </button>
         <button
-          className="text-primary-400 hover:text-accent"
+          className="btn-outline !py-1 !px-2 text-xs shrink-0"
           onClick={() => onAddChild(section.id)}
           title="Ajouter une sous-section"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-3 h-3" /> Sous-section
         </button>
         <button
-          className="text-primary-400 hover:text-error"
-          onClick={() => onRemove(section.id)}
+          className="btn-outline !py-1 !px-2 text-xs text-error shrink-0"
+          onClick={() => onDelete(section)}
           title="Supprimer"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-3 h-3" />
         </button>
       </div>
 
-      {/* Account picker */}
-      {showAccountPicker && (
-        <div className="border-t border-primary-200/60 dark:border-primary-700/60 p-3 bg-primary-50/50 dark:bg-primary-900/30">
-          <div className="flex flex-wrap gap-1 mb-2">
-            {section.prefixes.map((p) => (
-              <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-[10px] font-semibold num">
-                {p}
-                <button onClick={() => onUpdate(section.id, { prefixes: section.prefixes.filter((x) => x !== p) })} className="hover:text-error">
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            ))}
-            {section.prefixes.length === 0 && (
-              <span className="text-[10px] text-primary-400 italic">Aucun préfixe — section vide.</span>
-            )}
-          </div>
-          <input
-            className="input !py-1.5 text-xs mb-2"
-            placeholder="Ajouter un préfixe (ex: 70, 706, 7061…) puis Entrée"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const v = (e.target as HTMLInputElement).value.trim();
-                if (v && !section.prefixes.includes(v)) {
-                  onUpdate(section.id, { prefixes: [...section.prefixes, v] });
-                  (e.target as HTMLInputElement).value = '';
-                }
-              }
-            }}
-          />
-          {matchingAccounts.length > 0 && (
-            <div className="text-[10px] text-primary-500">
-              <p className="font-semibold mb-1">Comptes du plan comptable rattachés ({matchingAccounts.length}) :</p>
-              <div className="max-h-32 overflow-y-auto space-y-0.5">
-                {matchingAccounts.slice(0, 30).map((a) => (
-                  <p key={a.code} className="num">
-                    <span className="font-semibold">{a.code}</span> — {a.label}
-                  </p>
-                ))}
-                {matchingAccounts.length > 30 && <p className="italic">…+ {matchingAccounts.length - 30}</p>}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Sous-sections récursives */}
       {expanded && hasChildren && (
         <div className="pb-2 pr-2">
           <SectionTree
             sections={allSections}
             parentId={section.id}
             accounts={accounts}
-            search={search}
-            onUpdate={onUpdate}
-            onRemove={onRemove}
-            onMove={onMove}
+            onEdit={onEdit}
             onAddChild={onAddChild}
+            onDelete={onDelete}
           />
         </div>
       )}
@@ -644,7 +857,7 @@ function SectionRow({ section, allSections, accounts, search, onUpdate, onRemove
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Intermediate Editor (sous-totaux paramétrables)
+// Intermediate Editor
 // ─────────────────────────────────────────────────────────────────────
 
 function IntermediateEditor({ intermediate, sections, onChange, onRemove }: {
@@ -653,7 +866,6 @@ function IntermediateEditor({ intermediate, sections, onChange, onRemove }: {
   onChange: (patch: Partial<CRIntermediateNode>) => void;
   onRemove: () => void;
 }) {
-  // Test de la formule avec valeurs fictives pour valider la syntaxe
   const formulaValid = useMemo(() => {
     if (!intermediate.formula.trim()) return null;
     try {
@@ -661,9 +873,7 @@ function IntermediateEditor({ intermediate, sections, onChange, onRemove }: {
       for (const s of sections) values[s.id] = 100;
       evaluateFormula(intermediate.formula, values);
       return true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }, [intermediate.formula, sections]);
 
   return (
@@ -685,7 +895,7 @@ function IntermediateEditor({ intermediate, sections, onChange, onRemove }: {
           <option value="percent">Pourcentage</option>
           <option value="ratio">Ratio</option>
         </select>
-        <button onClick={onRemove} className="text-primary-400 hover:text-error">
+        <button onClick={onRemove} className="text-primary-400 hover:text-error" title="Supprimer">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -702,7 +912,7 @@ function IntermediateEditor({ intermediate, sections, onChange, onRemove }: {
         )}>
           {formulaValid === null ? 'Saisissez une formule' : formulaValid ? '✓ Syntaxe valide' : '✗ Formule invalide'}
         </span>
-        <span className="text-primary-400">
+        <span className="text-primary-400 truncate">
           Variables : {sections.slice(0, 3).map((s) => s.id).join(', ')}{sections.length > 3 ? '…' : ''}
         </span>
       </div>
@@ -711,7 +921,7 @@ function IntermediateEditor({ intermediate, sections, onChange, onRemove }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Preview Mode (rendu du CR avant publication)
+// Preview Mode
 // ─────────────────────────────────────────────────────────────────────
 
 function ModelPreview({ model, accounts }: { model: CRModel; accounts: { code: string; label: string; class: string }[] }) {
