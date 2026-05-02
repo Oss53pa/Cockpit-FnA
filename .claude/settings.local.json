@@ -19,7 +19,8 @@
       "Bash(grep -rnE \"^\\\\s+animate\\\\s*$\" \"C:/devs/Cockpit FnA/src/pages\")",
       "Bash(cp \"C:/devs/Cockpit FnA/src/pages/DashboardHome.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/DashboardHome.tsx\")",
       "Bash(cp \"C:/devs/Cockpit FnA/src/pages/TAFIREPage.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/TAFIREPage.tsx\")",
-      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/CREditor.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/CREditor.tsx\")"
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/CREditor.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/CREditor.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Reports.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Reports.tsx\")"
     ]
   }
 }

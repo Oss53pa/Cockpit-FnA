@@ -727,6 +727,8 @@ export default function Reports() {
   const { currentYear, currentOrgId } = useApp();
 
   const [config, setConfig] = useState<ReportConfig>(() => ({ ...DEFAULT_CONFIG(`Exercice ${currentYear}`), blocks: QUICK_TEMPLATES.monthly() }));
+  // Track le modèle rapide actuellement applique pour highlight visuel + toast
+  const [activeTemplate, setActiveTemplate] = useState<string>('monthly');
   const [openSend, setOpenSend] = useState(false);
   const [openSave, setOpenSave] = useState(false);
   const [openLoad, setOpenLoad] = useState(false);
@@ -853,7 +855,15 @@ export default function Reports() {
     });
   };
 
-  const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => setConfig((c) => ({ ...c, blocks: filterConditionalBlocks(QUICK_TEMPLATES[k](data), data) }));
+  const applyTemplate = (k: keyof typeof QUICK_TEMPLATES) => {
+    setConfig((c) => ({ ...c, blocks: filterConditionalBlocks(QUICK_TEMPLATES[k](data), data) }));
+    setActiveTemplate(k as string);
+    const labels: Record<string, string> = {
+      weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel',
+      quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire',
+    };
+    toast.success(`Modèle appliqué : ${labels[k as string] ?? k}`, 'Le rapport a été régénéré avec ce template.');
+  };
 
   const palette = PALETTES[config.palette];
 
@@ -1014,6 +1024,7 @@ export default function Reports() {
 
   return (
     <div>
+      <div className="no-print">
       <PageHeader
         title="Reporting"
         subtitle="Éditeur par blocs · Visualiseur · Sommaire personnalisé · A4/PPTX · Palette"
@@ -1059,6 +1070,7 @@ export default function Reports() {
           </div>
         }
       />
+      </div>
 
       <div className="grid grid-cols-1 gap-4" style={{
         gridTemplateColumns: `${leftCollapsed ? '48px' : '300px'} minmax(0, 1fr) ${rightCollapsed ? '48px' : '280px'}`,
@@ -1202,12 +1214,29 @@ export default function Reports() {
 
           <Collapsible title="Modèles rapides" defaultOpen>
             <div className="space-y-1">
-              {Object.entries(QUICK_TEMPLATES).map(([k]) => (
-                <button key={k} onClick={() => applyTemplate(k as any)} className="w-full text-left px-2.5 py-2 rounded hover:bg-primary-200 dark:hover:bg-primary-800 text-xs font-medium">
-                  {{ weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel', quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire' }[k] ?? k}
-                </button>
-              ))}
+              {Object.entries(QUICK_TEMPLATES).map(([k]) => {
+                const isActive = activeTemplate === k;
+                const label = { weekly: 'Flash hebdomadaire', monthly: 'Rapport mensuel', quarterly: 'Comité trimestriel', annual: 'Rapport annuel', interim: 'Rapport intérimaire' }[k] ?? k;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => applyTemplate(k as any)}
+                    className={clsx(
+                      'w-full text-left px-2.5 py-2 rounded text-xs font-medium border-2 transition-all flex items-center justify-between gap-2',
+                      isActive
+                        ? 'bg-accent/10 border-accent text-accent font-semibold'
+                        : 'border-transparent hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-700 dark:text-primary-300',
+                    )}
+                  >
+                    <span className="truncate">{label}</span>
+                    {isActive && <span className="text-[9px] uppercase tracking-wider font-bold shrink-0">Actif</span>}
+                  </button>
+                );
+              })}
             </div>
+            <p className="text-[10px] text-primary-400 italic mt-2 px-1">
+              Cliquez sur un modèle pour régénérer le rapport.
+            </p>
           </Collapsible>
         </aside>
         )}
