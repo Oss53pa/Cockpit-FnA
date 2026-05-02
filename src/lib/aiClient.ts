@@ -48,15 +48,30 @@ export const PROVIDER_PRESETS: Array<{
   { id: 'anthropic', name: 'Anthropic Claude (via proxy)', baseUrl: 'https://api.anthropic.com/v1', suggestedModel: 'claude-3-5-sonnet-20241022', signupUrl: 'https://console.anthropic.com/settings/keys', description: 'Claude Sonnet — qualité haut de gamme. Nécessite un proxy OpenAI-compat.' },
 ];
 
+/** Nettoie une chaîne pour ne garder que les caractères ASCII imprimables.
+ *  Supprime les zero-width spaces, BOM, et autres caractères Unicode invisibles
+ *  souvent collés par erreur dans les clés API. */
+function sanitize(s: string): string {
+  return s.replace(/[^\x20-\x7E]/g, '').trim();
+}
+
 export function loadConfig(): AIConfig {
   try {
     const raw = localStorage.getItem(CFG_KEY);
     if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const parsed = { ...DEFAULTS, ...JSON.parse(raw) };
+    // Nettoie les champs sensibles (clé API, URLs) pour éviter les erreurs fetch
+    if (parsed.openaiApiKey) parsed.openaiApiKey = sanitize(parsed.openaiApiKey);
+    if (parsed.openaiBaseUrl) parsed.openaiBaseUrl = sanitize(parsed.openaiBaseUrl);
+    if (parsed.ollamaUrl) parsed.ollamaUrl = sanitize(parsed.ollamaUrl);
+    return parsed;
   } catch { return { ...DEFAULTS }; }
 }
 
 export function saveConfig(cfg: Partial<AIConfig>) {
+  if (cfg.openaiApiKey) cfg.openaiApiKey = sanitize(cfg.openaiApiKey);
+  if (cfg.openaiBaseUrl) cfg.openaiBaseUrl = sanitize(cfg.openaiBaseUrl);
+  if (cfg.ollamaUrl) cfg.ollamaUrl = sanitize(cfg.ollamaUrl);
   const merged = { ...loadConfig(), ...cfg };
   localStorage.setItem(CFG_KEY, JSON.stringify(merged));
   return merged;
