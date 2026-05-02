@@ -36,20 +36,28 @@ export function Gauge({ value, max = 100, label, displayValue, unit, target, inv
   // Affichage central : displayValue prioritaire, sinon value formatée
   const formatted = displayValue ?? `${Number.isFinite(value) ? value.toFixed(value < 10 ? 1 : 0) : '—'}${unit ? ` ${unit}` : ''}`;
 
+  // Fix React warning: ne pas mixer shorthand (border) avec longhand (borderBottom/Left).
+  // On utilise UNIQUEMENT borderTop + borderRight pour les arcs supérieurs.
   return (
     <div className="text-center">
       <div className="relative w-[110px] h-16 mx-auto overflow-hidden">
         <div
           className="absolute w-[110px] h-[110px] rounded-full box-border"
           style={{
-            border: '10px solid #e5e5e5', borderBottom: 'none', borderLeft: 'none',
+            borderTop: '10px solid #e5e5e5',
+            borderRight: '10px solid #e5e5e5',
+            borderBottom: '10px solid transparent',
+            borderLeft: '10px solid transparent',
             transform: 'rotate(-90deg)',
           }}
         />
         <div
           className="absolute w-[110px] h-[110px] rounded-full box-border transition-transform"
           style={{
-            border: `10px solid ${color}`, borderBottom: 'none', borderLeft: 'none',
+            borderTop: `10px solid ${color}`,
+            borderRight: `10px solid ${color}`,
+            borderBottom: '10px solid transparent',
+            borderLeft: '10px solid transparent',
             transform: `rotate(${angle}deg)`,
           }}
         />

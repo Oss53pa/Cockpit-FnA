@@ -115,20 +115,23 @@ export default function ExecutiveSummary() {
   }, [sig, ct]);
 
   // ─── Structure du bilan (Actif vs Passif — empilés) ────
+  // Filtre strict pour éviter les erreurs SVG transform de react-spring (nivo) :
+  // valeurs NaN / Infinity / 0 / quasi-zéro produisent des "translate(, )" invalides.
+  const isValidValue = (v: number) => Number.isFinite(v) && v >= 1; // au moins 1 unité (XOF)
   const bilanData = useMemo(() => {
     if (!bilan) return { actif: [], passif: [] };
     return {
       actif: [
-        { id: 'Immobilisations', value: Math.max(0, bilan.actif.find((l) => l.code === '_AZ')?.value ?? 0) },
-        { id: 'Actif circulant', value: Math.max(0, bilan.actif.find((l) => l.code === '_BK')?.value ?? 0) },
-        { id: 'Trésorerie active', value: Math.max(0, bilan.actif.find((l) => l.code === '_BT')?.value ?? 0) },
-      ].filter((d) => d.value > 0),
+        { id: 'Immobilisations', value: bilan.actif.find((l) => l.code === '_AZ')?.value ?? 0 },
+        { id: 'Actif circulant', value: bilan.actif.find((l) => l.code === '_BK')?.value ?? 0 },
+        { id: 'Trésorerie active', value: bilan.actif.find((l) => l.code === '_BT')?.value ?? 0 },
+      ].filter((d) => isValidValue(d.value)),
       passif: [
-        { id: 'Capitaux propres', value: Math.max(0, bilan.passif.find((l) => l.code === '_CP')?.value ?? 0) },
-        { id: 'Dettes financières', value: Math.max(0, bilan.passif.find((l) => l.code === 'DA')?.value ?? 0) },
-        { id: 'Passif circulant', value: Math.max(0, bilan.passif.find((l) => l.code === '_DP')?.value ?? 0) },
-        { id: 'Trésorerie passive', value: Math.max(0, bilan.passif.find((l) => l.code === 'DV')?.value ?? 0) },
-      ].filter((d) => d.value > 0),
+        { id: 'Capitaux propres', value: bilan.passif.find((l) => l.code === '_CP')?.value ?? 0 },
+        { id: 'Dettes financières', value: bilan.passif.find((l) => l.code === 'DA')?.value ?? 0 },
+        { id: 'Passif circulant', value: bilan.passif.find((l) => l.code === '_DP')?.value ?? 0 },
+        { id: 'Trésorerie passive', value: bilan.passif.find((l) => l.code === 'DV')?.value ?? 0 },
+      ].filter((d) => isValidValue(d.value)),
     };
   }, [bilan]);
 
