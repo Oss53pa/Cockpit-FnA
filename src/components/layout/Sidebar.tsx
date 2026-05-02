@@ -155,7 +155,12 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
       {/* Footer minimal */}
       <div className="px-5 py-3 border-t border-primary-200/60 dark:border-primary-800">
         <div className="flex items-center justify-between">
-          <p className="text-[10px] text-primary-400 tracking-tight">v0.3.0</p>
+          <div className="min-w-0">
+            <p className="text-[10px] text-primary-400 tracking-tight">v0.3.0</p>
+            <p className="text-[10px] text-primary-400 tracking-tight">
+              by <a href="https://atlas-studio.app" target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent transition-colors">Atlas Studio</a>
+            </p>
+          </div>
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}

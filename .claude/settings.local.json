@@ -25,7 +25,10 @@
       "mcp__a58aae78-1ce6-4205-900f-0d0e6f7f4178__get_edge_function",
       "mcp__a58aae78-1ce6-4205-900f-0d0e6f7f4178__deploy_edge_function",
       "Bash(cp \"C:/devs/Cockpit FnA/src/components/ui/EmailPreviewModal.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/components/ui/EmailPreviewModal.tsx\")",
-      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Settings.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Settings.tsx\")"
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Settings.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Settings.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Home.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Home.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/auth/Login.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/auth/Login.tsx\")",
+      "Bash(cp \"C:/devs/Cockpit FnA/src/pages/Guide.tsx\" \"C:/devs/Cockpit FnA/.claude/worktrees/recursing-rosalind-0a5881/src/pages/Guide.tsx\")"
     ]
   }
 }

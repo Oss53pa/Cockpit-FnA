@@ -117,8 +117,11 @@ export default function Home() {
       </div>
 
       {/* FOOTER */}
-      <div className="text-center text-[10px] text-primary-400 mt-6">
-        CockPit F&amp;A — SYSCOHADA révisé 2017 · Tous droits réservés © {currentYear}
+      <div className="text-center text-[10px] text-primary-400 mt-6 space-y-0.5">
+        <p>CockPit F&amp;A — SYSCOHADA révisé 2017 · Tous droits réservés © {currentYear}</p>
+        <p>
+          Une application <a href="https://atlas-studio.app" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-500 hover:text-accent transition-colors">Atlas Studio</a>
+        </p>
       </div>
       </div>
     </div>
