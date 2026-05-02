@@ -216,9 +216,43 @@ export default function CREditorPage() {
       setSelectedId(active.id);
       setModel(JSON.parse(JSON.stringify(active)));
     }
-    listCRAccounts(currentOrgId).then(setAccounts);
-    db.gl.where('orgId').equals(currentOrgId).toArray()
-      .then((entries) => setGlAccounts([...new Set(entries.map((e) => e.account))]));
+    // Charge le plan comptable + les comptes UTILISÉS en GL, puis fusionne :
+    // on veut voir l'arborescence complète jusqu'au plus petit code de compte
+    // RÉELLEMENT mouvementé, même si db.accounts ne contient que les racines.
+    Promise.all([
+      listCRAccounts(currentOrgId),
+      db.gl.where('orgId').equals(currentOrgId).toArray(),
+    ]).then(([coaList, entries]) => {
+      const labelByCode = new Map(coaList.map((a) => [a.code, a.label]));
+      // Libellé GL le plus fréquent par compte (proxy quand db.accounts n'a
+      // pas le code complet)
+      const glLabelFreq = new Map<string, Map<string, number>>();
+      for (const e of entries) {
+        if (!e.label) continue;
+        const lbl = e.label.trim(); if (!lbl) continue;
+        let m = glLabelFreq.get(e.account); if (!m) { m = new Map(); glLabelFreq.set(e.account, m); }
+        m.set(lbl, (m.get(lbl) ?? 0) + 1);
+      }
+      const glLabel = (code: string): string => {
+        const m = glLabelFreq.get(code); if (!m) return '';
+        let best = ''; let bestN = 0;
+        for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
+        return best;
+      };
+      // Fusion : tous les codes db.accounts + tous les codes uniques de db.gl
+      const allCodes = new Set<string>([...labelByCode.keys(), ...entries.map((e) => e.account)]);
+      const merged: { code: string; label: string; class: string }[] = [];
+      for (const code of allCodes) {
+        if (!code || code.length < 1) continue;
+        merged.push({
+          code,
+          label: labelByCode.get(code) ?? glLabel(code) ?? code,
+          class: code[0],
+        });
+      }
+      setAccounts(merged);
+      setGlAccounts([...new Set(entries.map((e) => e.account))]);
+    });
   }, [currentOrgId]);
 
   useEffect(() => {
@@ -651,7 +685,18 @@ export default function CREditorPage() {
 // ─────────────────────────────────────────────────────────────────────
 
 function buildCOATree(accounts: { code: string; label: string; class: string }[]): COANode[] {
-  // Niveaux : Classe (1 chiffre) > Sous-classe (2 chiffres) > Groupe (3 chiffres) > Compte
+  // Plan comptable arborescent à PROFONDEUR ARBITRAIRE :
+  //   Niveau 1 : Classe (1 chiffre) — ex: "6"
+  //   Niveau 2 : Sous-classe (2 chiffres) — ex: "66"
+  //   Niveau 3 : Groupe (3 chiffres) — ex: "661"
+  //   Niveau 4 : Sous-groupe (4 chiffres) — ex: "6611"
+  //   Niveau 5 : (5 chiffres) — ex: "66110"
+  //   Niveau 6+ : compte feuille (≥ 6 chiffres) — ex: "661100", "6611000", …
+  //
+  // CHAQUE NŒUD est draggable (classe, sous-classe, groupe, sous-groupe, ou
+  // compte feuille). Le user peut donc rattacher à une section soit une
+  // famille entière (préfixe court → englobe tous les enfants) soit un
+  // compte précis (code complet).
   const CLASS_LABELS: Record<string, string> = {
     '1': 'Classe 1 — Capitaux',
     '2': 'Classe 2 — Immobilisations',
@@ -664,46 +709,64 @@ function buildCOATree(accounts: { code: string; label: string; class: string }[]
     '9': 'Classe 9 — Analytique',
   };
 
+  const labelForLevel = (level: COANode['level'], code: string): string => {
+    if (level === 'class')    return CLASS_LABELS[code] ?? `Classe ${code}`;
+    if (level === 'subclass') return `Sous-classe ${code}`;
+    if (level === 'group')    return `Groupe ${code}`;
+    return `Sous-groupe ${code}`; // niveau 4+ sans label explicite
+  };
+  const levelForLength = (n: number): COANode['level'] => {
+    if (n <= 1) return 'class';
+    if (n === 2) return 'subclass';
+    if (n === 3) return 'group';
+    return 'account'; // 4+ chiffres = compte (sous-groupe ou feuille selon descendants)
+  };
+
   const root: Map<string, COANode> = new Map();
 
   for (const acc of accounts) {
-    const c1 = acc.code[0]; if (!c1) continue;
-    if (!root.has(c1)) {
-      root.set(c1, { code: c1, label: CLASS_LABELS[c1] ?? `Classe ${c1}`, level: 'class', children: [], isLeaf: false });
-    }
-    const cls = root.get(c1)!;
+    if (!acc.code || acc.code.length < 1) continue;
 
-    if (acc.code.length >= 2) {
-      const c2 = acc.code.substring(0, 2);
-      let sub = cls.children.find((n) => n.code === c2);
-      if (!sub) {
-        sub = { code: c2, label: `Sous-classe ${c2}`, level: 'subclass', children: [], isLeaf: false };
-        cls.children.push(sub);
+    let parentChildren = (() => {
+      const c1 = acc.code[0];
+      if (!root.has(c1)) {
+        root.set(c1, { code: c1, label: labelForLevel('class', c1), level: 'class', children: [], isLeaf: false });
       }
+      return root.get(c1)!.children;
+    })();
+    let parentNode: COANode = root.get(acc.code[0])!;
 
-      if (acc.code.length >= 3) {
-        const c3 = acc.code.substring(0, 3);
-        let grp = sub.children.find((n) => n.code === c3);
-        if (!grp) {
-          grp = { code: c3, label: `Groupe ${c3}`, level: 'group', children: [], isLeaf: false };
-          sub.children.push(grp);
-        }
-
-        if (acc.code.length > 3) {
-          const exists = grp.children.find((n) => n.code === acc.code);
-          if (!exists) {
-            grp.children.push({ code: acc.code, label: acc.label, level: 'account', children: [], isLeaf: true });
-          }
-        } else {
-          // Le compte EST le groupe (3 chiffres exactement)
-          grp.label = acc.label;
-          grp.isLeaf = true;
-        }
+    // Pour chaque longueur de préfixe de 2 jusqu'à la longueur totale,
+    // on crée (ou récupère) un nœud à ce niveau.
+    for (let len = 2; len <= acc.code.length; len++) {
+      const prefix = acc.code.substring(0, len);
+      let node = parentChildren.find((n) => n.code === prefix);
+      if (!node) {
+        const lvl = levelForLength(len);
+        node = {
+          code: prefix,
+          label: labelForLevel(lvl, prefix),
+          level: lvl,
+          children: [],
+          isLeaf: false,
+        };
+        parentChildren.push(node);
       }
+      // Si on est arrivé à la longueur totale du compte, ce nœud EST le
+      // compte réel : on lui pose son vrai libellé et on le marque feuille.
+      if (len === acc.code.length) {
+        node.label = acc.label || node.label;
+        node.isLeaf = true;
+      }
+      parentNode = node;
+      parentChildren = node.children;
     }
   }
 
-  // Trie chaque niveau par code
+  // Trie chaque niveau par code croissant. Garde isLeaf comme défini dans la
+  // boucle : un nœud peut être ET un compte réel (isLeaf=true) ET avoir des
+  // enfants (sous-comptes plus longs). C'est OK : drag du parent = inclure
+  // toute la famille via préfixe ; drag d'un enfant = ce compte précis.
   const sortRec = (node: COANode) => {
     node.children.sort((a, b) => a.code.localeCompare(b.code));
     node.children.forEach(sortRec);
@@ -741,6 +804,15 @@ function COATreeNode({ node, depth, search, onDragStart, onDragEnd }: {
     onDragStart({ code: node.code, label: node.label, level: node.level });
   };
 
+  // Distinction visuelle des nœuds :
+  //  - Classe (1 chiffre) : font-bold + accent
+  //  - Sous-classe (2)    : font-semibold + primary-700
+  //  - Groupe (3)         : font-medium + primary-600
+  //  - Sous-groupe / Compte (4+) : normal + primary-500
+  //  - Compte FEUILLE (isLeaf) : icône • verte → "ce compte existe au GL"
+  const codeLen = node.code.length;
+  const isLeafAccount = node.isLeaf && codeLen >= 3; // affiche le • uniquement à partir des comptes-feuilles
+
   return (
     <>
       <div
@@ -749,12 +821,13 @@ function COATreeNode({ node, depth, search, onDragStart, onDragEnd }: {
         onDragEnd={onDragEnd}
         className={clsx(
           'flex items-center gap-1.5 py-1 px-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-accent/10 transition-colors',
-          depth === 0 && 'font-semibold text-sm',
-          depth === 1 && 'text-xs',
-          depth >= 2 && 'text-[11px]',
+          codeLen === 1 && 'font-bold text-sm',
+          codeLen === 2 && 'font-semibold text-xs',
+          codeLen === 3 && 'text-xs',
+          codeLen >= 4 && 'text-[11px]',
         )}
-        style={{ paddingLeft: `${depth * 14 + 4}px` }}
-        title={`Glisser ${node.code} vers une section`}
+        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        title={`Glisser ${node.code} (${node.label}) vers une section`}
       >
         {node.children.length > 0 ? (
           <button onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }} className="text-primary-500 hover:text-accent shrink-0">
@@ -764,7 +837,16 @@ function COATreeNode({ node, depth, search, onDragStart, onDragEnd }: {
           <span className="w-3.5 h-3.5 shrink-0" />
         )}
         <GripVertical className="w-3 h-3 text-primary-300 shrink-0" />
-        <span className={clsx('num shrink-0 font-mono', node.level === 'class' ? 'text-accent' : node.level === 'subclass' ? 'text-primary-700 dark:text-primary-300' : 'text-primary-500')}>
+        {isLeafAccount && (
+          <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" title="Compte présent dans le Grand Livre" />
+        )}
+        <span className={clsx(
+          'num shrink-0 font-mono',
+          codeLen === 1 ? 'text-accent' :
+          codeLen === 2 ? 'text-primary-700 dark:text-primary-300' :
+          codeLen === 3 ? 'text-primary-600 dark:text-primary-400' :
+          'text-primary-500',
+        )}>
           {node.code}
         </span>
         <span className="truncate text-primary-700 dark:text-primary-300">{node.label}</span>
