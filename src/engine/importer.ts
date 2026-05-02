@@ -934,6 +934,12 @@ export async function importGL(
     }
   });
 
+  // Push vers Supabase en arrière-plan (fire & forget)
+  import('../db/supabaseSync').then(({ pushOrgToSupabase, pushGLToSupabase }) => {
+    pushOrgToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push org failed:', e));
+    pushGLToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push GL failed:', e));
+  }).catch((e) => console.warn('[Sync] Module supabaseSync unavailable:', e));
+
   // Statistique des années présentes dans les écritures
   const yearMap = new Map<number, number>();
   for (const e of entries) {
@@ -1060,6 +1066,11 @@ export async function importCOA(
     status: errors.length === 0 ? 'success' : (toImport.length > 0 ? 'partial' : 'error'),
     report: JSON.stringify({ updated, errors: errors.slice(0, 100) }),
   });
+
+  // Push vers Supabase en arrière-plan
+  import('../db/supabaseSync').then(({ pushOrgToSupabase }) => {
+    pushOrgToSupabase(orgId).catch((e) => console.warn('[Sync] Push COA failed:', e));
+  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
 
   return {
     totalRows: rows.length,
@@ -1210,6 +1221,11 @@ export async function importBudget(
     year: opts.year,
     version: opts.version,
   });
+
+  // Push vers Supabase en arrière-plan
+  import('../db/supabaseSync').then(({ pushOrgToSupabase }) => {
+    pushOrgToSupabase(orgId).catch((e) => console.warn('[Sync] Push budget failed:', e));
+  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
 
   return {
     totalRows: rows.length,
@@ -1536,6 +1552,12 @@ export async function importGLTiers(
       ok: Math.abs(ecart) < 1,
     });
   }
+
+  // Push vers Supabase en arrière-plan
+  import('../db/supabaseSync').then(({ pushOrgToSupabase, pushGLToSupabase }) => {
+    pushOrgToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push tiers org failed:', e));
+    pushGLToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push tiers GL failed:', e));
+  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
 
   return {
     totalRows: rows.length,

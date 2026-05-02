@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell, AreaChart, Area,
+  AreaChart, Area,
 } from 'recharts';
+import { ResponsivePie } from '@nivo/pie';
 import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, Banknote, Receipt, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
 import { TabSwitch } from '../components/ui/TabSwitch';
@@ -26,6 +28,13 @@ import {
   type FRBFRRow,
 } from '../engine/synthese';
 import { resolveSystem, SYSTEM_META } from '../syscohada/systems';
+
+const nivoTheme = {
+  background: 'transparent',
+  text: { fontSize: 11, fill: 'rgb(var(--p-600))' },
+  legends: { text: { fontSize: 11, fill: 'rgb(var(--p-600))' } },
+  tooltip: { container: { background: 'rgb(var(--p-900))', color: 'rgb(var(--p-50))', fontSize: 11, borderRadius: 8, boxShadow: '0 10px 25px rgb(0 0 0 / 0.15)', padding: '8px 12px' } },
+};
 
 export default function DashboardHome() {
   const { bilan, cr, sig, balance } = useStatements();
@@ -82,7 +91,24 @@ export default function DashboardHome() {
   const { fr: frV, bfr: bfrV, tn: tnV, jCA } = computeStructure(bilan, ca);
   const caData = computeCaData(monthly);
   const chargesData = computeChargesData(balance);
-  const treso = fr.map((r) => ({ mois: r.mois, solde: r.tn }));
+
+  // ── Filtrage des mois actifs sur les charts ──────────────────────────
+  // Bug: les charts affichaient tous les 12 mois même quand les données du
+  // GL s'arrêtaient en avril → ligne plate de avril à décembre, donnant
+  // l'impression de valeurs aberrantes (ex: trésorerie qui semble rester
+  // figée à 1.8B). Solution : trouver le dernier mois avec activité réelle
+  // (CA non-zéro dans `monthly`) et borner les charts à ce mois.
+  const lastActiveMonthIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < monthly.length; i++) {
+      if (monthly[i].realise && monthly[i].realise !== 0) last = i;
+    }
+    return last;
+  })();
+  // On garde au moins jusqu'au mois courant si CA détecté, sinon montre tout.
+  // Note : monthly est borné par fromMonth/toMonth donc l'index correspond.
+  const activeFr = lastActiveMonthIdx >= 0 ? fr.slice(0, lastActiveMonthIdx + 1) : fr;
+  const treso = activeFr.map((r) => ({ mois: r.mois, solde: r.tn }));
 
   const caN1 = caData.reduce((s, m) => s + m.n1, 0);
   const caBudget = caData.reduce((s, m) => s + m.budget, 0);
@@ -112,6 +138,8 @@ export default function DashboardHome() {
           </div>
         }
       />
+
+      <DataIntegrityBanner />
 
       {system === 'SMT' && (
         <>
@@ -182,15 +210,39 @@ export default function DashboardHome() {
           </ChartCard>
 
           <ChartCard title="Répartition des Charges" subtitle="Top postes de dépenses" accent={ct.at(1)}>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={chargesData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={2} dataKey="value"
-                  label={(p: any) => `${p.pct}%`} labelLine={false} fontSize={10} stroke="rgb(var(--bg-surface))" strokeWidth={2}>
-                  {chargesData.map((_, i) => <Cell key={i} fill={ct.at(i)} />)}
-                </Pie>
-                <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div style={{ height: 260 }}>
+              {(() => {
+                // Filtre rigoureux : pas de NaN/Infinity/valeurs nulles → évite les
+                // erreurs SVG transform de react-spring (translate vide quand value = 0).
+                const data = chargesData
+                  .filter((d) => Number.isFinite(d.value) && d.value > 0)
+                  .map((d, i) => ({ id: d.name, label: d.name, value: d.value, color: ct.at(i) }));
+                if (data.length === 0) {
+                  return <div className="h-full flex items-center justify-center text-xs text-primary-400">Aucune charge à afficher</div>;
+                }
+                const total = data.reduce((s, x) => s + x.value, 0);
+                return (
+                  <ResponsivePie
+                    data={data}
+                    margin={{ top: 20, right: 20, bottom: 50, left: 20 }}
+                    innerRadius={0.6}
+                    padAngle={1}
+                    cornerRadius={4}
+                    colors={{ datum: 'data.color' }}
+                    borderWidth={2}
+                    borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
+                    enableArcLinkLabels={false}
+                    arcLabelsTextColor="#fff"
+                    arcLabel={(d) => `${Math.round((d.value / total) * 100)} %`}
+                    arcLabelsSkipAngle={10}
+                    valueFormat={(v) => fmtFull(v)}
+                    theme={nivoTheme}
+                    animate={false}
+                    legends={[{ anchor: 'bottom', direction: 'row', translateY: 35, itemWidth: 90, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' }]}
+                  />
+                );
+              })()}
+            </div>
           </ChartCard>
         </div>
 
@@ -200,8 +252,14 @@ export default function DashboardHome() {
       </>}
 
       {system !== 'SMT' && tab === 'risk' && <>
+        {fr.length === 0 ? (
+          <div className="card p-8 text-center mb-4 animate-fade-in-up">
+            <p className="text-sm text-primary-500">Données mensuelles en cours de calcul depuis le Grand Livre…</p>
+            <p className="text-xs text-primary-400 mt-2">Si rien n'apparaît, vérifiez que votre import contient des écritures réparties sur plusieurs périodes.</p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 animate-fade-in-up">
-          <ChartCard title="Évolution de la Trésorerie Nette" subtitle="Cumul mensuel YTD" accent={ct.at(0)}>
+          <ChartCard title="Évolution de la Trésorerie Nette" subtitle="Cumul mensuel YTD — calculé depuis le Grand Livre" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={treso}>
                 <defs>
@@ -219,9 +277,9 @@ export default function DashboardHome() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="FR / BFR / Trésorerie Nette" subtitle="Equilibre du cycle d'exploitation" accent={ct.at(1)}>
+          <ChartCard title="FR / BFR / Trésorerie Nette" subtitle="Équilibre du cycle d'exploitation — données réelles GL" accent={ct.at(1)}>
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={fr}>
+              <LineChart data={activeFr}>
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="mois" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />
@@ -234,6 +292,7 @@ export default function DashboardHome() {
             </ResponsiveContainer>
           </ChartCard>
         </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
           <PerformanceGauges budgetExec={budgetExec} marge={marge} ratios={ratios} />

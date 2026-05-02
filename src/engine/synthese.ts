@@ -4,7 +4,7 @@ type Line = { code: string; value: number };
 type MonthlyLine = { code: string; values: number[] };
 type BalanceRow = { account: string; debit: number; credit: number; soldeC: number };
 type Ratio = { code: string; label: string; family: string; value: number; target: number | string; unit: string; status: string };
-type MonthlyCA = { mois: string; realise: number };
+type MonthlyCA = { mois: string; realise: number; budget?: number; n1?: number };
 type MonthlyBilan = { months: string[]; actif: MonthlyLine[]; passif: MonthlyLine[] };
 
 export type Alert = { severity: 'high' | 'medium' | 'low'; type: string; message: string };
@@ -35,7 +35,12 @@ export function computeFRBFRMonthly(mb: MonthlyBilan): FRBFRRow[] {
   return mb.months.map((mois, i) => {
     const fr = getM(mb.passif, '_DF', i) - getM(mb.actif, '_AZ', i);
     const bfr = getM(mb.actif, '_BK', i) - getM(mb.passif, '_DP', i);
-    return { mois, fr, bfr, tn: fr - bfr };
+    // Bug fix: TN doit etre la VRAIE tresorerie nette (tresoActive - tresoPass),
+    // PAS la valeur derivee fr - bfr. En theorie l'equation FR = BFR + TN tient,
+    // mais des qu'un compte n'est pas mappe (ex: imbalance bilan), fr - bfr
+    // donne un faux TN gonfle (observation user: TN reelle 372M, fr-bfr = 1.9B).
+    const tn = getM(mb.actif, '_BT', i) - getM(mb.passif, 'DV', i);
+    return { mois, fr, bfr, tn };
   });
 }
 
@@ -43,8 +48,10 @@ export function computeCaData(monthly: MonthlyCA[], budget?: number[], n1?: numb
   return monthly.map((m, i) => ({
     mois: m.mois,
     realise: m.realise,
-    budget: budget?.[i] ?? 0,
-    n1: n1?.[i] ?? 0,
+    // Budget : prioritairement celui inclus dans monthly (depuis useMonthlyCA enrichi),
+    // sinon le tableau optionnel passé séparément, sinon 0.
+    budget: m.budget ?? budget?.[i] ?? 0,
+    n1: m.n1 ?? n1?.[i] ?? 0,
   }));
 }
 

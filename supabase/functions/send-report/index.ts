@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
     // Check user has access to org
     const body: RequestBody = await req.json();
     const { data: membership } = await supabase
-      .from('user_orgs')
+      .from('fna_user_orgs')
       .select('role')
       .eq('user_id', user.id)
       .eq('org_id', body.orgId)
@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
 
     // Get report
     const { data: report } = await supabase
-      .from('reports')
+      .from('fna_reports')
       .select('*')
       .eq('id', body.reportId)
       .single();
@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
 
     // Get org name
     const { data: org } = await supabase
-      .from('organizations')
+      .from('fna_organizations')
       .select('name')
       .eq('id', body.orgId)
       .single();
@@ -103,7 +103,7 @@ Deno.serve(async (req: Request) => {
     const status = resendRes.ok ? 'sent' : 'failed';
 
     // Log the email
-    await supabase.from('email_logs').insert({
+    await supabase.from('fna_email_logs').insert({
       org_id: body.orgId,
       report_id: body.reportId,
       recipients: body.recipients,

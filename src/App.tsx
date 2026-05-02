@@ -70,6 +70,8 @@ const WeeklyDashboard = lazyWithRetry(() => import('./pages/WeeklyDashboard'));
 const MdaAuto = lazyWithRetry(() => import('./pages/MdaAuto'));
 const BoardPack = lazyWithRetry(() => import('./pages/BoardPack'));
 const SectorBenchmark = lazyWithRetry(() => import('./pages/SectorBenchmark'));
+const Proph3tIntelligence = lazyWithRetry(() => import('./pages/Proph3tIntelligence'));
+const CREditor = lazyWithRetry(() => import('./pages/CREditor'));
 
 function PageFallback() {
   return (
@@ -206,6 +208,8 @@ function App() {
         <Route path="/dashboard/mda" element={<ProtectedRoute><AppLayout><MdaAuto /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/board-pack" element={<ProtectedRoute><AppLayout><BoardPack /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/sector-benchmark" element={<ProtectedRoute><AppLayout><SectorBenchmark /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/proph3t" element={<ProtectedRoute><AppLayout><Proph3tIntelligence /></AppLayout></ProtectedRoute>} />
+        <Route path="/cr-editor" element={<ProtectedRoute><AppLayout><CREditor /></AppLayout></ProtectedRoute>} />
         <Route path="/builder" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
         <Route path="/builder/:id" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
       </Routes>

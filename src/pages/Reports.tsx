@@ -1014,6 +1014,7 @@ export default function Reports() {
 
   return (
     <div>
+      <div className="no-print">
       <PageHeader
         title="Reporting"
         subtitle="Éditeur par blocs · Visualiseur · Sommaire personnalisé · A4/PPTX · Palette"
@@ -1059,6 +1060,7 @@ export default function Reports() {
           </div>
         }
       />
+      </div>
 
       <div className="grid grid-cols-1 gap-4" style={{
         gridTemplateColumns: `${leftCollapsed ? '48px' : '300px'} minmax(0, 1fr) ${rightCollapsed ? '48px' : '280px'}`,

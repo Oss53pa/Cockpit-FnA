@@ -135,14 +135,52 @@ export function useRatios() {
   const fromMonth = useApp((s) => s.fromMonth);
   const toMonth = useApp((s) => s.toMonth);
   const currentYear = useApp((s) => s.currentYear);
+  const currentOrgId = useApp((s) => s.currentOrgId);
+
+  // ── Detection des mois actifs (avec activité CA réelle) ──
+  // Bug fix: si l'utilisateur sélectionne YTD (jan-déc) mais que la data du GL
+  // ne couvre que Q1, periodDays était 365 → DSO et DPO sont multipliés par
+  // ~4. Solution: détecter les mois avec mouvements 70-75 (produits) et limiter
+  // periodDays aux mois actifs.
+  const activeMonths = useLiveQuery(
+    async () => {
+      if (!currentOrgId) return null;
+      const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
+      const yearPeriods = periods.filter((p) => p.year === currentYear && p.month >= fromMonth && p.month <= toMonth);
+      const periodIds = new Set(yearPeriods.map((p) => p.id));
+      const entries = await db.gl
+        .where('orgId').equals(currentOrgId)
+        .filter((e) => periodIds.has(e.periodId) && /^7[0-5]/.test(e.account))
+        .toArray();
+      const months = new Set<number>();
+      for (const e of entries) {
+        const period = yearPeriods.find((p) => p.id === e.periodId);
+        if (period) months.add(period.month);
+      }
+      return months;
+    },
+    [currentOrgId, currentYear, fromMonth, toMonth],
+  );
+
   if (!balance || balance.length === 0) return [];
-  // Calcule le nb de jours réels de la période sélectionnée pour annualiser
-  // correctement DSO/DPO. Sans ça, sur Q1 (3 mois) DSO est multiplié par 4.
+
+  // Calcul du periodDays effectif :
+  //  - Si on a la liste des mois actifs (CA détecté), on borne aux mois avec activité réelle
+  //  - Sinon fallback sur la sélection utilisateur (fromMonth/toMonth)
   let periodDays = 0;
-  for (let m = fromMonth; m <= toMonth; m++) {
-    periodDays += new Date(currentYear, m, 0).getDate();
+  if (activeMonths && activeMonths.size > 0) {
+    // Mois actifs détectés : utiliser EXACTEMENT ceux-là
+    for (const m of activeMonths) {
+      periodDays += new Date(currentYear, m, 0).getDate();
+    }
+  } else {
+    // Fallback : période sélectionnée
+    for (let m = fromMonth; m <= toMonth; m++) {
+      periodDays += new Date(currentYear, m, 0).getDate();
+    }
   }
   if (periodDays <= 0) periodDays = 360;
+
   return computeRatios(balance, customTargets, { periodDays });
 }
 
@@ -206,6 +244,10 @@ export function useBudgetActual(version?: string): BudgetActualRow[] {
 // (P1-9) Propage fromMonth/toMonth pour respecter la période sélectionnée
 // par l'utilisateur. Avant : tous les mois étaient retournés même quand le
 // header avait une plage restreinte → graphiques incohérents avec les KPI.
+//
+// Inclut le BUDGET et N-1 par défaut — bug fix: la jauge Budget CA affichait
+// "—" car le budget n'était jamais fetché. Maintenant useMonthlyCA() retourne
+// realise + budget + n1 par mois, prêt pour computeCaData() et budgetExec.
 export function useMonthlyCA() {
   const { currentOrgId, currentYear, fromMonth, toMonth } = useApp();
   return useLiveQuery(async () => {
@@ -214,13 +256,51 @@ export function useMonthlyCA() {
     const thisYear = periods
       .filter((p) => p.year === currentYear && p.month >= fromMonth && p.month <= toMonth)
       .sort((a, b) => a.month - b.month);
-    const result: { mois: string; month: number; realise: number }[] = [];
+
+    // ── Budget de l'année courante (toutes versions confondues, dernière par compte) ──
+    // Si plusieurs versions de budget existent, on prend la version la plus récente
+    // par défaut (sans filtre de version).
+    const budgets = await db.budgets
+      .where('orgId').equals(currentOrgId)
+      .filter((b) => b.year === currentYear)
+      .toArray();
+    // Agrège budget CA (classes 70-73) par mois
+    const budgetByMonth = new Map<number, number>();
+    for (const b of budgets) {
+      if (!/^7[0-3]/.test(b.account)) continue;
+      // budgets a un champ `month` (1-12) et `amount`
+      const m = (b as any).month ?? 0;
+      const amount = (b as any).amount ?? (b as any).budget ?? 0;
+      budgetByMonth.set(m, (budgetByMonth.get(m) ?? 0) + amount);
+    }
+
+    // ── CA N-1 (année précédente, mêmes mois) ──
+    const prevPeriods = await db.periods
+      .where('orgId').equals(currentOrgId)
+      .filter((p) => p.year === currentYear - 1 && p.month >= fromMonth && p.month <= toMonth)
+      .toArray();
+    const n1ByMonth = new Map<number, number>();
+    for (const p of prevPeriods) {
+      const entries = await db.gl.where('periodId').equals(p.id).toArray();
+      const ca = entries
+        .filter((e) => /^7[0-3]/.test(e.account))
+        .reduce((s, e) => s + (e.credit - e.debit), 0);
+      n1ByMonth.set(p.month, ca);
+    }
+
+    const result: { mois: string; month: number; realise: number; budget: number; n1: number }[] = [];
     for (const p of thisYear) {
       const entries = await db.gl.where('periodId').equals(p.id).toArray();
       const ca = entries
-        .filter((e) => e.account.startsWith('70') || e.account.startsWith('71') || e.account.startsWith('72') || e.account.startsWith('73'))
+        .filter((e) => /^7[0-3]/.test(e.account))
         .reduce((s, e) => s + (e.credit - e.debit), 0);
-      result.push({ mois: p.label.substring(0, 3), month: p.month, realise: ca });
+      result.push({
+        mois: p.label.substring(0, 3),
+        month: p.month,
+        realise: ca,
+        budget: budgetByMonth.get(p.month) ?? 0,
+        n1: n1ByMonth.get(p.month) ?? 0,
+      });
     }
     return result;
   }, [currentOrgId, currentYear, fromMonth, toMonth], []);

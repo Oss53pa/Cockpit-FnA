@@ -225,7 +225,7 @@ export default function CashflowForecast() {
               enableGridY
               axisLeft={{ format: (v: number) => fmtK(v) }}
               theme={nivoTheme}
-              animate
+              animate={false}
               markers={[
                 { axis: 'y', value: criticalThreshold, lineStyle: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 5' }, legend: `Seuil critique`, legendOrientation: 'horizontal', textStyle: { fill: '#ef4444', fontSize: 9 } },
                 { axis: 'y', value: 0, lineStyle: { stroke: 'rgb(var(--p-400))', strokeWidth: 1 } },
@@ -259,7 +259,7 @@ export default function CashflowForecast() {
               enableLabel={false}
               borderRadius={2}
               theme={nivoTheme}
-              animate
+              animate={false}
             />
           </div>
         </ChartCard>

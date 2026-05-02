@@ -312,18 +312,34 @@
   }
   /* Cache tout SAUF le rapport : display:none pour que rien n'occupe
      d'espace (évite la page blanche avant la couverture). */
-  aside, header, nav, .toolbar, .floating-ai {
+  aside, header, nav, .toolbar, .floating-ai, .no-print {
     display: none !important;
   }
-  /* Tous les ancêtres du rapport : bloc simple, zéro marge, zéro espace */
+  /* Tous les ancêtres du rapport : bloc simple, zéro marge, zéro espace.
+     Neutralise le layout Twisty (padding, gap, rounded shell, shadow). */
   body, body > div, body > div > div, body > div > div > div,
-  body > div > div > div > div {
+  body > div > div > div > div,
+  body > div > div > div > div > div {
     display: block !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     min-height: 0 !important;
     height: auto !important;
+    gap: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+  /* Le shell app (div.app-shell) : supprimer cadre, fond, arrondi */
+  .app-shell, .app-shell > main {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
   /* Casser tout grid inline (le conteneur 3 colonnes) */
   [style*="grid-template-columns"] {
@@ -367,6 +383,13 @@
     padding: 0 !important;
     overflow: hidden !important;
     page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .page-a4[data-page-type="cover"] *,
+  .page-a4[data-page-type="back"] * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .page-a4[data-page-type="cover"] > div,
   .page-a4[data-page-type="back"] > div {
@@ -410,7 +433,9 @@
   }
   /* Pages contenu : pas de hauteur forcée, contenu fluide */
   .page-a4[data-page-type="content"] > div > div,
-  .report-print-area > div > div {
+  .page-a4[data-page-type="content"] > div,
+  .page-a4[data-page-type="toc"] > div > div,
+  .page-a4[data-page-type="toc"] > div {
     box-shadow: none !important;
     border: none !important;
     margin: 0 !important;
@@ -445,16 +470,20 @@
   .report-print-area .border-l-4 {
     page-break-inside: avoid;
   }
-  /* Cacher TOUS les éléments d'édition */
-  .report-print-area button,
+  /* Cacher les éléments d'édition (sélecteurs, inputs, boutons d'action) */
   .report-print-area select,
   .report-print-area input[type="file"],
+  .report-print-area input[type="color"],
   .report-print-area .group-hover\:opacity-100,
-  .no-print,
   .print\:hidden {
     display: none !important;
   }
   .report-print-area textarea {
+    display: none !important;
+  }
+  /* Boutons d'édition dans les pages de contenu (pas ceux de la couverture) */
+  .report-print-area .page-a4[data-page-type="content"] button,
+  .report-print-area .page-a4[data-page-type="toc"] button {
     display: none !important;
   }
   /* Cacher les zones de drag-drop "+" entre blocs */
@@ -462,8 +491,36 @@
   .report-print-area .h-0\.5 {
     display: none !important;
   }
-  /* Footer de page */
-  .report-print-area .pointer-events-none {
-    display: none !important;
-  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Kanban scroller — scrollbar horizontale TOUJOURS visible
+   Sur macOS/iOS les scrollbars sont normalement masquees, donc on force
+   leur affichage dans le catalogue Kanban pour que le user voit clairement
+   qu'il peut scroller horizontalement vers les colonnes coupees.
+   ──────────────────────────────────────────────────────────────────── */
+.kanban-scroller {
+  /* Firefox */
+  scrollbar-width: auto;
+  scrollbar-color: rgb(var(--p-400)) transparent;
+}
+.kanban-scroller::-webkit-scrollbar {
+  height: 10px;
+  -webkit-appearance: auto;
+  display: block;
+}
+.kanban-scroller::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  margin: 0 12px;
+}
+.kanban-scroller::-webkit-scrollbar-thumb {
+  background: rgb(var(--p-400));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.kanban-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--accent));
+  background-clip: padding-box;
 }

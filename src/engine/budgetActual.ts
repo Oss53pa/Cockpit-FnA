@@ -2,6 +2,7 @@
 import { db } from '../db/schema';
 import { findSyscoAccount } from '../syscohada/coa';
 import { Line } from './statements';
+import { getActiveModel, modelToSectionDefs, modelToOrder, migrateLegacySettings } from './crModels';
 
 export type BudgetActualRow = {
   code: string;
@@ -119,18 +120,49 @@ export function saveOrder(orgId: string, order: CRSection[]) {
   localStorage.setItem(`${KEY_ORDER}:${orgId}`, JSON.stringify(order));
 }
 
-// CR_SECTIONS dynamique selon labels custom + sections custom
+// CR_SECTIONS dynamique — lit le MODÈLE ACTIF du module crModels (Phase 3 / propagation).
+// Fallback : si aucun modèle (ou orgId manquant), retombe sur les defaults SYSCOHADA.
+//
+// Le modèle actif est sélectionné dans l'éditeur CR (page /cr-editor). Tous les
+// engines (statements, monthly, budgetActual, reports) consomment cette fonction
+// comme point pivot unique — un changement de modèle se propage à tout Cockpit.
 export function getSectionDefs(orgId?: string): Record<string, { label: string; prefixes: string[]; isCharge: boolean }> {
   if (!orgId) return { ...DEFAULT_SECTION_DEFS };
-  const labels = loadLabels(orgId);
-  const out: Record<string, { label: string; prefixes: string[]; isCharge: boolean }> = {};
-  for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
-    out[k] = { ...DEFAULT_SECTION_DEFS[k], label: labels[k] ?? DEFAULT_SECTION_DEFS[k].label };
+
+  // Migration douce depuis l'ancien système localStorage (idempotente)
+  try { migrateLegacySettings(orgId); } catch { /* ignore */ }
+
+  // Lecture du modèle actif (Vue Direction / Vue Fiscale / etc.)
+  try {
+    const model = getActiveModel(orgId);
+    return modelToSectionDefs(model);
+  } catch (e) {
+    // Sécurité : si crModels échoue, on retombe sur l'ancien système legacy
+    console.warn('CR Models indisponible, fallback sur localStorage legacy', e);
+    const labels = loadLabels(orgId);
+    const out: Record<string, { label: string; prefixes: string[]; isCharge: boolean }> = {};
+    for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
+      out[k] = { ...DEFAULT_SECTION_DEFS[k], label: labels[k] ?? DEFAULT_SECTION_DEFS[k].label };
+    }
+    for (const c of loadCustomSections(orgId)) {
+      out[c.id] = { label: labels[c.id] ?? c.label, prefixes: c.prefixes, isCharge: c.isCharge };
+    }
+    return out;
   }
-  for (const c of loadCustomSections(orgId)) {
-    out[c.id] = { label: labels[c.id] ?? c.label, prefixes: c.prefixes, isCharge: c.isCharge };
+}
+
+/**
+ * Ordre d'affichage des sections selon le modèle actif (DFS sur la hiérarchie).
+ * Remplace progressivement loadOrder() qui lisait localStorage directement.
+ */
+export function getSectionOrder(orgId?: string): string[] {
+  if (!orgId) return Object.keys(DEFAULT_SECTION_DEFS);
+  try {
+    const model = getActiveModel(orgId);
+    return modelToOrder(model);
+  } catch {
+    return loadOrder(orgId);
   }
-  return out;
 }
 
 // Compat : utilisation directe des defaults

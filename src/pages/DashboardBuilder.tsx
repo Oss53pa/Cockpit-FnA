@@ -191,14 +191,19 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
   if (!def) return <Card><p className="text-xs text-error">Widget inconnu : {type}</p></Card>;
 
   const removeBtn = editing && onRemove ? (
-    <button
-      onClick={onRemove}
-      className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-error/90 hover:bg-error text-white flex items-center justify-center text-xs print:hidden"
-      title="Retirer ce widget"
-      aria-label="Retirer"
-    >
-      <Trash2 className="w-3 h-3" />
-    </button>
+    <div className="absolute top-1.5 right-1.5 z-20 flex items-center gap-1 print:hidden">
+      <span className="w-7 h-7 rounded-lg bg-primary-200/80 dark:bg-primary-700/80 backdrop-blur flex items-center justify-center text-primary-600 dark:text-primary-200 cursor-move" title="Glisser pour réorganiser">
+        <GripVertical className="w-3.5 h-3.5" strokeWidth={2.5} />
+      </span>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        className="w-7 h-7 rounded-lg bg-error hover:bg-error/90 text-white flex items-center justify-center shadow-sm hover:shadow-md transition-all hover:scale-105"
+        title="Supprimer ce widget"
+        aria-label="Supprimer"
+      >
+        <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} />
+      </button>
+    </div>
   ) : null;
 
   // ── KPIs Performance ──

@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
-  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search, Users,
+  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search, Users, FileEdit,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -33,6 +33,7 @@ const sections = [
       { to: '/ratios', icon: Calculator, label: 'Ratios' },
       { to: '/reports', icon: FileText, label: 'Reporting' },
       { to: '/analytical', icon: PieChart, label: 'Analytique' },
+      { to: '/cr-editor', icon: FileEdit, label: 'Personnaliser CR' },
       { to: '/ai', icon: Sparkles, label: 'Proph3t' },
     ],
   },

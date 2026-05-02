@@ -57,7 +57,7 @@ export function useEmail() {
   const getEmailLogs = useCallback(async (orgId: string): Promise<EmailLog[]> => {
     if (!isSupabaseConfigured) return [];
     const { data } = await supabase
-      .from('email_logs')
+      .from('fna_email_logs')
       .select('*')
       .eq('org_id', orgId)
       .order('sent_at', { ascending: false })
@@ -78,7 +78,7 @@ export function useEmail() {
   const getSchedules = useCallback(async (orgId: string): Promise<EmailSchedule[]> => {
     if (!isSupabaseConfigured) return [];
     const { data } = await supabase
-      .from('email_schedules')
+      .from('fna_email_schedules')
       .select('*')
       .eq('org_id', orgId);
     return (data ?? []).map(r => ({
@@ -111,16 +111,16 @@ export function useEmail() {
       next_run_at: schedule.nextRunAt,
     };
     if (schedule.id) {
-      await supabase.from('email_schedules').update(row).eq('id', schedule.id);
+      await supabase.from('fna_email_schedules').update(row).eq('id', schedule.id);
     } else {
-      await supabase.from('email_schedules').insert(row);
+      await supabase.from('fna_email_schedules').insert(row);
     }
   }, []);
 
   /** Supprimer une programmation */
   const deleteSchedule = useCallback(async (id: number) => {
     if (!isSupabaseConfigured) return;
-    await supabase.from('email_schedules').delete().eq('id', id);
+    await supabase.from('fna_email_schedules').delete().eq('id', id);
   }, []);
 
   return { sendReport, sending, getEmailLogs, getSchedules, upsertSchedule, deleteSchedule };

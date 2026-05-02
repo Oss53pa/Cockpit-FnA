@@ -115,20 +115,23 @@ export default function ExecutiveSummary() {
   }, [sig, ct]);
 
   // ─── Structure du bilan (Actif vs Passif — empilés) ────
+  // Filtre strict pour éviter les erreurs SVG transform de react-spring (nivo) :
+  // valeurs NaN / Infinity / 0 / quasi-zéro produisent des "translate(, )" invalides.
+  const isValidValue = (v: number) => Number.isFinite(v) && v >= 1; // au moins 1 unité (XOF)
   const bilanData = useMemo(() => {
     if (!bilan) return { actif: [], passif: [] };
     return {
       actif: [
-        { id: 'Immobilisations', value: Math.max(0, bilan.actif.find((l) => l.code === '_AZ')?.value ?? 0) },
-        { id: 'Actif circulant', value: Math.max(0, bilan.actif.find((l) => l.code === '_BK')?.value ?? 0) },
-        { id: 'Trésorerie active', value: Math.max(0, bilan.actif.find((l) => l.code === '_BT')?.value ?? 0) },
-      ].filter((d) => d.value > 0),
+        { id: 'Immobilisations', value: bilan.actif.find((l) => l.code === '_AZ')?.value ?? 0 },
+        { id: 'Actif circulant', value: bilan.actif.find((l) => l.code === '_BK')?.value ?? 0 },
+        { id: 'Trésorerie active', value: bilan.actif.find((l) => l.code === '_BT')?.value ?? 0 },
+      ].filter((d) => isValidValue(d.value)),
       passif: [
-        { id: 'Capitaux propres', value: Math.max(0, bilan.passif.find((l) => l.code === '_CP')?.value ?? 0) },
-        { id: 'Dettes financières', value: Math.max(0, bilan.passif.find((l) => l.code === 'DA')?.value ?? 0) },
-        { id: 'Passif circulant', value: Math.max(0, bilan.passif.find((l) => l.code === '_DP')?.value ?? 0) },
-        { id: 'Trésorerie passive', value: Math.max(0, bilan.passif.find((l) => l.code === 'DV')?.value ?? 0) },
-      ].filter((d) => d.value > 0),
+        { id: 'Capitaux propres', value: bilan.passif.find((l) => l.code === '_CP')?.value ?? 0 },
+        { id: 'Dettes financières', value: bilan.passif.find((l) => l.code === 'DA')?.value ?? 0 },
+        { id: 'Passif circulant', value: bilan.passif.find((l) => l.code === '_DP')?.value ?? 0 },
+        { id: 'Trésorerie passive', value: bilan.passif.find((l) => l.code === 'DV')?.value ?? 0 },
+      ].filter((d) => isValidValue(d.value)),
     };
   }, [bilan]);
 
@@ -272,8 +275,7 @@ export default function ExecutiveSummary() {
               axisLeft={{ format: (v: number) => fmtK(v) }}
               enableLabel={false}
               theme={nivoTheme}
-              animate
-              motionConfig="gentle"
+              animate={false}
               tooltip={({ data, value }) => (
                 <div style={{ background: 'rgb(var(--p-900))', color: 'rgb(var(--p-50))', padding: '8px 12px', borderRadius: 8, fontSize: 12 }}>
                   <strong>{(data as any).etape}</strong><br />{fmtFull(value)} XOF
@@ -301,7 +303,7 @@ export default function ExecutiveSummary() {
               arcLabelsTextColor="#fff"
               arcLabel={(d) => `${Math.round((d.value / bilanData.actif.reduce((s, x) => s + x.value, 0)) * 100)} %`}
               theme={nivoTheme}
-              animate
+              animate={false}
               legends={[
                 { anchor: 'bottom', direction: 'row', translateY: 30, itemWidth: 110, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' },
               ]}
@@ -324,7 +326,7 @@ export default function ExecutiveSummary() {
               arcLabelsTextColor="#fff"
               arcLabel={(d) => `${Math.round((d.value / bilanData.passif.reduce((s, x) => s + x.value, 0)) * 100)} %`}
               theme={nivoTheme}
-              animate
+              animate={false}
               legends={[
                 { anchor: 'bottom', direction: 'row', translateY: 30, itemWidth: 110, itemHeight: 14, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10, symbolShape: 'circle' },
               ]}
@@ -408,8 +410,7 @@ export default function ExecutiveSummary() {
             enableGridY
             axisLeft={{ format: (v: number) => `${v}` }}
             theme={nivoTheme}
-            animate
-            motionConfig="gentle"
+            animate={false}
           />
         </div>
       </ChartCard>

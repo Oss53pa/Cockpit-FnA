@@ -70,10 +70,12 @@ export default {
         'card-hover': '0 4px 12px -2px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.06)',
       },
       animation: {
-        'fade-in':      'fadeIn 200ms ease-out',
-        'fade-in-up':   'fadeInUp 300ms cubic-bezier(0.16, 1, 0.3, 1)',
-        'scale-in':     'scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1)',
-        'slide-in-right': 'slideInRight 250ms cubic-bezier(0.16, 1, 0.3, 1)',
+        // forwards : conserve l'état final après l'animation (opacity 1) — sinon le
+        // modal et autres overlays repartent en opacity:0 et deviennent invisibles.
+        'fade-in':      'fadeIn 200ms ease-out forwards',
+        'fade-in-up':   'fadeInUp 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'scale-in':     'scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'slide-in-right': 'slideInRight 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'shimmer':      'shimmer 1.4s ease-in-out infinite',
         'pulse-soft':   'pulseSoft 2s ease-in-out infinite',
       },

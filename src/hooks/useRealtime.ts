@@ -43,7 +43,7 @@ export function useConnectionStatus() {
 
     const check = async () => {
       try {
-        const { error } = await supabase.from('organizations').select('id').limit(1);
+        const { error } = await supabase.from('fna_organizations').select('id').limit(1);
         ref.current = error ? 'offline' : 'online';
       } catch {
         ref.current = 'offline';
