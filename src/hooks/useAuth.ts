@@ -133,6 +133,19 @@ export function useAuth() {
         await pullFromSupabase(orgIds, (p) => {
           setState(s => ({ ...s, syncStatus: p.step }));
         });
+        // Sync chat + activities pour chaque org (fire-and-forget)
+        for (const orgId of orgIds) {
+          void Promise.all([
+            import('../engine/chatSync').then(async ({ initialChatSync, subscribeChatRealtime }) => {
+              await initialChatSync(orgId);
+              subscribeChatRealtime(orgId); // realtime subscription persistante
+            }),
+            import('../engine/activitySync').then(async ({ initialActivitySync, subscribeActivityRealtime }) => {
+              await initialActivitySync(orgId);
+              subscribeActivityRealtime(orgId);
+            }),
+          ]).catch((e) => console.warn('[Sync] chat/activities sync error:', e));
+        }
         setState(s => ({ ...s, syncing: false, syncStatus: '' }));
       } catch (e) {
         console.error('[Sync] Erreur pull Supabase → Dexie:', e);

@@ -140,19 +140,31 @@ export function ActivitySidebar() {
     if (!orgId) { toast.error('Société manquante'); return; }
     if (!newContent.trim()) { toast.warning('Contenu vide'); return; }
     try {
-      await db.activities.add({
+      // Récupère l'auteur depuis sessionStorage Supabase Auth (fallback local)
+      const authorName = (() => {
+        try {
+          const raw = sessionStorage.getItem('cockpit-current-user');
+          if (raw) return JSON.parse(raw)?.name ?? 'Utilisateur local';
+        } catch { /* ignore */ }
+        return 'Utilisateur local';
+      })();
+      const activity = {
         orgId,
         kind: newKind,
-        status: newKind === 'validation' ? 'resolved' : 'open',
+        status: (newKind === 'validation' ? 'resolved' : 'open') as 'open' | 'resolved' | 'archived',
         context: location.pathname,
         contextLabel: document.title || location.pathname,
-        author: 'Utilisateur local', // TODO: lier au currentUser quand auth complète
+        author: authorName,
         content: newContent.trim(),
         createdAt: Date.now(),
-        ...(newKind === 'validation' ? { resolvedAt: Date.now(), resolvedBy: 'Utilisateur local' } : {}),
-      });
+        ...(newKind === 'validation' ? { resolvedAt: Date.now(), resolvedBy: authorName } : {}),
+      };
+      const localId = await db.activities.add(activity);
       setNewContent('');
       toast.success(`${KIND_LABELS[newKind].slice(0, -1)} ajoutée`);
+      // Sync cloud (fire-and-forget)
+      void import('../../engine/activitySync').then(({ pushActivityToCloud }) =>
+        pushActivityToCloud({ ...activity, id: localId as number })).catch(() => { /* ignore */ });
     } catch (e: any) {
       toast.error('Erreur', e?.message ?? 'Ajout impossible.');
     }
@@ -160,13 +172,25 @@ export function ActivitySidebar() {
 
   const resolveActivity = async (a: Activity) => {
     if (!a.id) return;
-    await db.activities.update(a.id, { status: 'resolved', resolvedAt: Date.now(), resolvedBy: 'Utilisateur local' });
+    const authorName = (() => {
+      try {
+        const raw = sessionStorage.getItem('cockpit-current-user');
+        if (raw) return JSON.parse(raw)?.name ?? 'Utilisateur local';
+      } catch { /* ignore */ }
+      return 'Utilisateur local';
+    })();
+    const updates = { status: 'resolved' as const, resolvedAt: Date.now(), resolvedBy: authorName };
+    await db.activities.update(a.id, updates);
+    void import('../../engine/activitySync').then(({ updateActivityInCloud }) =>
+      updateActivityInCloud(a.id!, updates)).catch(() => { /* ignore */ });
     toast.success('Résolu');
   };
 
   const archiveActivity = async (a: Activity) => {
     if (!a.id) return;
     await db.activities.update(a.id, { status: 'archived' });
+    void import('../../engine/activitySync').then(({ updateActivityInCloud }) =>
+      updateActivityInCloud(a.id!, { status: 'archived' })).catch(() => { /* ignore */ });
   };
 
   const deleteActivity = async (a: Activity) => {
