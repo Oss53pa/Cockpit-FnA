@@ -76,28 +76,29 @@ export const BUILTIN_PALETTES: Record<string, Palette> = {
   // entre elles (pas de zinc neutre, pas de creme chaud).
   twisty: {
     name: 'Cockpit',
-    // Palette MAXIMUM CLARTÉ — Linear/Stripe pur (quasi blanc)
+    // Palette neutre (gris) + accent sage green
     scale: [
-      '#FFFFFF', // 50  — blanc pur
-      '#FCFCFB', // 100 — fond app (quasi blanc)
-      '#F4F3F1', // 200 — borders soft
-      '#E2E0DC', // 300 — borders visibles
-      '#B4B2AC', // 400 — décoratif
-      '#8A8882', // 500 — secondaire
-      '#64625C', // 600 — body
-      '#4B4944', // 700 — fort
-      '#33312D', // 800 — heading
-      '#21201D', // 900 — graphite
-      '#12110F', // 950 — quasi-noir
+      '#FAFAFA', // 50  — blanc neutre
+      '#F5F5F5', // 100 — fond app (gris très clair)
+      '#EAEAEA', // 200 — borders soft
+      '#D4D4D4', // 300 — borders visibles
+      '#A3A3A3', // 400 — décoratif
+      '#737373', // 500 — secondaire
+      '#525252', // 600 — body
+      '#404040', // 700 — fort
+      '#262626', // 800 — heading
+      '#171717', // 900 — graphite
+      '#0A0A0A', // 950 — quasi-noir
     ],
-    tableHeader: '#21201D', tableHeaderText: '#FCFCFB',
-    chartColors: ['#DA4D28','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#8A8882'],
+    tableHeader: '#171717', tableHeaderText: '#F5F5F5',
+    // Charts : sage primary + clay secondary + neutres harmonieux
+    chartColors: ['#7FA88E','#C97A5A','#5E8772','#D4A574','#737373','#B5C4A8','#A3A3A3'],
     layout: {
-      bgPage:     '#FCFCFB',
-      bgShell:    '#FCFCFB',
+      bgPage:     '#F5F5F5',
+      bgShell:    '#F5F5F5',
       bgSurface:  '#FFFFFF',
-      accent:     '#DA4D28',
-      accentSoft: '#FDF0E9',
+      accent:     '#7FA88E',  // sage primary
+      accentSoft: '#E5EDE3',
     },
   },
   // Graphite — neutre pur (style Linear / Vercel)

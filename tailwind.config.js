@@ -28,6 +28,10 @@ export default {
           DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
           soft:    'rgb(var(--accent-soft) / <alpha-value>)',
         },
+        accent2: {
+          DEFAULT: 'rgb(var(--accent-2) / <alpha-value>)',
+          soft:    'rgb(var(--accent-2-soft) / <alpha-value>)',
+        },
         // Couleurs de statut fonctionnelles (fixes)
         success: '#22c55e',
         warning: '#f59e0b',

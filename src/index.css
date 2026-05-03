@@ -7,27 +7,32 @@
     /* === ANTI-FOUC : valeurs par defaut palette Twisty (Premium Graphite) ===
        Palette graphite + ivoire + terracotta — niveau Linear/Vercel/Stripe Dashboard.
        Ces variables sont surchargées au runtime par theme.ts/applyPalette() */
-    /* Palette MAXIMUM CLARTÉ — quasi blanc + gris très doux.
-       Linear/Stripe Dashboard pur — l'app respire au maximum. */
-    --p-50:  255 255 255;   /* #FFFFFF — blanc pur */
-    --p-100: 252 252 251;   /* #FCFCFB — fond app (quasi blanc, juste teinté chaud) */
-    --p-200: 244 243 241;   /* #F4F3F1 — borders/séparateurs soft */
-    --p-300: 226 224 220;   /* #E2E0DC — borders visibles */
-    --p-400: 180 178 172;   /* #B4B2AC — texte décoratif */
-    --p-500: 138 136 130;   /* #8A8882 — texte secondaire */
-    --p-600: 100 98 92;     /* #64625C — body */
-    --p-700: 75 73 68;      /* #4B4944 — texte fort */
-    --p-800: 51 49 45;      /* #33312D — heading */
-    --p-900: 33 32 29;      /* #21201D — graphite (titres uniquement) */
-    --p-950: 18 17 15;      /* #12110F — quasi-noir */
-    --bg-page:    252 252 251;  /* #FCFCFB — fond quasi blanc */
-    --bg-shell:   252 252 251;  /* identique */
-    --bg-surface: 255 255 255;  /* blanc pur — cards */
-    --accent:     218 77 40;    /* #DA4D28 — terracotta */
-    --accent-soft:253 240 233;  /* #FDF0E9 */
-    --th-bg: #21201D;
-    --th-text: #FCFCFB;
-    --grid-color: #F4F3F1;
+    /* Palette HYBRIDE — gris neutre + double accent sage primaire / terracotta secondaire.
+       Sage  = navigation, KPI sains, boutons primaires, success, conformité
+       Clay  = CTA critiques, alertes, focus visuel ponctuel */
+    --p-50:  250 250 250;   /* #FAFAFA — blanc neutre */
+    --p-100: 245 245 245;   /* #F5F5F5 — fond app */
+    --p-200: 234 234 234;   /* #EAEAEA — borders soft */
+    --p-300: 212 212 212;   /* #D4D4D4 — borders visibles */
+    --p-400: 163 163 163;   /* #A3A3A3 — texte décoratif */
+    --p-500: 115 115 115;   /* #737373 — secondaire */
+    --p-600: 82 82 82;      /* #525252 — body */
+    --p-700: 64 64 64;      /* #404040 — fort */
+    --p-800: 38 38 38;      /* #262626 — heading */
+    --p-900: 23 23 23;      /* #171717 — graphite */
+    --p-950: 10 10 10;      /* #0A0A0A — quasi-noir */
+    --bg-page:    245 245 245;
+    --bg-shell:   245 245 245;
+    --bg-surface: 255 255 255;
+    /* Accent PRIMAIRE = sage (utilisation dominante) */
+    --accent:     127 168 142;  /* #7FA88E — sage primary */
+    --accent-soft:229 237 227;  /* #E5EDE3 — sage pâle */
+    /* Accent SECONDAIRE = terracotta (CTA critiques, alertes) */
+    --accent-2:      201 122 90;   /* #C97A5A — clay/terracotta */
+    --accent-2-soft: 245 230 220;  /* #F5E6DC — terracotta pâle */
+    --th-bg: #171717;
+    --th-text: #F5F5F5;
+    --grid-color: #EAEAEA;
 
     /* Couleurs de statut */
     --color-status-success: #22c55e;
@@ -176,12 +181,27 @@
   }
   .btn-accent {
     @apply btn bg-accent text-white;
-    box-shadow: 0 1px 2px 0 rgb(218 77 40 / 0.15), 0 0 0 1px rgb(218 77 40 / 0.20),
+    box-shadow: 0 1px 2px 0 rgb(var(--accent) / 0.15),
+                0 0 0 1px rgb(var(--accent) / 0.20),
                 inset 0 1px 0 0 rgb(255 255 255 / 0.10);
   }
   .btn-accent:hover {
     background: rgb(var(--accent) / 0.92);
-    box-shadow: 0 4px 12px -2px rgb(218 77 40 / 0.30), 0 0 0 1px rgb(218 77 40 / 0.30),
+    box-shadow: 0 4px 12px -2px rgb(var(--accent) / 0.30),
+                0 0 0 1px rgb(var(--accent) / 0.30),
+                inset 0 1px 0 0 rgb(255 255 255 / 0.12);
+  }
+  /* Bouton CTA critique avec terracotta secondaire (Exporter PDF, Diffuser, Alerter…) */
+  .btn-clay {
+    @apply btn bg-accent2 text-white;
+    box-shadow: 0 1px 2px 0 rgb(var(--accent-2) / 0.15),
+                0 0 0 1px rgb(var(--accent-2) / 0.20),
+                inset 0 1px 0 0 rgb(255 255 255 / 0.10);
+  }
+  .btn-clay:hover {
+    background: rgb(var(--accent-2) / 0.92);
+    box-shadow: 0 4px 12px -2px rgb(var(--accent-2) / 0.30),
+                0 0 0 1px rgb(var(--accent-2) / 0.30),
                 inset 0 1px 0 0 rgb(255 255 255 / 0.12);
   }
   .btn-ghost {

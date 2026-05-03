@@ -149,7 +149,7 @@ export default function DashboardHome() {
         action={
           <div className="flex gap-2">
             <button className="btn-outline" onClick={() => navigate('/ai')}><Sparkles className="w-4 h-4" /> Commenter avec l'IA</button>
-            <button className="btn-primary" onClick={handleExport}><Download className="w-4 h-4" /> Exporter PDF</button>
+            <button className="btn-clay" onClick={handleExport}><Download className="w-4 h-4" /> Exporter PDF</button>
           </div>
         }
       />
