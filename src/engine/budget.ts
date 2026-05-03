@@ -72,10 +72,12 @@ export async function loadBudget(orgId: string, year: number, version: string): 
 }
 
 // Enregistre un budget (efface l'existant pour cette version avant insertion)
+// Push automatiquement vers Supabase pour multi-device.
 export async function saveBudget(
   orgId: string, year: number, version: string,
   items: Array<{ account: string; monthly: number[] }>,
 ) {
+  let inserted: Omit<BudgetLine, 'id'>[] = [];
   await db.transaction('rw', db.budgets, async () => {
     await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).delete();
     const toInsert: Omit<BudgetLine, 'id'>[] = [];
@@ -87,7 +89,30 @@ export async function saveBudget(
       }
     }
     if (toInsert.length) await db.budgets.bulkAdd(toInsert as BudgetLine[]);
+    inserted = toInsert;
   });
+
+  // Push vers Supabase (fire-and-forget) pour multi-device
+  if (inserted.length > 0) {
+    void (async () => {
+      try {
+        const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+        if (!isSupabaseConfigured) return;
+        await (supabase as any).from('fna_budgets')
+          .delete()
+          .eq('org_id', orgId).eq('year', year).eq('version', version);
+        const rows = inserted.map((r) => ({
+          org_id: r.orgId, year: r.year, version: r.version,
+          account: r.account, month: r.month, amount: r.amount,
+        }));
+        for (let i = 0; i < rows.length; i += 500) {
+          await (supabase as any).from('fna_budgets').insert(rows.slice(i, i + 500));
+        }
+      } catch (e) {
+        console.warn('[saveBudget] Push Supabase failed (non-bloquant):', e);
+      }
+    })();
+  }
 }
 
 // Duplique une version

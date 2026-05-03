@@ -57,12 +57,13 @@
   }
 
   html {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Dosis', 'Inter', system-ui, -apple-system, sans-serif;
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';   /* Inter v4 stylistic alternates */
     font-weight: 400;
-    letter-spacing: -0.005em;
+    font-style: normal;
+    letter-spacing: 0;
     text-rendering: optimizeLegibility;
   }
   body {

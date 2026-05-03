@@ -108,10 +108,21 @@ export async function pullFromSupabase(
     const imports = await fetchAll('fna_imports', oid);
     if (imports.length > 0) await db.imports.bulkPut(imports.map((r: any) => toCamel(r) as any));
 
-    // 7. Budgets
+    // 7. Budgets — REPLACE (pas merge) pour cette org : on vide d'abord puis insère
+    // (sinon les lignes supprimees cote Supabase resteraient en local)
     progress('Budgets');
     const budgets = await fetchAll('fna_budgets', oid);
-    if (budgets.length > 0) await db.budgets.bulkPut(budgets.map((r: any) => toCamel(r) as any));
+    await db.budgets.where('orgId').equals(oid).delete();
+    if (budgets.length > 0) {
+      // bulkAdd sans id pour laisser auto-increment Dexie
+      const rows = budgets.map((r: any) => {
+        const c = toCamel(r) as any;
+        delete c.id; // important : laisse Dexie générer un id local frais
+        return c;
+      });
+      await db.budgets.bulkAdd(rows);
+    }
+    console.log(`[Sync] Budgets pulled for org ${oid}: ${budgets.length} lignes`);
 
     // 8. Reports
     progress('Rapports');
