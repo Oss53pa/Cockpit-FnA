@@ -456,15 +456,25 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
 
       <Card padded={false}>
         <table className="w-full text-sm">
+          {/* colgroup partagé avec la table 'Résultats intermédiaires' pour alignement strict */}
+          <colgroup>
+            <col style={{ width: 32 }} />
+            <col style={{ width: 32 }} />
+            <col />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 40 }} />
+          </colgroup>
           <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700">
             <tr>
-              <th className="text-left py-2 px-3 w-8"></th>
-              <th className="text-left py-2 px-3 w-8"></th>
+              <th className="text-left py-2 px-3"></th>
+              <th className="text-left py-2 px-3"></th>
               <th className="text-left py-2 px-3">Section / compte</th>
-              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Réalisé</th>
-              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Budget</th>
-              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Écart</th>
-              <th className="text-right py-2 px-3 w-10"></th>
+              <th className="text-right py-2 px-3 whitespace-nowrap">Réalisé</th>
+              <th className="text-right py-2 px-3 whitespace-nowrap">Budget</th>
+              <th className="text-right py-2 px-3 whitespace-nowrap">Écart</th>
+              <th className="text-right py-2 px-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
@@ -550,9 +560,20 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
         </table>
       </Card>
 
-      {/* Résultats intermédiaires (calculés sur les sections standard) */}
+      {/* Résultats intermédiaires — calé sur le même grid que le tableau ci-dessus
+          (drag handle 32px + toggle 32px + section flex + 3 × 180px + action 40px).
+          colgroup garantit l'alignement parfait des colonnes. */}
       <Card title="Résultats intermédiaires" subtitle="Calculés à partir des sections SYSCOHADA standard" padded={false}>
         <table className="w-full text-sm">
+          <colgroup>
+            <col style={{ width: 32 }} />
+            <col style={{ width: 32 }} />
+            <col />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 40 }} />
+          </colgroup>
           <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
             {CR_FLOW.filter((i) => i.kind === 'inter').map((item: any) => {
               const data = inters[item.key as keyof typeof inters];
@@ -562,10 +583,13 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                 <tr key={item.key}
                   className={clsx('font-bold',
                     isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
+                  <td></td>
+                  <td></td>
                   <td className="py-2.5 px-3 uppercase text-xs tracking-wider">= {INTERMEDIATE_LABELS[item.key as keyof typeof INTERMEDIATE_LABELS]}</td>
-                  <td className="py-2.5 px-3 text-right num min-w-[180px] w-[180px] whitespace-nowrap">{fmtFull(data.realise)}</td>
-                  <td className="py-2.5 px-3 text-right num min-w-[180px] w-[180px] whitespace-nowrap">{fmtFull(data.budget)}</td>
-                  <td className="py-2.5 px-3 text-right num min-w-[180px] w-[180px] whitespace-nowrap">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                  <td className="py-2.5 px-3 text-right num whitespace-nowrap">{fmtFull(data.realise)}</td>
+                  <td className="py-2.5 px-3 text-right num whitespace-nowrap">{fmtFull(data.budget)}</td>
+                  <td className="py-2.5 px-3 text-right num whitespace-nowrap">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                  <td></td>
                 </tr>
               );
             })}
