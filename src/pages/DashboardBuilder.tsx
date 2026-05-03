@@ -165,9 +165,16 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
   const stocks = bilan ? get(bilan.actif, 'BB') : 0;
   const dettesFour = sumC('40');
   const achatsHT = (sumD('60') - sumD('603')) + sumD('61') + sumD('62') + sumD('63');
-  const dso = ca > 0 ? Math.round((creances / (ca * 1.18)) * periodDays) : 0;
+  // Taux TVA dynamique (fallback 18% UEMOA)
+  const vatRate = useMemo(() => {
+    if (!balance?.length) return 0.18;
+    const tvaC = balance.filter((r: any) => r.account?.startsWith('443')).reduce((s: number, r: any) => s + (r.credit - r.debit), 0);
+    const raw = ca > 0 && tvaC > 0 ? tvaC / ca : 0.18;
+    return raw > 0 && raw < 0.30 ? raw : 0.18;
+  }, [balance, ca]);
+  const dso = ca > 0 ? Math.round((creances / (ca * (1 + vatRate))) * periodDays) : 0;
   const dio = ca > 0 ? Math.round((stocks / ca) * periodDays) : 0;
-  const dpo = achatsHT > 0 ? Math.round((dettesFour / (achatsHT * 1.18)) * periodDays) : 0;
+  const dpo = achatsHT > 0 ? Math.round((dettesFour / (achatsHT * (1 + vatRate))) * periodDays) : 0;
   const ccc = dso + dio - dpo;
 
   // CAF

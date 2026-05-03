@@ -5,7 +5,7 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import { ResponsivePie } from '@nivo/pie';
-import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload, Building2, Calendar, Coins } from 'lucide-react';
+import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { KPICard } from '../components/ui/KPICardV2';
@@ -140,12 +140,6 @@ export default function DashboardHome() {
         title={org?.name ? `Bonjour · ${org.name}` : 'Synthèse de gestion'}
         subtitle={`Vue d'ensemble temps réel — bilan, compte de résultat, ratios SYSCOHADA et trésorerie. Données rafraîchies en direct.`}
         hero
-        pills={[
-          { label: 'Live', variant: 'live' },
-          { label: 'Société', value: org?.name, icon: <Building2 className="w-3 h-3" /> },
-          { label: 'Devise', value: currency, icon: <Coins className="w-3 h-3" /> },
-          { label: 'Période', value: periodLabel, icon: <Calendar className="w-3 h-3" /> },
-        ]}
         action={
           <div className="flex gap-2">
             <button className="btn-outline" onClick={() => navigate('/ai')}><Sparkles className="w-4 h-4" /> Commenter avec l'IA</button>

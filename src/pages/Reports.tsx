@@ -1550,7 +1550,7 @@ export default function Reports() {
             }}>Effacer commentaires Proph3t</button>
             <button className="btn-outline" onClick={() => generate(false)}><Eye className="w-4 h-4" /> Aperçu</button>
             <button className="btn-outline" onClick={() => generate(true)}><Download className="w-4 h-4" /> Télécharger</button>
-            <button className="btn-primary" onClick={() => setOpenSend(true)}><Send className="w-4 h-4" /> Envoyer</button>
+            <button className="btn-clay" onClick={() => setOpenSend(true)}><Send className="w-4 h-4" /> Envoyer</button>
           </div>
         }
       />
@@ -1819,7 +1819,7 @@ export default function Reports() {
           </div>
 
           <div className="card p-4">
-            <button className="btn-primary w-full mb-2" onClick={() => setOpenSend(true)}><Send className="w-4 h-4" /> Envoyer pour validation/diffusion</button>
+            <button className="btn-clay w-full mb-2" onClick={() => setOpenSend(true)}><Send className="w-4 h-4" /> Envoyer pour validation/diffusion</button>
             <button className="btn-outline w-full mb-2" onClick={() => setOpenSave(true)}><Save className="w-4 h-4" /> Enregistrer comme modèle</button>
           </div>
 
@@ -2850,6 +2850,13 @@ function TablePreview({ source, data, palette, title }: any) {
 
 function DashboardSnippet({ id, data, palette }: any) {
   const dash = DASHBOARD_CATALOG.find((d) => d.id === id);
+  // Taux TVA dynamique depuis balance (fallback 18% UEMOA)
+  const vatRate = useMemo(() => {
+    try {
+      const { computeVatRate } = require('../engine/ratios');
+      return computeVatRate(data.balance ?? []);
+    } catch { return 0.18; }
+  }, [data.balance]);
   const kpis = (() => {
     if (id === 'home' || id === 'cp' || id === 'crblock' || id === 'is_bvsa' || id === 'is_bvsa_monthly' || id?.startsWith('crblock_')) return [
       { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
@@ -2981,7 +2988,7 @@ function DashboardSnippet({ id, data, palette }: any) {
       // Taux TVA fixé à 18 % (norme UEMOA SYSCOHADA). Dériver du solde 443
       // donne un taux faussé car le solde 443 est minoré dès qu'une déclaration
       // a été déposée et payée en cours de période.
-      const caTTC = ca * 1.18;
+      const caTTC = ca * (1 + vatRate);
       const dso = caTTC > 0 ? Math.round((encoursNet / caTTC) * periodDays) : 0;
       return [
         { label: 'Encours net (411 − 491)', value: fmtMoney(encoursNet), subValue: `Brut ${fmtMoney(encoursBrut)} − prov ${fmtMoney(provisions)}` },
@@ -3006,7 +3013,7 @@ function DashboardSnippet({ id, data, palette }: any) {
         .reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
       // Taux TVA fixé à 18 % (UEMOA) pour ne pas se faire piéger par un solde
       // 445 minoré post-déclaration.
-      const achatsTTC = achatsHT * 1.18;
+      const achatsTTC = achatsHT * (1 + vatRate);
       const dpo = achatsTTC > 0 ? Math.round((dettesNettes / achatsTTC) * periodDays) : 0;
       return [
         { label: 'Dettes fournisseurs (40x)', value: fmtMoney(dettesNettes), subValue: `dont effets ${fmtMoney(effetsAPayer)}` },
@@ -3400,9 +3407,9 @@ function DashboardSnippet({ id, data, palette }: any) {
       const creances = data.bilanActif?.find((l: any) => l.code === 'BH')?.value ?? 0;
       const dettes = sumC('40');
       const achats = balance.filter((r: any) => /^(60|61|62|63)/.test(r.account) && !r.account?.startsWith('603')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
-      const dso = ca > 0 ? Math.round((creances / (ca * 1.18)) * periodDays) : 0;
+      const dso = ca > 0 ? Math.round((creances / (ca * (1 + vatRate))) * periodDays) : 0;
       const dio = ca > 0 ? Math.round((stocks / ca) * periodDays) : 0;
-      const dpo = achats > 0 ? Math.round((dettes / (achats * 1.18)) * periodDays) : 0;
+      const dpo = achats > 0 ? Math.round((dettes / (achats * (1 + vatRate))) * periodDays) : 0;
       return [
         { label: 'DSO', value: `${dso} j`, subValue: 'Délai clients' },
         { label: 'DIO', value: `${dio} j`, subValue: 'Délai stocks' },
@@ -4424,7 +4431,7 @@ function SendModal({ open, onClose, config, setConfig, onValidate }: any) {
     <Modal open={open} onClose={onClose} title="Envoyer le rapport" subtitle="Validation interne ou diffusion finale"
       footer={<>
         <button className="btn-outline" onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={sendAll}>
+        <button className="btn-clay" onClick={sendAll}>
           <Send className="w-4 h-4" /> Envoyer ({config.recipients.length})
         </button>
       </>}>
