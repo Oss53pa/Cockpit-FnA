@@ -119,20 +119,19 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    // Twisty layout : fond gris-bleu de la page (bg-bgpage défini par le thème),
-    // sidebar à gauche, et le bloc droit est le grand "shell" crème arrondi qui
-    // contient header + main. Le padding extérieur (p-3) crée la marge bleue.
-    <div className="flex min-h-screen p-2 sm:p-3 lg:p-4 gap-3">
+    // Layout Cockpit CR : fond crème uniforme, sidebar flush avec un border
+    // droit subtil, main area sans rounded shell — fluidité totale.
+    <div className="flex min-h-screen bg-bgpage">
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         collapsed={collapsed}
         onToggleCollapse={toggleCollapse}
       />
-      <div className="flex-1 flex flex-col min-w-0 app-shell">
+      <div className="flex-1 flex flex-col min-w-0 border-l border-primary-200/60 dark:border-primary-800/60">
         <DemoBanner />
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main key={`${amountMode}-${remountKey}`} className="flex-1 p-3 sm:p-4 lg:p-6">
+        <main key={`${amountMode}-${remountKey}`} className="flex-1 p-4 sm:p-6 lg:p-8">
           <Suspense fallback={<PageFallback />}>
             <PageTransition>{children}</PageTransition>
           </Suspense>

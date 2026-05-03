@@ -4,30 +4,31 @@
 
 @layer base {
   :root {
-    /* === ANTI-FOUC : valeurs par defaut palette Twisty ===
-       Ces variables sont surchargées au runtime par theme.ts/applyPalette()
-       quand l'utilisateur active une autre palette, mais elles permettent
-       au CSS d'afficher TOUT DE SUITE les bonnes couleurs avant meme que
-       le JS ne s'execute (evite le flash noir/blanc au cold load). */
-    --p-50:  248 249 251;   /* #F8F9FB */
-    --p-100: 231 235 238;   /* #E7EBEE — shell Twisty */
-    --p-200: 209 214 221;   /* #D1D6DD */
-    --p-300: 181 183 192;   /* #B5B7C0 — gris Twisty */
-    --p-400: 147 155 170;   /* #939BAA */
-    --p-500: 110 120 136;   /* #6E7888 */
-    --p-600: 82 92 110;     /* #525C6E */
-    --p-700: 63 72 88;      /* #3F4858 */
-    --p-800: 45 51 64;      /* #2D3340 */
-    --p-900: 34 40 52;      /* #222834 — bleu nuit Twisty */
-    --p-950: 22 25 31;      /* #16191F */
-    --bg-page:    130 176 217;  /* #82B0D9 — bleu page Twisty */
-    --bg-shell:   231 235 238;  /* #E7EBEE — shell */
-    --bg-surface: 255 255 255;  /* #FFFFFF — cards */
-    --accent:     218 77 40;    /* #DA4D28 — orange-rouge Twisty */
-    --accent-soft:130 176 217;  /* #82B0D9 — bleu clair */
-    --th-bg: #222834;
-    --th-text: #E7EBEE;
-    --grid-color: #D1D6DD;
+    /* === ANTI-FOUC : valeurs par defaut palette Twisty (Premium Graphite) ===
+       Palette graphite + ivoire + terracotta — niveau Linear/Vercel/Stripe Dashboard.
+       Ces variables sont surchargées au runtime par theme.ts/applyPalette() */
+    /* Palette inspirée de Cockpit CR — ivoire chaud + graphite + terracotta.
+       L'app entière baigne dans un crème apaisant (pas de fond bleu, pas de
+       shell séparé). Les cards blanches pures se détachent par contraste subtil. */
+    --p-50:  252 251 249;   /* #FCFBF9 — blanc cassé chaud */
+    --p-100: 247 245 240;   /* #F7F5F0 — crème principal */
+    --p-200: 233 230 222;   /* #E9E6DE — séparateurs subtils */
+    --p-300: 207 203 192;   /* #CFCBC0 — décoratif */
+    --p-400: 165 162 152;   /* #A5A298 — secondaire */
+    --p-500: 122 119 110;   /* #7A776E — support */
+    --p-600: 86 84 77;      /* #56544D — body */
+    --p-700: 64 62 57;      /* #403E39 — fort */
+    --p-800: 44 43 38;      /* #2C2B26 — surface sombre */
+    --p-900: 26 25 22;      /* #1A1916 — graphite signature */
+    --p-950: 15 14 11;      /* #0F0E0B — quasi-noir */
+    --bg-page:    247 245 240;  /* #F7F5F0 — crème (page entière baigne dedans) */
+    --bg-shell:   247 245 240;  /* identique : pas de shell séparé, fluidité totale */
+    --bg-surface: 255 255 255;  /* blanc pur — cards se détachent par contraste */
+    --accent:     218 77 40;    /* #DA4D28 — terracotta signature Cockpit FnA */
+    --accent-soft:251 234 226;  /* #FBEAE2 — terracotta très pâle (badges) */
+    --th-bg: #1A1916;
+    --th-text: #F7F5F0;
+    --grid-color: #E9E6DE;
 
     /* Couleurs de statut */
     --color-status-success: #22c55e;
@@ -100,55 +101,87 @@
 }
 
 @layer components {
-  /* ── Cards (3 niveaux de hierarchie) ──────────────────────────── */
+  /* ── Cards (4 niveaux + glassmorphism) — niveau premium Linear/Vercel ─ */
   .card {
-    @apply bg-surface dark:bg-primary-900 rounded-2xl transition-shadow duration-200;
+    @apply bg-surface dark:bg-primary-900 rounded-2xl transition-all duration-200 ease-spring;
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03), 0 0 0 1px rgb(0 0 0 / 0.04);
-  }
-  .card:hover {
-    /* Pas d'effet hover par defaut — utiliser .card-hover pour activer */
   }
   .card-hover {
     @apply card;
   }
   .card-hover:hover {
-    box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.06);
+    box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.07), 0 0 0 1px rgb(0 0 0 / 0.06);
+    transform: translateY(-1px);
   }
-  /* Hero card : background teinte accent + plus de presence */
+  /* Card élevée — pour les blocs importants (KPI, dashboards prioritaires) */
+  .card-elevated {
+    @apply bg-surface dark:bg-primary-900 rounded-2xl transition-all duration-200;
+    box-shadow: 0 8px 28px -6px rgb(0 0 0 / 0.10), 0 0 0 1px rgb(0 0 0 / 0.05);
+  }
+  /* Hero card : gradient sombre premium */
   .card-hero {
-    @apply rounded-2xl transition-all duration-300;
-    background: linear-gradient(135deg, rgb(var(--p-900)) 0%, rgb(var(--p-800)) 100%);
+    @apply rounded-2xl transition-all duration-300 relative overflow-hidden;
+    background: linear-gradient(135deg, rgb(var(--p-900)) 0%, rgb(var(--p-800)) 50%, rgb(var(--p-900)) 100%);
     color: rgb(var(--p-50));
-    box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.06);
+    box-shadow: 0 8px 28px -6px rgb(0 0 0 / 0.15), 0 0 0 1px rgb(0 0 0 / 0.08);
   }
-  /* Surface secondaire : ghost, juste un border */
+  /* Lueur accent subtile en haut-droite des hero cards */
+  .card-hero::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -10%;
+    width: 60%;
+    height: 100%;
+    background: radial-gradient(circle, rgb(var(--accent) / 0.18) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .card-hero > * { position: relative; z-index: 1; }
+  /* Surface secondaire : ghost (juste un border, fond transparent) */
   .card-ghost {
-    @apply rounded-2xl border border-primary-200/60 dark:border-primary-800 bg-transparent;
+    @apply rounded-2xl border border-primary-200/60 dark:border-primary-800/60 bg-transparent transition-colors duration-200;
   }
-  /* Glassmorphism — overlays/popovers */
+  .card-ghost:hover {
+    @apply border-primary-300 dark:border-primary-700;
+  }
+  /* Glassmorphism — overlays/popovers (Apple-grade) */
   .card-glass {
-    @apply bg-surface/85 dark:bg-primary-900/85 backdrop-blur-xl
-           border border-primary-200/40 dark:border-primary-700/40 rounded-2xl shadow-lg;
+    @apply bg-surface/80 dark:bg-primary-900/80 backdrop-blur-xl
+           border border-primary-200/40 dark:border-primary-700/40 rounded-2xl;
+    box-shadow: 0 16px 40px -8px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.05);
   }
-  /* Container shell principal (sidebar + main) */
+  /* Container shell principal (sidebar + main) — bord premium */
   .app-shell {
-    @apply bg-shell dark:bg-primary-900 rounded-shell shadow-sm;
+    @apply bg-shell dark:bg-primary-900 rounded-shell;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03), 0 0 0 1px rgb(0 0 0 / 0.04);
   }
 
-  /* ── Buttons (5 variantes) ────────────────────────────────────── */
+  /* ── Buttons (5 variantes) — premium tactile feedback ──────────── */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-medium
            transition-all duration-150 ease-spring
-           disabled:opacity-40 disabled:pointer-events-none
-           active:scale-[0.97];
+           disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed
+           active:scale-[0.97]
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-shell;
   }
   .btn-primary {
     @apply btn bg-primary-900 text-primary-50 hover:bg-primary-800
-           dark:bg-primary-100 dark:text-primary-900 dark:hover:bg-primary-200
-           shadow-sm hover:shadow;
+           dark:bg-primary-100 dark:text-primary-900 dark:hover:bg-primary-200;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.10), inset 0 1px 0 0 rgb(255 255 255 / 0.08);
   }
   .btn-accent {
-    @apply btn bg-accent text-white hover:opacity-90 shadow-sm hover:shadow;
+    @apply btn bg-accent text-white;
+    box-shadow: 0 1px 2px 0 rgb(218 77 40 / 0.15), 0 0 0 1px rgb(218 77 40 / 0.20),
+                inset 0 1px 0 0 rgb(255 255 255 / 0.10);
+  }
+  .btn-accent:hover {
+    background: rgb(var(--accent) / 0.92);
+    box-shadow: 0 4px 12px -2px rgb(218 77 40 / 0.30), 0 0 0 1px rgb(218 77 40 / 0.30),
+                inset 0 1px 0 0 rgb(255 255 255 / 0.12);
   }
   .btn-ghost {
     @apply btn text-primary-700 dark:text-primary-300
@@ -157,27 +190,69 @@
   .btn-outline {
     @apply btn border border-primary-200 dark:border-primary-700
            text-primary-900 dark:text-primary-100
-           hover:bg-primary-100 dark:hover:bg-primary-900 bg-surface dark:bg-primary-950;
+           bg-surface dark:bg-primary-900;
+  }
+  .btn-outline:hover {
+    @apply bg-primary-100 dark:bg-primary-800 border-primary-300 dark:border-primary-600;
   }
   .btn-icon {
     @apply inline-flex items-center justify-center w-9 h-9 rounded-full
            text-primary-700 dark:text-primary-300
            hover:bg-primary-100 dark:hover:bg-primary-800
-           transition-colors duration-150;
+           transition-colors duration-150
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-shell
+           active:scale-90;
   }
 
-  /* ── Form inputs ───────────────────────────────────────────────── */
+  /* ── Form inputs — premium tactile (Linear/Stripe) ─────────────── */
   .input {
     @apply w-full px-3.5 py-2 rounded-lg bg-surface dark:bg-primary-900
            border border-primary-200 dark:border-primary-700
            text-sm text-primary-900 dark:text-primary-50
-           transition-colors duration-150
-           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20
-           placeholder:text-primary-400;
+           transition-all duration-150
+           focus:outline-none focus:border-accent
+           placeholder:text-primary-400 dark:placeholder:text-primary-500;
+  }
+  .input:hover:not(:focus):not(:disabled) {
+    @apply border-primary-300 dark:border-primary-600;
+  }
+  .input:focus {
+    box-shadow: 0 0 0 3px rgb(var(--accent) / 0.10),
+                inset 0 1px 0 0 rgb(0 0 0 / 0.02);
+  }
+  .input:disabled {
+    @apply opacity-50 cursor-not-allowed bg-primary-50 dark:bg-primary-900/50;
   }
   select.input,
   select.input option {
     @apply text-primary-900 dark:text-primary-50 bg-surface dark:bg-primary-900;
+  }
+  /* Inputs avec icône leading — utilitaire pour wrapper */
+  .input-with-icon {
+    @apply relative;
+  }
+  .input-with-icon .input {
+    @apply pl-9;
+  }
+  .input-with-icon > .icon-leading {
+    @apply absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none;
+  }
+
+  /* Textarea premium */
+  textarea.input {
+    @apply py-2.5 leading-relaxed resize-y min-h-[80px];
+  }
+
+  /* Checkbox & radio refonte minimaliste */
+  input[type="checkbox"], input[type="radio"] {
+    @apply w-4 h-4 rounded border-primary-300 dark:border-primary-600
+           text-accent
+           focus:ring-2 focus:ring-accent/30 focus:ring-offset-0
+           transition-colors duration-150
+           cursor-pointer;
+  }
+  input[type="radio"] {
+    @apply rounded-full;
   }
 
   /* ── Badges (semantiques) ──────────────────────────────────────── */
@@ -203,7 +278,89 @@
     animation: shimmer 1.4s ease-in-out infinite;
   }
 
-  /* ── Surfaces densifiees pour tableaux comptables ──────────────── */
+  /* ── Tables premium (Linear/Stripe Dashboard style) ───────────── */
+  .table-premium {
+    @apply w-full text-sm;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .table-premium thead tr {
+    @apply bg-primary-100/60 dark:bg-primary-900/60 backdrop-blur-sm sticky top-0 z-10;
+  }
+  .table-premium thead th {
+    @apply text-left text-[10px] uppercase tracking-[0.10em] font-semibold
+           text-primary-500 dark:text-primary-400
+           px-4 py-2.5 first:pl-5 last:pr-5;
+    border-bottom: 1px solid rgb(var(--p-200));
+  }
+  .dark .table-premium thead th {
+    border-bottom-color: rgb(var(--p-800));
+  }
+  .table-premium tbody tr {
+    @apply transition-colors duration-100;
+  }
+  .table-premium tbody tr:hover {
+    @apply bg-primary-100/40 dark:bg-primary-800/40;
+  }
+  .table-premium tbody td {
+    @apply px-4 py-2.5 first:pl-5 last:pr-5
+           text-primary-800 dark:text-primary-200;
+    border-bottom: 1px solid rgb(var(--p-100));
+  }
+  .dark .table-premium tbody td {
+    border-bottom-color: rgb(var(--p-800) / 0.6);
+  }
+  .table-premium tbody tr:last-child td {
+    border-bottom: none;
+  }
+  /* Footer (totaux) avec emphasis subtile */
+  .table-premium tfoot tr {
+    @apply bg-primary-50 dark:bg-primary-900/80 font-semibold;
+  }
+  .table-premium tfoot td {
+    @apply px-4 py-3 first:pl-5 last:pr-5 text-primary-900 dark:text-primary-100;
+    border-top: 2px solid rgb(var(--p-300));
+  }
+  .dark .table-premium tfoot td {
+    border-top-color: rgb(var(--p-700));
+  }
+  /* Density compact (pour grandes balances comptables) */
+  .table-premium-compact thead th { @apply px-3 py-2; }
+  .table-premium-compact tbody td { @apply px-3 py-1.5; }
+
+  /* Cellule numérique alignée droite avec tabular-nums */
+  .td-num {
+    @apply num text-right;
+  }
+
+  /* Row de groupement (lignes parents dans une hiérarchie de comptes) */
+  .table-row-group {
+    @apply bg-primary-100/40 dark:bg-primary-900/50 font-semibold;
+  }
+
+  /* Hover subtle pour les rows cliquables (drilldown) */
+  .table-row-clickable {
+    @apply cursor-pointer transition-colors duration-100;
+  }
+  .table-row-clickable:hover {
+    @apply bg-accent/5;
+  }
+  .table-row-clickable:hover td:first-child {
+    @apply text-accent;
+  }
+
+  /* Badge variation (en hausse / baisse) — utilise dans le reporting */
+  .delta-up {
+    @apply inline-flex items-center gap-0.5 text-success font-medium tabular-nums;
+  }
+  .delta-down {
+    @apply inline-flex items-center gap-0.5 text-error font-medium tabular-nums;
+  }
+  .delta-flat {
+    @apply inline-flex items-center gap-0.5 text-primary-400 font-medium tabular-nums;
+  }
+
+  /* ── Surfaces densifiees pour tableaux comptables (legacy) ─────── */
   .table-row-hover {
     @apply transition-colors duration-100 hover:bg-primary-100/50 dark:hover:bg-primary-800/40;
   }
@@ -211,6 +368,109 @@
   .num {
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Keyboard shortcut display (Mac/Linear style) ──────────────── */
+  .kbd {
+    @apply inline-flex items-center justify-center px-1.5 py-0.5 rounded-md
+           text-[10px] font-medium font-mono
+           bg-primary-100 dark:bg-primary-800
+           text-primary-700 dark:text-primary-200
+           border border-primary-200 dark:border-primary-700;
+    box-shadow: 0 1px 0 0 rgb(0 0 0 / 0.05), inset 0 -1px 0 0 rgb(0 0 0 / 0.04);
+    min-width: 18px;
+    height: 18px;
+  }
+
+  /* ── Section divider (gradient subtil) ──────────────────────────── */
+  .divider-soft {
+    @apply h-px w-full;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgb(var(--p-300) / 0.5) 20%,
+      rgb(var(--p-300) / 0.5) 80%,
+      transparent 100%);
+  }
+  .divider-vertical {
+    @apply w-px h-full;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgb(var(--p-300) / 0.4) 50%,
+      transparent 100%);
+  }
+
+  /* ── KPI value style (numéraire imposant) ──────────────────────── */
+  .kpi-value {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+  }
+  .kpi-label {
+    @apply text-[10px] uppercase tracking-[0.10em] text-primary-500 font-semibold;
+  }
+  .kpi-trend-up   { @apply text-success font-semibold; }
+  .kpi-trend-down { @apply text-error font-semibold; }
+  .kpi-trend-flat { @apply text-primary-400 font-medium; }
+
+  /* ── Section heading (entête de groupe — "PILOTAGE", "DONNÉES") ── */
+  .section-eyebrow {
+    @apply text-[10px] uppercase tracking-[0.12em] text-primary-500 font-semibold;
+  }
+
+  /* ── Tag pills (alternative aux badges, plus discrets) ─────────── */
+  .tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium
+           bg-primary-100 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300
+           border border-primary-200/40 dark:border-primary-700/40;
+  }
+  .tag-accent {
+    @apply tag !bg-accent/10 !text-accent !border-accent/20;
+  }
+
+  /* ── Toolbar / pill (groupes de boutons sticky) ───────────────── */
+  .toolbar-pill {
+    @apply inline-flex items-center gap-1 p-1 rounded-full
+           bg-primary-100/60 dark:bg-primary-900/60
+           border border-primary-200/50 dark:border-primary-700/50
+           backdrop-blur-sm;
+  }
+
+  /* ── Surface scroll-shadow (indicateur subtil de scroll vertical) ─ */
+  .scroll-shadow {
+    background:
+      linear-gradient(rgb(var(--bg-surface)) 30%, rgb(var(--bg-surface) / 0)) center top,
+      linear-gradient(rgb(var(--bg-surface) / 0), rgb(var(--bg-surface)) 70%) center bottom,
+      radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.10), transparent) center top,
+      radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.10), transparent) center bottom;
+    background-repeat: no-repeat;
+    background-size: 100% 12px, 100% 12px, 100% 6px, 100% 6px;
+    background-attachment: local, local, scroll, scroll;
+  }
+
+  /* ── Hover lift (utility pour cartes cliquables — Linear) ──────── */
+  .lift-hover {
+    @apply transition-all duration-200 ease-spring;
+  }
+  .lift-hover:hover {
+    transform: translateY(-2px);
+  }
+
+  /* ── Dot indicator (status — pulse subtil) ─────────────────────── */
+  .dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full;
+  }
+  .dot-success { @apply dot bg-success; box-shadow: 0 0 0 3px rgb(34 197 94 / 0.15); }
+  .dot-warning { @apply dot bg-warning; box-shadow: 0 0 0 3px rgb(245 158 11 / 0.15); }
+  .dot-error   { @apply dot bg-error;   box-shadow: 0 0 0 3px rgb(239 68 68 / 0.15); }
+  .dot-info    { @apply dot bg-info;    box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15); }
+  .dot-pulse {
+    animation: dotPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50%      { box-shadow: 0 0 0 6px transparent; }
   }
 }
 

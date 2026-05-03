@@ -152,9 +152,9 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
   const tauxEbe = ca ? (ebe / ca) * 100 : 0;
   const tn = bilan ? get(bilan.actif, '_BT') - get(bilan.passif, 'DV') : 0;
   const bfr = bilan ? get(bilan.actif, '_BK') - get(bilan.passif, '_DP') : 0;
-  const fr = bilan ? get(bilan.passif, 'CP') - get(bilan.actif, '_AZ') : 0;
+  const fr = bilan ? get(bilan.passif, '_CP') - get(bilan.actif, '_AZ') : 0;
   const totActif = bilan ? get(bilan.actif, '_BZ') : 0;
-  const cp = bilan ? get(bilan.passif, '_CP') || get(bilan.passif, 'CP') : 0;
+  const cp = bilan ? get(bilan.passif, '_CP') : 0;
   const autonomie = totActif > 0 ? (cp / totActif) * 100 : 0;
 
   // Calculs cycle d'exploitation

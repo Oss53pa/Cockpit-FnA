@@ -75,29 +75,30 @@ export const BUILTIN_PALETTES: Record<string, Palette> = {
   // luminosite decroissante 97% -> 6%. Resultat : nuances cool-blue cohérentes
   // entre elles (pas de zinc neutre, pas de creme chaud).
   twisty: {
-    name: 'Twisty',
+    name: 'Cockpit',
+    // Palette signature Cockpit FnA — niveau Cockpit CR (ivoire chaud + graphite + terracotta)
     scale: [
-      '#F8F9FB', // 50  — quasi blanc bleuté
-      '#E7EBEE', // 100 — shell Twisty source
-      '#D1D6DD', // 200
-      '#B5B7C0', // 300 — gris bleuté source
-      '#939BAA', // 400
-      '#6E7888', // 500
-      '#525C6E', // 600
-      '#3F4858', // 700
-      '#2D3340', // 800
-      '#222834', // 900 — bleu nuit Twisty source ("noir")
-      '#16191F', // 950
+      '#FCFBF9', // 50  — blanc cassé chaud
+      '#F7F5F0', // 100 — crème principal (fond app)
+      '#E9E6DE', // 200 — séparateurs subtils
+      '#CFCBC0', // 300 — décoratif
+      '#A5A298', // 400 — secondaire
+      '#7A776E', // 500 — support
+      '#56544D', // 600 — body
+      '#403E39', // 700 — fort
+      '#2C2B26', // 800 — surface sombre
+      '#1A1916', // 900 — graphite signature
+      '#0F0E0B', // 950 — quasi-noir
     ],
-    tableHeader: '#222834', tableHeaderText: '#E7EBEE',
-    // Sequence charts : noir Twisty -> orange accent -> bleu page -> gris -> gris moyen -> clair -> gris fonce
-    chartColors: ['#222834','#DA4D28','#82B0D9','#B5B7C0','#6E7888','#E7EBEE','#3F4858'],
+    tableHeader: '#1A1916', tableHeaderText: '#F7F5F0',
+    // Charts multi-couleurs harmonieux — KPI sémantiques distincts (orange / rouge / ambre / vert / bleu / violet / gris)
+    chartColors: ['#DA4D28','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#7A776E'],
     layout: {
-      bgPage:     '#82B0D9',  // bleu clair Twisty (fond exterieur)
-      bgShell:    '#E7EBEE',  // tres clair bleuté (sidebar + container)
-      bgSurface:  '#FFFFFF',  // blanc pur (cards intérieures)
-      accent:     '#DA4D28',  // orange-rouge Twisty (CTA, indicators)
-      accentSoft: '#82B0D9',  // bleu clair (badges secondaires)
+      bgPage:     '#F7F5F0',  // crème (l'app entière y baigne — pas de fond contrasté)
+      bgShell:    '#F7F5F0',  // identique : fluidité totale, pas de shell séparé
+      bgSurface:  '#FFFFFF',  // blanc pur (cards se détachent par contraste subtle)
+      accent:     '#DA4D28',  // terracotta signature
+      accentSoft: '#FBEAE2',  // terracotta pâle (badges, hover)
     },
   },
   // Graphite — neutre pur (style Linear / Vercel)

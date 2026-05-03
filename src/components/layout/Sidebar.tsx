@@ -107,10 +107,10 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-6">
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
         {sections.map((sec) => (
           <div key={sec.label}>
-            <p className="px-3 mb-1.5 text-[10px] uppercase tracking-[0.14em] text-primary-400 font-semibold">
+            <p className="px-3 mb-2 text-[10px] uppercase tracking-[0.14em] text-primary-400 dark:text-primary-500 font-semibold">
               {sec.label}
             </p>
             <div className="space-y-0.5">
@@ -122,27 +122,33 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
                   onClick={onClose}
                   className={({ isActive }) =>
                     clsx(
-                      'group relative flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] transition-all duration-150',
+                      'group relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px]',
+                      'transition-all duration-200 ease-spring',
                       isActive
-                        ? 'bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 font-semibold shadow-sm'
-                        : 'text-primary-700 dark:text-primary-400 hover:bg-primary-200/60 dark:hover:bg-primary-800 hover:text-primary-900 dark:hover:text-primary-100',
+                        ? 'bg-primary-900 dark:bg-primary-100 text-primary-50 dark:text-primary-900 font-semibold'
+                        : 'text-primary-700 dark:text-primary-400 hover:bg-primary-200/40 dark:hover:bg-primary-800/60 hover:text-primary-900 dark:hover:text-primary-100',
                     )
                   }
+                  style={({ isActive }) => isActive ? { boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.10), inset 0 1px 0 0 rgb(255 255 255 / 0.06)' } : undefined}
                 >
                   {({ isActive }) => (
                     <>
-                      {/* Indicator accent vertical pour l'item actif */}
+                      {/* Indicator accent vertical pour l'item actif — barre prononcée */}
                       {isActive && (
                         <span
                           aria-hidden
-                          className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent"
+                          className="absolute -left-3 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-accent"
+                          style={{ boxShadow: '0 0 8px 0 rgb(218 77 40 / 0.4)' }}
                         />
                       )}
                       <it.icon
-                        className={clsx('w-4 h-4 shrink-0', isActive ? 'text-primary-50 dark:text-primary-900' : 'text-primary-500 group-hover:text-primary-900 dark:group-hover:text-primary-100')}
-                        strokeWidth={isActive ? 2.4 : 2}
+                        className={clsx('w-4 h-4 shrink-0 transition-colors',
+                          isActive
+                            ? 'text-primary-50 dark:text-primary-900'
+                            : 'text-primary-500 dark:text-primary-500 group-hover:text-primary-900 dark:group-hover:text-primary-100')}
+                        strokeWidth={isActive ? 2.2 : 1.8}
                       />
-                      <span className="truncate">{it.label}</span>
+                      <span className="truncate flex-1">{it.label}</span>
                     </>
                   )}
                 </NavLink>
@@ -224,13 +230,13 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — flush avec le main area, séparée par 1px subtle (Cockpit CR style) */}
       {collapsed ? (
-        <aside className="hidden lg:flex w-14 shrink-0 h-[calc(100vh-2rem)] sticky top-4 bg-shell dark:bg-primary-900 rounded-shell flex-col transition-all duration-200 shadow-sm">
+        <aside className="hidden lg:flex w-14 shrink-0 h-screen sticky top-0 bg-shell dark:bg-primary-900 flex-col transition-all duration-200">
           {collapsedNav}
         </aside>
       ) : (
-        <aside className="hidden lg:flex w-60 shrink-0 h-[calc(100vh-2rem)] sticky top-4 bg-shell dark:bg-primary-900 rounded-shell flex-col transition-all duration-200 shadow-sm">
+        <aside className="hidden lg:flex w-60 shrink-0 h-screen sticky top-0 bg-shell dark:bg-primary-900 flex-col transition-all duration-200">
           {fullNav(false)}
         </aside>
       )}

@@ -50,7 +50,7 @@ export default function MultiYearPage() {
         ebe: sig.ebe,
         margeBrute: sig.margeBrute,
         totalActif: get(bilan.actif, '_BZ'),
-        capPropres: get(bilan.passif, 'CP'),
+        capPropres: get(bilan.passif, '_CP'),
         treso: get(bilan.actif, '_BT') - get(bilan.passif, 'DV'),
       };
     })).then(setSnaps).finally(() => setLoading(false));
