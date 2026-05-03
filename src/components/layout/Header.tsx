@@ -155,16 +155,22 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* DROITE : actions */}
         <div className="flex items-center gap-1.5">
-          {/* Bouton recherche / Command palette (Cmd+K) */}
+          {/* Recherche élargie premium — niveau Cockpit CR (large, centrée) */}
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
-            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-200/60 dark:border-primary-700 bg-surface/60 hover:bg-surface text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 text-xs transition-colors duration-150"
+            className="hidden md:flex items-center gap-2.5 px-3.5 py-2 rounded-xl
+                       border border-primary-200/70 dark:border-primary-700/60
+                       bg-surface/60 hover:bg-surface dark:bg-primary-900/60 dark:hover:bg-primary-900
+                       text-primary-500 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-200
+                       text-xs transition-all duration-150
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-shell
+                       min-w-[280px] xl:min-w-[360px]"
             title="Recherche rapide"
             aria-label="Ouvrir la recherche"
           >
-            <Search className="w-3.5 h-3.5" />
-            <span>Rechercher…</span>
-            <kbd className="ml-2 font-mono text-[10px] px-1 py-0.5 rounded bg-primary-200/60 dark:bg-primary-800 text-primary-600">⌘K</kbd>
+            <Search className="w-3.5 h-3.5 shrink-0" />
+            <span className="flex-1 text-left">Rechercher comptes, rapports, dashboards…</span>
+            <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded-md bg-primary-200/60 dark:bg-primary-800 text-primary-600 dark:text-primary-300 border border-primary-300/40 dark:border-primary-700/50">⌘K</kbd>
           </button>
 
           {/* Toggle montants — segmented control discret */}
