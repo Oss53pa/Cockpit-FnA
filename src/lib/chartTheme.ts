@@ -1,5 +1,5 @@
-// Theme charts premium — niveau international (Stripe / Linear / Vercel)
-// Barres tres fines, axes minimaux, tooltip dark, accent sur la donnee active.
+// Theme charts premium — niveau Cockpit CR / Linear / Stripe Dashboard
+// Barres fines avec radius prononcé, smooth curves, tooltips premium glassmorphic.
 import { useTheme } from '../store/theme';
 
 export function useChartTheme() {
@@ -14,41 +14,55 @@ export function useChartTheme() {
     line: palette.chartColors[0],
     area: palette.chartColors[2],
     accent: layout?.accent ?? palette.chartColors[1],
-    // Grille & axes (minimalistes)
+    // Grille & axes (ultra-minimalistes)
     grid: palette.scale[2],
     gridDark: palette.scale[8],
     axisColor: palette.scale[4],
-    // Style Twisty : barres fines, espacement large
-    barCategoryGap: '40%',
-    barSize: 8,
-    barRadius: 4 as number,
-    // Tooltip dark style premium
+    // Bars : fines + radius prononcé (signature premium)
+    barCategoryGap: '35%',
+    barSize: 12,
+    barRadius: 6 as number,
+    // Smooth curve type pour line charts (Catmull-Rom natural)
+    curveType: 'natural' as const,
+    // Tooltip — backdrop blur + border refine + shadow premium (style Linear)
     tooltipStyle: {
-      backgroundColor: palette.scale[10],
-      border: 'none',
-      borderRadius: 10,
-      padding: '8px 12px',
+      backgroundColor: 'rgba(31, 30, 27, 0.96)',
+      backdropFilter: 'blur(8px)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      borderRadius: 12,
+      padding: '10px 14px',
       color: palette.scale[0],
       fontSize: 12,
-      fontWeight: 600,
-      boxShadow: '0 8px 24px -6px rgb(0 0 0 / 0.25), 0 4px 8px -4px rgb(0 0 0 / 0.15)',
+      fontWeight: 500,
+      boxShadow: '0 16px 40px -8px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+      outline: 'none',
     } as React.CSSProperties,
-    tooltipItemStyle: { color: palette.scale[0] } as React.CSSProperties,
-    tooltipLabelStyle: { color: palette.scale[3], fontSize: 11, fontWeight: 400, marginBottom: 2 } as React.CSSProperties,
-    // Props axes minimalistes pour Recharts XAxis / YAxis
+    tooltipItemStyle: { color: palette.scale[0], fontWeight: 600 } as React.CSSProperties,
+    tooltipLabelStyle: {
+      color: palette.scale[3],
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: '0.06em',
+      textTransform: 'uppercase' as const,
+      marginBottom: 4,
+      opacity: 0.7,
+    } as React.CSSProperties,
+    tooltipCursor: { fill: 'rgba(0, 0, 0, 0.03)' },
+    // Axes ultra-minimalistes
     axisProps: {
-      stroke: palette.scale[3],
-      tick: { fill: palette.scale[5], fontSize: 11, fontFamily: 'Inter' },
+      stroke: 'transparent',
+      tick: { fill: palette.scale[4], fontSize: 11, fontFamily: 'Inter', fontWeight: 500 },
       tickLine: false,
-      axisLine: { stroke: palette.scale[2] },
+      axisLine: false,
+      tickMargin: 8,
     },
-    // Cartesian grid : juste horizontale, tres discrete
+    // Cartesian grid : juste horizontale, dotted, ultra-discrète
     gridProps: {
       stroke: palette.scale[2],
-      strokeDasharray: '3 3',
+      strokeDasharray: '2 4',
       vertical: false,
     },
-    // Gradients dynamiques pour les headers de dashboards
+    // Gradients pour areas / barres avec effet "glow"
     gradient: (variant: 'a' | 'b' | 'c') => {
       const s = palette.scale;
       if (variant === 'a') return `linear-gradient(135deg, ${s[10]} 0%, ${s[7]} 100%)`;

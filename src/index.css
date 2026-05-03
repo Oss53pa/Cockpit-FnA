@@ -7,28 +7,27 @@
     /* === ANTI-FOUC : valeurs par defaut palette Twisty (Premium Graphite) ===
        Palette graphite + ivoire + terracotta — niveau Linear/Vercel/Stripe Dashboard.
        Ces variables sont surchargées au runtime par theme.ts/applyPalette() */
-    /* Palette inspirée de Cockpit CR — ivoire chaud + graphite + terracotta.
-       L'app entière baigne dans un crème apaisant (pas de fond bleu, pas de
-       shell séparé). Les cards blanches pures se détachent par contraste subtil. */
-    --p-50:  252 251 249;   /* #FCFBF9 — blanc cassé chaud */
-    --p-100: 247 245 240;   /* #F7F5F0 — crème principal */
-    --p-200: 233 230 222;   /* #E9E6DE — séparateurs subtils */
-    --p-300: 207 203 192;   /* #CFCBC0 — décoratif */
-    --p-400: 165 162 152;   /* #A5A298 — secondaire */
-    --p-500: 122 119 110;   /* #7A776E — support */
-    --p-600: 86 84 77;      /* #56544D — body */
-    --p-700: 64 62 57;      /* #403E39 — fort */
-    --p-800: 44 43 38;      /* #2C2B26 — surface sombre */
-    --p-900: 26 25 22;      /* #1A1916 — graphite signature */
-    --p-950: 15 14 11;      /* #0F0E0B — quasi-noir */
-    --bg-page:    247 245 240;  /* #F7F5F0 — crème (page entière baigne dedans) */
-    --bg-shell:   247 245 240;  /* identique : pas de shell séparé, fluidité totale */
-    --bg-surface: 255 255 255;  /* blanc pur — cards se détachent par contraste */
-    --accent:     218 77 40;    /* #DA4D28 — terracotta signature Cockpit FnA */
-    --accent-soft:251 234 226;  /* #FBEAE2 — terracotta très pâle (badges) */
-    --th-bg: #1A1916;
-    --th-text: #F7F5F0;
-    --grid-color: #E9E6DE;
+    /* Palette MAXIMUM CLARTÉ — quasi blanc + gris très doux.
+       Linear/Stripe Dashboard pur — l'app respire au maximum. */
+    --p-50:  255 255 255;   /* #FFFFFF — blanc pur */
+    --p-100: 252 252 251;   /* #FCFCFB — fond app (quasi blanc, juste teinté chaud) */
+    --p-200: 244 243 241;   /* #F4F3F1 — borders/séparateurs soft */
+    --p-300: 226 224 220;   /* #E2E0DC — borders visibles */
+    --p-400: 180 178 172;   /* #B4B2AC — texte décoratif */
+    --p-500: 138 136 130;   /* #8A8882 — texte secondaire */
+    --p-600: 100 98 92;     /* #64625C — body */
+    --p-700: 75 73 68;      /* #4B4944 — texte fort */
+    --p-800: 51 49 45;      /* #33312D — heading */
+    --p-900: 33 32 29;      /* #21201D — graphite (titres uniquement) */
+    --p-950: 18 17 15;      /* #12110F — quasi-noir */
+    --bg-page:    252 252 251;  /* #FCFCFB — fond quasi blanc */
+    --bg-shell:   252 252 251;  /* identique */
+    --bg-surface: 255 255 255;  /* blanc pur — cards */
+    --accent:     218 77 40;    /* #DA4D28 — terracotta */
+    --accent-soft:253 240 233;  /* #FDF0E9 */
+    --th-bg: #21201D;
+    --th-text: #FCFCFB;
+    --grid-color: #F4F3F1;
 
     /* Couleurs de statut */
     --color-status-success: #22c55e;
@@ -62,7 +61,9 @@
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-bgpage text-primary-900 dark:bg-primary-950 dark:text-primary-100;
+    /* Texte body en p-700 — lisible mais doux (Linear/Stripe pattern).
+       Les titres explicites (h1-h4) gardent p-900 pour le contraste. */
+    @apply bg-bgpage text-primary-700 dark:bg-primary-950 dark:text-primary-200;
     font-weight: 400;
   }
   /* Hierarchie typographique stricte (international standard).
