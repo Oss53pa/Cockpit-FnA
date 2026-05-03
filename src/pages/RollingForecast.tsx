@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
 import { ResponsiveContainer, Area, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -41,6 +42,7 @@ export default function RollingForecastPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/forecast" />
       <PageHeader
         title="Rolling Forecast"
         subtitle={`${org?.name ?? '—'} · Projection trésorerie ${horizon} jours · Modèle Prophet-like`}

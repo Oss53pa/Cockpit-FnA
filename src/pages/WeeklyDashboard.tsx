@@ -4,6 +4,7 @@
 import { TrendingUp, Wallet, AlertTriangle, Target } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useStatements, useRatios, useMonthlyCA, useCurrentOrg } from '../hooks/useFinancials';
@@ -27,6 +28,7 @@ export default function WeeklyDashboardPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/weekly" />
       <PageHeader title="Flash hebdomadaire" subtitle={`${org?.name ?? '—'} · ${week}`} />
 
       {/* KPI flash 4 colonnes */}

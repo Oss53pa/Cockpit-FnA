@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { TrendingUp, Sliders, Target } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useStatements, useCurrentOrg } from '../hooks/useFinancials';
@@ -48,6 +49,7 @@ export default function WhatIfPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/whatif" />
       <PageHeader title="Sensibilité (What-if)" subtitle={`${org?.name ?? '—'} · Simulation impacts résultat`} />
 
       <ChartCard title="Paramètres de simulation" subtitle="Faites varier les hypothèses pour voir l'impact" accent={ct.accent}>

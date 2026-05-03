@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Shield, TrendingUp, TrendingDown } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -51,6 +52,7 @@ export default function ProvisionsTrackingPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/provisions" />
       <PageHeader title="Suivi des provisions" subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · Dotations / Reprises mensuelles`} />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

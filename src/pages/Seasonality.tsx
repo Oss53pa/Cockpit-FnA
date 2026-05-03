@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Calendar, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -55,6 +56,7 @@ export default function SeasonalityPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/seasonality" />
       <PageHeader title="Saisonnalité" subtitle={`${org?.name ?? '—'} · Détection des cycles d'activité`} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { Building2, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useRatios, useCurrentOrg } from '../hooks/useFinancials';
@@ -44,6 +45,7 @@ export default function SectorBenchmarkPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/sector-benchmark" />
       <PageHeader
         title="Comparatif sectoriel"
         subtitle={`${org?.name ?? '—'} · Secteur : ${sector} · Normes UEMOA OHADA`}

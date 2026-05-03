@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -69,6 +70,7 @@ export default function MultiYearPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/multi-year" />
       <PageHeader
         title="Comparatif multi-exercices"
         subtitle={`${org?.name ?? '—'} · ${years[0]} → ${years[years.length - 1]} · Tendances pluriannuelles`}
