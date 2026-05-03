@@ -72,10 +72,12 @@ export async function loadBudget(orgId: string, year: number, version: string): 
 }
 
 // Enregistre un budget (efface l'existant pour cette version avant insertion)
+// Push automatiquement vers Supabase pour multi-device.
 export async function saveBudget(
   orgId: string, year: number, version: string,
   items: Array<{ account: string; monthly: number[] }>,
 ) {
+  let inserted: Omit<BudgetLine, 'id'>[] = [];
   await db.transaction('rw', db.budgets, async () => {
     await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).delete();
     const toInsert: Omit<BudgetLine, 'id'>[] = [];
@@ -87,7 +89,30 @@ export async function saveBudget(
       }
     }
     if (toInsert.length) await db.budgets.bulkAdd(toInsert as BudgetLine[]);
+    inserted = toInsert;
   });
+
+  // Push vers Supabase (fire-and-forget) pour multi-device
+  if (inserted.length > 0) {
+    void (async () => {
+      try {
+        const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+        if (!isSupabaseConfigured) return;
+        await (supabase as any).from('fna_budgets')
+          .delete()
+          .eq('org_id', orgId).eq('year', year).eq('version', version);
+        const rows = inserted.map((r) => ({
+          org_id: r.orgId, year: r.year, version: r.version,
+          account: r.account, month: r.month, amount: r.amount,
+        }));
+        for (let i = 0; i < rows.length; i += 500) {
+          await (supabase as any).from('fna_budgets').insert(rows.slice(i, i + 500));
+        }
+      } catch (e) {
+        console.warn('[saveBudget] Push Supabase failed (non-bloquant):', e);
+      }
+    })();
+  }
 }
 
 // Duplique une version
@@ -124,6 +149,44 @@ export async function computeVariance(
     const v = c === '6' ? e.debit - e.credit : e.credit - e.debit;
     perAccount.set(e.account, (perAccount.get(e.account) ?? 0) + v);
   }
+
+  // Roll-up budget parent → enfants du réalisé
+  // Le budget peut être saisi sur des codes courts (60, 622) alors que le réalisé
+  // est détaillé (605118, 622100). On distribue proportionnellement au réalisé.
+  const budgetCodes = Array.from(budgetMap.keys());
+  const realiseCodes = Array.from(perAccount.keys());
+  const absorbedChildren = new Set<string>();
+  const sortedBudgetCodes = [...budgetCodes].sort((a, b) => a.length - b.length);
+  for (const budCode of sortedBudgetCodes) {
+    const exactRealise = perAccount.get(budCode) ?? 0;
+    const children = realiseCodes.filter(
+      (c) => c !== budCode && c.startsWith(budCode) && c.length > budCode.length && !absorbedChildren.has(c),
+    );
+    if (children.length === 0) continue;
+    let childRealise = 0;
+    for (const c of children) childRealise += perAccount.get(c) ?? 0;
+    if (childRealise !== 0 || exactRealise === 0) {
+      perAccount.set(budCode, exactRealise + childRealise);
+      for (const c of children) absorbedChildren.add(c);
+    }
+  }
+  // Sens inverse : réalisé orphelin → agrège budgets enfants
+  const realiseOrphans = realiseCodes.filter(
+    (c) => !budgetMap.has(c) && !absorbedChildren.has(c),
+  );
+  for (const realCode of realiseOrphans) {
+    const childBudgets = budgetCodes.filter(
+      (b) => b !== realCode && b.startsWith(realCode) && b.length > realCode.length,
+    );
+    if (childBudgets.length === 0) continue;
+    let agg = budgetMap.get(realCode) ?? 0;
+    for (const cb of childBudgets) agg += budgetMap.get(cb) ?? 0;
+    if (agg !== 0) {
+      budgetMap.set(realCode, agg);
+      for (const cb of childBudgets) budgetMap.delete(cb);
+    }
+  }
+  for (const c of absorbedChildren) perAccount.delete(c);
 
   // Agrégation tous comptes (budget + réalisé)
   const all = new Set<string>([...budgetMap.keys(), ...perAccount.keys()]);
