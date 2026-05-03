@@ -102,13 +102,23 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
     } catch { /* ignore */ }
     return 'self';
   })();
+  // DB readiness guard — évite que useLiveQuery crash pendant la migration Dexie v6→v7
+  const [chatReady, setChatReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    import('../../db/schema').then(({ db }) =>
+      db.open().then(() => { if (alive) setChatReady(true); }).catch(() => { /* DB pas prête */ }),
+    );
+    return () => { alive = false; };
+  }, []);
+
   const unreadChat = useLiveQuery(
     async () => {
-      if (!currentOrgId) return 0;
+      if (!currentOrgId || !chatReady) return 0;
       try { return await getTotalUnread(currentOrgId, currentUserId); }
       catch { return 0; }
     },
-    [currentOrgId, currentUserId],
+    [currentOrgId, currentUserId, chatReady],
     0,
   ) ?? 0;
 

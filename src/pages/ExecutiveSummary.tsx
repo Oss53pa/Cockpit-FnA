@@ -173,13 +173,19 @@ export default function ExecutiveSummary() {
 
       {/* KPIs Headline — 4 colonnes avec sparklines */}
       {(() => {
-        // Trends pour sparklines (12 mois si dispo)
-        const caTrend = monthly.map((m) => m.realise);
+        // Trends pour sparklines (12 mois si dispo) — sanitized
+        const safeNum = (v: number) => (Number.isFinite(v) ? v : 0);
+        const caTrend = monthly.map((m) => safeNum(m.realise));
         const totCa = caTrend.reduce((s, v) => s + v, 0) || 1;
-        const resTrend = caTrend.map((v) => (v / totCa) * resultat);
-        const tnTrend = caTrend.map((v, i) => tresoNet * (0.85 + (v / totCa) * (i / caTrend.length) * 0.5));
-        const ebeTrend = caTrend.map((v) => (v / totCa) * ebe);
-        const reTrend = caTrend.map((v) => (v / totCa) * re);
+        const len = caTrend.length || 1;
+        const safeResultat = safeNum(resultat);
+        const safeTreso = safeNum(tresoNet);
+        const safeEbe = safeNum(ebe);
+        const safeRe = safeNum(re);
+        const resTrend = caTrend.map((v) => safeNum((v / totCa) * safeResultat));
+        const tnTrend = caTrend.map((v, i) => safeNum(safeTreso * (0.85 + (v / totCa) * (i / len) * 0.5)));
+        const ebeTrend = caTrend.map((v) => safeNum((v / totCa) * safeEbe));
+        const reTrend = caTrend.map((v) => safeNum((v / totCa) * safeRe));
         return <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <KPICard

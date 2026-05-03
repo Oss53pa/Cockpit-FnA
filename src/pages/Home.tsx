@@ -56,7 +56,7 @@ export default function Home() {
       <div aria-hidden className="absolute -bottom-40 -right-40 w-[700px] h-[700px] rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgb(218 77 40 / 0.04) 0%, transparent 60%)' }} />
 
-      <div className="relative max-w-7xl mx-auto px-6 lg:px-10 py-6 lg:py-8 min-h-screen flex flex-col">
+      <div className="relative w-full px-6 lg:px-10 xl:px-14 py-6 lg:py-8 min-h-screen flex flex-col">
         {/* TOP BAR */}
         <div className="flex items-center justify-between gap-4 mb-12">
           <div className="flex items-center gap-3">
@@ -112,20 +112,20 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CENTRE — Hero éditorial */}
-        <div className="flex-1 flex flex-col justify-center max-w-6xl mx-auto w-full">
-          {/* Greeting éditorial */}
-          <div className="mb-12 lg:mb-16">
-            <div className="flex items-center gap-2 mb-4">
+        {/* CENTRE — Hero éditorial pleine largeur */}
+        <div className="flex-1 flex flex-col justify-center w-full">
+          {/* Greeting éditorial — centré */}
+          <div className="mb-12 lg:mb-16 text-center flex flex-col items-center">
+            <div className="flex items-center justify-center gap-2 mb-4">
               <span className="dot dot-success dot-pulse" />
               <span className="text-[10px] uppercase tracking-[0.18em] font-semibold text-primary-500">
                 Bienvenue · {moisActuel} {currentYear}
               </span>
             </div>
-            <h1 className="font-display text-6xl md:text-7xl lg:text-8xl leading-[0.95] text-primary-900 dark:text-primary-50 mb-3">
-              Cockpit<span className="text-accent">.</span>
+            <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-normal leading-[0.95] text-primary-900 dark:text-primary-50 mb-3">
+              Cockpit <span className="text-accent">FnA</span>
             </h1>
-            <p className="text-sm md:text-base text-primary-500 dark:text-primary-400 max-w-xl leading-relaxed">
+            <p className="text-sm md:text-base text-primary-500 dark:text-primary-400 max-w-xl leading-relaxed mx-auto">
               Pilotage financier <span className="font-semibold text-primary-800 dark:text-primary-200">SYSCOHADA révisé 2017</span>.
               Bilan, compte de résultat, ratios et trésorerie en temps réel.
             </p>
@@ -312,14 +312,16 @@ function HeroMetric({ label, value, hint, trend, tone, indicator, onClick }: {
 }
 
 function SparkPath({ data, color }: { data: number[]; color: string }) {
-  if (!data || data.length < 2) return null;
+  const cleanData = (data ?? []).map((v) => (Number.isFinite(v) ? v : 0));
+  if (cleanData.length < 2) return null;
+  data = cleanData;
   const w = 200;
   const h = 48;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
   const stepX = w / (data.length - 1);
-  const id = `home-spark-${color.replace('#', '')}`;
+  const id = `home-spark-${color.replace('#', '')}-${Math.random().toString(36).slice(2, 7)}`;
   const points = data.map((v, i) => ({ x: i * stepX, y: h - 4 - ((v - min) / range) * (h - 8) }));
   let path = `M ${points[0].x} ${points[0].y}`;
   for (let i = 1; i < points.length; i++) {
