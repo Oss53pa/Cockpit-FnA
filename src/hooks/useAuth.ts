@@ -6,6 +6,53 @@ import type { User, Session } from '@supabase/supabase-js';
 // Helper: les tables fna_* ne sont pas typees dans Database — bypass le typing
 const fromAny = (table: string) => (supabase as any).from(table);
 
+/**
+ * Synchronise l'utilisateur Supabase Auth vers sessionStorage.
+ * Cle 'cockpit-current-user' utilisee par Chat, Sidebar, auditLog,
+ * ActivitySidebar pour identifier l'auteur des messages/comments/audits.
+ *
+ * Bug en prod : sans ce helper, le user est connecte cote Supabase mais
+ * l'app affiche "Vous" / "system" partout car sessionStorage reste vide.
+ */
+function syncCurrentUserToStorage(user: User) {
+  // Recupere le nom depuis user_metadata (defini lors du signup ou par invitation)
+  // Fallback en cascade : full_name -> name -> first_name -> email avant @
+  const meta = (user.user_metadata ?? {}) as Record<string, any>;
+  const name = meta.full_name
+    ?? meta.name
+    ?? (meta.first_name && meta.last_name ? `${meta.first_name} ${meta.last_name}` : meta.first_name)
+    ?? user.email?.split('@')[0]
+    ?? 'Utilisateur';
+
+  // Tente aussi de retrouver le user dans la liste locale (Settings → Utilisateurs)
+  // pour récupérer le rôle et l'orgIds
+  let role = 'viewer';
+  let orgIds: string[] = [];
+  try {
+    const localUsers = JSON.parse(localStorage.getItem('cockpit-users') ?? '[]');
+    const localMatch = localUsers.find((u: any) => u.email?.toLowerCase() === user.email?.toLowerCase());
+    if (localMatch) {
+      role = localMatch.role ?? role;
+      orgIds = localMatch.orgIds ?? [];
+    }
+  } catch { /* ignore */ }
+
+  const payload = {
+    id: user.id,
+    name,
+    email: user.email ?? '',
+    role,
+    orgIds,
+    avatar: meta.avatar_url ?? meta.picture ?? null,
+  };
+  sessionStorage.setItem('cockpit-current-user', JSON.stringify(payload));
+  // Notifie les composants à l'écoute (Header, ActivitySidebar, Sidebar)
+  // pour qu'ils se rafraîchissent immédiatement
+  try {
+    window.dispatchEvent(new CustomEvent('cockpit-auth-changed', { detail: payload }));
+  } catch { /* ignore */ }
+}
+
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
 interface AuthState {
@@ -42,14 +89,26 @@ export function useAuth() {
     // Récupère la session active
     supabase.auth.getSession().then(({ data: { session } }) => {
       const user = session?.user ?? null;
-      if (user) loadUserOrgs(user.id);
+      if (user) {
+        loadUserOrgs(user.id);
+        syncCurrentUserToStorage(user);
+      }
       setState(s => ({ ...s, user, session, loading: false }));
     });
 
     // Écoute les changements d'auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null;
-      if (user) loadUserOrgs(user.id);
+      if (user) {
+        loadUserOrgs(user.id);
+        syncCurrentUserToStorage(user);
+      } else if (event === 'SIGNED_OUT') {
+        // Nettoie au logout pour eviter ghost user dans sidebar/chat
+        sessionStorage.removeItem('cockpit-current-user');
+        try {
+          window.dispatchEvent(new CustomEvent('cockpit-auth-changed', { detail: null }));
+        } catch { /* ignore */ }
+      }
       setState(s => ({ ...s, user, session, loading: false }));
     });
 
