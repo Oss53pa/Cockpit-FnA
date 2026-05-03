@@ -195,27 +195,54 @@ function ViewSwitcher({ view, onChange }: { view: ViewMode; onChange: (v: ViewMo
 // ─────────────────────────────────────────────────────────────────────
 // Vue 1 — CARTES
 // ─────────────────────────────────────────────────────────────────────
+// Couleur sémantique par catégorie (ton subtil pour l'icône) — niveau Cockpit CR
+const CAT_TONE: Record<string, { bg: string; icon: string }> = {
+  'Synthèse':       { bg: 'bg-orange-100/70',  icon: 'text-orange-600' },
+  'Performance':    { bg: 'bg-orange-100/70',  icon: 'text-orange-600' },
+  'Trésorerie':     { bg: 'bg-blue-100/70',    icon: 'text-blue-600' },
+  'Cycle':          { bg: 'bg-blue-100/70',    icon: 'text-blue-600' },
+  'Rentabilité':    { bg: 'bg-emerald-100/70', icon: 'text-emerald-600' },
+  'Marge':          { bg: 'bg-emerald-100/70', icon: 'text-emerald-600' },
+  'Charges':        { bg: 'bg-amber-100/70',   icon: 'text-amber-600' },
+  'Tiers':          { bg: 'bg-violet-100/70',  icon: 'text-violet-600' },
+  'Audit':          { bg: 'bg-violet-100/70',  icon: 'text-violet-600' },
+  'Alertes':        { bg: 'bg-red-100/70',     icon: 'text-red-600' },
+  'Risques':        { bg: 'bg-red-100/70',     icon: 'text-red-600' },
+  'Capital':        { bg: 'bg-violet-100/70',  icon: 'text-violet-600' },
+  'Reporting':      { bg: 'bg-blue-100/70',    icon: 'text-blue-600' },
+  'Closing':        { bg: 'bg-amber-100/70',   icon: 'text-amber-600' },
+  'Forecast':       { bg: 'bg-emerald-100/70', icon: 'text-emerald-600' },
+};
+
+function getCatTone(cat: string) {
+  return CAT_TONE[cat] || { bg: 'bg-primary-100', icon: 'text-primary-700' };
+}
+
 function CardsView({ list, navigate }: { list: typeof dashboards; navigate: (path: string) => void }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {list.map((d) => {
         const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
+        const tone = getCatTone(d.cat);
         return (
           <button
             key={d.id}
             onClick={() => navigate(d.route)}
-            className="group relative text-left card-premium p-5 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-primary-400 dark:hover:border-primary-600"
+            className="group relative text-left card-hover p-5 overflow-hidden lift-hover"
           >
-            <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-primary-900/40 dark:via-primary-100/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-200/70 to-primary-300/40 dark:from-primary-800/70 dark:to-primary-700/40 flex items-center justify-center ring-1 ring-inset ring-primary-300/30 dark:ring-primary-700/30 text-primary-800 dark:text-primary-200 group-hover:from-primary-900 group-hover:to-primary-800 dark:group-hover:from-primary-100 dark:group-hover:to-primary-200 group-hover:text-primary-50 dark:group-hover:text-primary-900 transition-all duration-300">
-                <Icon className="w-5 h-5" strokeWidth={1.75} />
+              <div className={`w-11 h-11 rounded-xl ${tone.bg} flex items-center justify-center transition-transform duration-200 group-hover:scale-105`}>
+                <Icon className={`w-5 h-5 ${tone.icon}`} strokeWidth={2} />
               </div>
-              <Badge>{d.cat}</Badge>
+              <span className="text-[10px] uppercase tracking-[0.10em] font-semibold text-primary-500 px-2 py-0.5 rounded-md bg-primary-100/60 dark:bg-primary-800/60">
+                {d.cat}
+              </span>
             </div>
-            <p className="font-semibold text-[13px] text-primary-900 dark:text-primary-100 tracking-tight leading-snug">{d.name}</p>
-            <p className="text-[11px] text-primary-500 mt-1.5 leading-relaxed">{d.desc}</p>
-            <span aria-hidden className="absolute bottom-4 right-4 text-primary-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
+            <p className="font-semibold text-[14px] text-primary-900 dark:text-primary-50 tracking-tight leading-snug mb-1.5 group-hover:text-accent transition-colors">
+              {d.name}
+            </p>
+            <p className="text-[11px] text-primary-500 dark:text-primary-400 leading-relaxed line-clamp-2">{d.desc}</p>
+            <span aria-hidden className="absolute bottom-4 right-4 text-primary-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all">
               <Icons.ArrowUpRight className="w-4 h-4" strokeWidth={2} />
             </span>
           </button>
@@ -232,41 +259,41 @@ function TableView({ list, navigate }: { list: typeof dashboards; navigate: (pat
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="table-premium">
           <thead>
-            <tr className="bg-primary-100/60 dark:bg-primary-800/60 text-primary-600 dark:text-primary-300 text-[11px] uppercase tracking-wider">
-              <th className="text-left py-2.5 px-4 font-semibold w-10"></th>
-              <th className="text-left py-2.5 px-4 font-semibold">Dashboard</th>
-              <th className="text-left py-2.5 px-4 font-semibold hidden md:table-cell">Description</th>
-              <th className="text-left py-2.5 px-4 font-semibold w-40">Catégorie</th>
-              <th className="py-2.5 px-4 w-10"></th>
+            <tr>
+              <th className="w-10"></th>
+              <th>Dashboard</th>
+              <th className="hidden md:table-cell">Description</th>
+              <th className="w-44">Catégorie</th>
+              <th className="w-10"></th>
             </tr>
           </thead>
           <tbody>
-            {list.map((d, i) => {
+            {list.map((d) => {
               const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
+              const tone = getCatTone(d.cat);
               return (
                 <tr
                   key={d.id}
                   onClick={() => navigate(d.route)}
-                  className={clsx(
-                    'cursor-pointer table-row-hover transition-colors',
-                    i !== list.length - 1 && 'border-b border-primary-200/60 dark:border-primary-800',
-                  )}
+                  className="table-row-clickable group"
                 >
-                  <td className="py-3 px-4">
-                    <div className="w-8 h-8 rounded-lg bg-primary-100/80 dark:bg-primary-800/80 flex items-center justify-center text-primary-700 dark:text-primary-200">
-                      <Icon className="w-4 h-4" strokeWidth={2} />
+                  <td>
+                    <div className={`w-8 h-8 rounded-lg ${tone.bg} flex items-center justify-center transition-transform duration-150 group-hover:scale-105`}>
+                      <Icon className={`w-4 h-4 ${tone.icon}`} strokeWidth={2} />
                     </div>
                   </td>
-                  <td className="py-3 px-4 font-medium text-primary-900 dark:text-primary-100">{d.name}</td>
-                  <td className="py-3 px-4 text-xs text-primary-500 hidden md:table-cell max-w-md">
+                  <td className="font-medium text-primary-900 dark:text-primary-50">{d.name}</td>
+                  <td className="text-xs text-primary-500 hidden md:table-cell max-w-md">
                     <span className="line-clamp-2">{d.desc}</span>
                   </td>
-                  <td className="py-3 px-4">
-                    <Badge>{d.cat}</Badge>
+                  <td>
+                    <span className="text-[10px] uppercase tracking-[0.10em] font-semibold text-primary-500 px-2 py-0.5 rounded-md bg-primary-100 dark:bg-primary-800">
+                      {d.cat}
+                    </span>
                   </td>
-                  <td className="py-3 px-4 text-primary-400">
+                  <td className="text-primary-400 group-hover:text-accent group-hover:translate-x-0.5 transition-all">
                     <Icons.ChevronRight className="w-4 h-4" strokeWidth={2} />
                   </td>
                 </tr>
@@ -379,10 +406,11 @@ function KanbanView({ list, navigate, filter }: {
             </span>
           </div>
 
-          {/* Cards verticales */}
-          <div className="flex flex-col gap-2 bg-primary-100/30 dark:bg-primary-900/30 p-2 rounded-2xl min-h-[200px] flex-1 border border-primary-200/40 dark:border-primary-800/40">
+          {/* Cards verticales — niveau Linear/Trello */}
+          <div className="flex flex-col gap-2 bg-primary-100/40 dark:bg-primary-900/30 p-2 rounded-2xl min-h-[200px] flex-1 border border-primary-200/40 dark:border-primary-800/40">
             {items.map((d) => {
               const Icon = (Icons as any)[d.icon] ?? Icons.LayoutDashboard;
+              const tone = getCatTone(d.cat);
               return (
                 <button
                   key={d.id}
@@ -390,10 +418,10 @@ function KanbanView({ list, navigate, filter }: {
                   className="group text-left card p-3 hover:shadow-md hover:-translate-y-px transition-all duration-200 w-full"
                 >
                   <div className="flex items-start gap-2.5 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-primary-200/80 dark:bg-primary-800/80 flex items-center justify-center text-primary-700 dark:text-primary-200 shrink-0 group-hover:bg-primary-900 group-hover:text-primary-50 dark:group-hover:bg-primary-100 dark:group-hover:text-primary-900 transition-colors">
-                      <Icon className="w-3.5 h-3.5" strokeWidth={2} />
+                    <div className={`w-8 h-8 rounded-lg ${tone.bg} flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110`}>
+                      <Icon className={`w-3.5 h-3.5 ${tone.icon}`} strokeWidth={2} />
                     </div>
-                    <p className="font-semibold text-[12px] text-primary-900 dark:text-primary-100 leading-snug tracking-tight flex-1 break-words">
+                    <p className="font-semibold text-[12px] text-primary-900 dark:text-primary-50 leading-snug tracking-tight flex-1 break-words group-hover:text-accent transition-colors">
                       {d.name}
                     </p>
                   </div>

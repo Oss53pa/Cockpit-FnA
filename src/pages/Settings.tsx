@@ -73,6 +73,28 @@ function SettingsContent() {
 }
 
 // ─── APPARENCE ──────────────────────────────────────────────────────
+// Métadonnées descriptives pour les 3 palettes principales
+const PALETTE_META: Record<string, { tag: string; tagColor: 'success' | 'accent' | 'warning' | 'default'; forces: string; faiblesses: string }> = {
+  twisty: {
+    tag: 'Recommandée',
+    tagColor: 'success',
+    forces: "Équilibre entre apaisement (sage) et urgence (terracotta sur les CTA critiques). Différenciation marketing forte.",
+    faiblesses: "Demande discipline d'usage : terracotta réservé aux actions critiques (Envoyer, Diffuser, Clôturer).",
+  },
+  editorial: {
+    tag: 'Pitch / Démo',
+    tagColor: 'accent',
+    forces: "Chaleur, identité éditoriale forte (rappelle Cockpit CR / Linear / Stripe Dashboard). Le terracotta crie pour les CTA.",
+    faiblesses: "Crème peut sembler daté · terracotta vif fatigue après 4h sur des balances comptables · 'lifestyle' plutôt que 'finance institutionnelle'.",
+  },
+  sauge: {
+    tag: 'Anti-fatigue',
+    tagColor: 'success',
+    forces: "Sage = différenciation rare en SaaS finance · apaisant sur longues sessions · évoque stabilité/conformité (vert = conforme) · positionnement moderne sérieux.",
+    faiblesses: "Sage manque d'urgence pour les CTA · peut paraître 'trop calme' pour un outil de pilotage où il faut détecter des alertes.",
+  },
+};
+
 function TabApparence() {
   const { theme, toggleTheme } = useApp();
   const paletteKey = useTheme((s) => s.paletteKey);
@@ -86,35 +108,93 @@ function TabApparence() {
         </button>
       </Card>
 
-      <Card title="Palette de couleurs" subtitle="Couleurs appliquées aux graphiques, tables, KPIs et dashboards de toute l'application">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {(Object.keys(PALETTES) as PaletteKey[]).map((k) => {
+      <Card title="Palette de couleurs" subtitle="3 directions visuelles principales · 3 alternatives complémentaires. Le changement est instantané sur toute l'app.">
+        {/* Palettes principales — 3 directions visuelles distinctes */}
+        <p className="text-[10px] uppercase tracking-[0.10em] font-semibold text-primary-500 mb-2">Directions visuelles principales</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+          {(['twisty', 'editorial', 'sauge'] as PaletteKey[]).map((k) => {
+            const p = PALETTES[k];
+            if (!p) return null;
+            const active = paletteKey === k;
+            const meta = PALETTE_META[k] ?? { tag: '', tagColor: 'default', forces: '', faiblesses: '' };
+            return (
+              <button key={k} onClick={() => setPalette(k)}
+                className={clsx(
+                  'text-left p-4 rounded-xl border-2 transition-all',
+                  active
+                    ? 'border-accent bg-accent/5 shadow-sm'
+                    : 'border-primary-200 dark:border-primary-800 hover:border-primary-400 dark:hover:border-primary-600',
+                )}>
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm">{p.name}</p>
+                    {meta.tag && (
+                      <span className={clsx(
+                        'inline-block mt-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded-md',
+                        meta.tagColor === 'success' && 'bg-success/10 text-success',
+                        meta.tagColor === 'accent' && 'bg-accent/10 text-accent',
+                        meta.tagColor === 'warning' && 'bg-warning/10 text-warning',
+                        meta.tagColor === 'default' && 'bg-primary-100 dark:bg-primary-800 text-primary-600',
+                      )}>{meta.tag}</span>
+                    )}
+                  </div>
+                  {active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent text-white font-semibold shrink-0">Active</span>}
+                </div>
+                {/* Mini preview : surface + accent + accent2 + dark */}
+                <div className="flex gap-0.5 mb-2 rounded-md overflow-hidden">
+                  <div className="flex-1 h-7" style={{ background: p.layout?.bgPage }} title="Fond" />
+                  <div className="flex-1 h-7" style={{ background: p.layout?.bgSurface }} title="Card" />
+                  <div className="flex-1 h-7" style={{ background: p.layout?.accent }} title="Accent" />
+                  <div className="flex-1 h-7" style={{ background: p.scale[9] }} title="Texte" />
+                </div>
+                {/* Charts colors */}
+                <div className="flex gap-0.5 mb-3 rounded-sm overflow-hidden">
+                  {p.chartColors.map((c, i) => (
+                    <div key={i} className="flex-1 h-3" style={{ background: c }} />
+                  ))}
+                </div>
+                {/* Forces / Faiblesses */}
+                {meta.forces && (
+                  <div className="space-y-1.5 text-[11px] leading-relaxed">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-success font-bold mt-0.5 shrink-0">+</span>
+                      <span className="text-primary-700 dark:text-primary-300">{meta.forces}</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-error font-bold mt-0.5 shrink-0">−</span>
+                      <span className="text-primary-500">{meta.faiblesses}</span>
+                    </div>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Palettes alternatives compactes */}
+        <p className="text-[10px] uppercase tracking-[0.10em] font-semibold text-primary-500 mb-2">Autres palettes disponibles</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+          {(Object.keys(PALETTES) as PaletteKey[]).filter((k) => !['twisty', 'editorial', 'sauge'].includes(k)).map((k) => {
             const p = PALETTES[k];
             const active = paletteKey === k;
             return (
               <button key={k} onClick={() => setPalette(k)}
-                className={`text-left p-4 rounded-lg border-2 transition ${active ? 'border-primary-900 dark:border-primary-100 bg-primary-200/30 dark:bg-primary-800/30' : 'border-primary-200 dark:border-primary-800 hover:border-primary-400 dark:hover:border-primary-600'}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <p className="font-semibold text-sm">{p.name}</p>
-                  {active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900 font-semibold">Active</span>}
-                </div>
-                <div className="flex gap-0.5 mb-2">
-                  {p.chartColors.map((c, i) => (
-                    <div key={i} className="flex-1 h-6 first:rounded-l last:rounded-r" style={{ background: c }} />
-                  ))}
-                </div>
-                <div className="flex gap-0.5">
-                  {p.scale.map((c, i) => (
-                    <div key={i} className="flex-1 h-3 first:rounded-l last:rounded-r" style={{ background: c }} />
+                className={clsx(
+                  'text-left p-2.5 rounded-lg border transition-all',
+                  active
+                    ? 'border-accent bg-accent/5'
+                    : 'border-primary-200 dark:border-primary-800 hover:border-primary-400',
+                )}>
+                <p className="text-xs font-semibold mb-1.5 truncate">{p.name}</p>
+                <div className="flex gap-0.5 rounded-sm overflow-hidden">
+                  {p.chartColors.slice(0, 5).map((c, i) => (
+                    <div key={i} className="flex-1 h-3" style={{ background: c }} />
                   ))}
                 </div>
               </button>
             );
           })}
         </div>
-        <p className="text-xs text-primary-500 mt-4">
-          Le changement est instantané sur tous les graphiques (camembert, barres, courbes), les en-têtes de tables, et les accents primaires.
-        </p>
       </Card>
 
       <Card title="Typographie" subtitle="Polices utilisées dans l'application">

@@ -17,6 +17,8 @@ type Props = {
   inverse?: boolean;
   /** Variant : 'default' (carte blanche) | 'hero' (carte sombre highlight) */
   variant?: 'default' | 'hero';
+  /** Sparkline trend data (12 points typique). Affichée en bas de la card avec gradient. */
+  trend?: number[];
 };
 
 // Mapping color name -> classes Tailwind tinted (fond doux + icône foncée)
@@ -43,7 +45,7 @@ const TINT_MAP: Record<string, { bg: string; icon: string }> = {
  */
 export function KPICard({
   title, value, unit, icon, variation, vsLabel = 'vs N-1',
-  subValue, inverse = false, color, variant = 'default',
+  subValue, inverse = false, color, variant = 'default', trend,
 }: Props) {
   const hasVar = variation !== undefined && !Number.isNaN(variation);
   const isUp = hasVar && variation! > 0.05;
@@ -58,16 +60,26 @@ export function KPICard({
   const tint = !isHero && color && TINT_MAP[color] ? TINT_MAP[color] : null;
   const customColor = !isHero && color && !TINT_MAP[color] ? color : null;
 
+  // Couleur du sparkline (hex pur — match avec tint si dispo)
+  const SPARK_HEX: Record<string, string> = {
+    orange: '#EA580C', red: '#DC2626', amber: '#D97706',
+    green: '#059669', blue: '#2563EB', violet: '#7C3AED',
+  };
+  const sparkColor = isHero ? '#FFFFFF'
+    : (color && SPARK_HEX[color]) ? SPARK_HEX[color]
+    : customColor || '#DA4D28';
+
   return (
     <div
       className={clsx(
-        'group relative p-5 flex flex-col min-w-0 overflow-hidden',
+        'group relative flex flex-col min-w-0 overflow-hidden',
         'transition-all duration-200 ease-spring',
         isHero
           ? 'card-hero'
           : 'card-hover',
       )}
     >
+    <div className={clsx('p-5 flex flex-col', trend && trend.length > 1 && 'pb-3')}>
       {/* Header : icône + label + variation top-right */}
       <div className="flex items-center justify-between gap-3 mb-3.5">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -148,5 +160,52 @@ export function KPICard({
         </p>
       )}
     </div>
+
+      {/* Sparkline en bas de card avec gradient — signature premium */}
+      {trend && trend.length > 1 && (
+        <div className="-mt-1 px-0 pb-0">
+          <KPISparkline data={trend} color={sparkColor} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Sparkline avec gradient remplissage — niveau Cockpit CR/Stripe Dashboard */
+function KPISparkline({ data, color }: { data: number[]; color: string }) {
+  if (!data || data.length < 2) return null;
+  const w = 200;
+  const h = 40;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const stepX = w / (data.length - 1);
+  const id = `kpi-spark-${color.replace('#', '')}-${Math.random().toString(36).slice(2, 7)}`;
+
+  // Smooth curve via cubic Bezier
+  const points = data.map((v, i) => ({
+    x: i * stepX,
+    y: h - 3 - ((v - min) / range) * (h - 6),
+  }));
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    const p0 = points[i - 1];
+    const p1 = points[i];
+    path += ` C ${p0.x + stepX * 0.4} ${p0.y}, ${p1.x - stepX * 0.4} ${p1.y}, ${p1.x} ${p1.y}`;
+  }
+  const fillPath = `${path} L ${w} ${h} L 0 ${h} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full block" style={{ height: h }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.20" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={fillPath} fill={`url(#${id})`} />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
