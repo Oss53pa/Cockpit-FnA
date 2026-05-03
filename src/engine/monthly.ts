@@ -111,21 +111,79 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   }
 
   // ── Réalisé N-1 par mois (mêmes périodes, année year-1) ──
+  // ── Calcul N-1 : Budget N-1 PRIORITAIRE (semantique du user) ──
+  // Pattern : Realise N vs Budget N vs Budget N-1.
+  // Si pas de Budget N-1 saisi, fallback sur GL realise N-1 (semantique SYSCOHADA classique).
   const n1ByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
-  const periodsN1 = periods.filter((p) => p.year === year - 1 && p.month >= 1 && p.month <= 12);
-  if (periodsN1.length > 0) {
-    const periodMapN1 = new Map(periodsN1.map((p) => [p.id, p.month] as const));
-    const periodIdsN1 = new Set(periodsN1.map((p) => p.id));
-    for (const e of allEntries) {
-      if (!periodIdsN1.has(e.periodId)) continue;
-      const c = e.account[0];
-      if (c !== '6' && c !== '7' && c !== '8') continue;
-      const isCharge = c === '6' || e.account.startsWith('81') || e.account.startsWith('83') || e.account.startsWith('85') || e.account.startsWith('87') || e.account.startsWith('89');
-      const net = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
-      const m = periodMapN1.get(e.periodId);
-      if (m === undefined) continue;
-      const map = n1ByMonthAccount[m - 1];
-      map.set(e.account, (map.get(e.account) ?? 0) + net);
+
+  // Etape 1 : tente d'abord BUDGET N-1
+  const allBudgetsN1 = await db.budgets
+    .where('[orgId+year+version]')
+    .between([orgId, year - 1, ''], [orgId, year - 1, '￿'])
+    .toArray();
+  let n1Source: 'budget' | 'gl' | 'none' = 'none';
+  if (allBudgetsN1.length > 0) {
+    const versionsN1 = Array.from(new Set(allBudgetsN1.map((b) => b.version))).sort();
+    const lastVersionN1 = versionsN1[versionsN1.length - 1];
+    const linesN1 = allBudgetsN1.filter((b) => b.version === lastVersionN1);
+    for (const l of linesN1) {
+      if (l.month < 1 || l.month > 12) continue;
+      const map = n1ByMonthAccount[l.month - 1];
+      map.set(l.account, (map.get(l.account) ?? 0) + l.amount);
+    }
+    n1Source = 'budget';
+    // eslint-disable-next-line no-console
+    console.info(`[monthly] N-1 = Budget ${year - 1} version=${lastVersionN1} (${linesN1.length} lignes)`);
+  }
+
+  // Etape 2 : fallback sur GL N-1 si aucun budget N-1
+  if (n1Source === 'none') {
+    const periodsN1 = periods.filter((p) => p.year === year - 1 && p.month >= 1 && p.month <= 12);
+    if (periodsN1.length > 0) {
+      const periodMapN1 = new Map(periodsN1.map((p) => [p.id, p.month] as const));
+      const periodIdsN1 = new Set(periodsN1.map((p) => p.id));
+      for (const e of allEntries) {
+        if (!periodIdsN1.has(e.periodId)) continue;
+        const c = e.account[0];
+        if (c !== '6' && c !== '7' && c !== '8') continue;
+        const isCharge = c === '6' || e.account.startsWith('81') || e.account.startsWith('83') || e.account.startsWith('85') || e.account.startsWith('87') || e.account.startsWith('89');
+        const net = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
+        const m = periodMapN1.get(e.periodId);
+        if (m === undefined) continue;
+        const map = n1ByMonthAccount[m - 1];
+        map.set(e.account, (map.get(e.account) ?? 0) + net);
+      }
+      n1Source = 'gl';
+      // eslint-disable-next-line no-console
+      console.info(`[monthly] N-1 = GL realise ${year - 1} (fallback, pas de Budget N-1)`);
+    }
+  }
+  // Roll-up Budget N-1 parent → enfants pour aligner sur les codes GL detailes
+  if (n1Source === 'budget') {
+    for (let m = 0; m < 12; m++) {
+      const bn1Map = n1ByMonthAccount[m];
+      const rMap = netByMonthAccount[m];
+      const allReal = new Set<string>();
+      for (const k of rMap.keys()) allReal.add(k);
+      for (const [budCode, budAmt] of Array.from(bn1Map.entries())) {
+        if (rMap.has(budCode)) continue;
+        const children: string[] = [];
+        let totalChildReal = 0;
+        for (const realCode of allReal) {
+          if (realCode.startsWith(budCode) && realCode.length > budCode.length) {
+            children.push(realCode);
+            totalChildReal += Math.abs(rMap.get(realCode) ?? 0);
+          }
+        }
+        if (children.length > 0) {
+          bn1Map.delete(budCode);
+          for (const child of children) {
+            const childReal = Math.abs(rMap.get(child) ?? 0);
+            const share = totalChildReal > 0 ? (childReal / totalChildReal) * budAmt : budAmt / children.length;
+            bn1Map.set(child, (bn1Map.get(child) ?? 0) + share);
+          }
+        }
+      }
     }
   }
 

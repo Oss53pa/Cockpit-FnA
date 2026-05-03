@@ -777,7 +777,9 @@
     overflow: visible !important;
   }
   /* ── COUVERTURE & 4ÈME DE COUVERTURE ──
-     Occuper exactement une page A4 complète, identique à l'écran. */
+     Occuper exactement une page A4 complète, identique à l'écran.
+     Utilise break-* (moderne) ET page-break-* (legacy) pour couvrir
+     tous les navigateurs. height: 100vh = 1 page imprimée exacte. */
   .page-a4[data-page-type="cover"],
   .page-a4[data-page-type="back"] {
     height: 100vh !important;
@@ -786,6 +788,7 @@
     padding: 0 !important;
     overflow: hidden !important;
     page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
