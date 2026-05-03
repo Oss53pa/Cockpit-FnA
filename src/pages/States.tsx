@@ -218,10 +218,10 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
             <tr>
               <th className="text-left py-2 px-3 w-8"></th>
               <th className="text-left py-2 px-3">Section / compte</th>
-              <th className="text-right py-2 px-3 w-44 whitespace-nowrap">Réalisé</th>
-              <th className="text-right py-2 px-3 w-44 whitespace-nowrap">Budget</th>
-              <th className="text-right py-2 px-3 w-40 whitespace-nowrap">Écart</th>
-              <th className="text-right py-2 px-3 w-24">% activité</th>
+              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Réalisé</th>
+              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Budget</th>
+              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Écart</th>
+              <th className="text-right py-2 px-3 min-w-[100px] w-[100px] whitespace-nowrap">% activité</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
@@ -264,12 +264,12 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                       </div>
                     </td>
                     <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(s.totalRealise)}</td>
-                    <td className="py-2 px-3 text-right num text-primary-500 font-normal">{fmtFull(s.totalBudget)}</td>
-                    <td className={clsx('py-2 px-3 text-right num',
+                    <td className="py-2 px-3 text-right num text-primary-500 font-normal whitespace-nowrap">{fmtFull(s.totalBudget)}</td>
+                    <td className={clsx('py-2 px-3 text-right num whitespace-nowrap',
                       s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
                       {s.totalEcart >= 0 ? '+' : ''}{fmtFull(s.totalEcart)}
                     </td>
-                    <td className="py-2 px-3 text-right num text-xs text-primary-500 font-normal">—</td>
+                    <td className="py-2 px-3 text-right num text-xs text-primary-500 font-normal whitespace-nowrap">—</td>
                   </tr>
                   {open && s.rows.map((r) => (
                     <tr key={r.code} className="bg-primary-50 dark:bg-primary-950">
@@ -278,13 +278,13 @@ function CRSynthese({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                         {!hideCodes && <span className="font-mono text-primary-500 mr-2">{r.code}</span>}
                         {r.label}
                       </td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.realise)}</td>
-                      <td className="py-1.5 px-3 text-right num text-xs text-primary-500">{fmtFull(r.budget)}</td>
-                      <td className={clsx('py-1.5 px-3 text-right num text-xs',
+                      <td className="py-1.5 px-3 text-right num text-xs whitespace-nowrap">{fmtFull(r.realise)}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs text-primary-500 whitespace-nowrap">{fmtFull(r.budget)}</td>
+                      <td className={clsx('py-1.5 px-3 text-right num text-xs whitespace-nowrap',
                         r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
                         {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
                       </td>
-                      <td className="py-1.5 px-3 text-right num text-[10px] text-primary-400">
+                      <td className="py-1.5 px-3 text-right num text-[10px] text-primary-400 whitespace-nowrap">
                         {s.totalRealise ? ((r.realise / s.totalRealise) * 100).toFixed(1) : 0} %
                       </td>
                     </tr>
@@ -461,9 +461,9 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
               <th className="text-left py-2 px-3 w-8"></th>
               <th className="text-left py-2 px-3 w-8"></th>
               <th className="text-left py-2 px-3">Section / compte</th>
-              <th className="text-right py-2 px-3 w-32">Réalisé</th>
-              <th className="text-right py-2 px-3 w-32">Budget</th>
-              <th className="text-right py-2 px-3 w-28">Écart</th>
+              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Réalisé</th>
+              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Budget</th>
+              <th className="text-right py-2 px-3 min-w-[180px] w-[180px] whitespace-nowrap">Écart</th>
               <th className="text-right py-2 px-3 w-10"></th>
             </tr>
           </thead>
@@ -516,8 +516,8 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                       </div>
                     </td>
                     <td className="py-2 px-3 text-right num whitespace-nowrap">{fmtFull(s.totalRealise)}</td>
-                    <td className="py-2 px-3 text-right num text-primary-500 font-normal">{fmtFull(s.totalBudget)}</td>
-                    <td className={clsx('py-2 px-3 text-right num',
+                    <td className="py-2 px-3 text-right num text-primary-500 font-normal whitespace-nowrap">{fmtFull(s.totalBudget)}</td>
+                    <td className={clsx('py-2 px-3 text-right num whitespace-nowrap',
                       s.totalEcart > 0 ? (s.isCharge ? 'text-error' : 'text-success') : (s.isCharge ? 'text-success' : 'text-error'))}>
                       {s.totalEcart >= 0 ? '+' : ''}{fmtFull(s.totalEcart)}
                     </td>
@@ -534,9 +534,9 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                         {!hideCodes && <span className="font-mono text-primary-500 mr-2">{r.code}</span>}
                         {r.label}
                       </td>
-                      <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.realise)}</td>
-                      <td className="py-1.5 px-3 text-right num text-xs text-primary-500">{fmtFull(r.budget)}</td>
-                      <td className={clsx('py-1.5 px-3 text-right num text-xs',
+                      <td className="py-1.5 px-3 text-right num text-xs whitespace-nowrap">{fmtFull(r.realise)}</td>
+                      <td className="py-1.5 px-3 text-right num text-xs text-primary-500 whitespace-nowrap">{fmtFull(r.budget)}</td>
+                      <td className={clsx('py-1.5 px-3 text-right num text-xs whitespace-nowrap',
                         r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
                         {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
                       </td>
@@ -563,9 +563,9 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
                   className={clsx('font-bold',
                     isFinal ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'bg-primary-300/40 dark:bg-primary-700/40')}>
                   <td className="py-2.5 px-3 uppercase text-xs tracking-wider">= {INTERMEDIATE_LABELS[item.key as keyof typeof INTERMEDIATE_LABELS]}</td>
-                  <td className="py-2.5 px-3 text-right num w-32">{fmtFull(data.realise)}</td>
-                  <td className="py-2.5 px-3 text-right num w-32">{fmtFull(data.budget)}</td>
-                  <td className="py-2.5 px-3 text-right num w-28">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
+                  <td className="py-2.5 px-3 text-right num min-w-[180px] w-[180px] whitespace-nowrap">{fmtFull(data.realise)}</td>
+                  <td className="py-2.5 px-3 text-right num min-w-[180px] w-[180px] whitespace-nowrap">{fmtFull(data.budget)}</td>
+                  <td className="py-2.5 px-3 text-right num min-w-[180px] w-[180px] whitespace-nowrap">{ecart >= 0 ? '+' : ''}{fmtFull(ecart)}</td>
                 </tr>
               );
             })}
