@@ -32,6 +32,7 @@ export async function getOrCreateGeneralChannel(orgId: string, currentUserId: st
     isPinned: true,
   };
   await db.channels.add(channel);
+  void import('./chatSync').then(({ pushChannelToCloud }) => pushChannelToCloud(channel)).catch(() => { /* ignore */ });
   return channel;
 }
 
@@ -51,6 +52,7 @@ export async function createChannel(
     members: kind === 'private' ? members : undefined,
   };
   await db.channels.add(channel);
+  void import('./chatSync').then(({ pushChannelToCloud }) => pushChannelToCloud(channel)).catch(() => { /* ignore */ });
   return channel;
 }
 
@@ -70,6 +72,7 @@ export async function getOrCreateDM(orgId: string, userA: string, userB: string)
     createdAt: Date.now(),
   };
   await db.channels.add(channel);
+  void import('./chatSync').then(({ pushChannelToCloud }) => pushChannelToCloud(channel)).catch(() => { /* ignore */ });
   return channel;
 }
 
@@ -111,6 +114,13 @@ export async function sendMessage(params: {
   const id = await db.chatMessages.add(msg);
   // Met à jour updatedAt du channel pour le tri
   await db.channels.update(params.channelId, { updatedAt: Date.now() });
+  // Sync cloud (fire-and-forget — n'attend pas)
+  void (async () => {
+    try {
+      const { pushMessageToCloud } = await import('./chatSync');
+      await pushMessageToCloud({ ...msg, id: id as number });
+    } catch { /* ignore */ }
+  })();
   return id as number;
 }
 
@@ -169,13 +179,18 @@ export async function toggleReaction(messageId: number, emoji: string, userId: s
     reactions[emoji] = [...users, userId];
   }
   await db.chatMessages.update(messageId, { reactions });
+  void import('./chatSync').then(({ updateMessageInCloud }) =>
+    updateMessageInCloud(messageId, { reactions })).catch(() => { /* ignore */ });
 }
 
 /** Edite le contenu d'un message (uniquement par l'auteur). */
 export async function editMessage(messageId: number, userId: string, newContent: string): Promise<boolean> {
   const msg = await db.chatMessages.get(messageId);
   if (!msg || msg.userId !== userId) return false;
-  await db.chatMessages.update(messageId, { content: newContent, editedAt: Date.now() });
+  const editedAt = Date.now();
+  await db.chatMessages.update(messageId, { content: newContent, editedAt });
+  void import('./chatSync').then(({ updateMessageInCloud }) =>
+    updateMessageInCloud(messageId, { content: newContent, editedAt })).catch(() => { /* ignore */ });
   return true;
 }
 
@@ -183,6 +198,9 @@ export async function editMessage(messageId: number, userId: string, newContent:
 export async function deleteMessage(messageId: number, userId: string): Promise<boolean> {
   const msg = await db.chatMessages.get(messageId);
   if (!msg || msg.userId !== userId) return false;
+  // Sync cloud AVANT suppression locale (pour avoir encore la ligne en BDD au moment du push)
+  await import('./chatSync').then(({ deleteMessageFromCloud }) =>
+    deleteMessageFromCloud(messageId)).catch(() => { /* ignore */ });
   await db.chatMessages.delete(messageId);
   return true;
 }

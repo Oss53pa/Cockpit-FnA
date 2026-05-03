@@ -59,16 +59,11 @@ export default function Home() {
       <div className="relative w-full px-6 lg:px-10 xl:px-14 py-6 lg:py-8 min-h-screen flex flex-col">
         {/* TOP BAR */}
         <div className="flex items-center justify-between gap-4 mb-12">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary-900 flex items-center justify-center shrink-0">
-              <span className="text-primary-50 font-display text-lg leading-none">C</span>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-primary-900 dark:text-primary-50 leading-tight">
-                {org?.name ?? 'Cockpit FnA'}
-              </p>
-              <p className="text-[10px] text-primary-500 leading-tight">{org?.sector ?? 'SYSCOHADA · Pilotage financier'}</p>
-            </div>
+          <div>
+            <p className="text-xs font-semibold text-primary-900 dark:text-primary-50 leading-tight">
+              {org?.name ?? 'Cockpit FnA'}
+            </p>
+            <p className="text-[10px] text-primary-500 leading-tight">{org?.sector ?? 'SYSCOHADA · Pilotage financier'}</p>
           </div>
 
           <div className="flex items-center gap-2">
