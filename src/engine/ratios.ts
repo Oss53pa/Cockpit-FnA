@@ -64,6 +64,17 @@ function status(value: number, t: RatioTarget | undefined, fallbackTarget: numbe
 }
 
 /**
+ * Calcule le taux TVA dynamique depuis la balance (443x collectée / CA).
+ * Fallback : 0.18 (UEMOA standard). Utilisable par tous les modules.
+ */
+export function computeVatRate(rows: BalanceRow[], fallbackRate = 0.18): number {
+  const { sig } = computeSIG(rows);
+  const tvaCollectee = sumMoneyWhere(rows, (r) => r.soldeC - r.soldeD, (r) => r.account.startsWith('443'));
+  const raw = sig.ca > 0 && tvaCollectee > 0 ? tvaCollectee / sig.ca : fallbackRate;
+  return clampVatRate(raw, fallbackRate);
+}
+
+/**
  * Calcule l'ensemble des ratios financiers (rentabilité, liquidité, structure, activité).
  * @param rows           Balance générale (compute via computeBalance)
  * @param customTargets  Cibles personnalisées par tenant

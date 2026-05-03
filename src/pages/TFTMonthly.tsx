@@ -32,11 +32,11 @@ export default function TFTMonthlyPage() {
     if (!data) return null;
     const find = (code: string) => data.lines.find((l) => l.code === code);
     return {
-      fluxOp: find('FE')?.ytd ?? 0,
-      fluxInv: find('FI')?.ytd ?? 0,
-      fluxFin: find('FF')?.ytd ?? 0,
-      varTreso: find('FZ')?.ytd ?? 0,
-      cafg: find('FA')?.ytd ?? 0,
+      fluxOp: find('_ZC')?.ytd ?? 0,
+      fluxInv: find('_ZD')?.ytd ?? 0,
+      fluxFin: find('_ZE')?.ytd ?? 0,
+      varTreso: find('_ZF')?.ytd ?? 0,
+      cafg: find('_ZA')?.ytd ?? 0,
     };
   }, [data]);
 
@@ -44,7 +44,7 @@ export default function TFTMonthlyPage() {
   const chartData = useMemo(() => {
     if (!data) return [];
     const findVals = (code: string) => data.lines.find((l) => l.code === code)?.values ?? Array(12).fill(0);
-    const op = findVals('FE'); const inv = findVals('FI'); const fin = findVals('FF');
+    const op = findVals('_ZC'); const inv = findVals('_ZD'); const fin = findVals('_ZE');
     return data.months.map((m, i) => ({
       mois: m,
       'Exploitation': op[i],

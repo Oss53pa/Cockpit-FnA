@@ -239,18 +239,15 @@ async function computeTFTForRange(orgId: string, year: number, fromMonth: number
 
   const resultat = sig.resultat;
 
-  // (P0-5) Dotations IMMOBILISATIONS uniquement (681x amortissements + 687x
-  // amortissements HAO). On EXCLUT 68 entier qui inclut aussi 691 (provisions
-  // pour risques et charges) qui sont des CHARGES déjà dans le résultat mais
-  // PAS des amortissements à réintégrer dans la CAFG.
-  // SYSCOHADA — comptes 681 (Dotations aux amortissements d'exploitation),
-  // 687 (Dotations aux amortissements HAO).
+  // Dotations TOTALES (pour CAFG) = 68 + 69 nets de 78 + 79
+  // Cohérent avec computeTFT annuel et SYSCOHADA : la CAFG réintègre
+  // TOUTES les dotations (amortissements + provisions) car elles sont
+  // des charges non décaissables.
   const dotations = periodBal
-    .filter((r) => r.account.startsWith('681') || r.account.startsWith('687'))
+    .filter((r) => r.account.startsWith('68') || r.account.startsWith('69'))
     .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
-  // Idem reprises : 781 (reprises amortissements exploitation) + 787 (HAO).
   const reprises = periodBal
-    .filter((r) => r.account.startsWith('781') || r.account.startsWith('787'))
+    .filter((r) => r.account.startsWith('78') || r.account.startsWith('79'))
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
   // (P1-4) VNC cédée : compte 685 strict (Valeur nette comptable des
   // immobilisations cédées). 81 entier englobait des charges HAO non liées.

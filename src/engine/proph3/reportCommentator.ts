@@ -22,8 +22,9 @@ export function feedMemory(orgId: string, data: any, context?: string) {
     rn: sig?.resultat ?? 0,
     treso: get(data.bilanActif, '_BT') - get(data.bilanPassif, 'DV'),
     bfr: get(data.bilanActif, '_BK') - get(data.bilanPassif, '_DP'),
-    // DSO sur CA TTC (1.18) — aligné avec dashboard Cycle Client
-    dso: ca > 0 ? Math.round((get(data.bilanActif, 'BH') / (ca * 1.18)) * 360) : 0,
+    // DSO depuis les ratios calculés (TVA dynamique) — fallback formule
+    dso: (data.ratios ?? []).find((r: any) => r.code === 'DSO')?.value ??
+         (ca > 0 ? Math.round((get(data.bilanActif, 'BH') / (ca * 1.18)) * 360) : 0),
     capPropres: get(data.bilanPassif, '_CP'),
     totActif: get(data.bilanActif, '_BZ'),
     ratiosAlertes: (data.ratios ?? []).filter((r: any) => r.status !== 'good').length,

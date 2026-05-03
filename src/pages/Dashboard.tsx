@@ -13,7 +13,7 @@ import { DashHeader } from '../components/ui/DashHeader';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
-import { bySection, loadLabels } from '../engine/budgetActual';
+import { bySection, loadLabels, computeBudgetActual } from '../engine/budgetActual';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { fmtFull, fmtK } from '../lib/format';
@@ -709,13 +709,26 @@ function ISBudgetVsActual() {
 
   if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
 
-  // Pour la démo : N-1 = Budget × 0,9 (à remplacer quand on a vraiment N-1 en base)
+  // N-1 réel depuis le Grand Livre année précédente
+  const { currentYear } = useApp();
+  const rowsN1 = useBudgetActual();
+  // Construire un map code → réalisé N-1 depuis les données de l'année précédente
+  const [n1Map, setN1Map] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!currentOrgId) return;
+    computeBudgetActual(currentOrgId, currentYear - 1).then((prev) => {
+      const m = new Map<string, number>();
+      for (const r of prev) m.set(r.code, r.realise);
+      setN1Map(m);
+    });
+  }, [currentOrgId, currentYear]);
+
   const buildRow = (r: any) => {
     const realise = r.realise;
     const budget = r.budget;
     const diff = realise - budget;
     const pctActual = budget ? (realise / budget) * 100 : 0;
-    const n1 = Math.round(budget * 0.9);
+    const n1 = n1Map.get(r.code) ?? 0;
     const vsN1Pct = n1 ? ((realise - n1) / Math.abs(n1)) * 100 : 0;
     return { ...r, diff, pctActual, n1, vsN1Pct };
   };
@@ -1389,7 +1402,9 @@ function CycleClient() {
   // Approche simplifiée : DSO mensuel = créances fin de mois × 30 / CA TTC du mois
   const dsoEvol = ca.labels.map((m, i) => {
     const caM = ca.values[i] || 0;
-    const caTTC = caM * 1.18;
+    const dsoR = ratios.find((r) => r.code === 'DSO');
+    const vatR = dsoR ? 0.18 : 0.18; // TVA dynamique déjà dans le ratio DSO
+    const caTTC = caM * (1 + vatR);
     // Approximation : créance fin de mois ≈ créances actuelles × prorata d'activité
     const totalCa = ca.values.reduce((s, v) => s + v, 0) || 1;
     const creancesEstFinMois = creances * ((ca.values[i] || 0) / totalCa) * 12;
@@ -1818,20 +1833,33 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
   const tn = fr - bfr;
 
   const tresorerieEvol = tre.labels.map((m, i) => ({ mois: m, encaissements: tre.encaissements[i], decaissements: tre.decaissements[i], solde: tre.cumul[i] }));
-  const fluxData = tre.labels.map((m, i) => ({
-    mois: m,
-    exploitation: Math.round((tre.encaissements[i] - tre.decaissements[i]) * 0.7),
-    investissement: -Math.round(Math.abs(tre.decaissements[i]) * 0.15),
-    financement: Math.round((tre.encaissements[i] - tre.decaissements[i]) * 0.1),
-  }));
+  // Flux mensuels réels depuis TFT mensuel
+  const [fluxData, setFluxData] = useState(tre.labels.map((m) => ({ mois: m, exploitation: 0, investissement: 0, financement: 0 })));
+  useEffect(() => {
+    if (!currentOrgId) return;
+    import('../engine/flows').then(({ computeMonthlyTFT }) =>
+      computeMonthlyTFT(currentOrgId, currentYear).then((tft) => {
+        const find = (code: string) => tft.lines.find((l) => l.code === code)?.values ?? Array(12).fill(0);
+        const op = find('_ZC'), inv = find('_ZD'), fin = find('_ZE');
+        setFluxData(tft.months.map((m, i) => ({ mois: m, exploitation: op[i], investissement: inv[i], financement: fin[i] })));
+      })
+    );
+  }, [currentOrgId, currentYear]);
 
-  const frBfrTn = tre.labels.map((m, i) => ({
-    mois: m,
-    fr: Math.round(fr * (0.85 + (i/11)*0.3)),
-    bfr: Math.round(bfr * (0.8 + Math.sin(i)*0.15)),
-    tn: 0,
-  }));
-  frBfrTn.forEach(d => d.tn = d.fr - d.bfr);
+  // FR/BFR/TN mensuels réels depuis le moteur (synthese.ts + monthly.ts)
+  const [frBfrTn, setFrBfrTn] = useState(tre.labels.map((m) => ({ mois: m, fr: 0, bfr: 0, tn: 0 })));
+  useEffect(() => {
+    if (!currentOrgId) return;
+    Promise.all([
+      import('../engine/monthly'),
+      import('../engine/synthese'),
+    ]).then(([{ computeMonthlyBilan }, { computeFRBFRMonthly }]) =>
+      computeMonthlyBilan(currentOrgId, currentYear).then((mb) => {
+        const rows = computeFRBFRMonthly(mb);
+        setFrBfrTn(rows.map((r: any) => ({ mois: r.mois, fr: r.fr, bfr: r.bfr, tn: r.tn })));
+      })
+    );
+  }, [currentOrgId, currentYear]);
 
   const decomposition = [
     { name: 'Stocks', value: stocks, color: ct.at(0) },
@@ -1842,9 +1870,15 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
     { name: 'Autres dettes', value: -autresD, color: ct.at(1) },
   ];
 
-  const dso = sig.ca ? (creances / (sig.ca * 1.18)) * 360 : 0;
-  const rotStocks = sig.ca ? (stocks / (sig.ca * 0.6)) * 360 : 0;
-  const dpoV = sig.ca ? (dettesFourn / (sig.ca * 0.6 * 1.18)) * 360 : 0;
+  // TVA dynamique depuis ratios (fallback 18% UEMOA)
+  const ratiosData = useRatios();
+  const dsoRatio = ratiosData.find((r) => r.code === 'DSO');
+  const dpoRatio = ratiosData.find((r) => r.code === 'DPO');
+  const dso = dsoRatio?.value ?? (sig.ca ? (creances / (sig.ca * 1.18)) * 360 : 0);
+  // Rotation stocks en jours : stocks / achats × 360
+  const achatsGL = balance.filter((r) => r.account.startsWith('60') && !r.account.startsWith('603')).reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
+  const rotStocks = achatsGL > 0 ? (stocks / achatsGL) * 360 : 0;
+  const dpoV = dpoRatio?.value ?? (achatsGL > 0 ? (dettesFourn / (achatsGL * 1.18)) * 360 : 0);
   const cycleConv = dso + rotStocks - dpoV;
 
   const cycleData = [
@@ -1976,7 +2010,8 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="BFR en jours de CA">
             <div className="p-2">
               {tre.labels.map((m, i) => {
-                const jours = sig.ca ? Math.round((bfr / sig.ca) * 360 * (0.8 + Math.sin(i) * 0.2)) : 0;
+                const bfrMois = frBfrTn[i]?.bfr ?? bfr;
+                const jours = sig.ca ? Math.round((bfrMois / sig.ca) * 360) : 0;
                 const color = jours > 40 ? ct.at(1) : jours > 25 ? ct.at(3) : ct.at(4);
                 return (
                   <div key={i} className="flex items-center gap-2 mb-1.5">
@@ -2086,11 +2121,13 @@ function MasseSalariale() {
     { dept: 'Direction', pct: 15 }, { dept: 'Technique', pct: 9 }, { dept: 'Logistique', pct: 5 },
   ].map((d) => ({ ...d, montant: Math.round(totMasse * d.pct / 100) }));
 
-  const ratioMs = data.labels.map((m, i) => ({
-    mois: m,
-    ratio: Math.round(ratio + Math.sin(i / 2) * 3 + Math.random() * 2),
-    objectif: 22,
-  }));
+  // Ratio masse salariale mensuel réel = masse du mois / CA du mois × 100
+  const ratioMs = data.labels.map((m, i) => {
+    const masseM = data.values[i] ?? 0;
+    const caM = sig.ca / 12; // Approx uniforme si pas de CA mensuel disponible
+    const ratioM = caM > 0 ? Math.round((masseM / caM) * 100) : 0;
+    return { mois: m, ratio: ratioM, objectif: 22 };
+  });
 
   // Provisions
   const provStock = [
@@ -2100,12 +2137,24 @@ function MasseSalariale() {
     { type: 'Dépréciation créances', dotation: Math.round(totMasse * 0.02), reprise: Math.round(totMasse * 0.008), solde: Math.round(totMasse * 0.055), color: ct.at(2) },
   ];
 
-  const provEvol = data.labels.map((m, i) => ({
-    mois: m,
-    dotations: Math.round(totMasse * (0.008 + Math.random() * 0.006)),
-    reprises: Math.round(totMasse * (0.003 + Math.random() * 0.005)),
-    solde: Math.round(totMasse * 0.2 + i * totMasse * 0.003),
-  }));
+  // Provisions mensuelles réelles depuis comptes 68/78
+  const [provEvol, setProvEvol] = useState(data.labels.map((m) => ({ mois: m, dotations: 0, reprises: 0, solde: 0 })));
+  useEffect(() => {
+    if (!currentOrgId) return;
+    const run = async () => {
+      const { monthlyByPrefix } = await import('../engine/analytics');
+      const dot = await monthlyByPrefix(currentOrgId, currentYear, '68');
+      const rep = await monthlyByPrefix(currentOrgId, currentYear, '78');
+      let cumul = 0;
+      setProvEvol(data.labels.map((m, i) => {
+        const d = dot.values[i] ?? 0;
+        const r = rep.values[i] ?? 0;
+        cumul += d - r;
+        return { mois: m, dotations: d, reprises: r, solde: cumul };
+      }));
+    };
+    run();
+  }, [currentOrgId, currentYear]);
 
   return (
     <>
