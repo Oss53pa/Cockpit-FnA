@@ -1,10 +1,14 @@
 import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
-  X, ChevronsLeft, ChevronsRight, PieChart, ClipboardList, Search, Users, FileEdit,
-  HelpCircle,
+  X, ChevronsLeft, ChevronsRight, ChevronRight, PieChart, ClipboardList, Search, Users, FileEdit,
+  HelpCircle, MessageCircle,
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { useApp } from '../../store/app';
+import { getTotalUnread } from '../../engine/chat';
 import clsx from 'clsx';
 
 const sections = [
@@ -39,6 +43,12 @@ const sections = [
     ],
   },
   {
+    label: 'Collaboration',
+    items: [
+      { to: '/chat', icon: MessageCircle, label: 'Discussion' },
+    ],
+  },
+  {
     label: 'Admin',
     items: [
       { to: '/settings', icon: Settings, label: 'Paramètres' },
@@ -64,7 +74,43 @@ type Props = {
  * - Collapsed mode : icones centrees, tooltip implicite via title
  * - Footer minimal (version)
  */
+// Persistance des sections ouvertes/fermées
+const SECTIONS_KEY = 'sidebar-sections-collapsed';
+function loadCollapsedSections(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? '{}'); } catch { return {}; }
+}
+function saveCollapsedSections(state: Record<string, boolean>) {
+  localStorage.setItem(SECTIONS_KEY, JSON.stringify(state));
+}
+
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
+  const { currentOrgId } = useApp();
+  // Sections collapsed state
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => loadCollapsedSections());
+  const toggleSection = (label: string) => {
+    setCollapsedSections((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      saveCollapsedSections(next);
+      return next;
+    });
+  };
+  // Badge unread pour /chat — récupère le user courant depuis sessionStorage
+  const currentUserId = (() => {
+    try {
+      const raw = sessionStorage.getItem('cockpit-current-user');
+      if (raw) return JSON.parse(raw)?.id ?? 'self';
+    } catch { /* ignore */ }
+    return 'self';
+  })();
+  const unreadChat = useLiveQuery(
+    async () => {
+      if (!currentOrgId) return 0;
+      try { return await getTotalUnread(currentOrgId, currentUserId); }
+      catch { return 0; }
+    },
+    [currentOrgId, currentUserId],
+    0,
+  ) ?? 0;
 
   const fullNav = (showClose: boolean) => (
     <>
@@ -106,15 +152,46 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
-        {sections.map((sec) => (
-          <div key={sec.label}>
-            <p className="px-3 mb-2 text-[10px] uppercase tracking-[0.14em] text-primary-400 dark:text-primary-500 font-semibold">
-              {sec.label}
-            </p>
-            <div className="space-y-0.5">
-              {sec.items.map((it) => (
+      {/* Navigation — sections collapsibles (cliquer le label pour replier) */}
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-1.5">
+        {sections.map((sec) => {
+          const isCollapsed = collapsedSections[sec.label] ?? false;
+          // Calcule unread/badges pour cette section (utile en mode collapsed)
+          const sectionUnread = sec.items.reduce((s, it) => s + (it.to === '/chat' ? unreadChat : 0), 0);
+          return (
+            <div key={sec.label}>
+              <button
+                type="button"
+                onClick={() => toggleSection(sec.label)}
+                className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-md
+                           text-[10px] uppercase tracking-[0.14em] font-semibold
+                           text-primary-400 dark:text-primary-500
+                           hover:text-primary-700 dark:hover:text-primary-300
+                           hover:bg-primary-100/50 dark:hover:bg-primary-800/40
+                           transition-colors duration-150"
+                aria-expanded={!isCollapsed}
+              >
+                <ChevronRight
+                  className={clsx(
+                    'w-3 h-3 shrink-0 transition-transform duration-200',
+                    !isCollapsed && 'rotate-90',
+                  )}
+                  strokeWidth={2.5}
+                />
+                <span className="flex-1 text-left">{sec.label}</span>
+                {/* Badge mini en mode collapsed */}
+                {isCollapsed && sectionUnread > 0 && (
+                  <span className="text-[9px] px-1 rounded bg-accent text-white font-bold tabular-nums">
+                    {sectionUnread > 99 ? '99+' : sectionUnread}
+                  </span>
+                )}
+              </button>
+              {/* Items — visible uniquement si section ouverte */}
+              <div className={clsx(
+                'space-y-0.5 overflow-hidden transition-all duration-200',
+                isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100 mt-1 mb-2',
+              )}>
+                {sec.items.map((it) => (
                 <NavLink
                   key={it.to}
                   to={it.to}
@@ -149,13 +226,20 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
                         strokeWidth={isActive ? 2.2 : 1.8}
                       />
                       <span className="truncate flex-1">{it.label}</span>
+                      {/* Badge unread pour /chat */}
+                      {it.to === '/chat' && unreadChat > 0 && (
+                        <span className="text-[10px] px-1.5 rounded-md bg-accent text-white font-bold tabular-nums shrink-0">
+                          {unreadChat > 99 ? '99+' : unreadChat}
+                        </span>
+                      )}
                     </>
                   )}
                 </NavLink>
               ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer minimal */}
