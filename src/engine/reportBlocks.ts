@@ -10,7 +10,9 @@ import { Ratio } from './ratios';
 export type PaletteKey = string;
 
 export const PALETTES: Record<string, { name: string; primary: string; secondary: string; accent: string; success: string; danger: string; neutral: string; tableHeader: string; tableHeaderText: string; chartColors: string[] }> = {
-  // Palette officielle Atlas Studio : anthracite + or mat (par défaut sur les nouveaux rapports)
+  // Palette signature Cockpit FnA — graphite + sage primary + terracotta accent (par défaut)
+  cockpit:   { name: 'Cockpit',      primary: '#171717', secondary: '#404040', accent: '#7FA88E', success: '#7FA88E', danger: '#C97A5A', neutral: '#737373', tableHeader: '#171717', tableHeaderText: '#FAFAFA', chartColors: ['#7FA88E','#C97A5A','#5E8772','#D4A574','#737373','#B5C4A8','#A3A3A3'] },
+  // Palette Atlas Studio : anthracite + or mat
   atlas:     { name: 'Atlas Studio', primary: '#1F1F23', secondary: '#332915', accent: '#B8954A', success: '#22c55e', danger: '#ef4444', neutral: '#9C7D3E', tableHeader: '#1F1F23', tableHeaderText: '#D4B870', chartColors: ['#B8954A','#1F1F23','#D4B870','#9C7D3E','#6E5A2D','#E8D5A0','#4D3F20'] },
   graphite:  { name: 'Graphite',   primary: '#171717', secondary: '#404040', accent: '#737373', success: '#22c55e', danger: '#ef4444', neutral: '#a3a3a3', tableHeader: '#171717', tableHeaderText: '#fafafa', chartColors: ['#374151','#dc2626','#2563eb','#d97706','#059669','#7c3aed','#db2777'] },
   ardoise:   { name: 'Ardoise',    primary: '#0f172a', secondary: '#334155', accent: '#64748b', success: '#22c55e', danger: '#ef4444', neutral: '#94a3b8', tableHeader: '#0f172a', tableHeaderText: '#f8fafc', chartColors: ['#475569','#0ea5e9','#f59e0b','#10b981','#8b5cf6','#f43f5e','#06b6d4'] },
@@ -87,7 +89,7 @@ export const DEFAULT_CONFIG = (period: string): ReportConfig => ({
     confidentiality: 'interne',
   },
   format: 'A4_portrait',
-  palette: 'atlas',
+  palette: 'cockpit',
   options: { includeCover: true, includeTOC: true, includeFooter: true, includePageNumbers: true },
   blocks: [],
   recipients: [],
