@@ -23,7 +23,7 @@ export interface AIConfig {
   // OpenAI-compatible
   openaiBaseUrl: string;        // ex: https://api.openai.com/v1, https://api.mistral.ai/v1, https://api.groq.com/openai/v1
   openaiApiKey: string;
-  openaiModel: string;          // ex: gpt-4o-mini, mistral-small-latest, llama-3.1-70b-versatile
+  openaiModel: string;          // ex: gpt-4o-mini, mistral-small-latest, llama-3.3-70b-versatile
   // Commun
   temperature: number;
 }
@@ -43,7 +43,7 @@ export const PROVIDER_PRESETS: Array<{
 }> = [
   { id: 'openai',   name: 'OpenAI',                 baseUrl: 'https://api.openai.com/v1',           suggestedModel: 'gpt-4o-mini',          signupUrl: 'https://platform.openai.com/api-keys',          description: 'GPT-4o, fiable et précis. Tarif raisonnable, latence faible.' },
   { id: 'mistral',  name: 'Mistral La Plateforme',  baseUrl: 'https://api.mistral.ai/v1',           suggestedModel: 'mistral-small-latest', signupUrl: 'https://console.mistral.ai/api-keys',           description: 'Européen, multilingue, conforme RGPD. Très bon en français.' },
-  { id: 'groq',     name: 'Groq',                   baseUrl: 'https://api.groq.com/openai/v1',      suggestedModel: 'llama-3.1-70b-versatile', signupUrl: 'https://console.groq.com/keys',              description: 'Inférence ultra-rapide (>500 tokens/s). Llama 3 hébergé.' },
+  { id: 'groq',     name: 'Groq',                   baseUrl: 'https://api.groq.com/openai/v1',      suggestedModel: 'llama-3.3-70b-versatile', signupUrl: 'https://console.groq.com/keys',              description: 'Inférence ultra-rapide (>500 tokens/s). Llama 3.3 70B hébergé.' },
   { id: 'together', name: 'Together AI',            baseUrl: 'https://api.together.xyz/v1',         suggestedModel: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo', signupUrl: 'https://api.together.ai/settings/api-keys', description: 'Modèles open-source hébergés (Llama, Qwen, Mixtral).' },
   { id: 'anthropic', name: 'Anthropic Claude (via proxy)', baseUrl: 'https://api.anthropic.com/v1', suggestedModel: 'claude-3-5-sonnet-20241022', signupUrl: 'https://console.anthropic.com/settings/keys', description: 'Claude Sonnet — qualité haut de gamme. Nécessite un proxy OpenAI-compat.' },
 ];
@@ -55,6 +55,21 @@ function sanitize(s: string): string {
   return s.replace(/[^\x20-\x7E]/g, '').trim();
 }
 
+// Mapping de modèles décommissionnés → leur successeur officiel
+// (mis à jour quand un fournisseur retire un modèle pour migrer auto les users)
+const DEPRECATED_MODELS: Record<string, string> = {
+  // Groq — voir https://console.groq.com/docs/deprecations
+  'llama-3.1-70b-versatile': 'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant': 'llama-3.1-8b-instant', // toujours valide
+  'mixtral-8x7b-32768': 'llama-3.3-70b-versatile', // décommissionné
+  // OpenAI
+  'gpt-4-vision-preview': 'gpt-4o',
+  'gpt-3.5-turbo-0301': 'gpt-3.5-turbo',
+  // Anthropic
+  'claude-3-sonnet-20240229': 'claude-3-5-sonnet-20241022',
+  'claude-2.1': 'claude-3-5-sonnet-20241022',
+};
+
 export function loadConfig(): AIConfig {
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -64,6 +79,15 @@ export function loadConfig(): AIConfig {
     if (parsed.openaiApiKey) parsed.openaiApiKey = sanitize(parsed.openaiApiKey);
     if (parsed.openaiBaseUrl) parsed.openaiBaseUrl = sanitize(parsed.openaiBaseUrl);
     if (parsed.ollamaUrl) parsed.ollamaUrl = sanitize(parsed.ollamaUrl);
+    // Migration auto : si le modèle est dans la liste des décommissionnés,
+    // remplace par le successeur et persiste
+    if (parsed.openaiModel && DEPRECATED_MODELS[parsed.openaiModel]) {
+      const oldModel = parsed.openaiModel;
+      parsed.openaiModel = DEPRECATED_MODELS[oldModel];
+      // eslint-disable-next-line no-console
+      console.info(`[AI] Migration auto modèle décommissionné : ${oldModel} → ${parsed.openaiModel}`);
+      try { localStorage.setItem(CFG_KEY, JSON.stringify(parsed)); } catch { /* ignore */ }
+    }
     return parsed;
   } catch { return { ...DEFAULTS }; }
 }
