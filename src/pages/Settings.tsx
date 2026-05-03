@@ -1674,17 +1674,49 @@ const WEBHOOK_EVENTS: { id: WebhookEvent; label: string; desc: string }[] = [
   { id: 'export.generated', label: 'Export généré',      desc: 'Un export PDF/Excel a été produit' },
 ];
 
-const TOKENS_KEY = 'cockpit-api-tokens';
-const WEBHOOKS_KEY = 'cockpit-webhooks';
+// Multi-tenant : tokens et webhooks scopés par orgId pour isoler les sociétés.
+// Les clés legacy 'cockpit-api-tokens' / 'cockpit-webhooks' (non scopées) sont
+// migrées automatiquement vers la société courante au premier load.
+const tokensKey = (orgId: string) => `cockpit-api-tokens-${orgId}`;
+const webhooksKey = (orgId: string) => `cockpit-webhooks-${orgId}`;
+const LEGACY_TOKENS_KEY = 'cockpit-api-tokens';
+const LEGACY_WEBHOOKS_KEY = 'cockpit-webhooks';
 
-function loadTokens(): ApiToken[] {
-  try { return JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '[]'); } catch { return []; }
+function loadTokens(orgId: string): ApiToken[] {
+  try {
+    // Migration legacy : si la clé non-scopée existe et que la clé scopée n'existe pas
+    const scoped = localStorage.getItem(tokensKey(orgId));
+    if (!scoped) {
+      const legacy = localStorage.getItem(LEGACY_TOKENS_KEY);
+      if (legacy) {
+        localStorage.setItem(tokensKey(orgId), legacy);
+        localStorage.removeItem(LEGACY_TOKENS_KEY);
+        return JSON.parse(legacy);
+      }
+    }
+    return JSON.parse(scoped ?? '[]');
+  } catch { return []; }
 }
-function saveTokens(tokens: ApiToken[]) { localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens)); }
-function loadWebhooks(): Webhook[] {
-  try { return JSON.parse(localStorage.getItem(WEBHOOKS_KEY) ?? '[]'); } catch { return []; }
+function saveTokens(orgId: string, tokens: ApiToken[]) {
+  localStorage.setItem(tokensKey(orgId), JSON.stringify(tokens));
 }
-function saveWebhooks(hooks: Webhook[]) { localStorage.setItem(WEBHOOKS_KEY, JSON.stringify(hooks)); }
+function loadWebhooks(orgId: string): Webhook[] {
+  try {
+    const scoped = localStorage.getItem(webhooksKey(orgId));
+    if (!scoped) {
+      const legacy = localStorage.getItem(LEGACY_WEBHOOKS_KEY);
+      if (legacy) {
+        localStorage.setItem(webhooksKey(orgId), legacy);
+        localStorage.removeItem(LEGACY_WEBHOOKS_KEY);
+        return JSON.parse(legacy);
+      }
+    }
+    return JSON.parse(scoped ?? '[]');
+  } catch { return []; }
+}
+function saveWebhooks(orgId: string, hooks: Webhook[]) {
+  localStorage.setItem(webhooksKey(orgId), JSON.stringify(hooks));
+}
 
 async function generateToken(): Promise<{ key: string; prefix: string; hashedKey: string }> {
   const buf = new Uint8Array(32);
@@ -1703,13 +1735,23 @@ function generateWebhookSecret(): string {
 }
 
 function TabIntegrations() {
-  const [tokens, setTokens] = useState<ApiToken[]>(() => loadTokens());
-  const [webhooks, setWebhooks] = useState<Webhook[]>(() => loadWebhooks());
+  const { currentOrgId } = useApp();
+  // Fallback 'global' uniquement quand aucune société n'est sélectionnée
+  // (cas exceptionnel : reset complet, première installation)
+  const orgScope = currentOrgId ?? 'global';
+  const [tokens, setTokens] = useState<ApiToken[]>(() => loadTokens(orgScope));
+  const [webhooks, setWebhooks] = useState<Webhook[]>(() => loadWebhooks(orgScope));
   const [newTokenName, setNewTokenName] = useState('');
   const [newTokenScopes, setNewTokenScopes] = useState<ApiToken['scopes']>(['read']);
   const [revealedToken, setRevealedToken] = useState<{ name: string; key: string } | null>(null);
   const [newHookUrl, setNewHookUrl] = useState('');
   const [newHookEvents, setNewHookEvents] = useState<WebhookEvent[]>([]);
+
+  // Recharge tokens + webhooks quand la société change
+  useEffect(() => {
+    setTokens(loadTokens(orgScope));
+    setWebhooks(loadWebhooks(orgScope));
+  }, [orgScope]);
 
   const createToken = async () => {
     if (!newTokenName.trim()) { toast.warning('Nom requis'); return; }
@@ -1723,7 +1765,7 @@ function TabIntegrations() {
       createdAt: Date.now(),
     };
     const next = [...tokens, token];
-    setTokens(next); saveTokens(next);
+    setTokens(next); saveTokens(orgScope, next);
     setRevealedToken({ name: token.name, key });
     setNewTokenName(''); setNewTokenScopes(['read']);
     toast.success('Token créé', 'Copiez-le maintenant — il ne sera plus affiché');
@@ -1732,7 +1774,7 @@ function TabIntegrations() {
   const revokeToken = (id: string) => {
     if (!confirm('Révoquer ce token ? Les requêtes l\'utilisant seront refusées immédiatement.')) return;
     const next = tokens.filter((t) => t.id !== id);
-    setTokens(next); saveTokens(next);
+    setTokens(next); saveTokens(orgScope, next);
     toast.success('Token révoqué');
   };
 
@@ -1751,20 +1793,20 @@ function TabIntegrations() {
       createdAt: Date.now(),
     };
     const next = [...webhooks, hook];
-    setWebhooks(next); saveWebhooks(next);
+    setWebhooks(next); saveWebhooks(orgScope, next);
     setNewHookUrl(''); setNewHookEvents([]);
     toast.success('Webhook créé', `${hook.events.length} événement(s) configuré(s)`);
   };
 
   const toggleHook = (id: string) => {
     const next = webhooks.map((h) => h.id === id ? { ...h, active: !h.active } : h);
-    setWebhooks(next); saveWebhooks(next);
+    setWebhooks(next); saveWebhooks(orgScope, next);
   };
 
   const deleteHook = (id: string) => {
     if (!confirm('Supprimer ce webhook ?')) return;
     const next = webhooks.filter((h) => h.id !== id);
-    setWebhooks(next); saveWebhooks(next);
+    setWebhooks(next); saveWebhooks(orgScope, next);
   };
 
   const copyToClipboard = async (text: string, label: string) => {
