@@ -12,6 +12,7 @@ import { useApp } from '../store/app';
 import { useStatements, useRatios, useMonthlyCA, useCurrentOrg } from '../hooks/useFinancials';
 import { fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { SEMANTIC } from '../lib/semantic';
 
 export default function ClosingPackPage() {
   const { currentYear, fromMonth, toMonth } = useApp();
@@ -124,7 +125,7 @@ export default function ClosingPackPage() {
                 <BarChart data={ratios.slice(0, 5).map((r) => ({ name: r.code, value: r.value, status: r.status }))} layout="vertical">
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {ratios.slice(0, 5).map((r, i) => (
-                      <Cell key={i} fill={r.status === 'good' ? '#22c55e' : r.status === 'warn' ? '#f59e0b' : '#ef4444'} />
+                      <Cell key={i} fill={r.status === 'good' ? SEMANTIC.success : r.status === 'warn' ? SEMANTIC.warning : SEMANTIC.danger} />
                     ))}
                   </Bar>
                 </BarChart>

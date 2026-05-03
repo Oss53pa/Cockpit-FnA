@@ -25,6 +25,7 @@ import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull, fmtK } from '../lib/format';
+import { SEMANTIC } from '../lib/semantic';
 
 // ─── Thème Nivo unifié avec les CSS vars de l'app ─────────────────
 function useNivoTheme() {
@@ -109,10 +110,10 @@ export default function ExecutiveSummary() {
       etape: l.key,
       valeur: Math.round(l.value),
       color:
-        l.type === 'final' ? (l.value >= 0 ? ct.at(0) : '#ef4444') :
+        l.type === 'final' ? (l.value >= 0 ? ct.at(0) : SEMANTIC.danger) :
         l.type === 'subtotal' ? ct.at(3) :
-        l.type === 'positive' ? '#22c55e' :
-        '#ef4444',
+        l.type === 'positive' ? SEMANTIC.success :
+        SEMANTIC.danger,
     }));
   }, [sig, ct]);
 
@@ -230,7 +231,7 @@ export default function ExecutiveSummary() {
       <ChartCard
         title="Santé financière — diagnostic automatique"
         subtitle="Indicateurs critiques détectés à partir du GL"
-        accent={alerts.some((a) => a.level === 'danger') ? '#ef4444' : alerts.some((a) => a.level === 'warn') ? '#f59e0b' : '#22c55e'}
+        accent={alerts.some((a) => a.level === 'danger') ? SEMANTIC.danger : alerts.some((a) => a.level === 'warn') ? SEMANTIC.warning : SEMANTIC.success}
         className="mb-6"
       >
         <ul className="space-y-2">
@@ -369,9 +370,9 @@ export default function ExecutiveSummary() {
               {ratios.slice(0, 8).map((r) => {
                 const pct = r.target ? Math.min(100, Math.abs((r.value / r.target) * 100)) : 0;
                 const statusColor =
-                  r.status === 'good' ? '#22c55e' :
-                  r.status === 'warn' ? '#f59e0b' :
-                  '#ef4444';
+                  r.status === 'good' ? SEMANTIC.success :
+                  r.status === 'warn' ? SEMANTIC.warning :
+                  SEMANTIC.danger;
                 return (
                   <tr key={r.code} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
                     <td className="py-2 px-3 font-medium text-[13px]">{r.label}</td>
