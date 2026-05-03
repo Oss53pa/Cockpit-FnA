@@ -20,6 +20,7 @@ import { ResponsivePie } from '@nivo/pie';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
+import { DashboardNav } from '../components/ui/DashboardNav';
 import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
@@ -429,6 +430,8 @@ export default function ExecutiveSummary() {
           />
         </div>
       </ChartCard>
+
+      <DashboardNav currentRoute="/dashboard/exec" />
     </div>
   );
 }

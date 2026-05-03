@@ -264,6 +264,44 @@ export type Activity = {
   resolvedBy?: string;
 };
 
+// ── Chat interne : channels + messages entre collaborateurs ──
+export type ChannelKind = 'public' | 'private' | 'dm';
+export type Channel = {
+  id: string;
+  orgId: string;
+  kind: ChannelKind;
+  name: string;
+  description?: string;
+  /** Liste des userId membres (null = tous accès si public) */
+  members?: string[];
+  createdBy: string;
+  createdAt: number;
+  updatedAt?: number;
+  /** Pour les DM 1:1, pinné en haut */
+  isPinned?: boolean;
+};
+
+export type ChatMessage = {
+  id?: number;
+  orgId: string;
+  channelId: string;
+  userId: string;
+  userName: string;
+  content: string;
+  /** Mentions @user : liste d'userIds */
+  mentions?: string[];
+  /** Reactions emoji : { '👍': ['user1', 'user2'], '🚀': ['user3'] } */
+  reactions?: Record<string, string[]>;
+  /** ID du message parent si réponse en thread */
+  replyTo?: number;
+  /** Pièce jointe optionnelle (URL Supabase storage) */
+  attachment?: { name: string; url: string; size?: number; type?: string };
+  createdAt: number;
+  editedAt?: number;
+  /** Liste des userId qui ont lu le message */
+  readBy?: string[];
+};
+
 class CockpitDB extends Dexie {
   organizations!: Table<Organization, string>;
   fiscalYears!: Table<FiscalYear, string>;
@@ -283,6 +321,8 @@ class CockpitDB extends Dexie {
   analyticAssignments!: Table<AnalyticAssignment, number>;
   analyticBudgets!: Table<AnalyticBudget, number>;
   activities!: Table<Activity, number>;
+  channels!: Table<Channel, string>;
+  chatMessages!: Table<ChatMessage, number>;
 
   constructor() {
     super('CockpitFA');
@@ -319,6 +359,11 @@ class CockpitDB extends Dexie {
     // v6 : table activities pour annotations / comments / corrections / validations
     this.version(6).stores({
       activities: '++id, orgId, kind, status, context, linkedId, createdAt, [orgId+createdAt], [orgId+kind], [orgId+status]',
+    });
+    // v7 : tables chat (channels + messages) entre collaborateurs
+    this.version(7).stores({
+      channels: 'id, orgId, kind, name, [orgId+kind], [orgId+name]',
+      chatMessages: '++id, orgId, channelId, userId, createdAt, [channelId+createdAt], [orgId+channelId], replyTo',
     });
   }
 }
