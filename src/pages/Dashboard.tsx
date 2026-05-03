@@ -10,6 +10,7 @@ import clsx from 'clsx';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
@@ -93,9 +94,9 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
-        <button className="btn-primary text-sm"><Download className="w-4 h-4" /> Exporter</button>
+      <DashboardTopBar currentRoute={`/dashboard/${id}`} />
+      <div className="flex justify-end mb-3">
+        <button className="btn-clay text-sm"><Download className="w-4 h-4" /> Exporter</button>
       </div>
       <DashHeader icon={meta.icon} title={meta.title} subtitle={subtitle} gradient={ct.gradient(gradientVariants[id ?? 'cp'] ?? 'a')} />
 

@@ -12,6 +12,7 @@ import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull, fmtK } from '../lib/format';
+import { SEMANTIC } from '../lib/semantic';
 
 export default function BreakEven() {
   const { currentYear } = useApp();
@@ -104,8 +105,8 @@ export default function BreakEven() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <KPICard title="Chiffre d'affaires" value={fmtK(ca)} unit="XOF" icon={<TrendingUp className="w-4 h-4" />} color={ct.at(0)} />
         <KPICard title="Point mort" value={fmtK(pointMort)} unit="XOF" subValue={`MCV : ${tauxMcv.toFixed(1)} %`} icon={<Target className="w-4 h-4" />} color={ct.at(3)} />
-        <KPICard title="Marge de sécurité" value={fmtK(margeSecurite)} unit="XOF" icon={<Activity className="w-4 h-4" />} color={margeSecurite >= 0 ? '#22c55e' : '#ef4444'} />
-        <KPICard title="Indice de sécurité" value={`${indiceSecu.toFixed(1)} %`} subValue={indiceSecu > 20 ? 'Zone confortable' : indiceSecu > 0 ? 'Zone de vigilance' : 'SOUS le point mort'} icon={<AlertTriangle className="w-4 h-4" />} color={indiceSecu > 20 ? '#22c55e' : indiceSecu > 0 ? '#f59e0b' : '#ef4444'} />
+        <KPICard title="Marge de sécurité" value={fmtK(margeSecurite)} unit="XOF" icon={<Activity className="w-4 h-4" />} color={margeSecurite >= 0 ? SEMANTIC.success : SEMANTIC.danger} />
+        <KPICard title="Indice de sécurité" value={`${indiceSecu.toFixed(1)} %`} subValue={indiceSecu > 20 ? 'Zone confortable' : indiceSecu > 0 ? 'Zone de vigilance' : 'SOUS le point mort'} icon={<AlertTriangle className="w-4 h-4" />} color={indiceSecu > 20 ? SEMANTIC.success : indiceSecu > 0 ? SEMANTIC.warning : SEMANTIC.danger} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
@@ -162,7 +163,7 @@ export default function BreakEven() {
               xScale={{ type: 'linear', min: 0, max: 'auto' }}
               yScale={{ type: 'linear', min: 0, max: 'auto' }}
               curve="linear"
-              colors={[ct.at(0), '#ef4444', '#f59e0b']}
+              colors={[ct.at(0), SEMANTIC.danger, SEMANTIC.warning]}
               lineWidth={2.5}
               enablePoints={false}
               enableArea={false}
@@ -174,7 +175,7 @@ export default function BreakEven() {
                 { anchor: 'bottom-right', direction: 'column', translateX: 100, translateY: 0, itemWidth: 90, itemHeight: 18, itemTextColor: 'rgb(var(--p-600))', symbolSize: 10 },
               ]}
               markers={pointMort > 0 ? [
-                { axis: 'x', value: pointMort, lineStyle: { stroke: '#22c55e', strokeWidth: 1.5, strokeDasharray: '4 4' }, legend: `PM : ${fmtK(pointMort)}`, legendOrientation: 'vertical', textStyle: { fill: '#22c55e', fontSize: 10, fontWeight: 600 } },
+                { axis: 'x', value: pointMort, lineStyle: { stroke: SEMANTIC.success, strokeWidth: 1.5, strokeDasharray: '4 4' }, legend: `PM : ${fmtK(pointMort)}`, legendOrientation: 'vertical', textStyle: { fill: SEMANTIC.success, fontSize: 10, fontWeight: 600 } },
               ] : []}
             />
           </div>

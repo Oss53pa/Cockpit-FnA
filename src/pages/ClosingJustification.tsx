@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Shield, FileText, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { TabSwitch } from '../components/ui/TabSwitch';
@@ -84,6 +85,7 @@ export default function ClosingJustificationPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/closing-justification" />
       <PageHeader
         title="Justification des écritures de clôture"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · Provisions, CCA/PCA, FAE/FAP, dotations`}

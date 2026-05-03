@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -57,6 +58,7 @@ export default function LettragePage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/lettrage" />
       <PageHeader title="Lettrage des comptes tiers" subtitle={`${org?.name ?? '—'} · Qualité du suivi clients/fournisseurs`} />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, ArrowUpFromLine, Banknote, Activity, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -68,6 +69,7 @@ export default function TFTMonthlyPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/tft-monthly" />
       <PageHeader
         title="Tableau des Flux de Trésorerie"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · SYSCOHADA art. 38 — vue mensuelle 12 mois`}

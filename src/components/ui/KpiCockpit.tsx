@@ -99,14 +99,18 @@ export function KpiCockpit({
 
 /** Sparkline avec gradient de remplissage — signature visuelle Cockpit CR */
 function SparklineGradient({ data, color, fill, height = 48 }: { data: number[]; color: string; fill: string; height?: number }) {
-  if (!data || data.length < 2) return null;
+  // Sanitize : retire les NaN/Infinity qui causent des erreurs SVG path
+  const cleanData = (data ?? []).map((v) => (Number.isFinite(v) ? v : 0));
+  if (cleanData.length < 2) return null;
   const w = 200;
   const h = height;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const min = Math.min(...cleanData);
+  const max = Math.max(...cleanData);
   const range = max - min || 1;
-  const stepX = w / (data.length - 1);
-  const id = `spark-${color.replace('#', '')}`;
+  const stepX = w / (cleanData.length - 1);
+  const id = `spark-${color.replace('#', '')}-${Math.random().toString(36).slice(2, 7)}`;
+  // Reassign data var name for the rest of the function
+  data = cleanData;
 
   // Smoothed curve via cubic Bezier (catmull-rom approximation)
   const points = data.map((v, i) => ({

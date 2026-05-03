@@ -16,6 +16,7 @@ import {
   GraduationCap, Activity, Repeat, Target, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { Card } from '../components/ui/Card';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
@@ -63,6 +64,7 @@ export default function Proph3tIntelligencePage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/proph3t" />
       <PageHeader
         title="Proph3t · Intelligence avancée"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · Date-aware · Predict · Correct · Suggest · Audit`}

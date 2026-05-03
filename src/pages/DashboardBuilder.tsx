@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { SEMANTIC } from '../lib/semantic';
 import {
   Plus, Save, Eye, Edit, Trash2, GripVertical,
   TrendingUp, TrendingDown, Wallet, Activity, BadgeDollarSign,
@@ -312,7 +313,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
       { name: 'Marge brute', value: mb, fill: ct.at(1) },
       { name: 'VA', value: va, fill: ct.at(2) },
       { name: 'EBE', value: ebe, fill: ct.at(3) },
-      { name: 'Résultat net', value: rn, fill: rn >= 0 ? '#22c55e' : '#ef4444' },
+      { name: 'Résultat net', value: rn, fill: rn >= 0 ? SEMANTIC.success : SEMANTIC.danger },
     ];
     return (
       <div className="relative">{removeBtn}
@@ -389,7 +390,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
               <YAxis {...ct.axisProps} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} />
               <Bar dataKey="rn" radius={[4, 4, 0, 0]}>
-                {data.map((d, i) => <Cell key={i} fill={d.rn >= 0 ? '#22c55e' : '#ef4444'} />)}
+                {data.map((d, i) => <Cell key={i} fill={d.rn >= 0 ? SEMANTIC.success : SEMANTIC.danger} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

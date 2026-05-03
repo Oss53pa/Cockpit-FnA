@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Download, Layers } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { TabSwitch } from '../components/ui/TabSwitch';
@@ -54,6 +55,7 @@ export default function BilanMonthlyPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/bilan-monthly" />
       <PageHeader
         title="Bilan comparatif mensuel"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · Évolution structure financière 12 mois`}

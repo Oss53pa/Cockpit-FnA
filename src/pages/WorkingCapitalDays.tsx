@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { Clock, Users, Truck, Package } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useStatements, useRatios, useCurrentOrg } from '../hooks/useFinancials';
@@ -38,6 +39,7 @@ export default function WorkingCapitalDaysPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/wcd" />
       <PageHeader
         title="Working Capital Days"
         subtitle={`${org?.name ?? '—'} · Cycle d'exploitation : DSO + DIO − DPO`}

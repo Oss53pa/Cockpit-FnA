@@ -122,7 +122,7 @@ export default function Home() {
                 Bienvenue · {moisActuel} {currentYear}
               </span>
             </div>
-            <h1 className="font-display text-6xl md:text-7xl lg:text-8xl leading-[0.95] text-primary-900 dark:text-primary-50 mb-3">
+            <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-normal leading-[0.95] text-primary-900 dark:text-primary-50 mb-3">
               Cockpit <span className="text-accent">FnA</span>
             </h1>
             <p className="text-sm md:text-base text-primary-500 dark:text-primary-400 max-w-xl leading-relaxed mx-auto">
@@ -312,14 +312,16 @@ function HeroMetric({ label, value, hint, trend, tone, indicator, onClick }: {
 }
 
 function SparkPath({ data, color }: { data: number[]; color: string }) {
-  if (!data || data.length < 2) return null;
+  const cleanData = (data ?? []).map((v) => (Number.isFinite(v) ? v : 0));
+  if (cleanData.length < 2) return null;
+  data = cleanData;
   const w = 200;
   const h = 48;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
   const stepX = w / (data.length - 1);
-  const id = `home-spark-${color.replace('#', '')}`;
+  const id = `home-spark-${color.replace('#', '')}-${Math.random().toString(36).slice(2, 7)}`;
   const points = data.map((v, i) => ({ x: i * stepX, y: h - 4 - ((v - min) / range) * (h - 8) }));
   let path = `M ${points[0].x} ${points[0].y}`;
   for (let i = 1; i < points.length; i++) {

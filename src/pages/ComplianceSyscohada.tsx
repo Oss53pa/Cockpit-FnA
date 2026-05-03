@@ -10,6 +10,7 @@ import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { fmtFull } from '../lib/format';
+import { SEMANTIC } from '../lib/semantic';
 
 type Check = {
   id: string;
@@ -154,7 +155,7 @@ export default function ComplianceSyscohada() {
   const failCount = checks.filter((c) => c.status === 'fail').length;
   const score = Math.round((okCount / checks.length) * 100);
 
-  const scoreColor = score >= 90 ? '#22c55e' : score >= 70 ? '#f59e0b' : '#ef4444';
+  const scoreColor = score >= 90 ? SEMANTIC.success : score >= 70 ? SEMANTIC.warning : SEMANTIC.danger;
 
   return (
     <div>

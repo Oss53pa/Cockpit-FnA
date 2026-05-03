@@ -15,6 +15,7 @@ import { useBalance, useCurrentOrg, useStatements } from '../hooks/useFinancials
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull, fmtK } from '../lib/format';
 import { agedBalance, AgedTier } from '../engine/analytics';
+import { SEMANTIC } from '../lib/semantic';
 
 type Week = {
   label: string;
@@ -186,9 +187,9 @@ export default function CashflowForecast() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KPICard title="Trésorerie actuelle" value={fmtK(tresoStart)} unit="XOF" icon={<Wallet className="w-4 h-4" />} color={tresoStart >= 0 ? ct.at(0) : '#ef4444'} />
-        <KPICard title="Trésorerie à S+13" value={fmtK(finalCash)} unit="XOF" subValue={finalCash >= tresoStart ? 'En amélioration' : 'En dégradation'} icon={finalCash >= tresoStart ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />} color={finalCash >= 0 ? ct.at(3) : '#ef4444'} />
-        <KPICard title="Trésorerie minimale" value={fmtK(minCash)} unit="XOF" subValue={`atteinte en ${minWeek}`} icon={<AlertTriangle className="w-4 h-4" />} color={minCash >= 0 ? '#22c55e' : '#ef4444'} />
+        <KPICard title="Trésorerie actuelle" value={fmtK(tresoStart)} unit="XOF" icon={<Wallet className="w-4 h-4" />} color={tresoStart >= 0 ? ct.at(0) : SEMANTIC.danger} />
+        <KPICard title="Trésorerie à S+13" value={fmtK(finalCash)} unit="XOF" subValue={finalCash >= tresoStart ? 'En amélioration' : 'En dégradation'} icon={finalCash >= tresoStart ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />} color={finalCash >= 0 ? ct.at(3) : SEMANTIC.danger} />
+        <KPICard title="Trésorerie minimale" value={fmtK(minCash)} unit="XOF" subValue={`atteinte en ${minWeek}`} icon={<AlertTriangle className="w-4 h-4" />} color={minCash >= 0 ? SEMANTIC.success : SEMANTIC.danger} />
         <KPICard title="Flux net cumulé" value={fmtK(totalEnc - totalDec)} unit="XOF" subValue={`${fmtK(totalEnc)} encaissés · ${fmtK(totalDec)} décaissés`} icon={<Wallet className="w-4 h-4" />} color={ct.at(4)} />
       </div>
 
@@ -226,7 +227,7 @@ export default function CashflowForecast() {
               theme={nivoTheme}
               animate={false}
               markers={[
-                { axis: 'y', value: criticalThreshold, lineStyle: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 5' }, legend: `Seuil critique`, legendOrientation: 'horizontal', textStyle: { fill: '#ef4444', fontSize: 9 } },
+                { axis: 'y', value: criticalThreshold, lineStyle: { stroke: SEMANTIC.danger, strokeWidth: 1.5, strokeDasharray: '5 5' }, legend: `Seuil critique`, legendOrientation: 'horizontal', textStyle: { fill: SEMANTIC.danger, fontSize: 9 } },
                 { axis: 'y', value: 0, lineStyle: { stroke: 'rgb(var(--p-400))', strokeWidth: 1 } },
               ]}
             />
@@ -251,7 +252,7 @@ export default function CashflowForecast() {
               indexBy="week"
               margin={{ top: 10, right: 10, bottom: 40, left: 50 }}
               padding={0.25}
-              colors={({ data }) => ((data as any).value >= 0 ? '#22c55e' : '#ef4444')}
+              colors={({ data }) => ((data as any).value >= 0 ? SEMANTIC.success : SEMANTIC.danger)}
               colorBy="indexValue"
               axisBottom={{ tickRotation: -45 }}
               axisLeft={{ format: (v: number) => fmtK(v) }}

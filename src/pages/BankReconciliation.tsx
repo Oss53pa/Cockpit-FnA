@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Banknote, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -13,6 +14,7 @@ import { db } from '../db/schema';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 import { useCurrentOrg } from '../hooks/useFinancials';
+import { SEMANTIC } from '../lib/semantic';
 
 export default function BankReconciliationPage() {
   const { currentOrgId, currentYear } = useApp();
@@ -56,6 +58,7 @@ export default function BankReconciliationPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/bank-reconciliation" />
       <PageHeader
         title="Réconciliation bancaire"
         subtitle={`${org?.name ?? '—'} · Comparaison GL / relevé bancaire`}
@@ -81,7 +84,7 @@ export default function BankReconciliationPage() {
           <p className="text-xs text-primary-500 mt-2">Solde au {new Date().toLocaleDateString('fr-FR')}</p>
         </ChartCard>
 
-        <ChartCard title="Statut" accent={reconcilie ? '#22c55e' : '#ef4444'}>
+        <ChartCard title="Statut" accent={reconcilie ? SEMANTIC.success : SEMANTIC.danger}>
           {reconcilie ? (
             <div className="flex items-center gap-2 text-success">
               <CheckCircle2 className="w-5 h-5" />

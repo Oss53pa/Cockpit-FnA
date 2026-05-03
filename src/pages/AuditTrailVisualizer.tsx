@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { ShieldCheck, ShieldAlert, Hash } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { toast } from '../components/ui/Toast';
@@ -46,6 +47,7 @@ export default function AuditTrailVisualizer() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/audit-trail" />
       <PageHeader
         title="Audit Trail Visuel"
         subtitle={`${org?.name ?? '—'} · Chaînage SHA-256 des écritures GL · Conformité SYSCOHADA art. 17`}

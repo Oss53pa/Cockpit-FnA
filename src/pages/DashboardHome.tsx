@@ -125,13 +125,15 @@ export default function DashboardHome() {
     });
   };
 
-  // Trends pour les sparklines KPI (12 derniers mois)
-  const caTrend = caData.map((m) => m.realise);
-  const tnTrend = activeFr.map((r) => r.tn);
-  // Pour résultat / EBE : pas de série mensuelle directe — approximation via CA pondéré
-  const totCaForRatio = caData.reduce((s, m) => s + m.realise, 0) || 1;
-  const resTrend = caData.map((m) => (m.realise / totCaForRatio) * sig.resultat);
-  const ebeTrend = caData.map((m) => (m.realise / totCaForRatio) * sig.ebe);
+  // Trends pour les sparklines KPI (12 derniers mois) — sanitized pour eviter NaN/Infinity
+  const safe = (v: number) => (Number.isFinite(v) ? v : 0);
+  const caTrend = caData.map((m) => safe(m.realise));
+  const tnTrend = activeFr.map((r) => safe(r.tn));
+  const totCaForRatio = caData.reduce((s, m) => s + safe(m.realise), 0) || 1;
+  const sigResultat = safe(sig.resultat);
+  const sigEbe = safe(sig.ebe);
+  const resTrend = caData.map((m) => safe((safe(m.realise) / totCaForRatio) * sigResultat));
+  const ebeTrend = caData.map((m) => safe((safe(m.realise) / totCaForRatio) * sigEbe));
 
   return (
     <div>

@@ -173,7 +173,10 @@ export function KPICard({
 
 /** Sparkline avec gradient remplissage — niveau Cockpit CR/Stripe Dashboard */
 function KPISparkline({ data, color }: { data: number[]; color: string }) {
-  if (!data || data.length < 2) return null;
+  // Sanitize : retire NaN/Infinity (cause path SVG invalide)
+  const cleanData = (data ?? []).map((v) => (Number.isFinite(v) ? v : 0));
+  if (cleanData.length < 2) return null;
+  data = cleanData;
   const w = 200;
   const h = 40;
   const min = Math.min(...data);
