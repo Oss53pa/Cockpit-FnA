@@ -88,6 +88,15 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   // ── Budget mensuel par compte (dernière version) ──
   const budgetByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
   const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
+  if (allBudgets.length === 0) {
+    const allOrgBudgets = await db.budgets.where('orgId').equals(orgId).toArray();
+    if (allOrgBudgets.length > 0) {
+      const yearsWithBudget = Array.from(new Set(allOrgBudgets.map((b) => b.year))).sort((a, b) => b - a);
+      console.warn('[monthly] Pas de budget pour ' + year + ' (orgId=' + orgId + '). Annees disponibles : ' + yearsWithBudget.join(', '));
+    } else {
+      console.warn('[monthly] Aucun budget charge pour orgId=' + orgId + '. Allez dans Budget pour en charger un.');
+    }
+  }
   const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
   const lastVersion = versions[versions.length - 1];
   if (lastVersion) {
@@ -97,6 +106,8 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
       const map = budgetByMonthAccount[l.month - 1];
       map.set(l.account, (map.get(l.account) ?? 0) + l.amount);
     }
+    const uniqueAccounts = new Set(lines.map((l) => l.account)).size;
+    console.log('[monthly] Budget charge : orgId=' + orgId + ' year=' + year + ' version=' + lastVersion + ' (' + lines.length + ' lignes, ' + uniqueAccounts + ' comptes)');
   }
 
   // ── Réalisé N-1 par mois (mêmes périodes, année year-1) ──
