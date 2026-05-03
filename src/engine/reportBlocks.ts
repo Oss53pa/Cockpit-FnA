@@ -302,7 +302,20 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
           ]; title ||= 'Soldes intermédiaires de gestion'; break;
           case 'balance': head = ['Compte', 'Libellé', 'Débit', 'Crédit', 'Solde D', 'Solde C']; body = data.balance.slice(0, limit).map((r) => [r.account, r.label, fmt(r.debit), fmt(r.credit), r.soldeD ? fmt(r.soldeD) : '', r.soldeC ? fmt(r.soldeC) : '']); title ||= `Balance générale (${Math.min(limit, data.balance.length)} sur ${data.balance.length})`; break;
           case 'ratios': head = ['Famille', 'Ratio', 'Valeur', 'Cible', 'Statut']; body = data.ratios.map((r) => [r.family, r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : r.unit === 'j' ? `${Math.round(r.value)} j` : r.value.toFixed(2), `${r.target}${r.unit === '%' ? ' %' : ''}`, r.status === 'good' ? 'OK' : r.status === 'warn' ? 'Vigilance' : 'Alerte']); title ||= 'Ratios financiers'; break;
-          case 'budget_actual': head = ['Compte', 'Libellé', 'Réalisé', 'Budget', 'Écart', 'Var %']; body = (data.budgetActual ?? []).slice(0, limit).map((r) => [r.code, r.label, fmt(r.realise), fmt(r.budget), fmt(r.ecart), r.ecartPct ? r.ecartPct.toFixed(1) + '%' : '—']); title ||= 'Budget vs Réalisé'; break;
+          case 'budget_actual': {
+            const ba = data.budgetActual ?? [];
+            const totB = ba.reduce((s: number, r: any) => s + (r.budget ?? 0), 0);
+            const hasB = Math.abs(totB) > 0.01;
+            head = ['Compte', 'Libellé', 'Réalisé', 'Budget', 'Écart', 'Var %'];
+            body = ba.slice(0, limit).map((r) => [
+              r.code, r.label, fmt(r.realise),
+              hasB ? fmt(r.budget) : '—',
+              hasB ? fmt(r.ecart) : '—',
+              hasB && r.ecartPct ? r.ecartPct.toFixed(1) + '%' : '—',
+            ]);
+            title ||= 'Budget vs Réalisé';
+            break;
+          }
           case 'capital': head = ['Rubrique', 'Ouverture', 'Augm.', 'Dimin.', 'Clôture']; body = (data.capital ?? []).map((m: any) => [m.rubrique, fmt(m.ouverture), m.augmentation ? '+' + fmt(m.augmentation) : '—', m.diminution ? '−' + fmt(m.diminution) : '—', fmt(m.cloture)]); title ||= 'Variation des capitaux propres'; break;
           case 'tft': head = ['Code', 'Poste', 'Montant']; body = (data.tft ?? []).map((l) => [l.code.startsWith('_') ? '' : l.code, l.label, fmt(l.value)]); title ||= 'Tableau des flux de trésorerie'; break;
         }
@@ -477,7 +490,18 @@ export async function buildPPTXFromBlocks(config: ReportConfig, data: ReportData
           case 'bilan_passif': head = ['Code','Poste','Montant']; body = data.bilanPassif.slice(0, limit).map((l) => [l.code.startsWith('_')?'':l.code, l.label, fmt(l.value)]); break;
           case 'cr': head = ['Code','Poste','Montant']; body = data.cr.slice(0, limit).map((l) => [l.code.startsWith('_')?'':l.code, l.label, fmt(l.value)]); break;
           case 'ratios': head = ['Ratio','Valeur','Cible']; body = data.ratios.slice(0, limit).map((r) => [r.label, r.unit==='%'?`${r.value.toFixed(1)} %`:r.value.toFixed(2), `${r.target}`]); break;
-          case 'budget_actual': head = ['Compte','Réalisé','Budget','Écart']; body = (data.budgetActual ?? []).slice(0, limit).map((r) => [r.label, fmt(r.realise), fmt(r.budget), fmt(r.ecart)]); break;
+          case 'budget_actual': {
+            const ba = data.budgetActual ?? [];
+            const totB = ba.reduce((s: number, r: any) => s + (r.budget ?? 0), 0);
+            const hasB = Math.abs(totB) > 0.01;
+            head = ['Compte', 'Réalisé', 'Budget', 'Écart'];
+            body = ba.slice(0, limit).map((r) => [
+              r.label, fmt(r.realise),
+              hasB ? fmt(r.budget) : '—',
+              hasB ? fmt(r.ecart) : '—',
+            ]);
+            break;
+          }
           default: head = ['Indicateur','Valeur']; body = [['CA', fmt(data.sig.ca)], ['Résultat', fmt(data.sig.resultat)]];
         }
       } else {

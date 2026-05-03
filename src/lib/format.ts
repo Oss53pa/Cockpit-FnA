@@ -46,6 +46,40 @@ export const fmtFull = (v: number | null | undefined): string => {
   return frFull.format(v).split(NARROW_NBSP).join(' ').split(NBSP).join(' ');
 };
 
+/**
+ * Format Budget — distingue 'pas de budget saisi' de 'budget réel à zéro'.
+ *
+ * Usage typique pour une table :
+ *   const totBudget = rows.reduce((s, r) => s + r.budget, 0);
+ *   const hasBudget = Math.abs(totBudget) > 0.01;
+ *   <td>{fmtBudget(r.budget, hasBudget)}</td>
+ *
+ * Si `hasBudgetGlobal === false` → toujours "—" (pas de budget chargé)
+ * Si `hasBudgetGlobal === true`  → affiche la valeur réelle (même si 0)
+ * Si `hasBudgetGlobal === undefined` → "—" si valeur ≈ 0, sinon valeur
+ */
+export const fmtBudget = (v: number | null | undefined, hasBudgetGlobal?: boolean): string => {
+  if (!isFiniteNumber(v)) return NA;
+  if (hasBudgetGlobal === false) return NA;
+  if (hasBudgetGlobal === undefined && Math.abs(v) < 0.01) return NA;
+  return fmtFull(v);
+};
+
+/** Format Écart — '—' si pas de budget de référence (sinon l'écart n'a pas de sens). */
+export const fmtEcart = (v: number | null | undefined, hasBudgetGlobal: boolean): string => {
+  if (!isFiniteNumber(v)) return NA;
+  if (!hasBudgetGlobal) return NA;
+  return fmtFull(v);
+};
+
+/** Format Pourcentage écart — '—' si pas de budget. */
+export const fmtEcartPct = (v: number | null | undefined, hasBudgetGlobal: boolean, digits = 1): string => {
+  if (!isFiniteNumber(v)) return NA;
+  if (!hasBudgetGlobal) return NA;
+  const sign = v >= 0 ? '+' : '';
+  return `${sign}${v.toFixed(digits).replace('.', ',')} %`;
+};
+
 /** Abrégée K/M/Md (utilisable dans les axes/tooltips compacts). Jamais en entier.
  *  (P2-7) Retourne "—" pour NaN/Infinity. */
 export const fmtShort = (v: number | null | undefined): string => {
