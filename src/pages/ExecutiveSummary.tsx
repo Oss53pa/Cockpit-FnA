@@ -20,7 +20,7 @@ import { ResponsivePie } from '@nivo/pie';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
-import { DashboardNav } from '../components/ui/DashboardNav';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
@@ -159,9 +159,9 @@ export default function ExecutiveSummary() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
-        <button className="btn-primary text-sm"><Download className="w-4 h-4" /> Exporter</button>
+      <DashboardTopBar currentRoute="/dashboard/exec" />
+      <div className="flex justify-end mb-3">
+        <button className="btn-clay text-sm"><Download className="w-4 h-4" /> Exporter</button>
       </div>
 
       <DashHeader
@@ -430,8 +430,6 @@ export default function ExecutiveSummary() {
           />
         </div>
       </ChartCard>
-
-      <DashboardNav currentRoute="/dashboard/exec" />
     </div>
   );
 }

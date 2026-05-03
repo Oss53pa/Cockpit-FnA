@@ -8,7 +8,7 @@ import { ResponsiveLine } from '@nivo/line';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
 import { KPICard } from '../components/ui/KPICardV2';
-import { DashboardNav } from '../components/ui/DashboardNav';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { useApp } from '../store/app';
 import { useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
@@ -72,8 +72,8 @@ export default function ParetoAccounts() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
+      <DashboardTopBar currentRoute="/dashboard/pareto" />
+      <div className="flex justify-end mb-3">
         <div className="flex gap-1 p-0.5 bg-primary-100 dark:bg-primary-900 rounded-lg border border-primary-200 dark:border-primary-800">
           <button onClick={() => setMode('charges')} className={`px-3 py-1 text-[11px] rounded font-medium ${mode === 'charges' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600'}`}>Charges</button>
           <button onClick={() => setMode('produits')} className={`px-3 py-1 text-[11px] rounded font-medium ${mode === 'produits' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600'}`}>Produits</button>
@@ -238,8 +238,6 @@ export default function ParetoAccounts() {
           </table>
         </div>
       </ChartCard>
-
-      <DashboardNav currentRoute="/dashboard/pareto" />
     </div>
   );
 }

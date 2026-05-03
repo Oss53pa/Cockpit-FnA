@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Shield } from 'lucide-
 import { Link } from 'react-router-dom';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useStatements } from '../hooks/useFinancials';
@@ -157,9 +158,7 @@ export default function ComplianceSyscohada() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
-      </div>
+      <DashboardTopBar currentRoute="/dashboard/compliance" />
 
       <DashHeader
         icon="✓"
