@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, LabelList } from 'recharts';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
 import { useBudgetActual, useCurrentOrg, useStatements } from '../hooks/useFinancials';
@@ -159,8 +160,8 @@ export default function Waterfall() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
+      <DashboardTopBar currentRoute="/dashboard/waterfall" />
+      <div className="flex justify-end mb-3">
         <div className="flex gap-1 p-0.5 bg-primary-100 dark:bg-primary-900 rounded-lg border border-primary-200 dark:border-primary-800">
           <button onClick={() => setMode('sig')} className={`px-3 py-1 text-[11px] rounded font-medium ${mode === 'sig' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600'}`}>Cascade SIG</button>
           <button onClick={() => setMode('variance')} className={`px-3 py-1 text-[11px] rounded font-medium ${mode === 'variance' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600'}`}>Écarts Budget</button>

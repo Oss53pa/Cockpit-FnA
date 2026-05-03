@@ -8,6 +8,7 @@ import { ResponsiveBar } from '@nivo/bar';
 import { ResponsiveLine } from '@nivo/line';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
 import { useBalance, useCurrentOrg, useStatements } from '../hooks/useFinancials';
@@ -176,9 +177,7 @@ export default function CashflowForecast() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <Link to="/dashboards" className="btn-ghost text-sm"><ArrowLeft className="w-4 h-4" /> Catalogue</Link>
-      </div>
+      <DashboardTopBar currentRoute="/dashboard/cashforecast" />
 
       <DashHeader
         icon="CF"

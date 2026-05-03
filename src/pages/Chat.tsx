@@ -63,19 +63,24 @@ export default function Chat() {
   const orgUsers = useMemo(() => loadUsers(), []);
 
   // ── Charge les channels en live (Dexie reactive) ──
+  const [dbReady, setDbReady] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+  useEffect(() => {
+    // Force l'ouverture de la DB pour déclencher les migrations avant les queries
+    db.open().then(() => setDbReady(true)).catch((e) => {
+      console.error('[Chat] DB open error:', e);
+      setDbError(e?.message ?? 'Erreur base de données');
+    });
+  }, []);
+
   const channels = useLiveQuery(
     async () => {
-      if (!currentOrgId) return [];
-      try {
-        // Auto-init : crée le channel #général au premier accès
-        await getOrCreateGeneralChannel(currentOrgId, me.id);
-        return await listChannels(currentOrgId, me.id);
-      } catch (e) {
-        console.warn('[Chat] Erreur chargement channels:', e);
-        return [];
-      }
+      if (!currentOrgId || !dbReady) return [];
+      // Auto-init : crée le channel #général au premier accès
+      await getOrCreateGeneralChannel(currentOrgId, me.id);
+      return await listChannels(currentOrgId, me.id);
     },
-    [currentOrgId, me.id],
+    [currentOrgId, me.id, dbReady],
     [],
   ) ?? [];
 
@@ -89,18 +94,13 @@ export default function Chat() {
   // ── Messages du channel actif (live) ──
   const messages = useLiveQuery(
     async () => {
-      if (!activeChannelId) return [];
-      try {
-        const msgs = await db.chatMessages
-          .where('channelId').equals(activeChannelId)
-          .toArray();
-        return msgs.sort((a, b) => a.createdAt - b.createdAt);
-      } catch (e) {
-        console.warn('[Chat] Erreur chargement messages:', e);
-        return [];
-      }
+      if (!activeChannelId || !dbReady) return [];
+      const msgs = await db.chatMessages
+        .where('channelId').equals(activeChannelId)
+        .toArray();
+      return msgs.sort((a, b) => a.createdAt - b.createdAt);
     },
-    [activeChannelId],
+    [activeChannelId, dbReady],
     [],
   ) ?? [];
 
@@ -165,6 +165,31 @@ export default function Chat() {
     return (
       <div>
         <PageHeader title="Chat interne" subtitle="Sélectionnez une société pour démarrer" />
+      </div>
+    );
+  }
+
+  if (dbError) {
+    return (
+      <div>
+        <PageHeader title="Chat interne" subtitle="Erreur d'initialisation" />
+        <EmptyState
+          icon={MessageCircle}
+          title="Base de données inaccessible"
+          description={`${dbError}. Essayez de rafraîchir la page (F5). Si le problème persiste, videz le cache du navigateur.`}
+          action={<button className="btn-primary" onClick={() => window.location.reload()}>Rafraîchir</button>}
+        />
+      </div>
+    );
+  }
+
+  if (!dbReady) {
+    return (
+      <div>
+        <PageHeader title="Chat interne" subtitle="Initialisation…" />
+        <div className="py-20 flex justify-center">
+          <div className="w-8 h-8 rounded-full border-2 border-primary-200 border-t-accent animate-spin" />
+        </div>
       </div>
     );
   }
