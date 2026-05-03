@@ -1890,11 +1890,14 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
   const maxH = config.format === 'pptx' ? 540 : isLandscape ? 760 : 1400;
   // Pas de maxWidth en écran : la page A4 occupe toute la cellule grid centrale.
   // Le ratio A4 réel est respecté à l'impression via les CSS @page (cf. index.css).
-  const pageStyle = config.format === 'pptx'
-    ? { width: '100%', aspectRatio: '16/9', minHeight: 'auto' as const, maxHeight: maxH }
+  // overflow:hidden empêche le débordement visuel d'un contenu qui déborderait
+  // (cover dont le contenu ferait > aspect-ratio * width). Sans ça, le contenu
+  // débordait et apparaissait comme une 2e page (artifact visuel de la grille).
+  const pageStyle: React.CSSProperties = config.format === 'pptx'
+    ? { width: '100%', aspectRatio: '16/9', minHeight: 'auto', maxHeight: maxH, overflow: 'hidden' }
     : isLandscape
-      ? { width: '100%', aspectRatio: '297/210', minHeight: 'auto' as const, maxHeight: maxH }
-      : { width: '100%', aspectRatio: '210/297', minHeight: 'auto' as const, maxHeight: maxH };
+      ? { width: '100%', aspectRatio: '297/210', minHeight: 'auto', maxHeight: maxH, overflow: 'hidden' }
+      : { width: '100%', aspectRatio: '210/297', minHeight: 'auto', maxHeight: maxH, overflow: 'hidden' };
 
   // Estimation de la hauteur de chaque bloc (en px) pour pagination auto.
   // Pour les tables : on utilise le NOMBRE RÉEL DE LIGNES dans `data` afin
@@ -2205,10 +2208,14 @@ function PageA4({ children, style, maxH, pageNum, totalPages, palette, hideNumbe
           Hors marge — créez un nouveau saut de page
         </div>
       )}
-      {/* w-full force la pleine largeur (parfois flex-basis:0 de flex-1 cause
-          un retreciement en cross-axis) — important pour les covers modern
-          qui utilisent flex horizontal interne avec w-2/5 et flex-1. */}
-      <div ref={ref} className="break-words flex-1 w-full flex flex-col gap-1 p-4 pb-2">{children}</div>
+      {/* Pour les pages cover/back : pas de padding wrapper — la cover doit
+          remplir EXACTEMENT la page A4 sans débordement vertical.
+          Pour les autres : padding standard p-4 pb-2 + flex-1. */}
+      {pageType === 'cover' || pageType === 'back' ? (
+        <div ref={ref} className="absolute inset-0 flex flex-col">{children}</div>
+      ) : (
+        <div ref={ref} className="break-words flex-1 w-full flex flex-col gap-1 p-4 pb-2">{children}</div>
+      )}
       {/* Footer en flux normal — pas d'absolute pour eviter l'espace vide
           quand la page contient peu de contenu. */}
       {!hideNumber && pageNum && totalPages && (
