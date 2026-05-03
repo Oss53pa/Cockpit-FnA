@@ -62,22 +62,28 @@ export default function Chat() {
   const me = useMemo(() => getCurrentUser(), []);
   const orgUsers = useMemo(() => loadUsers(), []);
 
-  // ── Charge les channels en live (Dexie reactive) ──
+  // ── Init DB + channel #général (écriture HORS liveQuery) ──
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   useEffect(() => {
-    // Force l'ouverture de la DB pour déclencher les migrations avant les queries
-    db.open().then(() => setDbReady(true)).catch((e) => {
-      console.error('[Chat] DB open error:', e);
-      setDbError(e?.message ?? 'Erreur base de données');
-    });
-  }, []);
+    if (!currentOrgId) return;
+    (async () => {
+      try {
+        await db.open();
+        // Écriture en dehors de liveQuery (ReadOnlyError sinon)
+        await getOrCreateGeneralChannel(currentOrgId, me.id);
+        setDbReady(true);
+      } catch (e: any) {
+        console.error('[Chat] Init error:', e);
+        setDbError(e?.message ?? 'Erreur base de données');
+      }
+    })();
+  }, [currentOrgId, me.id]);
 
+  // Lecture seule dans liveQuery (pas d'écriture !)
   const channels = useLiveQuery(
     async () => {
       if (!currentOrgId || !dbReady) return [];
-      // Auto-init : crée le channel #général au premier accès
-      await getOrCreateGeneralChannel(currentOrgId, me.id);
       return await listChannels(currentOrgId, me.id);
     },
     [currentOrgId, me.id, dbReady],
