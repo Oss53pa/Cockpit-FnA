@@ -28,7 +28,7 @@ export default function ClosingPackPage() {
   const kpis = useMemo(() => {
     if (!sig || !bilan) return null;
     const get = (lines: any[], code: string) => lines?.find((l: any) => l.code === code)?.value ?? 0;
-    const fr = get(bilan.passif, 'CP') - get(bilan.actif, '_AZ');
+    const fr = get(bilan.passif, '_CP') - get(bilan.actif, '_AZ');
     const bfr = get(bilan.actif, '_BK') - get(bilan.passif, '_DP');
     const tn = get(bilan.actif, '_BT') - get(bilan.passif, 'DV');
     return {

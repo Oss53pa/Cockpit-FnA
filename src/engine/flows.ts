@@ -354,8 +354,11 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
   const reprises = closingBal
     .filter((r) => r.account.startsWith('78') || r.account.startsWith('79'))
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
-  const vnc = closingBal.filter((r) => r.account.startsWith('81')).reduce((s, r) => s + r.soldeD, 0);
-  const pxCess = closingBal.filter((r) => r.account.startsWith('82')).reduce((s, r) => s + r.soldeC, 0);
+  // VNC strict 685 (charges sur cessions d'immo) — pas '81' qui inclut toutes les charges HAO
+  // Fix cohérent avec computeTFT (cf. ligne 96-99). Avant : '81' surestimait la VNC quand
+  // l'entreprise avait d'autres charges HAO (sinistres, provisions exceptionnelles).
+  const vnc = closingBal.filter((r) => r.account.startsWith('685')).reduce((s, r) => s + r.soldeD, 0);
+  const pxCess = closingBal.filter((r) => r.account.startsWith('775')).reduce((s, r) => s + r.soldeC, 0);
   const plusValueCession = pxCess - vnc;
   const cafg = sig.resultat + dotations - reprises - plusValueCession;
 

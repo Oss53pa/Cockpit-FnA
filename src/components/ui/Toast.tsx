@@ -51,6 +51,13 @@ const COLORS = {
   info: 'text-info',
 };
 
+const BORDER_COLORS = {
+  success: 'border-l-success',
+  error: 'border-l-error',
+  warning: 'border-l-warning',
+  info: 'border-l-info',
+};
+
 /** Container — a monter UNE FOIS au niveau App. */
 export function ToastContainer() {
   const { toasts, dismiss } = useToastStore();
@@ -63,20 +70,30 @@ export function ToastContainer() {
             key={t.id}
             role="alert"
             className={clsx(
-              'pointer-events-auto card-glass shadow-lg w-80 max-w-[calc(100vw-3rem)]',
-              'flex items-start gap-3 px-4 py-3 animate-fade-in-up',
+              'pointer-events-auto card-glass w-80 max-w-[calc(100vw-3rem)]',
+              'flex items-start gap-3 px-4 py-3.5 border-l-2',
+              'animate-fade-in-up',
+              BORDER_COLORS[t.variant],
             )}
+            style={{ boxShadow: '0 16px 40px -8px rgb(0 0 0 / 0.15), 0 0 0 1px rgb(0 0 0 / 0.05)' }}
           >
-            <Icon className={clsx('w-4 h-4 mt-0.5 shrink-0', COLORS[t.variant])} strokeWidth={2} />
+            <div className={clsx('shrink-0 w-7 h-7 rounded-lg flex items-center justify-center',
+              t.variant === 'success' && 'bg-success/10',
+              t.variant === 'error' && 'bg-error/10',
+              t.variant === 'warning' && 'bg-warning/10',
+              t.variant === 'info' && 'bg-info/10',
+            )}>
+              <Icon className={clsx('w-4 h-4', COLORS[t.variant])} strokeWidth={2.2} />
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-primary-900 dark:text-primary-50 leading-snug">{t.title}</p>
               {t.description && (
-                <p className="text-xs text-primary-500 mt-0.5 leading-relaxed">{t.description}</p>
+                <p className="text-xs text-primary-500 dark:text-primary-400 mt-0.5 leading-relaxed">{t.description}</p>
               )}
             </div>
             <button
               onClick={() => dismiss(t.id)}
-              className="shrink-0 text-primary-400 hover:text-primary-700 dark:hover:text-primary-200 transition-colors"
+              className="shrink-0 -mr-1 -mt-0.5 w-6 h-6 rounded-md text-primary-400 hover:text-primary-900 dark:hover:text-primary-100 hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors flex items-center justify-center"
               aria-label="Fermer"
             >
               <X className="w-3.5 h-3.5" />

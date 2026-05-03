@@ -24,7 +24,7 @@ export default function BoardPackPage() {
   const get = (lines: any[], code: string) => lines?.find((l: any) => l.code === code)?.value ?? 0;
   const tn = get(bilan.actif, '_BT') - get(bilan.passif, 'DV');
   const totalActif = get(bilan.actif, '_BZ');
-  const capPropres = get(bilan.passif, 'CP');
+  const capPropres = get(bilan.passif, '_CP');
   const margeNette = sig.ca ? (sig.resultat / sig.ca) * 100 : 0;
   const alertes = ratios.filter((r) => r.status === 'alert');
 

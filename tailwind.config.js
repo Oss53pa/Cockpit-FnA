@@ -60,15 +60,6 @@ export default {
       borderRadius: {
         'shell': '28px',
       },
-      boxShadow: {
-        'sm':     '0 1px 2px 0 rgb(0 0 0 / 0.04)',
-        'DEFAULT':'0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.04)',
-        'md':     '0 2px 6px -1px rgb(0 0 0 / 0.06), 0 1px 3px -1px rgb(0 0 0 / 0.04)',
-        'lg':     '0 8px 24px -6px rgb(0 0 0 / 0.08), 0 4px 8px -4px rgb(0 0 0 / 0.04)',
-        'xl':     '0 16px 40px -8px rgb(0 0 0 / 0.10), 0 8px 16px -6px rgb(0 0 0 / 0.06)',
-        'card':   '0 1px 2px 0 rgb(0 0 0 / 0.03), 0 0 0 1px rgb(0 0 0 / 0.04)',
-        'card-hover': '0 4px 12px -2px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.06)',
-      },
       animation: {
         // forwards : conserve l'état final après l'animation (opacity 1) — sinon le
         // modal et autres overlays repartent en opacity:0 et deviennent invisibles.
@@ -91,11 +82,35 @@ export default {
         'spring': 'cubic-bezier(0.16, 1, 0.3, 1)',
       },
       boxShadow: {
-        'sm': '0 1px 2px 0 rgb(0 0 0 / 0.03)',
-        'DEFAULT': '0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05)',
-        'md': '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)',
-        'lg': '0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05)',
-        'xl': '0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05)',
+        // Echelle premium ultra-subtile (Linear/Vercel/Stripe Dashboard)
+        'sm':       '0 1px 2px 0 rgb(0 0 0 / 0.03)',
+        'DEFAULT':  '0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.03)',
+        'md':       '0 2px 6px -1px rgb(0 0 0 / 0.05), 0 1px 3px -1px rgb(0 0 0 / 0.03)',
+        'lg':       '0 8px 24px -6px rgb(0 0 0 / 0.07), 0 4px 8px -4px rgb(0 0 0 / 0.04)',
+        'xl':       '0 16px 40px -8px rgb(0 0 0 / 0.09), 0 8px 16px -6px rgb(0 0 0 / 0.05)',
+        '2xl':      '0 24px 60px -12px rgb(0 0 0 / 0.12), 0 12px 24px -8px rgb(0 0 0 / 0.06)',
+        // Cards : 1px ring + ombre légère (signature premium)
+        'card':       '0 1px 2px 0 rgb(0 0 0 / 0.03), 0 0 0 1px rgb(0 0 0 / 0.04)',
+        'card-hover': '0 4px 12px -2px rgb(0 0 0 / 0.07), 0 0 0 1px rgb(0 0 0 / 0.06)',
+        'card-elevated': '0 8px 28px -6px rgb(0 0 0 / 0.10), 0 0 0 1px rgb(0 0 0 / 0.05)',
+        // Bouton accent (avec lueur subtile)
+        'accent':       '0 1px 2px 0 rgb(218 77 40 / 0.12), 0 0 0 1px rgb(218 77 40 / 0.20)',
+        'accent-hover': '0 4px 12px -2px rgb(218 77 40 / 0.25), 0 0 0 1px rgb(218 77 40 / 0.30)',
+        // Inset utile pour les inputs focus
+        'inset-accent': 'inset 0 0 0 1px rgb(var(--accent))',
+        // Glow doux pour hero / important elements
+        'glow-soft': '0 0 0 1px rgb(var(--accent) / 0.15), 0 8px 32px -8px rgb(var(--accent) / 0.20)',
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-conic':  'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+        // Gradient hero subtil (utilise pour cards-hero et headers)
+        'gradient-hero':   'linear-gradient(135deg, rgb(var(--p-900)) 0%, rgb(var(--p-800)) 50%, rgb(var(--p-900)) 100%)',
+        // Surface premium avec micro-grain
+        'gradient-surface': 'linear-gradient(180deg, rgb(var(--bg-surface)) 0%, rgb(var(--p-50)) 100%)',
+      },
+      backdropBlur: {
+        xs: '2px',
       },
     },
   },
