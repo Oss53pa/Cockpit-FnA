@@ -437,11 +437,25 @@ export async function importBudgetV2(
     })();
   }
 
+  // Détecte les fichiers VIDES (modèle téléchargé sans avoir été rempli) :
+  // si TOUS les montants sont à 0, on prévient l'utilisateur.
+  const totalAmount = Array.from(perAccount.values()).reduce(
+    (s, arr) => s + arr.reduce((a, b) => a + Math.abs(b), 0), 0,
+  );
+  if (totalAmount === 0 && perAccount.size > 0) {
+    errors.push(
+      "Aucune valeur trouvée dans le fichier — il semble vide (modèle téléchargé sans modification ?). " +
+      "Remplissez les colonnes Janv-Déc avec vos prévisions et ré-importez.",
+    );
+  }
+
   await db.imports.add({
     orgId, date: Date.now(), user: 'Utilisateur local', fileName: file.name,
-    source: 'Excel (v2)', kind: 'BUDGET', count: perAccount.size, rejected: errors.length,
+    source: 'Excel (v2)', kind: 'BUDGET',
+    year, version, // ← maintenant stockés en top-level (avant : seulement dans report JSON)
+    count: perAccount.size, rejected: errors.length,
     status: errors.length === 0 ? 'success' : 'partial',
-    report: JSON.stringify({ lines, version, year, errors }),
+    report: JSON.stringify({ lines, version, year, totalAmount, errors }),
   });
 
   return { imported: perAccount.size, lines, errors, sheetName };
