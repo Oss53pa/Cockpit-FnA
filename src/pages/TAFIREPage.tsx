@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDownToLine, TrendingUp, Banknote } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -37,6 +38,7 @@ export default function TAFIREPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/tafire" />
       <PageHeader
         title="TAFIRE — Tableau financier des ressources et emplois"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · SYSCOHADA art. 38 (système Normal)`}

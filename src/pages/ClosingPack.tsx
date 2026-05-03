@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { Printer, Sparkles, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, BarChart, Bar, Cell } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { useApp } from '../store/app';
 import { useStatements, useRatios, useMonthlyCA, useCurrentOrg } from '../hooks/useFinancials';
 import { fmtK } from '../lib/format';
@@ -53,11 +54,12 @@ export default function ClosingPackPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/closing-pack" />
       <PageHeader
         title="Closing Pack"
         subtitle={`${org?.name ?? '—'} · ${periodLabel}`}
         action={
-          <button className="btn-primary" onClick={print}>
+          <button className="btn-clay" onClick={print}>
             <Printer className="w-4 h-4" /> Imprimer / PDF
           </button>
         }

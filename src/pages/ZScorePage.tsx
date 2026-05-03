@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, AlertTriangle, Award } from 'lucide-react';
 import { ResponsiveContainer, RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { computeFinancialScore, type FinancialScore } from '../engine/proph3/scoring';
 import { useStatements, useRatios, useCurrentOrg } from '../hooks/useFinancials';
@@ -32,6 +33,7 @@ export default function ZScorePage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/zscore" />
       <PageHeader
         title="Score de santé financière"
         subtitle={`${org?.name ?? '—'} · Z-Score Altman + scoring multi-critères`}

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, ArrowUpFromLine, Banknote, Activity, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
@@ -32,11 +33,11 @@ export default function TFTMonthlyPage() {
     if (!data) return null;
     const find = (code: string) => data.lines.find((l) => l.code === code);
     return {
-      fluxOp: find('FE')?.ytd ?? 0,
-      fluxInv: find('FI')?.ytd ?? 0,
-      fluxFin: find('FF')?.ytd ?? 0,
-      varTreso: find('FZ')?.ytd ?? 0,
-      cafg: find('FA')?.ytd ?? 0,
+      fluxOp: find('_ZC')?.ytd ?? 0,
+      fluxInv: find('_ZD')?.ytd ?? 0,
+      fluxFin: find('_ZE')?.ytd ?? 0,
+      varTreso: find('_ZF')?.ytd ?? 0,
+      cafg: find('_ZA')?.ytd ?? 0,
     };
   }, [data]);
 
@@ -44,7 +45,7 @@ export default function TFTMonthlyPage() {
   const chartData = useMemo(() => {
     if (!data) return [];
     const findVals = (code: string) => data.lines.find((l) => l.code === code)?.values ?? Array(12).fill(0);
-    const op = findVals('FE'); const inv = findVals('FI'); const fin = findVals('FF');
+    const op = findVals('_ZC'); const inv = findVals('_ZD'); const fin = findVals('_ZE');
     return data.months.map((m, i) => ({
       mois: m,
       'Exploitation': op[i],
@@ -68,6 +69,7 @@ export default function TFTMonthlyPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <DashboardTopBar currentRoute="/dashboard/tft-monthly" />
       <PageHeader
         title="Tableau des Flux de Trésorerie"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · SYSCOHADA art. 38 — vue mensuelle 12 mois`}
