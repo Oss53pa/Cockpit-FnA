@@ -206,12 +206,19 @@ function hexToRgb(hex: string): string {
 
 function applyPalette(p: Palette) {
   const s = document.documentElement.style;
+  const isDark = document.documentElement.classList.contains('dark');
+
+  // En mode dark : on inverse la scale (les whites deviennent noirs, les noirs deviennent whites).
+  // Cela permet à text-primary-900 (très foncé en light) de devenir clair en dark
+  // tout en gardant la teinte de la palette (sage/terracotta restent vibrants).
+  const scale = isDark ? [...p.scale].reverse() : p.scale;
+
   for (let i = 0; i < 11; i++) {
-    s.setProperty(SCALE_KEYS[i], hexToRgb(p.scale[i]));
+    s.setProperty(SCALE_KEYS[i], hexToRgb(scale[i]));
   }
   s.setProperty('--th-bg', p.tableHeader);
   s.setProperty('--th-text', p.tableHeaderText);
-  s.setProperty('--grid-color', p.scale[2]);
+  s.setProperty('--grid-color', isDark ? scale[8] : scale[2]);
 
   // Tokens layout — fallback intelligent
   const lay = p.layout ?? {
@@ -222,17 +229,22 @@ function applyPalette(p: Palette) {
     accentSoft: p.chartColors[2] ?? p.scale[3],
   };
 
-  // Mode CLAIR (default) : tokens pris de la palette
-  s.setProperty('--bg-page', hexToRgb(lay.bgPage));
-  s.setProperty('--bg-shell', hexToRgb(lay.bgShell));
-  s.setProperty('--bg-surface', hexToRgb(lay.bgSurface));
-  s.setProperty('--accent', hexToRgb(lay.accent));
-  s.setProperty('--accent-soft', hexToRgb(lay.accentSoft));
-
-  // Mode SOMBRE : tokens recalculés en inversant le contexte
-  // (bg-page sombre, shell legerement plus clair, surface plus claire encore)
-  // Ces valeurs surchargent les light-tokens UNIQUEMENT quand .dark est active
-  // sur <html>. La declaration .dark { --bg-page: ... } se trouve dans index.css.
+  if (isDark) {
+    // Mode SOMBRE : page très sombre, shell un cran clair, surface card élevée.
+    // Effet "elevation" Linear/Vercel/Stripe Dashboard.
+    s.setProperty('--bg-page', '18 18 18');         // #121212
+    s.setProperty('--bg-shell', '24 24 24');        // #181818
+    s.setProperty('--bg-surface', '32 32 32');      // #202020
+    s.setProperty('--accent', hexToRgb(lay.accent)); // accent reste vibrant
+    s.setProperty('--accent-soft', '40 40 40');     // soft = surface un cran plus claire
+  } else {
+    // Mode CLAIR : tokens directement pris de la palette
+    s.setProperty('--bg-page', hexToRgb(lay.bgPage));
+    s.setProperty('--bg-shell', hexToRgb(lay.bgShell));
+    s.setProperty('--bg-surface', hexToRgb(lay.bgSurface));
+    s.setProperty('--accent', hexToRgb(lay.accent));
+    s.setProperty('--accent-soft', hexToRgb(lay.accentSoft));
+  }
 }
 
 // ── Store ──────────────────────────────────────────────────────────

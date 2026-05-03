@@ -53,6 +53,15 @@ export const useApp = create<AppState>((set) => ({
       const next = s.theme === 'light' ? 'dark' : 'light';
       localStorage.setItem('theme', next);
       document.documentElement.classList.toggle('dark', next === 'dark');
+      // Re-applique la palette pour adapter scale + bg en dark/light
+      // (theme.ts/applyPalette gere les deux modes selon classList.contains('dark'))
+      try {
+        // Lazy import pour eviter dependance circulaire
+        import('./theme').then(({ useTheme }) => {
+          const k = useTheme.getState().paletteKey;
+          useTheme.getState().setPalette(k); // re-trigger applyPalette
+        });
+      } catch { /* ignore */ }
       return { theme: next };
     }),
   currentOrgId: localStorage.getItem('current-org') || 'sa-001',
