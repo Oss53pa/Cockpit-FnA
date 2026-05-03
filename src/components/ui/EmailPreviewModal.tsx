@@ -49,30 +49,48 @@ export function EmailPreviewModal({
         toast.warning('Supabase non configuré', 'Configurez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY pour envoyer automatiquement.');
         return;
       }
-      // Une seule Edge Function generique : cockpit-send-email (compatible 3 modes)
-      // Le projet Supabase est partage avec d'autres apps — on utilise un nom prefixe.
-      const fnName = options.supabaseFunction ?? 'cockpit-send-email';
+      // Mode 'invitation' : utilise cockpit-invite-user qui CREE le compte Auth
+      // Supabase + genere un magic link de definition de mot de passe + envoie
+      // l'email HTML brande. C'est ce qui declenche la creation du mot de passe
+      // a la premiere connexion.
+      // Modes 'review' et 'report' : cockpit-send-email (envoi simple sans creation user).
+      const isInvitation = options.mode === 'invitation';
+      const fnName = options.supabaseFunction ?? (isInvitation ? 'cockpit-invite-user' : 'cockpit-send-email');
+      const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
       const { data, error } = await (supabase as any).functions.invoke(fnName, {
-        body: {
-          to: recipient.email,
-          recipientName: recipient.name,
-          subject: content.subject,
-          html: content.htmlBody,
-          text: content.textBody,
-          mode: options.mode,
-          ...options.supabasePayload,
-        },
+        body: isInvitation
+          ? {
+              email: recipient.email,
+              name: recipient.name,
+              subject: content.subject,
+              html: content.htmlBody,
+              appUrl,
+              ...options.supabasePayload, // role, orgIds, etc.
+            }
+          : {
+              to: recipient.email,
+              recipientName: recipient.name,
+              subject: content.subject,
+              html: content.htmlBody,
+              text: content.textBody,
+              mode: options.mode,
+              ...options.supabasePayload,
+            },
       });
       if (error) {
-        // Erreur HTTP — extrait le message Resend si dispo
         const detail = (error as any)?.context?.error ?? (error as any)?.message ?? 'Erreur reseau';
         throw new Error(detail);
       }
-      if (data?.error) {
+      if (data?.success === false || data?.error) {
         const hint = data.hint ? ` (${data.hint})` : '';
-        throw new Error(`${data.error}${hint}`);
+        const details = data.details ? ` — ${data.details}` : '';
+        throw new Error(`${data.error ?? 'Echec'}${hint}${details}`);
       }
-      toast.success('Email envoyé', `→ ${recipient.email}`);
+      // Pour les invitations, on affiche un message specifique
+      const successMsg = isInvitation
+        ? `Lien de définition de mot de passe envoyé à ${recipient.email}`
+        : `→ ${recipient.email}`;
+      toast.success(isInvitation ? 'Invitation envoyée' : 'Email envoyé', successMsg);
       // Audit trail
       try {
         const { audit } = await import('../../engine/auditLog');

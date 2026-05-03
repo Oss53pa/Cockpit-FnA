@@ -84,7 +84,14 @@ export interface InvitationParams {
 }
 
 export function buildInvitationEmail(p: InvitationParams): EmailContent {
-  const subject = `Invitation Cockpit FnA — ${p.recipientName}`;
+  const subject = `Invitation Cockpit FnA — Définissez votre mot de passe`;
+
+  // Le placeholder {{ACTION_LINK}} sera remplacé par l'Edge Function
+  // 'cockpit-invite-user' avec un magic link Supabase qui :
+  //  1. Crée le compte Supabase Auth avec l'email
+  //  2. Établit la session lors du clic
+  //  3. Redirige vers /auth/accept-invite où l'utilisateur définit son mdp
+  const ACTION_LINK = '{{ACTION_LINK}}';
 
   const textBody = `Bonjour ${p.recipientName},
 
@@ -95,10 +102,8 @@ Vos accès :
 • Rôle : ${p.roleLabel}
 • Sociétés : ${p.orgsLabel}
 
-Pour vous connecter, cliquez sur le lien ci-dessous :
-${p.appUrl}
-
-À votre première connexion, vous recevrez un email pour définir votre mot de passe.
+Pour activer votre compte et définir votre mot de passe, cliquez sur le lien ci-dessous (valable 24h) :
+${ACTION_LINK}
 
 Cordialement,
 L'équipe Cockpit FnA`;
@@ -113,18 +118,21 @@ L'équipe Cockpit FnA`;
       { label: 'Rôle', value: p.roleLabel, highlight: true },
       { label: 'Sociétés', value: p.orgsLabel },
     ])}
-    ${ctaButton(p.appUrl, 'Se connecter à Cockpit FnA')}
+    <p style="margin:24px 0 16px; font-size:14px; line-height:1.6;">
+      Pour <strong>activer votre compte</strong> et <strong>définir votre mot de passe</strong>, cliquez sur le bouton ci-dessous :
+    </p>
+    ${ctaButton(ACTION_LINK, 'Activer mon compte et définir mon mot de passe')}
     <p style="margin:0 0 8px; font-size:13px; line-height:1.6; color:#525C6E;">
       Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :
     </p>
     <p style="margin:0; font-size:12px; word-break:break-all;">
-      <a href="${escapeHtml(p.appUrl)}" style="color:#DA4D28; text-decoration:underline;">${escapeHtml(p.appUrl)}</a>
+      <a href="${ACTION_LINK}" style="color:#7FA88E; text-decoration:underline;">${ACTION_LINK}</a>
     </p>
-    <p style="margin:32px 0 0; font-size:13px; line-height:1.6; color:#525C6E; padding-top:24px; border-top:1px solid #E7EBEE;">
-      À votre première connexion, vous recevrez un email pour <strong>définir votre mot de passe</strong>. Si vous n'attendez pas cet email, ignorez ce message.
+    <p style="margin:32px 0 0; font-size:12px; line-height:1.6; color:#7A776E; padding-top:20px; border-top:1px solid #E7EBEE;">
+      <strong>⏱ Lien valable 24 heures.</strong> Passé ce délai, demandez à votre administrateur de relancer l'invitation. Si vous n'attendez pas cet email, ignorez-le ou contactez <a href="mailto:support@atlas-studio.org" style="color:#7FA88E;">support@atlas-studio.org</a>.
     </p>`;
 
-  return { subject, textBody, htmlBody: wrapHtml('Cockpit FnA', 'Invitation à rejoindre l\'équipe', content) };
+  return { subject, textBody, htmlBody: wrapHtml('Cockpit FnA', 'Activez votre compte', content) };
 }
 
 // ─── Template 2 : REVIEW / VALIDATION ─────────────────────────────────
