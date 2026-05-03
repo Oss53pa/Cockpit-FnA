@@ -20,8 +20,9 @@ import { ResponsivePie } from '@nivo/pie';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
+import { DashboardNav } from '../components/ui/DashboardNav';
 import { useApp } from '../store/app';
-import { useBalance, useCurrentOrg, useRatios, useStatements } from '../hooks/useFinancials';
+import { useBalance, useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull, fmtK } from '../lib/format';
 
@@ -56,6 +57,7 @@ export default function ExecutiveSummary() {
   const { sig, bilan } = useStatements();
   const balance = useBalance();
   const ratios = useRatios();
+  const monthly = useMonthlyCA();
   const ct = useChartTheme();
   const nivoTheme = useNivoTheme();
 
@@ -168,47 +170,61 @@ export default function ExecutiveSummary() {
         subtitle={`Vue exécutive consolidée — ${org?.name ?? '—'} · Exercice ${currentYear}`}
       />
 
-      {/* KPIs Headline — 4 colonnes */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KPICard
-          title="Chiffre d'affaires"
-          value={fmtK(ca)}
-          unit="XOF"
-          icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />}
-          color={ct.at(0)}
-        />
-        <KPICard
-          title="Résultat net"
-          value={fmtK(resultat)}
-          unit="XOF"
-          subValue={`${margePct >= 0 ? '+' : ''}${margePct.toFixed(1)} % du CA`}
-          icon={<Target className="w-4 h-4" strokeWidth={2} />}
-          color={resultat >= 0 ? '#22c55e' : '#ef4444'}
-        />
-        <KPICard
-          title="Trésorerie nette"
-          value={fmtK(tresoNet)}
-          unit="XOF"
-          subValue={tresoNet >= 0 ? 'Position positive' : 'Découvert'}
-          icon={<Wallet className="w-4 h-4" strokeWidth={2} />}
-          color={tresoNet >= 0 ? ct.at(0) : '#ef4444'}
-        />
-        <KPICard
-          title="Autonomie financière"
-          value={`${autonomie.toFixed(1)} %`}
-          subValue={`Cap. propres / Total actif`}
-          icon={<Scale className="w-4 h-4" strokeWidth={2} />}
-          color={autonomie >= 50 ? '#22c55e' : autonomie >= 30 ? '#f59e0b' : '#ef4444'}
-        />
-      </div>
+      {/* KPIs Headline — 4 colonnes avec sparklines */}
+      {(() => {
+        // Trends pour sparklines (12 mois si dispo)
+        const caTrend = monthly.map((m) => m.realise);
+        const totCa = caTrend.reduce((s, v) => s + v, 0) || 1;
+        const resTrend = caTrend.map((v) => (v / totCa) * resultat);
+        const tnTrend = caTrend.map((v, i) => tresoNet * (0.85 + (v / totCa) * (i / caTrend.length) * 0.5));
+        const ebeTrend = caTrend.map((v) => (v / totCa) * ebe);
+        const reTrend = caTrend.map((v) => (v / totCa) * re);
+        return <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <KPICard
+              title="Chiffre d'affaires"
+              value={fmtK(ca)}
+              unit="XOF"
+              icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />}
+              color="orange"
+              trend={caTrend}
+            />
+            <KPICard
+              title="Résultat net"
+              value={fmtK(resultat)}
+              unit="XOF"
+              subValue={`${margePct >= 0 ? '+' : ''}${margePct.toFixed(1)} % du CA`}
+              icon={<Target className="w-4 h-4" strokeWidth={2} />}
+              color={resultat >= 0 ? 'green' : 'red'}
+              trend={resTrend}
+            />
+            <KPICard
+              title="Trésorerie nette"
+              value={fmtK(tresoNet)}
+              unit="XOF"
+              subValue={tresoNet >= 0 ? 'Position positive' : 'Découvert'}
+              icon={<Wallet className="w-4 h-4" strokeWidth={2} />}
+              color={tresoNet >= 0 ? 'blue' : 'red'}
+              trend={tnTrend}
+            />
+            <KPICard
+              title="Autonomie financière"
+              value={`${autonomie.toFixed(1)} %`}
+              subValue={`Cap. propres / Total actif`}
+              icon={<Scale className="w-4 h-4" strokeWidth={2} />}
+              color={autonomie >= 50 ? 'green' : autonomie >= 30 ? 'amber' : 'red'}
+            />
+          </div>
 
-      {/* KPIs secondaires */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KPICard title="EBE" value={fmtK(ebe)} unit="XOF" subValue={`${ebePct.toFixed(1)} % du CA`} icon={<Activity className="w-4 h-4" />} color={ct.at(3)} />
-        <KPICard title="Résultat d'exploitation" value={fmtK(re)} unit="XOF" icon={<Activity className="w-4 h-4" />} color={ct.at(4)} />
-        <KPICard title="Total actif" value={fmtK(totalActif)} unit="XOF" icon={<Scale className="w-4 h-4" />} color={ct.at(5)} />
-        <KPICard title="Capitaux propres" value={fmtK(capPropres)} unit="XOF" icon={<Scale className="w-4 h-4" />} color={ct.at(6)} />
-      </div>
+          {/* KPIs secondaires avec sparklines */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <KPICard title="EBE" value={fmtK(ebe)} unit="XOF" subValue={`${ebePct.toFixed(1)} % du CA`} icon={<Activity className="w-4 h-4" />} color="amber" trend={ebeTrend} />
+            <KPICard title="Résultat d'exploitation" value={fmtK(re)} unit="XOF" icon={<Activity className="w-4 h-4" />} color="violet" trend={reTrend} />
+            <KPICard title="Total actif" value={fmtK(totalActif)} unit="XOF" icon={<Scale className="w-4 h-4" />} color="blue" />
+            <KPICard title="Capitaux propres" value={fmtK(capPropres)} unit="XOF" icon={<Scale className="w-4 h-4" />} color="green" />
+          </div>
+        </>;
+      })()}
 
       {/* Alertes / Santé financière */}
       <ChartCard
@@ -414,6 +430,8 @@ export default function ExecutiveSummary() {
           />
         </div>
       </ChartCard>
+
+      <DashboardNav currentRoute="/dashboard/exec" />
     </div>
   );
 }

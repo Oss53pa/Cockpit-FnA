@@ -8,6 +8,7 @@ import { ResponsiveLine } from '@nivo/line';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
 import { KPICard } from '../components/ui/KPICardV2';
+import { DashboardNav } from '../components/ui/DashboardNav';
 import { useApp } from '../store/app';
 import { useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
@@ -93,46 +94,102 @@ export default function ParetoAccounts() {
       </div>
 
       <ChartCard title="Courbe de Pareto — Top 20 comptes" subtitle="Barres : montant · Ligne : cumulé %" accent={ct.at(0)} className="mb-4">
+        {/* Palette premium : intensité de l'accent par classe ABC (pas red/orange/yellow amateur) */}
         <div style={{ height: 280 }}>
           <ResponsiveBar
             data={top20.map((r) => ({ code: r.code, value: Math.round(r.value), cumul: Math.round(r.pctCumul) }))}
             keys={['value']}
             indexBy="code"
-            margin={{ top: 20, right: 60, bottom: 60, left: 60 }}
-            padding={0.25}
+            margin={{ top: 20, right: 24, bottom: 56, left: 64 }}
+            padding={0.32}
             colors={({ data }) => {
               const pctCumul = (data as any).cumul as number;
-              return pctCumul <= 80 ? '#ef4444' : pctCumul <= 95 ? '#f59e0b' : ct.at(5);
+              // Intensite de l'accent par classe : A = 100%, B = 60%, C = 28%
+              if (pctCumul <= 80) return ct.accent;
+              if (pctCumul <= 95) return ct.accent + '99'; // 60% opacity
+              return ct.accent + '47';                    // 28% opacity
             }}
             colorBy="indexValue"
-            axisBottom={{ tickRotation: -55, legend: 'Compte', legendOffset: 50, legendPosition: 'middle' }}
-            axisLeft={{ format: (v: number) => fmtK(v), legend: 'XOF', legendOffset: -50, legendPosition: 'middle' }}
-            borderRadius={2}
+            axisBottom={{
+              tickRotation: -45,
+              tickSize: 0,
+              tickPadding: 8,
+              legend: 'Compte',
+              legendOffset: 46,
+              legendPosition: 'middle',
+            }}
+            axisLeft={{
+              format: (v: number) => fmtK(v),
+              tickSize: 0,
+              tickPadding: 8,
+              legend: 'Montant',
+              legendOffset: -54,
+              legendPosition: 'middle',
+            }}
+            borderRadius={4}
             enableLabel={false}
-            theme={nivoTheme}
+            enableGridY
+            gridYValues={4}
+            theme={{ ...nivoTheme, grid: { line: { stroke: 'rgb(var(--p-200))', strokeDasharray: '2 4' } } }}
             animate={false}
           />
         </div>
-        <div style={{ height: 110 }} className="mt-2">
+        <div style={{ height: 90 }} className="mt-1">
           <ResponsiveLine
             data={[{ id: '% cumulé', data: top20.map((r) => ({ x: r.code, y: r.pctCumul })) }]}
-            margin={{ top: 10, right: 60, bottom: 30, left: 60 }}
+            margin={{ top: 14, right: 24, bottom: 22, left: 64 }}
             xScale={{ type: 'point' }}
             yScale={{ type: 'linear', min: 0, max: 100 }}
-            colors={['#22c55e']}
-            lineWidth={2.5}
+            curve="monotoneX"
+            colors={[ct.at(1)]}
+            lineWidth={2}
             enablePoints
-            pointSize={5}
+            pointSize={4}
+            pointBorderWidth={2}
+            pointBorderColor={{ theme: 'background' }}
             axisBottom={null}
-            axisLeft={{ format: (v: number) => `${v} %` }}
+            axisLeft={{
+              format: (v: number) => `${v}%`,
+              tickValues: [0, 50, 80, 100],
+              tickSize: 0,
+              tickPadding: 6,
+            }}
             enableGridY
             gridYValues={[0, 50, 80, 100]}
-            theme={nivoTheme}
+            theme={{ ...nivoTheme, grid: { line: { stroke: 'rgb(var(--p-200))', strokeDasharray: '2 4' } } }}
+            enableArea
+            areaOpacity={0.08}
             markers={[
-              { axis: 'y', value: 80, lineStyle: { stroke: '#f59e0b', strokeWidth: 1, strokeDasharray: '4 4' }, legend: '80 %', textStyle: { fontSize: 9, fill: '#f59e0b' } },
+              {
+                axis: 'y',
+                value: 80,
+                lineStyle: { stroke: 'rgb(var(--p-400))', strokeWidth: 1, strokeDasharray: '3 3' },
+                legend: '80 %',
+                legendPosition: 'top-right',
+                textStyle: { fontSize: 9, fill: 'rgb(var(--p-500))', fontWeight: 600 },
+              },
             ]}
             animate={false}
           />
+        </div>
+        {/* Legende ABC en bas */}
+        <div className="flex items-center gap-4 mt-3 px-2 text-[10px] text-primary-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: ct.accent }} />
+            Classe A (≤80% cumulé)
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: ct.accent + '99' }} />
+            Classe B (80-95%)
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: ct.accent + '47' }} />
+            Classe C (queue longue)
+          </span>
+          <span className="ml-auto inline-flex items-center gap-1.5">
+            <span className="w-3 h-0.5 rounded-full" style={{ background: ct.at(1) }} />
+            Cumulé %
+          </span>
         </div>
       </ChartCard>
 
@@ -181,6 +238,8 @@ export default function ParetoAccounts() {
           </table>
         </div>
       </ChartCard>
+
+      <DashboardNav currentRoute="/dashboard/pareto" />
     </div>
   );
 }
