@@ -76,29 +76,29 @@ export const BUILTIN_PALETTES: Record<string, Palette> = {
   // entre elles (pas de zinc neutre, pas de creme chaud).
   twisty: {
     name: 'Cockpit',
-    // Palette signature Cockpit FnA — niveau Cockpit CR (ivoire chaud + graphite + terracotta)
+    // Palette neutre (gris) + accent sage green
     scale: [
-      '#FCFBF9', // 50  — blanc cassé chaud
-      '#F7F5F0', // 100 — crème principal (fond app)
-      '#E9E6DE', // 200 — séparateurs subtils
-      '#CFCBC0', // 300 — décoratif
-      '#A5A298', // 400 — secondaire
-      '#7A776E', // 500 — support
-      '#56544D', // 600 — body
-      '#403E39', // 700 — fort
-      '#2C2B26', // 800 — surface sombre
-      '#1A1916', // 900 — graphite signature
-      '#0F0E0B', // 950 — quasi-noir
+      '#FAFAFA', // 50  — blanc neutre
+      '#F5F5F5', // 100 — fond app (gris très clair)
+      '#EAEAEA', // 200 — borders soft
+      '#D4D4D4', // 300 — borders visibles
+      '#A3A3A3', // 400 — décoratif
+      '#737373', // 500 — secondaire
+      '#525252', // 600 — body
+      '#404040', // 700 — fort
+      '#262626', // 800 — heading
+      '#171717', // 900 — graphite
+      '#0A0A0A', // 950 — quasi-noir
     ],
-    tableHeader: '#1A1916', tableHeaderText: '#F7F5F0',
-    // Charts multi-couleurs harmonieux — KPI sémantiques distincts (orange / rouge / ambre / vert / bleu / violet / gris)
-    chartColors: ['#DA4D28','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#7A776E'],
+    tableHeader: '#171717', tableHeaderText: '#F5F5F5',
+    // Charts : sage primary + clay secondary + neutres harmonieux
+    chartColors: ['#7FA88E','#C97A5A','#5E8772','#D4A574','#737373','#B5C4A8','#A3A3A3'],
     layout: {
-      bgPage:     '#F7F5F0',  // crème (l'app entière y baigne — pas de fond contrasté)
-      bgShell:    '#F7F5F0',  // identique : fluidité totale, pas de shell séparé
-      bgSurface:  '#FFFFFF',  // blanc pur (cards se détachent par contraste subtle)
-      accent:     '#DA4D28',  // terracotta signature
-      accentSoft: '#FBEAE2',  // terracotta pâle (badges, hover)
+      bgPage:     '#F5F5F5',
+      bgShell:    '#F5F5F5',
+      bgSurface:  '#FFFFFF',
+      accent:     '#7FA88E',  // sage primary
+      accentSoft: '#E5EDE3',
     },
   },
   // Graphite — neutre pur (style Linear / Vercel)
