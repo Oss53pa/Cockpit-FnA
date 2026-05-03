@@ -558,7 +558,11 @@ function CRBlock() {
               <th className="text-right py-2 px-3">% section</th>
             </tr></thead>
             <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
-              {sec.rows.map((r) => {
+              {(() => {
+                // hasB calculé une fois pour la section (pas de budget chargé → '—')
+                const totBSection = sec.rows.reduce((s, r) => s + (r.budget ?? 0), 0);
+                const hasBSection = Math.abs(totBSection) > 0.01;
+                return sec.rows.map((r) => {
                 const n1Val = n1Data.get(r.code) ?? 0;
                 const varN1 = n1Val ? ((r.realise - n1Val) / Math.abs(n1Val) * 100) : 0;
                 return (
@@ -566,10 +570,10 @@ function CRBlock() {
                   <td className="py-2 px-3 num font-mono">{r.code}</td>
                   <td className="py-2 px-3">{r.label}</td>
                   <td className="py-2 px-3 text-right num font-semibold">{fmtFull(r.realise)}</td>
-                  <td className="py-2 px-3 text-right num text-primary-500">{fmtFull(r.budget)}</td>
+                  <td className="py-2 px-3 text-right num text-primary-500">{hasBSection ? fmtFull(r.budget) : '—'}</td>
                   <td className={clsx('py-2 px-3 text-right num',
                     r.status === 'favorable' ? 'text-success' : r.status === 'defavorable' ? 'text-error' : '')}>
-                    {r.ecart >= 0 ? '+' : ''}{fmtFull(r.ecart)}
+                    {hasBSection ? (r.ecart >= 0 ? '+' : '') + fmtFull(r.ecart) : '—'}
                   </td>
                   <td className="py-2 px-3 text-right num text-primary-400">{fmtFull(n1Val)}</td>
                   <td className={clsx('py-2 px-3 text-right num text-xs', varN1 === 0 ? 'text-primary-400' : (r.isCharge ? (varN1 <= 0 ? 'text-success' : 'text-error') : (varN1 >= 0 ? 'text-success' : 'text-error')))}>
@@ -578,7 +582,8 @@ function CRBlock() {
                   <td className="py-2 px-3 text-right num text-xs text-primary-500">{total ? ((r.realise / total) * 100).toFixed(1) : 0} %</td>
                 </tr>
                 );
-              })}
+              });
+              })()}
             </tbody>
           </table>
         </ChartCard>

@@ -2687,7 +2687,14 @@ function TablePreview({ source, data, palette, title }: any) {
       const filtered = (data.budgetActual ?? []).filter((r: any) =>
         Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01
       );
-      body = filtered.slice(0, 30).map((r: any) => [r.label, fmtFull(r.realise), fmtFull(r.budget), fmtFull(r.ecart), r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—']);
+      const totB = filtered.reduce((s: number, r: any) => s + (r.budget ?? 0), 0);
+      const hasB = Math.abs(totB) > 0.01;
+      body = filtered.slice(0, 30).map((r: any) => [
+        r.label, fmtFull(r.realise),
+        hasB ? fmtFull(r.budget) : '—',
+        hasB ? fmtFull(r.ecart) : '—',
+        hasB && r.ecartPct ? `${r.ecartPct.toFixed(1)}%` : '—',
+      ]);
       break;
     }
     case 'capital': head.push('Rubrique', 'Ouverture', 'Augm.', 'Clôture'); body = (data.capital ?? []).map((m: any) => [m.rubrique, fmtFull(m.ouverture), m.augmentation ? '+' + fmtFull(m.augmentation) : '—', fmtFull(m.cloture)]); break;
