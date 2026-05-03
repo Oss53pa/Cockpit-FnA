@@ -107,11 +107,10 @@ export default function Chat() {
   // ── Compteurs unread (live) ──
   const unreadCounts = useLiveQuery(
     async () => {
-      if (!currentOrgId) return {};
-      try { return await getUnreadCount(currentOrgId, me.id); }
-      catch { return {}; }
+      if (!currentOrgId || !dbReady) return {};
+      return await getUnreadCount(currentOrgId, me.id);
     },
-    [currentOrgId, me.id, messages.length],
+    [currentOrgId, me.id, messages.length, dbReady],
     {},
   ) ?? {};
 
