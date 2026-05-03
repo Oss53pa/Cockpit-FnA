@@ -20,6 +20,7 @@ const Login          = lazyWithRetry(() => import('./pages/auth/Login'));
 const Register       = lazyWithRetry(() => import('./pages/auth/Register'));
 const ForgotPassword = lazyWithRetry(() => import('./pages/auth/ForgotPassword'));
 const AuthCallback   = lazyWithRetry(() => import('./pages/auth/Callback'));
+const AcceptInvite   = lazyWithRetry(() => import('./pages/auth/AcceptInvite'));
 
 const Landing        = lazyWithRetry(() => import('./pages/Landing'));
 const Demo           = lazyWithRetry(() => import('./pages/Demo'));
@@ -158,6 +159,7 @@ function App() {
         <Route path="/register" element={<Suspense fallback={<PageFallback />}><Register /></Suspense>} />
         <Route path="/forgot-password" element={<Suspense fallback={<PageFallback />}><ForgotPassword /></Suspense>} />
         <Route path="/auth/callback" element={<Suspense fallback={<PageFallback />}><AuthCallback /></Suspense>} />
+        <Route path="/auth/accept-invite" element={<Suspense fallback={<PageFallback />}><AcceptInvite /></Suspense>} />
 
         {/* Landing publique */}
         <Route path="/" element={<Suspense fallback={<PageFallback />}><Landing /></Suspense>} />

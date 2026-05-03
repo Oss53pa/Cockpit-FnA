@@ -1894,7 +1894,7 @@ function renderPages(config: ReportConfig, data: any, palette: any, ops: any) {
     ? { width: '100%', aspectRatio: '16/9', minHeight: 'auto' as const, maxHeight: maxH }
     : isLandscape
       ? { width: '100%', aspectRatio: '297/210', minHeight: 'auto' as const, maxHeight: maxH }
-      : { width: '100%', minHeight: 'auto' as const, maxHeight: maxH };
+      : { width: '100%', aspectRatio: '210/297', minHeight: 'auto' as const, maxHeight: maxH };
 
   // Estimation de la hauteur de chaque bloc (en px) pour pagination auto.
   // Pour les tables : on utilise le NOMBRE RÉEL DE LIGNES dans `data` afin
@@ -2262,7 +2262,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
     return (
       <div
         className="w-full h-full relative overflow-hidden grid"
-        style={{ minHeight: 480, background: bgColor, gridTemplateColumns: '40% 1fr' }}
+        style={{ minHeight: '100%', height: '100%', background: bgColor, gridTemplateColumns: '40% 1fr' }}
       >
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
@@ -2295,7 +2295,7 @@ function CoverPage({ config, palette, org, setLogo, setCoverProps }: any) {
   // Style BANNER — bandeau horizontal en haut
   if (style === 'banner') {
     return (
-      <div className="w-full h-full relative overflow-hidden flex flex-col" style={{ minHeight: 480, background: bgColor }}>
+      <div className="w-full h-full relative overflow-hidden flex flex-col" style={{ minHeight: '100%', height: '100%', background: bgColor }}>
         {bgImage && <div className="absolute inset-0" style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: bgOpacity }} />}
         <CoverEditPanel id={id} setCoverProps={setCoverProps} setBgImage={setBgImage} />
         <div className="h-44 flex items-center justify-between px-12 relative z-10" style={{ background: titleColor, color: '#fff' }}>
@@ -2804,6 +2804,11 @@ function TablePreview({ source, data, palette, title }: any) {
         const totN1 = filtered.reduce((s, r) => s + r.n1, 0);
         const ecartTot = totR - totB;
         const varN1Tot = totN1 ? ((totR - totN1) / Math.abs(totN1)) * 100 : 0;
+        // Si AUCUN budget n'est saisi pour la table entière, on affiche "—" partout
+        // au lieu de "0" (clarte : pas de budget != budget de zero).
+        const hasBudget = Math.abs(totB) > 0.01;
+        const fmtBudget = (v: number) => hasBudget ? fmtFull(v) : '—';
+        const fmtEcart = (v: number) => hasBudget ? fmtFull(v) : '—';
 
         head.push('Compte', 'Libellé', `Réalisé ${periodLabel}`, `Budget`, 'Écart', 'Écart %', 'N-1', 'Var N-1 %');
         body = filtered.slice(0, 30).map((r) => {
@@ -2812,7 +2817,7 @@ function TablePreview({ source, data, palette, title }: any) {
           const varN1 = r.n1 ? ((r.realise - r.n1) / Math.abs(r.n1)) * 100 : 0;
           return [
             r.code, r.label,
-            fmtFull(r.realise), fmtFull(r.budget), fmtFull(ecart),
+            fmtFull(r.realise), fmtBudget(r.budget), fmtEcart(ecart),
             r.budget ? `${ecartPct.toFixed(1)}%` : '—',
             r.n1 ? fmtFull(r.n1) : '—',
             r.n1 ? `${varN1.toFixed(1)}%` : '—',
@@ -2821,7 +2826,7 @@ function TablePreview({ source, data, palette, title }: any) {
         // Ligne de TOTAL (sous-total intermédiaire SYSCOHADA)
         body.push([
           '─', `TOTAL ${sectionKey.toUpperCase()}`,
-          fmtFull(totR), fmtFull(totB), fmtFull(ecartTot),
+          fmtFull(totR), fmtBudget(totB), fmtEcart(ecartTot),
           totB ? `${((ecartTot / Math.abs(totB)) * 100).toFixed(1)}%` : '—',
           totN1 ? fmtFull(totN1) : '—',
           totN1 ? `${varN1Tot.toFixed(1)}%` : '—',
