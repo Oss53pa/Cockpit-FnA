@@ -5,10 +5,11 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import { ResponsivePie } from '@nivo/pie';
-import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
+import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload, Building2, Calendar, Coins } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { KPICard } from '../components/ui/KPICardV2';
+import { KpiCockpit } from '../components/ui/KpiCockpit';
 import { ChartCard } from '../components/ui/ChartCard';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { SIGList } from '../components/ui/SIGList';
@@ -124,11 +125,27 @@ export default function DashboardHome() {
     });
   };
 
+  // Trends pour les sparklines KPI (12 derniers mois)
+  const caTrend = caData.map((m) => m.realise);
+  const tnTrend = activeFr.map((r) => r.tn);
+  // Pour résultat / EBE : pas de série mensuelle directe — approximation via CA pondéré
+  const totCaForRatio = caData.reduce((s, m) => s + m.realise, 0) || 1;
+  const resTrend = caData.map((m) => (m.realise / totCaForRatio) * sig.resultat);
+  const ebeTrend = caData.map((m) => (m.realise / totCaForRatio) * sig.ebe);
+
   return (
     <div>
       <PageHeader
-        title="Synthèse de gestion"
-        subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · ${currentPeriodId ? 'Période sélectionnée' : periodLabel}`}
+        eyebrow="Synthèse de gestion"
+        title={org?.name ? `Bonjour · ${org.name}` : 'Synthèse de gestion'}
+        subtitle={`Vue d'ensemble temps réel — bilan, compte de résultat, ratios SYSCOHADA et trésorerie. Données rafraîchies en direct.`}
+        hero
+        pills={[
+          { label: 'Live', variant: 'live' },
+          { label: 'Société', value: org?.name, icon: <Building2 className="w-3 h-3" /> },
+          { label: 'Devise', value: currency, icon: <Coins className="w-3 h-3" /> },
+          { label: 'Période', value: periodLabel, icon: <Calendar className="w-3 h-3" /> },
+        ]}
         action={
           <div className="flex gap-2">
             <button className="btn-outline" onClick={() => navigate('/ai')}><Sparkles className="w-4 h-4" /> Commenter avec l'IA</button>
@@ -144,16 +161,16 @@ export default function DashboardHome() {
           <div className="mb-4 px-3 py-2 rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 text-xs text-primary-600 dark:text-primary-400">
             <strong>{SYSTEM_META.SMT.label}</strong> — cadrage simplifié. Pour le détail, voir onglet <em>Recettes / Dépenses</em> dans <a href="/states" className="underline">États financiers</a>.
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5 animate-fade-in-up">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 animate-fade-in-up">
             {(() => {
               const recettes = balance.filter((r) => r.account.startsWith('7')).reduce((s, r) => s + r.credit - r.debit, 0);
               const depenses = balance.filter((r) => r.account.startsWith('6')).reduce((s, r) => s + r.debit - r.credit, 0);
               const soldeNet = recettes - depenses;
               return <>
-                <KPICard title="Recettes" value={fmtK(recettes)} unit={currency} icon={<ArrowDownToLine className="w-4 h-4" strokeWidth={2} />} />
-                <KPICard title="Dépenses" value={fmtK(depenses)} unit={currency} icon={<ArrowUpFromLine className="w-4 h-4" strokeWidth={2} />} />
-                <KPICard title="Solde net" value={fmtK(soldeNet)} unit={currency} icon={<TrendingUp className="w-4 h-4" strokeWidth={2} />} />
-                <KPICard title="Trésorerie" value={fmtK(tnV)} unit={currency} icon={<Wallet className="w-4 h-4" strokeWidth={2} />} />
+                <KpiCockpit label="Recettes" value={recettes} currency={currency} tone="green" icon={ArrowDownToLine} />
+                <KpiCockpit label="Dépenses" value={depenses} currency={currency} tone="red" icon={ArrowUpFromLine} />
+                <KpiCockpit label="Solde net" value={soldeNet} currency={currency} tone={soldeNet >= 0 ? 'green' : 'red'} icon={TrendingUp} />
+                <KpiCockpit label="Trésorerie" value={tnV} currency={currency} tone="blue" icon={Wallet} />
               </>;
             })()}
           </div>
@@ -172,23 +189,45 @@ export default function DashboardHome() {
       )}
 
       {system !== 'SMT' && tab === 'perf' && <>
-        {/* Hero KPI : CA en grand carré sombre + 4 KPI standards */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-5 animate-fade-in-up">
-          <div className="lg:col-span-2 lg:row-span-1">
-            <KPICard
-              variant="hero"
-              title="Chiffre d'Affaires"
-              value={fmtK(ca)}
-              unit={currency}
-              variation={variationCA}
-              vsLabel="vs N-1"
-              icon={<TrendingUp className="w-5 h-5" strokeWidth={2} />}
-              subValue={`Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} % executé)`}
-            />
-          </div>
-          <KPICard title="Résultat Net" value={fmtK(sig.resultat)} unit={currency} icon={<BadgeDollarSign className="w-4 h-4" strokeWidth={2} />} subValue={`Marge nette : ${marge.toFixed(1)} %`} />
-          <KPICard title="EBE" value={fmtK(sig.ebe)} unit={currency} icon={<Activity className="w-4 h-4" strokeWidth={2} />} subValue={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`} />
-          <KPICard title="Trésorerie Nette" value={fmtK(tnV)} unit={currency} icon={<Wallet className="w-4 h-4" strokeWidth={2} />} subValue={`FR ${fmtK(frV)} · BFR ${fmtK(bfrV)}`} />
+        {/* Hero KPI grid — 4 cards uniformes premium avec icone coloree + sparkline gradient */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 animate-fade-in-up">
+          <KpiCockpit
+            label="Chiffre d'affaires"
+            value={ca}
+            previous={caN1}
+            currency={currency}
+            tone="orange"
+            icon={TrendingUp}
+            subtitle={caBudget ? `Budget : ${fmtK(caBudget)} (${budgetExec.toFixed(0)} % exécuté)` : `Cumul ${periodLabel}`}
+            trend={caTrend}
+          />
+          <KpiCockpit
+            label="Résultat net"
+            value={sig.resultat}
+            currency={currency}
+            tone={sig.resultat >= 0 ? 'green' : 'red'}
+            icon={BadgeDollarSign}
+            subtitle={`Marge nette : ${marge.toFixed(1)} %`}
+            trend={resTrend}
+          />
+          <KpiCockpit
+            label="EBE"
+            value={sig.ebe}
+            currency={currency}
+            tone="amber"
+            icon={Activity}
+            subtitle={`Taux EBE : ${ca ? ((sig.ebe / ca) * 100).toFixed(1) : 0} %`}
+            trend={ebeTrend}
+          />
+          <KpiCockpit
+            label="Trésorerie nette"
+            value={tnV}
+            currency={currency}
+            tone={tnV >= 0 ? 'blue' : 'red'}
+            icon={Wallet}
+            subtitle={`FR ${fmtK(frV)} · BFR ${fmtK(bfrV)}`}
+            trend={tnTrend}
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>

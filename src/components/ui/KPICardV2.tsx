@@ -7,6 +7,8 @@ type Props = {
   value: string;
   unit?: string;
   icon: ReactNode;
+  /** Couleur d'accent — détermine la teinte du badge icône.
+   *  Hex (ex '#DA4D28') ou name ('orange', 'red', 'green', 'amber', 'blue', 'violet'). */
   color?: string;
   variation?: number;
   vsLabel?: string;
@@ -17,12 +19,27 @@ type Props = {
   variant?: 'default' | 'hero';
 };
 
+// Mapping color name -> classes Tailwind tinted (fond doux + icône foncée)
+// Pour les hex, on calcule un fond léger et garde l'hex pour l'icône.
+const TINT_MAP: Record<string, { bg: string; icon: string }> = {
+  orange: { bg: 'bg-orange-100/70 dark:bg-orange-500/15',     icon: 'text-orange-600 dark:text-orange-400' },
+  red:    { bg: 'bg-red-100/70 dark:bg-red-500/15',           icon: 'text-red-600 dark:text-red-400' },
+  amber:  { bg: 'bg-amber-100/70 dark:bg-amber-500/15',       icon: 'text-amber-600 dark:text-amber-400' },
+  green:  { bg: 'bg-emerald-100/70 dark:bg-emerald-500/15',   icon: 'text-emerald-600 dark:text-emerald-400' },
+  blue:   { bg: 'bg-blue-100/70 dark:bg-blue-500/15',         icon: 'text-blue-600 dark:text-blue-400' },
+  violet: { bg: 'bg-violet-100/70 dark:bg-violet-500/15',     icon: 'text-violet-600 dark:text-violet-400' },
+};
+
 /**
- * KPI card premium — niveau international (Stripe / Linear).
- * Hierarchie typographique stricte, micro-interactions au hover.
+ * KPICard — niveau premium Cockpit CR / Stripe Dashboard.
  *
- * - 'default' : carte blanche, icone teintee, hover lift subtil
- * - 'hero'    : carte sombre, fond gradient, icone blanche (1 KPI principal)
+ * Pattern visuel :
+ *  ┌──────────────────────────────────────┐
+ *  │ [icone tintée]  LABEL UPPERCASE  ↗+X%│
+ *  │                                       │
+ *  │ VALEUR ÉNORME (32px tabular-nums)     │
+ *  │ subValue petit gris                   │
+ *  └──────────────────────────────────────┘
  */
 export function KPICard({
   title, value, unit, icon, variation, vsLabel = 'vs N-1',
@@ -37,86 +54,98 @@ export function KPICard({
 
   const isHero = variant === 'hero';
 
+  // Détermine le tint de l'icône
+  const tint = !isHero && color && TINT_MAP[color] ? TINT_MAP[color] : null;
+  const customColor = !isHero && color && !TINT_MAP[color] ? color : null;
+
   return (
     <div
       className={clsx(
         'group relative p-5 flex flex-col min-w-0 overflow-hidden',
         'transition-all duration-200 ease-spring',
         isHero
-          ? 'card-hero hover:shadow-lg'
-          : 'card-hover hover:-translate-y-px',
+          ? 'card-hero'
+          : 'card-hover',
       )}
     >
-      <div className="flex justify-between items-start gap-3">
-        <div className="min-w-0 flex-1">
+      {/* Header : icône + label + variation top-right */}
+      <div className="flex items-center justify-between gap-3 mb-3.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className={clsx(
+              'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
+              typeof icon === 'string' && icon.length <= 3
+                ? 'text-[11px] font-bold tracking-tight'
+                : 'text-base',
+              isHero
+                ? 'bg-white/10 text-primary-50 backdrop-blur-sm'
+                : tint
+                  ? clsx(tint.bg, tint.icon)
+                  : '',
+            )}
+            style={!isHero && customColor ? {
+              background: `${customColor}15`,
+              color: customColor,
+            } : undefined}
+          >
+            {icon}
+          </div>
           <p className={clsx(
-            'text-[11px] uppercase tracking-[0.08em] font-medium leading-tight',
+            'text-[10px] uppercase tracking-[0.10em] font-semibold leading-tight truncate',
             isHero ? 'text-primary-300' : 'text-primary-500',
           )}>
             {title}
           </p>
-          <p className={clsx(
-            'num text-[28px] leading-none font-semibold mt-2.5 tracking-tight tabular-nums break-all',
-            isHero ? 'text-primary-50' : 'text-primary-900 dark:text-primary-50',
+        </div>
+        {hasVar && (
+          <span className={clsx(
+            'inline-flex items-center gap-0.5 num text-[11px] font-semibold tabular-nums shrink-0',
+            isGood ? 'text-success' :
+            isBad ? 'text-error' :
+            (isHero ? 'text-primary-400' : 'text-primary-500'),
           )}>
-            {value}
-            {unit && (
-              <span className={clsx(
-                'text-sm font-normal ml-1 tracking-normal',
-                isHero ? 'text-primary-400' : 'text-primary-400',
-              )}>
-                {unit}
-              </span>
-            )}
-          </p>
-          {subValue && (
-            <p className={clsx(
-              'text-xs mt-1.5 leading-tight',
-              isHero ? 'text-primary-400' : 'text-primary-500',
-            )}>
-              {subValue}
-            </p>
-          )}
-        </div>
-
-        {/* Icone : pastille teintee (default) ou translucide (hero).
-            Si icon est une string courte (initiales 2-3 char), on bascule sur
-            un styling monogramme (font-bold + tracking-tight + text-[11px]). */}
-        <div
-          className={clsx(
-            'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-            'transition-transform duration-200 group-hover:scale-105',
-            typeof icon === 'string' && icon.length <= 3
-              ? 'text-[11px] font-bold tracking-tight'
-              : 'text-base',
-            isHero ? 'bg-white/10 text-primary-50 backdrop-blur-sm' : 'text-white',
-          )}
-          style={!isHero ? { background: color ?? 'rgb(var(--accent))' } : undefined}
-        >
-          {icon}
-        </div>
+            {isUp && <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2.5} />}
+            {isDown && <ArrowDownRight className="w-3.5 h-3.5" strokeWidth={2.5} />}
+            {isFlat && <Minus className="w-3.5 h-3.5" strokeWidth={2.5} />}
+            {Math.abs(variation!).toFixed(1)}%
+          </span>
+        )}
       </div>
 
-      {hasVar && (
-        <div className={clsx(
-          'flex items-center gap-2 mt-4 pt-3 border-t',
-          isHero ? 'border-white/10' : 'border-primary-200/50 dark:border-primary-800/50',
-        )}>
+      {/* Valeur — typo plus imposante (32px) avec tabular-nums et tracking serré */}
+      <p className={clsx(
+        'kpi-value text-[32px] leading-[1.1] tabular-nums break-all',
+        isHero ? 'text-primary-50' : 'text-primary-900 dark:text-primary-50',
+      )}>
+        {value}
+        {unit && (
           <span className={clsx(
-            'inline-flex items-center gap-1 num text-xs font-semibold px-2 py-0.5 rounded-md tabular-nums',
-            isGood && 'bg-success/15 text-success',
-            isBad && 'bg-error/15 text-error',
-            isFlat && (isHero ? 'bg-white/10 text-primary-300' : 'bg-primary-200 dark:bg-primary-800 text-primary-600 dark:text-primary-300'),
+            'text-sm font-normal ml-1.5 tracking-normal',
+            isHero ? 'text-primary-400' : 'text-primary-400',
           )}>
-            {isUp && <ArrowUpRight className="w-3 h-3" strokeWidth={2.5} />}
-            {isDown && <ArrowDownRight className="w-3 h-3" strokeWidth={2.5} />}
-            {isFlat && <Minus className="w-3 h-3" strokeWidth={2.5} />}
-            {Math.abs(variation!).toFixed(1)} %
+            {unit}
           </span>
-          <span className={clsx('text-[11px]', isHero ? 'text-primary-400' : 'text-primary-500')}>
-            {vsLabel}
-          </span>
-        </div>
+        )}
+      </p>
+
+      {/* Sub-value : précision contextuelle (budget, taux, etc.) */}
+      {subValue && (
+        <p className={clsx(
+          'text-[11px] mt-1.5 leading-relaxed',
+          isHero ? 'text-primary-400' : 'text-primary-500',
+        )}>
+          {subValue}
+        </p>
+      )}
+
+      {/* vsLabel uniquement quand variation ET subValue absent */}
+      {hasVar && !subValue && (
+        <p className={clsx(
+          'text-[11px] mt-1.5 leading-tight',
+          isHero ? 'text-primary-400' : 'text-primary-500',
+        )}>
+          {vsLabel}
+        </p>
       )}
     </div>
   );
