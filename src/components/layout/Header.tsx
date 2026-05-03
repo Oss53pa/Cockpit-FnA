@@ -42,7 +42,30 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const contextRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const currentOrg = orgs.find((o) => o.id === currentOrgId);
-  const initials = currentOrg?.name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase() ?? 'AD';
+
+  // Utilisateur connecté — sync avec sessionStorage 'cockpit-current-user'
+  // (rempli par useAuth.ts depuis Supabase user_metadata, ou fallback local users)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; avatar?: string | null } | null>(null);
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        const raw = sessionStorage.getItem('cockpit-current-user');
+        setCurrentUser(raw ? JSON.parse(raw) : null);
+      } catch { setCurrentUser(null); }
+    };
+    refresh();
+    // Re-lit quand sessionStorage change (multi-onglets) ou auth event
+    window.addEventListener('storage', refresh);
+    window.addEventListener('cockpit-auth-changed', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('cockpit-auth-changed', refresh);
+    };
+  }, []);
+
+  // Initiales : priorité au nom utilisateur, fallback société
+  const initials = (currentUser?.name ?? currentOrg?.name ?? 'Atlas')
+    .split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'AD';
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -265,13 +288,39 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               {initials}
             </button>
             {userOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 card-glass shadow-xl overflow-hidden animate-fade-in-up">
+              <div className="absolute right-0 top-full mt-2 w-72 card-glass shadow-xl overflow-hidden animate-fade-in-up">
                 <div className="px-4 py-3 border-b border-primary-200/60 dark:border-primary-800">
-                  <p className="font-semibold text-sm text-primary-900 dark:text-primary-50">{currentOrg?.name ?? 'Utilisateur'}</p>
-                  <p className="text-xs text-primary-500 mt-0.5">Mode hors-ligne</p>
+                  {currentUser ? (
+                    <>
+                      <div className="flex items-center gap-2.5">
+                        {currentUser.avatar ? (
+                          <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-accent text-white flex items-center justify-center text-xs font-bold">
+                            {initials}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm text-primary-900 dark:text-primary-50 truncate">{currentUser.name}</p>
+                          <p className="text-[11px] text-primary-500 truncate">{currentUser.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className="text-[10px] uppercase tracking-wider font-semibold text-primary-500">Société</span>
+                        <span className="text-[11px] text-primary-700 dark:text-primary-300 truncate">{currentOrg?.name ?? '—'}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-sm text-primary-900 dark:text-primary-50">{currentOrg?.name ?? 'Utilisateur'}</p>
+                      <p className="text-xs text-primary-500 mt-0.5">Mode hors-ligne · non connecté</p>
+                    </>
+                  )}
                 </div>
                 <div className="py-1">
-                  <MenuItem icon={<LogIn className="w-4 h-4" />} label="Se connecter" onClick={() => { setUserOpen(false); navigate('/login'); }} />
+                  {!currentUser && (
+                    <MenuItem icon={<LogIn className="w-4 h-4" />} label="Se connecter" onClick={() => { setUserOpen(false); navigate('/login'); }} />
+                  )}
                   <MenuItem icon={<Settings className="w-4 h-4" />} label="Paramètres" onClick={() => { setUserOpen(false); navigate('/settings'); }} />
                   <MenuItem icon={<LogOut className="w-4 h-4" />} label="Déconnexion" onClick={async () => {
                     setUserOpen(false);
