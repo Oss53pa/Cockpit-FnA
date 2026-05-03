@@ -54,8 +54,8 @@ export function PageHeader({ title, subtitle, action, back, eyebrow, icon, pills
     <div className="relative mb-6">
       {/* Pills contexte au dessus (Cockpit CR pattern) */}
       {pills && pills.length > 0 && <PillStatus pills={pills} />}
-      <div className="flex items-start justify-between gap-4 pb-5">
-        <div className="flex items-start gap-3 min-w-0 flex-1">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 pb-5">
+        <div className="flex items-start gap-3 min-w-0 flex-1 min-w-[260px]">
           {showBack && (
             <button
               type="button"
@@ -93,7 +93,7 @@ export function PageHeader({ title, subtitle, action, back, eyebrow, icon, pills
             )}
           </div>
         </div>
-        {action && <div className="flex items-center gap-2 shrink-0">{action}</div>}
+        {action && <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">{action}</div>}
       </div>
       {/* Divider gradient subtil — touche premium signature */}
       <div className="divider-soft" />

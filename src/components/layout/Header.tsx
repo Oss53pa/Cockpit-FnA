@@ -6,6 +6,7 @@ import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
 import { db } from '../../db/schema';
 import { HelpModal } from '../ui/HelpModal';
+import { PaletteSwitcher } from './PaletteSwitcher';
 import { toast } from '../ui/Toast';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -205,6 +206,9 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           >
             <Hash className="w-4 h-4" />
           </button>
+
+          {/* Palette switcher — bascule rapide entre les 3 directions visuelles */}
+          <PaletteSwitcher />
 
           <button
             type="button"

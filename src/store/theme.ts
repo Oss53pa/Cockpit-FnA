@@ -74,30 +74,59 @@ export const BUILTIN_PALETTES: Record<string, Palette> = {
   // La scale est generee en gardant la teinte HSL du bleu nuit (218°, 22%) avec
   // luminosite decroissante 97% -> 6%. Resultat : nuances cool-blue cohérentes
   // entre elles (pas de zinc neutre, pas de creme chaud).
+  // ── PALETTE 1 : Cockpit hybride (DÉFAUT) ──
+  // Gris neutre + sage primary + terracotta secondaire (CTA critiques)
   twisty: {
-    name: 'Cockpit',
-    // Palette neutre (gris) + accent sage green
+    name: 'Cockpit (Hybride)',
     scale: [
-      '#FAFAFA', // 50  — blanc neutre
-      '#F5F5F5', // 100 — fond app (gris très clair)
-      '#EAEAEA', // 200 — borders soft
-      '#D4D4D4', // 300 — borders visibles
-      '#A3A3A3', // 400 — décoratif
-      '#737373', // 500 — secondaire
-      '#525252', // 600 — body
-      '#404040', // 700 — fort
-      '#262626', // 800 — heading
-      '#171717', // 900 — graphite
-      '#0A0A0A', // 950 — quasi-noir
+      '#FAFAFA', '#F5F5F5', '#EAEAEA', '#D4D4D4', '#A3A3A3',
+      '#737373', '#525252', '#404040', '#262626', '#171717', '#0A0A0A',
     ],
     tableHeader: '#171717', tableHeaderText: '#F5F5F5',
-    // Charts : sage primary + clay secondary + neutres harmonieux
     chartColors: ['#7FA88E','#C97A5A','#5E8772','#D4A574','#737373','#B5C4A8','#A3A3A3'],
     layout: {
       bgPage:     '#F5F5F5',
       bgShell:    '#F5F5F5',
       bgSurface:  '#FFFFFF',
-      accent:     '#7FA88E',  // sage primary
+      accent:     '#7FA88E',
+      accentSoft: '#E5EDE3',
+    },
+  },
+  // ── PALETTE 2 : Éditorial — Crème + terracotta orangée vive ──
+  // Identité chaleureuse, "lifestyle finance", CTA qui crient.
+  // Idéal : pitches, présentations, demos. Moins idéal sur longues sessions.
+  editorial: {
+    name: 'Éditorial (Crème)',
+    scale: [
+      '#FCFBF9','#F7F5F0','#E9E6DE','#CFCBC0','#A5A298',
+      '#7A776E','#56544D','#403E39','#2C2B26','#1A1916','#0F0E0B',
+    ],
+    tableHeader: '#1A1916', tableHeaderText: '#F7F5F0',
+    chartColors: ['#DA4D28','#C97A5A','#D4A574','#56544D','#A5A298','#E9E6DE','#403E39'],
+    layout: {
+      bgPage:     '#F7F5F0',  // crème ivoire
+      bgShell:    '#F7F5F0',
+      bgSurface:  '#FFFFFF',
+      accent:     '#DA4D28',  // terracotta vif
+      accentSoft: '#FBEAE2',
+    },
+  },
+  // ── PALETTE 3 : Sauge — Gris neutre + sage green pur ──
+  // Identité apaisante, institutionnelle, anti-fatigue.
+  // Idéal : usage quotidien intensif, audit, conformité.
+  sauge: {
+    name: 'Sauge (Apaisante)',
+    scale: [
+      '#FAFAFA','#F5F5F5','#EAEAEA','#D4D4D4','#A3A3A3',
+      '#737373','#525252','#404040','#262626','#171717','#0A0A0A',
+    ],
+    tableHeader: '#171717', tableHeaderText: '#F5F5F5',
+    chartColors: ['#7FA88E','#5E8772','#B5C4A8','#8B7355','#737373','#A3A3A3','#4F6E5C'],
+    layout: {
+      bgPage:     '#F5F5F5',
+      bgShell:    '#F5F5F5',
+      bgSurface:  '#FFFFFF',
+      accent:     '#7FA88E',  // sage uniquement
       accentSoft: '#E5EDE3',
     },
   },
