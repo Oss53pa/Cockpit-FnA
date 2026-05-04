@@ -860,6 +860,91 @@ function saveUsers(users: AppUser[]) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
 }
 
+/** Charge les users depuis Supabase fna_org_members (multi-device + résilient). */
+async function loadUsersFromCloud(currentOrgId: string | undefined): Promise<AppUser[]> {
+  try {
+    const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+    if (!isSupabaseConfigured) return [];
+    let query = (supabase as any).from('fna_org_members').select('*');
+    if (currentOrgId) query = query.eq('org_id', currentOrgId);
+    const { data, error } = await query;
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[users] Pull fna_org_members error:', error.message);
+      return [];
+    }
+    // Groupe par email (un user peut être dans plusieurs orgs)
+    const map = new Map<string, AppUser>();
+    for (const r of data ?? []) {
+      const email = (r.email as string).toLowerCase();
+      const existing = map.get(email);
+      const orgIds = existing ? Array.from(new Set([...existing.orgIds, r.org_id])) : [r.org_id];
+      map.set(email, {
+        id: existing?.id ?? `user-${r.id ?? r.email}`,
+        name: r.name ?? email.split('@')[0],
+        email: r.email,
+        role: (r.role ?? 'viewer') as AppRole,
+        orgIds,
+        active: r.active !== false,
+        createdAt: Number(r.invited_at ?? Date.now()),
+        lastLoginAt: r.last_login_at ? Number(r.last_login_at) : undefined,
+      });
+    }
+    return Array.from(map.values());
+  } catch (e) {
+    console.warn('[users] loadUsersFromCloud failed:', e);
+    return [];
+  }
+}
+
+/** Pousse un user vers Supabase fna_org_members (toutes ses orgs). */
+async function pushUserToCloud(user: AppUser): Promise<void> {
+  try {
+    const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+    if (!isSupabaseConfigured || user.orgIds.length === 0) return;
+    const rows = user.orgIds.map((orgId) => ({
+      org_id: orgId,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      active: user.active,
+      invited_at: user.createdAt,
+      last_login_at: user.lastLoginAt ?? null,
+    }));
+    await (supabase as any).from('fna_org_members').upsert(rows, { onConflict: 'org_id,email' });
+  } catch (e) {
+    console.warn('[users] pushUserToCloud failed (non-bloquant):', e);
+  }
+}
+
+/** Supprime un user de Supabase fna_org_members. */
+async function deleteUserFromCloud(email: string): Promise<void> {
+  try {
+    const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+    if (!isSupabaseConfigured) return;
+    await (supabase as any).from('fna_org_members').delete().eq('email', email);
+  } catch (e) {
+    console.warn('[users] deleteUserFromCloud failed (non-bloquant):', e);
+  }
+}
+
+/** Merge local + cloud par email (cloud priorité sur local pour les champs communs). */
+function mergeUsers(local: AppUser[], cloud: AppUser[]): AppUser[] {
+  const byEmail = new Map<string, AppUser>();
+  for (const u of local) byEmail.set(u.email.toLowerCase(), u);
+  for (const u of cloud) {
+    const key = u.email.toLowerCase();
+    const existing = byEmail.get(key);
+    if (existing) {
+      // Cloud a priorité sur les champs métier, mais on conserve l'id local pour stabilité React
+      byEmail.set(key, { ...u, id: existing.id });
+    } else {
+      byEmail.set(key, u);
+    }
+  }
+  return Array.from(byEmail.values());
+}
+
 function TabUsers() {
   const [users, setUsers] = useState<AppUser[]>(() => loadUsers());
   const [modalOpen, setModalOpen] = useState(false);
@@ -867,6 +952,23 @@ function TabUsers() {
   const [invitePreview, setInvitePreview] = useState<{ user: AppUser; orgs: { id: string; name: string }[] } | null>(null);
   const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
   const { currentOrgId } = useApp();
+
+  // Pull cloud au mount + à chaque changement org : merge avec localStorage.
+  // Garantit que les users restent visibles même après cache/browser changement,
+  // et qu'ils sont scopés à la société courante (multi-tenant).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const cloud = await loadUsersFromCloud(undefined); // toutes orgs (admin voit tout)
+      if (!alive) return;
+      const local = loadUsers();
+      const merged = mergeUsers(local, cloud);
+      // Sauvegarde le merge en localStorage (cache local rafraichi)
+      saveUsers(merged);
+      setUsers(merged);
+    })();
+    return () => { alive = false; };
+  }, [currentOrgId]);
 
   const handleSave = (user: AppUser, sendInvite: boolean) => {
     const existing = users.findIndex((u) => u.id === user.id);
@@ -876,6 +978,8 @@ function TabUsers() {
       : users.map((u, i) => (i === existing ? user : u));
     setUsers(next);
     saveUsers(next);
+    // Push vers Supabase (fire-and-forget) — multi-device + persistence
+    void pushUserToCloud(user);
     setModalOpen(false);
     setEditing(null);
 
@@ -983,6 +1087,7 @@ function TabUsers() {
     const next = users.filter((u) => u.id !== id);
     setUsers(next);
     saveUsers(next);
+    if (target) void deleteUserFromCloud(target.email);
     toast.success('Utilisateur supprimé');
     if (target) void import('../engine/auditLog').then(({ audit }) => audit.userDeleted(currentOrgId ?? 'global', target.email));
   };
@@ -991,6 +1096,8 @@ function TabUsers() {
     const next = users.map((u) => u.id === id ? { ...u, active: !u.active } : u);
     setUsers(next);
     saveUsers(next);
+    const target = next.find((u) => u.id === id);
+    if (target) void pushUserToCloud(target);
   };
 
   const counts = {
