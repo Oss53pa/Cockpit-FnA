@@ -918,10 +918,23 @@ function TabUsers() {
           });
           if (error) throw new Error(error?.context?.error ?? error?.message ?? 'Erreur réseau');
           if (data?.success === false) {
-            const hint = data.hint ? ` (${data.hint})` : '';
-            throw new Error(`${data.error ?? 'Echec'}${hint}`);
+            const parts: string[] = [data.error ?? 'Echec'];
+            if (data.hint) parts.push(data.hint);
+            if (data.supabaseError) {
+              const se = data.supabaseError;
+              parts.push(`Supabase : ${se.message ?? '?'}${se.code ? ` (code=${se.code})` : ''}${se.status ? ` [HTTP ${se.status}]` : ''}`);
+            }
+            if (data.details && typeof data.details === 'string') parts.push(data.details);
+            // Console log complet pour debug avancé
+            // eslint-disable-next-line no-console
+            console.error('[invite-user] Echec :', data);
+            throw new Error(parts.join(' — '));
           }
-          toast.success('Invitation envoyée', `${user.name} recevra un lien pour définir son mot de passe.`);
+          // Si linkType=recovery, l'utilisateur existait déjà : message adapté
+          const successMsg = data?.linkType === 'recovery'
+            ? `${user.name} existe deja sur Supabase. Lien de recuperation envoye pour redefinir son mot de passe.`
+            : `${user.name} recevra un lien pour definir son mot de passe.`;
+          toast.success('Invitation envoyée', successMsg);
         } catch (e: any) {
           toast.error('Invitation impossible', e?.message ?? 'Erreur inconnue');
           // Ouvre le preview en fallback pour copie HTML / mailto / téléchargement .eml

@@ -96,6 +96,9 @@ export async function pullFromSupabase(
         const c = toCamel(r) as any;
         c.importId = c.importId != null ? String(c.importId) : undefined;
         delete c.id;
+        // Supabase renvoie numeric(18,2) en string — forcer Number()
+        if (c.debit != null) c.debit = Number(c.debit);
+        if (c.credit != null) c.credit = Number(c.credit);
         return c;
       });
       for (let i = 0; i < mapped.length; i += 5000) {
