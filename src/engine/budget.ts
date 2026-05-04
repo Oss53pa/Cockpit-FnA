@@ -55,7 +55,7 @@ export async function loadBudget(orgId: string, year: number, version: string): 
   const map = new Map<string, number[]>();
   for (const l of lines) {
     const arr = map.get(l.account) ?? Array(12).fill(0);
-    arr[l.month - 1] += l.amount;
+    arr[l.month - 1] += Number(l.amount);
     map.set(l.account, arr);
   }
   const result: BudgetSummary[] = [];

@@ -83,24 +83,30 @@ export async function pullFromSupabase(
     if (accs.length > 0) await db.accounts.bulkPut(accs.map((r: any) => toCamel(r) as any));
 
     // 5. GL entries (le plus volumineux — par chunks)
+    // SAFETY : on NE supprime PAS les donnees locales si Supabase est VIDE
+    // (evite la perte de donnees pour les users qui ont importe localement
+    // mais pas encore push vers Supabase).
     progress('Grand Livre');
-    // Supprimer les anciennes entrées de cet org dans Dexie avant de remplacer
-    const oldGlKeys = await db.gl.where('orgId').equals(oid).primaryKeys();
-    if (oldGlKeys.length > 0) await db.gl.bulkDelete(oldGlKeys);
     const glRows = await fetchAll('fna_gl_entries', oid);
     if (glRows.length > 0) {
+      // Supabase a des donnees → on remplace en local
+      const oldGlKeys = await db.gl.where('orgId').equals(oid).primaryKeys();
+      if (oldGlKeys.length > 0) await db.gl.bulkDelete(oldGlKeys);
       const mapped = glRows.map((r: any) => {
         const c = toCamel(r) as any;
-        // Supabase bigserial id → Dexie auto-increment: on laisse Dexie gérer
         c.importId = c.importId != null ? String(c.importId) : undefined;
         delete c.id;
         return c;
       });
-      // Bulk insert par chunks de 5000
       for (let i = 0; i < mapped.length; i += 5000) {
         await db.gl.bulkAdd(mapped.slice(i, i + 5000));
       }
       totalEntries += mapped.length;
+      console.log(`[Sync] GL: ${mapped.length} ecritures pulled depuis Supabase`);
+    } else {
+      // Supabase vide → on garde les donnees locales (fallback safe)
+      const localCount = await db.gl.where('orgId').equals(oid).count();
+      console.log(`[Sync] GL: Supabase vide pour ${oid}. Donnees locales preservees (${localCount} ecritures).`);
     }
 
     // 6. Imports
@@ -108,21 +114,26 @@ export async function pullFromSupabase(
     const imports = await fetchAll('fna_imports', oid);
     if (imports.length > 0) await db.imports.bulkPut(imports.map((r: any) => toCamel(r) as any));
 
-    // 7. Budgets — REPLACE (pas merge) pour cette org : on vide d'abord puis insère
-    // (sinon les lignes supprimees cote Supabase resteraient en local)
+    // 7. Budgets — SAFETY : on NE vide pas le local si Supabase est vide
     progress('Budgets');
     const budgets = await fetchAll('fna_budgets', oid);
-    await db.budgets.where('orgId').equals(oid).delete();
     if (budgets.length > 0) {
-      // bulkAdd sans id pour laisser auto-increment Dexie
+      // Supabase a des budgets → replace en local
+      await db.budgets.where('orgId').equals(oid).delete();
       const rows = budgets.map((r: any) => {
         const c = toCamel(r) as any;
-        delete c.id; // important : laisse Dexie générer un id local frais
+        delete c.id;
+        if (c.amount != null) c.amount = Number(c.amount);
+        if (c.year != null) c.year = Number(c.year);
+        if (c.month != null) c.month = Number(c.month);
         return c;
       });
       await db.budgets.bulkAdd(rows);
+      console.log(`[Sync] Budgets: ${rows.length} lignes pulled depuis Supabase`);
+    } else {
+      const localCount = await db.budgets.where('orgId').equals(oid).count();
+      console.log(`[Sync] Budgets: Supabase vide. Donnees locales preservees (${localCount} lignes).`);
     }
-    console.log(`[Sync] Budgets pulled for org ${oid}: ${budgets.length} lignes`);
 
     // 8. Reports
     progress('Rapports');

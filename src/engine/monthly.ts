@@ -104,7 +104,8 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     for (const l of lines) {
       if (l.month < 1 || l.month > 12) continue;
       const map = budgetByMonthAccount[l.month - 1];
-      map.set(l.account, (map.get(l.account) ?? 0) + l.amount);
+      // Number() : Supabase renvoie numeric(18,2) en string — évite la concaténation
+      map.set(l.account, (map.get(l.account) ?? 0) + Number(l.amount));
     }
     const uniqueAccounts = new Set(lines.map((l) => l.account)).size;
     console.log('[monthly] Budget charge : orgId=' + orgId + ' year=' + year + ' version=' + lastVersion + ' (' + lines.length + ' lignes, ' + uniqueAccounts + ' comptes)');
@@ -129,7 +130,7 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     for (const l of linesN1) {
       if (l.month < 1 || l.month > 12) continue;
       const map = n1ByMonthAccount[l.month - 1];
-      map.set(l.account, (map.get(l.account) ?? 0) + l.amount);
+      map.set(l.account, (map.get(l.account) ?? 0) + Number(l.amount));
     }
     n1Source = 'budget';
     // eslint-disable-next-line no-console

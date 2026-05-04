@@ -810,17 +810,25 @@
     height: 100% !important;
     width: 100% !important;
   }
-  /* Pages spéciales : isolées */
+  /* Pages spéciales : isolées — break-before + break-after garantissent
+     que cover/toc/back occupent TOUJOURS leur propre page imprimée. */
   .report-print-area .page-a4[data-page-type="cover"] {
+    page-break-before: always !important;
     page-break-after: always !important;
+    break-before: page !important;
+    break-after: page !important;
   }
   .report-print-area .page-a4[data-page-type="toc"] {
     page-break-after: always !important;
     page-break-inside: avoid !important;
+    break-after: page !important;
+    break-inside: avoid-page !important;
   }
   .report-print-area .page-a4[data-page-type="back"] {
     page-break-before: always !important;
     page-break-after: avoid !important;
+    break-before: page !important;
+    break-after: avoid !important;
   }
   /* Tables longues : coupure entre lignes */
   .report-print-area table {

@@ -2877,7 +2877,20 @@ function DashboardSnippet({ id, data, palette }: any) {
     } catch { return 0.18; }
   }, [data.balance]);
   const kpis = (() => {
-    if (id === 'home' || id === 'cp' || id === 'crblock' || id === 'is_bvsa' || id === 'is_bvsa_monthly' || id?.startsWith('crblock_')) return [
+    if (id === 'is_bvsa' || id === 'is_bvsa_monthly') {
+      const ba = data.budgetActual ?? [];
+      const totR = ba.reduce((s: number, r: any) => s + (Number(r.realise) || 0), 0);
+      const totB = ba.reduce((s: number, r: any) => s + (Number(r.budget) || 0), 0);
+      const ecart = totR - totB;
+      const execPct = totB ? ((totR / totB) * 100).toFixed(1) + ' %' : '—';
+      return [
+        { label: 'Réalisé total', value: fmtMoney(totR) },
+        { label: 'Budget total', value: fmtMoney(totB) },
+        { label: 'Écart global', value: fmtMoney(ecart) },
+        { label: 'Exécution', value: execPct },
+      ];
+    }
+    if (id === 'home' || id === 'cp' || id === 'crblock' || id?.startsWith('crblock_')) return [
       { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
       { label: 'Résultat net', value: fmtMoney(data.sig?.resultat ?? 0) },
       { label: 'EBE', value: fmtMoney(data.sig?.ebe ?? 0) },

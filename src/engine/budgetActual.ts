@@ -238,7 +238,8 @@ export async function computeBudgetActual(
     for (const l of lines) {
       // Filtrer le budget mensuel sur l'intervalle sélectionné
       if (l.month < fm || l.month > tm) continue;
-      budgetMap.set(l.account, (budgetMap.get(l.account) ?? 0) + l.amount);
+      // Number() : Supabase renvoie numeric(18,2) en string — évite la concaténation
+      budgetMap.set(l.account, (budgetMap.get(l.account) ?? 0) + Number(l.amount));
     }
   }
 
