@@ -880,14 +880,87 @@ function TabUsers() {
     setEditing(null);
 
     if (isNew && sendInvite) {
-      // Affiche le preview de l'invitation HTML que l'admin peut envoyer
-      setInvitePreview({ user, orgs: orgs.filter((o) => user.orgIds.includes(o.id)) });
+      // ENVOI AUTOMATIQUE de l'invitation Supabase Auth via cockpit-invite-user :
+      // 1. Crée le compte Supabase Auth avec generateLink type='invite'
+      // 2. Envoie l'email HTML via Resend avec le magic link vers /auth/accept-invite
+      // 3. L'utilisateur clique → définit son mot de passe → connexion automatique
+      toast.info('Invitation en cours…', `Envoi du lien à ${user.email}`);
+      void (async () => {
+        try {
+          const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+          if (!isSupabaseConfigured) {
+            toast.warning('Supabase non configuré', 'L\'utilisateur a été créé localement, mais aucun email n\'a été envoyé. Le preview reste disponible.');
+            // Ouvre le preview en fallback pour copie HTML / mailto
+            setInvitePreview({ user, orgs: orgs.filter((o) => user.orgIds.includes(o.id)) });
+            return;
+          }
+          const orgsLabel = orgs.filter((o) => user.orgIds.includes(o.id))
+            .map((o) => o.name).join(', ') || 'Toutes les sociétés autorisées';
+          const { buildInvitationEmail } = await import('../lib/emailTemplates');
+          const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://cockpit-fna.app';
+          const content = buildInvitationEmail({
+            recipientName: user.name,
+            recipientEmail: user.email,
+            roleLabel: ROLE_LABELS[user.role],
+            orgsLabel,
+            appUrl,
+          });
+          const { data, error } = await (supabase as any).functions.invoke('cockpit-invite-user', {
+            body: {
+              email: user.email,
+              name: user.name,
+              role: user.role,
+              orgIds: user.orgIds,
+              appUrl,
+              subject: content.subject,
+              html: content.htmlBody,
+            },
+          });
+          if (error) throw new Error(error?.context?.error ?? error?.message ?? 'Erreur réseau');
+          if (data?.success === false) {
+            const hint = data.hint ? ` (${data.hint})` : '';
+            throw new Error(`${data.error ?? 'Echec'}${hint}`);
+          }
+          toast.success('Invitation envoyée', `${user.name} recevra un lien pour définir son mot de passe.`);
+        } catch (e: any) {
+          toast.error('Invitation impossible', e?.message ?? 'Erreur inconnue');
+          // Ouvre le preview en fallback pour copie HTML / mailto / téléchargement .eml
+          setInvitePreview({ user, orgs: orgs.filter((o) => user.orgIds.includes(o.id)) });
+        }
+      })();
       void import('../engine/auditLog').then(({ audit }) => audit.userInvited(currentOrgId ?? 'global', user.email, user.role));
     } else {
       toast.success(isNew ? 'Utilisateur ajouté' : 'Utilisateur modifié', user.name);
       if (!isNew) {
         void import('../engine/auditLog').then(({ audit }) => audit.userUpdated(currentOrgId ?? 'global', user.email, ['role/active/orgs']));
       }
+    }
+  };
+
+  /** Re-envoyer l'invitation à un utilisateur déjà créé localement (ex: créé avant le fix) */
+  const resendInvite = async (u: AppUser) => {
+    const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
+    if (!isSupabaseConfigured) {
+      toast.warning('Supabase non configuré');
+      return;
+    }
+    toast.info('Renvoi en cours…', `→ ${u.email}`);
+    try {
+      const orgsLabel = orgs.filter((o) => u.orgIds.includes(o.id)).map((o) => o.name).join(', ') || 'Toutes les sociétés autorisées';
+      const { buildInvitationEmail } = await import('../lib/emailTemplates');
+      const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://cockpit-fna.app';
+      const content = buildInvitationEmail({
+        recipientName: u.name, recipientEmail: u.email, roleLabel: ROLE_LABELS[u.role],
+        orgsLabel, appUrl,
+      });
+      const { data, error } = await (supabase as any).functions.invoke('cockpit-invite-user', {
+        body: { email: u.email, name: u.name, role: u.role, orgIds: u.orgIds, appUrl, subject: content.subject, html: content.htmlBody },
+      });
+      if (error) throw new Error(error?.context?.error ?? error?.message);
+      if (data?.success === false) throw new Error(`${data.error}${data.hint ? ' — ' + data.hint : ''}`);
+      toast.success('Invitation renvoyée', `${u.name} recevra le lien.`);
+    } catch (e: any) {
+      toast.error('Échec', e?.message ?? 'Erreur');
     }
   };
 
@@ -989,6 +1062,9 @@ function TabUsers() {
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('fr-FR') : '—'}
                     </td>
                     <td className="py-2 px-3 text-right">
+                      <button className="btn-ghost !p-1 text-primary-500 hover:text-accent" onClick={() => resendInvite(u)} title="Renvoyer l'invitation (lien définition mot de passe)">
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
                       <button className="btn-ghost !p-1 text-primary-500 hover:text-accent" onClick={() => { setEditing(u); setModalOpen(true); }} title="Modifier">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
