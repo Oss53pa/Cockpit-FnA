@@ -121,27 +121,31 @@ const PRICING_FEATURES = [
 
 function styles(mode: Mode) {
   const d = mode === 'dark';
-  const txt = d ? '#ffffff' : '#1a1a1a';
-  const sec = d ? 'rgba(255,255,255,0.65)' : '#4a4a4a';
-  const ter = d ? 'rgba(255,255,255,0.45)' : '#777777';
-  const muted = d ? 'rgba(255,255,255,0.25)' : '#aaaaaa';
-  const inv = d ? '#1F1F23' : '#ffffff';
-  const accent = d ? '#D4B870' : '#B8954A';
-  const accent2 = d ? '#E8D5A0' : '#9C7D3E';
-  const chk = d ? '#34d399' : '#16a34a';
+  // Palette Cockpit FnA — alignée avec l'app : sage primary + clay secondaire + gris neutres
+  // Sage : #7FA88E (clair), #5E8772 (foncé)
+  // Clay : #C97A5A (terracotta — pour CTA critiques)
+  const txt = d ? '#FAFAFA' : '#171717';
+  const sec = d ? 'rgba(250,250,250,0.65)' : '#525252';
+  const ter = d ? 'rgba(250,250,250,0.45)' : '#737373';
+  const muted = d ? 'rgba(250,250,250,0.25)' : '#A3A3A3';
+  const inv = d ? '#171717' : '#ffffff';
+  const accent = d ? '#7FA88E' : '#5E8772';        // sage primary
+  const accent2 = d ? '#C97A5A' : '#A86344';       // clay secondaire (CTA critique)
+  const chk = d ? '#7FA88E' : '#5E8772';           // success = sage (cohérent)
   return {
-    bg: d ? 'bg-[#1F1F23]' : 'bg-white',
-    bgAlt: d ? 'bg-[#16161A]' : 'bg-[#f8f7f4]',
-    accentBg: d ? 'bg-[#D4B870]' : 'bg-[#B8954A]',
-    accentBgLight: d ? 'bg-[#D4B870]/10' : 'bg-[#B8954A]/8',
-    accentBorder: d ? 'border-[#D4B870]/20' : 'border-[#B8954A]/20',
-    accentBorderSolid: d ? 'border-[#D4B870]' : 'border-[#B8954A]',
-    border: d ? 'border-white/[0.08]' : 'border-[#e8e5de]',
-    btnPrimary: d ? 'bg-[#D4B870] hover:bg-[#E8D5A0]' : 'bg-[#B8954A] hover:bg-[#9C7D3E]',
-    btnSecondary: d ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#e8e5de] hover:bg-gray-50',
-    card: d ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white border-[#e8e5de] shadow-sm',
-    cardHover: d ? 'hover:bg-white/[0.06] hover:border-white/[0.16]' : 'hover:border-[#d4d0c8] hover:shadow-md',
-    navBg: d ? 'bg-[#1F1F23]/90' : 'bg-white/92',
+    bg: d ? 'bg-[#171717]' : 'bg-white',
+    bgAlt: d ? 'bg-[#0F0F0F]' : 'bg-[#FAFAFA]',
+    accentBg: d ? 'bg-[#7FA88E]' : 'bg-[#5E8772]',
+    accentBgLight: d ? 'bg-[#7FA88E]/10' : 'bg-[#5E8772]/8',
+    accentBorder: d ? 'border-[#7FA88E]/20' : 'border-[#5E8772]/20',
+    accentBorderSolid: d ? 'border-[#7FA88E]' : 'border-[#5E8772]',
+    border: d ? 'border-white/[0.08]' : 'border-[#EAEAEA]',
+    btnPrimary: d ? 'bg-[#7FA88E] hover:bg-[#5E8772]' : 'bg-[#5E8772] hover:bg-[#4F6E5C]',
+    btnClay: d ? 'bg-[#C97A5A] hover:bg-[#A86344]' : 'bg-[#C97A5A] hover:bg-[#A86344]',
+    btnSecondary: d ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-[#EAEAEA] hover:bg-[#FAFAFA]',
+    card: d ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white border-[#EAEAEA] shadow-sm',
+    cardHover: d ? 'hover:bg-white/[0.06] hover:border-white/[0.16]' : 'hover:border-[#D4D4D4] hover:shadow-md',
+    navBg: d ? 'bg-[#171717]/90' : 'bg-white/92',
     s: { color: txt } as React.CSSProperties,
     sSec: { color: sec } as React.CSSProperties,
     sTer: { color: ter } as React.CSSProperties,
@@ -217,13 +221,13 @@ export default function Landing() {
       <section className="relative pt-24 pb-20 px-6 overflow-hidden">
         {mode === 'dark' && (
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#D4B870]/[0.07] rounded-full blur-[120px] anim-glow" />
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#7FA88E]/[0.07] rounded-full blur-[120px] anim-glow" />
             <div className="absolute inset-0 opacity-[0.025]" style={{ backgroundImage: 'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
           </div>
         )}
         {mode === 'light' && (
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#B8954A]/[0.05] rounded-full blur-[120px] anim-glow" />
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#5E8772]/[0.05] rounded-full blur-[120px] anim-glow" />
           </div>
         )}
 
@@ -271,7 +275,7 @@ export default function Landing() {
           <div className="anim-hero-delay-3 flex items-center justify-center gap-3 text-sm" style={c.sTer}>
             <div className="flex -space-x-2">
               {['DF', 'EC', 'DG', 'CG'].map((init, i) => (
-                <div key={i} className={`w-9 h-9 rounded-full ${c.accentBg} border-2 ${mode === 'dark' ? 'border-[#1F1F23]' : 'border-white'} flex items-center justify-center text-xs font-bold`} style={c.sBtnP}>
+                <div key={i} className={`w-9 h-9 rounded-full ${c.accentBg} border-2 ${mode === 'dark' ? 'border-[#171717]' : 'border-white'} flex items-center justify-center text-xs font-bold`} style={c.sBtnP}>
                   {init}
                 </div>
               ))}
@@ -348,7 +352,7 @@ export default function Landing() {
       {/* ════════ DEMO CTA ════════ */}
       <section id="demo" className="py-16 px-6">
         <div className="max-w-5xl mx-auto">
-          <div ref={demoCta.ref} className={`anim-scale ${demoCta.className} relative ${mode === 'dark' ? 'bg-gradient-to-br from-white/[0.04] to-white/[0.02] border-white/[0.08]' : 'bg-gradient-to-br from-[#f8f7f4] to-[#f0ede6] border-[#e8e5de]'} border rounded-3xl p-10 md:p-14 overflow-hidden`}>
+          <div ref={demoCta.ref} className={`anim-scale ${demoCta.className} relative ${mode === 'dark' ? 'bg-gradient-to-br from-white/[0.04] to-white/[0.02] border-white/[0.08]' : 'bg-gradient-to-br from-[#FAFAFA] to-[#F4F3F1] border-[#EAEAEA]'} border rounded-3xl p-10 md:p-14 overflow-hidden`}>
             <div className="relative flex flex-col md:flex-row items-center gap-10">
               <div className="flex-1">
                 <div className={`inline-flex items-center gap-2 px-3 py-1 ${c.accentBgLight} border ${c.accentBorder} rounded-full text-xs font-semibold mb-4`} style={c.sAccent}>
@@ -659,15 +663,15 @@ export default function Landing() {
       </section>
 
       {/* ════════ FINAL CTA — DARK ════════ */}
-      <section className="py-24 px-6 bg-[#1F1F23] relative overflow-hidden" style={{ color: '#ffffff' }}>
+      <section className="py-24 px-6 bg-[#171717] relative overflow-hidden" style={{ color: '#ffffff' }}>
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#D4B870]/[0.10] rounded-full blur-[120px]" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#7FA88E]/[0.10] rounded-full blur-[120px]" />
         </div>
         <div className="max-w-3xl mx-auto text-center relative">
           <h2 className="text-4xl md:text-6xl font-medium mb-5" style={{ color: '#ffffff' }}>
             Prêt à transformer
             <br />
-            <span className="bg-gradient-to-r from-[#E8D5A0] via-[#D4B870] to-[#E8D5A0] bg-clip-text text-transparent" style={{ color: 'transparent' }}>
+            <span className="bg-gradient-to-r from-[#A4C9B4] via-[#7FA88E] to-[#A4C9B4] bg-clip-text text-transparent" style={{ color: 'transparent' }}>
               votre pilotage financier ?
             </span>
           </h2>
@@ -675,7 +679,7 @@ export default function Landing() {
             Démarrez en quelques secondes. Aucune installation, aucune donnée envoyée sur internet.
           </p>
           <div className="flex items-center justify-center gap-3 flex-wrap">
-            <a href={ATLAS_STUDIO_URL} target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-[#D4B870] hover:bg-[#E8D5A0] text-[#1F1F23] rounded-xl text-base font-bold shadow-xl hover:-translate-y-0.5 transition inline-flex items-center gap-2">
+            <a href={ATLAS_STUDIO_URL} target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-[#7FA88E] hover:bg-[#5E8772] text-[#171717] rounded-xl text-base font-bold shadow-xl hover:-translate-y-0.5 transition inline-flex items-center gap-2">
               <Zap className="w-5 h-5" /> Souscrire maintenant
               <ArrowRight className="w-5 h-5" />
             </a>
