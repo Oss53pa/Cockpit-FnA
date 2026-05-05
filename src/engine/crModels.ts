@@ -12,7 +12,7 @@
  * Le module substitue progressivement le système localStorage de budgetActual.ts.
  * getSectionDefs(orgId) (point pivot) lit le modèle actif depuis Dexie.
  */
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -582,7 +582,7 @@ export function migrateLegacySettings(orgId: string): boolean {
  * Utilisé par l'éditeur pour proposer un picker de comptes pertinent.
  */
 export async function listCRAccounts(orgId: string): Promise<{ code: string; label: string; class: string }[]> {
-  const accounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const accounts = await dataProvider.getAccounts(orgId);
   const crAccounts = accounts
     .filter((a) => /^[6-8]/.test(a.code))
     .sort((a, b) => a.code.localeCompare(b.code));

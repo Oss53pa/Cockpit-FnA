@@ -328,7 +328,22 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
         const dashKpi = (() => {
           switch (d.dashboardId) {
             case 'home': return [['Chiffre d\'affaires', fmt(data.sig.ca)], ['Résultat net', fmt(data.sig.resultat)], ['EBE', fmt(data.sig.ebe)], ['Marge brute', fmt(data.sig.margeBrute)]];
-            case 'cp': return [['Total Charges', fmt(data.cr.filter((l) => l.code === 'RA' || l.code === 'RB' || l.code === 'RC' || l.code === 'RD').reduce((s, l) => s + Math.abs(l.value), 0))], ['Total Produits', fmt(data.sig.ca)], ['Résultat exploitation', fmt(data.sig.re)]];
+            // BUG FIX (audit) : Charges & Produits.
+            // En SYSCOHADA : RA = Ventes marchandises (PRODUIT), RB = Achats march. (CHARGE),
+            // RC = Var. stocks march. (CHARGE), RD = MARGE BRUTE marchandises (calculée).
+            // L'ancienne formule sommait RA+RB+RC+RD comme "Total Charges" — non sensé
+            // comptablement. Désormais on prend les vrais agrégats SIG.
+            case 'cp': {
+              const sig = data.sig;
+              // Charges = sig.charges si dispo, sinon CA - résultat (approx).
+              const totalCharges = (sig.ca ?? 0) - (sig.resultat ?? 0);
+              return [
+                ['Chiffre d\'affaires (produits)', fmt(sig.ca ?? 0)],
+                ['Total charges (≈ CA − résultat)', fmt(totalCharges)],
+                ['Résultat exploitation', fmt(sig.re ?? 0)],
+                ['Résultat net', fmt(sig.resultat ?? 0)],
+              ];
+            }
             case 'ratios': return data.ratios.slice(0, 6).map((r) => [r.label, r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}`]);
             default: return [['CA', fmt(data.sig.ca)], ['Résultat', fmt(data.sig.resultat)]];
           }

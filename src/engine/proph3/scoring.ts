@@ -48,10 +48,49 @@ export function computeFinancialScore(ratios: Ratio[], sig?: SIG | null, bilanAc
   };
 }
 
+/**
+ * Z-Score Altman adapté SYSCOHADA.
+ * Formule originale (1968) :
+ *   Z = 1.2·X1 + 1.4·X2 + 3.3·X3 + 0.6·X4 + 1.0·X5
+ *   X1 = BFR / Total Actif      (BFR ≈ Actif circulant - Passif circulant)
+ *   X2 = Bénéfices non répartis (réserves) / Total Actif
+ *   X3 = EBE / Total Actif
+ *   X4 = Capitaux propres / Total Dettes
+ *   X5 = CA / Total Actif
+ *
+ * Interprétation : Z > 2.99 zone sûre · 1.81 < Z < 2.99 zone grise · Z < 1.81 zone de risque.
+ */
 function computeZScore(sig?: SIG | null, actif?: Line[], passif?: Line[]): number {
   if (!sig || !actif || !passif) return 0;
   const get = (l: Line[], c: string) => l.find((x) => x.code === c)?.value ?? 0;
   const ta = get(actif, '_BZ') || 1;
-  const ac = get(actif, '_BK'), pc = get(passif, '_DP'), cp = get(passif, '_CP'), df = get(passif, 'DA');
-  return 1.2 * ((ac - pc) / ta) + 1.4 * (sig.resultat / ta) + 3.3 * (sig.ebe / ta) + 0.6 * (cp / ((df + pc) || 1)) + 1.0 * (sig.ca / ta);
+  const ac = get(actif, '_BK');
+  const pc = get(passif, '_DP');
+  const cp = get(passif, '_CP');
+
+  // CORRECTION (audit) : code SYSCOHADA pour les dettes financières.
+  // Dans le bilan SYSCOHADA, 'DA' = "Emprunts et dettes financières" (16, 17, 18)
+  // — le code agrégé existe bien (cf. statements.ts). Mais on ajoute aussi DV
+  // (trésorerie passive / concours bancaires) pour les dettes COURT TERME.
+  // Total dettes = dettes financières (DA) + passif circulant (_DP) + treso passive (DV).
+  const detteFin = get(passif, 'DA');
+  const tresoPassive = get(passif, 'DV');
+  const totalDettes = detteFin + pc + tresoPassive;
+
+  // X2 : on utilise les RÉSERVES (CD = primes & réserves) plus le résultat
+  // accumulé. Sinon, fallback sur capitaux propres - capital pour approximer.
+  const reserves = get(passif, 'CD');
+  const beneficeNonReparti = reserves > 0 ? reserves : Math.max(0, cp - get(passif, 'CA'));
+
+  // GARDE : capitaux propres ≤ 0 = situation nette compromise → Z négatif (zone risque).
+  if (cp <= 0 || totalDettes === 0) {
+    // Calcul alternatif sans X4 (qui exploserait) — Z minoré.
+    return 1.2 * ((ac - pc) / ta) + 1.4 * (beneficeNonReparti / ta) + 3.3 * (sig.ebe / ta) + 1.0 * (sig.ca / ta);
+  }
+
+  return 1.2 * ((ac - pc) / ta)
+    + 1.4 * (beneficeNonReparti / ta)
+    + 3.3 * (sig.ebe / ta)
+    + 0.6 * (cp / totalDettes)
+    + 1.0 * (sig.ca / ta);
 }

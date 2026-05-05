@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowDown, ArrowUp, Download, Plus, Save, Trash2, TrendingDown, TrendingUp, Wallet, Wand2, CheckCircle2, FileWarning, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -8,7 +7,9 @@ import { Badge } from '../components/ui/Badge';
 import { Chart } from '../components/ui/Chart';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
-import { db, ImportLog } from '../db/schema';
+import type { ImportLog } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import {
   BudgetSummary, computeVariance, distribute,
   listBudgetVersions, loadBudget, saveBudget,
@@ -40,24 +41,33 @@ export default function Budget() {
   const [variance, setVariance] = useState<VarianceRow[]>([]);
 
   // Années disponibles : budgets existants + exercices définis + année courante
-  const budgetYears = useLiveQuery(async () => {
-    if (!currentOrgId) return [] as number[];
-    const all = await db.budgets.where('orgId').equals(currentOrgId).toArray();
-    return Array.from(new Set(all.map((b) => b.year)));
-  }, [currentOrgId], [] as number[]);
-  const fiscalYears = useLiveQuery(async () => {
-    if (!currentOrgId) return [] as number[];
-    const all = await db.fiscalYears.where('orgId').equals(currentOrgId).toArray();
-    return all.map((fy) => fy.year);
-  }, [currentOrgId], [] as number[]);
+  const { data: budgetYears = [] as number[] } = useCloudData<number[]>(
+    async () => {
+      if (!currentOrgId) return [] as number[];
+      const all = await dataProvider.getAllBudgets(currentOrgId);
+      return Array.from(new Set(all.map((b) => b.year)));
+    },
+    [currentOrgId],
+    { initial: [] as number[], tag: 'budgets' },
+  );
+  const { data: fiscalYears = [] as number[] } = useCloudData<number[]>(
+    async () => {
+      if (!currentOrgId) return [] as number[];
+      const all = await dataProvider.getFiscalYears(currentOrgId);
+      return all.map((fy) => fy.year);
+    },
+    [currentOrgId],
+    { initial: [] as number[], tag: 'fiscalYears' },
+  );
   const availableYears = useMemo(() => {
     const set = new Set<number>([...budgetYears, ...fiscalYears, currentYear, viewYear]);
     return Array.from(set).sort((a, b) => b - a);
   }, [budgetYears, fiscalYears, currentYear, viewYear]);
 
-  const versions = useLiveQuery(
+  const { data: versions = [] as string[] } = useCloudData<string[]>(
     () => listBudgetVersions(currentOrgId, viewYear),
-    [currentOrgId, viewYear], [] as string[],
+    [currentOrgId, viewYear],
+    { initial: [] as string[], tag: 'budgets' },
   );
 
   // Historique des imports Budget pour cette société
@@ -171,11 +181,13 @@ export default function Budget() {
               <Download className="w-4 h-4" /> Modèle Excel
             </button>
             <button className="btn-outline" onClick={async () => {
-              const all = await db.budgets.where('orgId').equals(currentOrgId).toArray();
+              const all = await dataProvider.getAllBudgets(currentOrgId);
               if (all.length === 0) { toast.info('Aucun budget', 'Rien à supprimer pour cette société'); return; }
               if (!confirm(`Vider TOUS les budgets de la société ?\n${all.length} ligne(s) seront supprimées (toutes années + versions confondues).`)) return;
-              await db.budgets.where('orgId').equals(currentOrgId).delete();
-              await db.imports.where('orgId').equals(currentOrgId).filter((i) => i.kind === 'BUDGET').delete();
+              await dataProvider.deleteAllBudgets(currentOrgId);
+              await dataProvider.deleteImportsByKind(currentOrgId, 'BUDGET');
+              invalidateCloudData('budgets');
+              invalidateCloudData('imports');
               setItems([]); setVersion('');
               toast.success('Budgets supprimés', `${all.length} lignes effacées`);
             }}>
@@ -358,15 +370,14 @@ function BudgetImportTab({
     if (imp.year && imp.version) {
       const msg = `Supprimer cet import ET sa version budgétaire « ${imp.version} » (${imp.year}) avec ses lignes ?`;
       if (!confirm(msg)) return;
-      await db.transaction('rw', [db.imports, db.budgets], async () => {
-        await db.budgets
-          .where('[orgId+year+version]').equals([imp.orgId, imp.year!, imp.version!])
-          .delete();
-        await db.imports.delete(imp.id!);
-      });
+      await dataProvider.deleteBudgets(imp.orgId, imp.year, imp.version);
+      await dataProvider.deleteImport(imp.id);
+      invalidateCloudData('budgets');
+      invalidateCloudData('imports');
     } else {
       if (!confirm("Supprimer cet import de l'historique ?")) return;
-      await db.imports.delete(imp.id);
+      await dataProvider.deleteImport(imp.id);
+      invalidateCloudData('imports');
     }
   };
 

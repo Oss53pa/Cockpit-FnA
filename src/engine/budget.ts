@@ -1,5 +1,10 @@
 // Moteur Budget — versions, répartition, écarts
-import { db, BudgetLine } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+// Toutes les lectures et écritures passent par dataProvider — aucun accès
+// direct à `db` Dexie ici.
+import type { BudgetLine } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { findSyscoAccount } from '../syscohada/coa';
 
 export type BudgetSummary = {
@@ -42,16 +47,17 @@ export function distribute(annualAmount: number, seasonality: SeasonalityKey): n
   return SEASONALITIES[seasonality].map((w) => Math.round(annualAmount * w));
 }
 
-// Récupère les versions de budget disponibles pour une société/année
+// Récupère les versions de budget disponibles pour une société/année.
+// BUG FIX (audit) : tri sémantique pour que 'V10' soit après 'V2' (et non avant).
 export async function listBudgetVersions(orgId: string, year: number): Promise<string[]> {
-  const lines = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
-  return Array.from(new Set(lines.map((l) => l.version))).sort();
+  const lines = await dataProvider.getBudgetsByYear(orgId, year);
+  return Array.from(new Set(lines.map((l) => l.version)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
 // Charge le budget complet d'une version
 export async function loadBudget(orgId: string, year: number, version: string): Promise<BudgetSummary[]> {
-  const lines = await db.budgets
-    .where('[orgId+year+version]').equals([orgId, year, version]).toArray();
+  const lines = await dataProvider.getBudgets(orgId, year, version);
   const map = new Map<string, number[]>();
   for (const l of lines) {
     const arr = map.get(l.account) ?? Array(12).fill(0);
@@ -71,62 +77,41 @@ export async function loadBudget(orgId: string, year: number, version: string): 
   return result.sort((a, b) => a.account.localeCompare(b.account));
 }
 
-// Enregistre un budget (efface l'existant pour cette version avant insertion)
-// Push automatiquement vers Supabase pour multi-device.
+// Enregistre un budget (efface l'existant pour cette version avant insertion).
+// Passe par DataProvider — qui pousse directement vers Supabase quand configuré
+// (plus besoin du double-push fire-and-forget de l'ancienne implémentation).
 export async function saveBudget(
   orgId: string, year: number, version: string,
   items: Array<{ account: string; monthly: number[] }>,
 ) {
-  let inserted: Omit<BudgetLine, 'id'>[] = [];
-  await db.transaction('rw', db.budgets, async () => {
-    await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).delete();
-    const toInsert: Omit<BudgetLine, 'id'>[] = [];
-    for (const it of items) {
-      for (let m = 0; m < 12; m++) {
-        if (it.monthly[m]) {
-          toInsert.push({ orgId, year, version, account: it.account, month: m + 1, amount: it.monthly[m] });
-        }
+  const toInsert: BudgetLine[] = [];
+  for (const it of items) {
+    for (let m = 0; m < 12; m++) {
+      if (it.monthly[m]) {
+        toInsert.push({ orgId, year, version, account: it.account, month: m + 1, amount: it.monthly[m] } as BudgetLine);
       }
     }
-    if (toInsert.length) await db.budgets.bulkAdd(toInsert as BudgetLine[]);
-    inserted = toInsert;
-  });
-
-  // Push vers Supabase (fire-and-forget) pour multi-device
-  if (inserted.length > 0) {
-    void (async () => {
-      try {
-        const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
-        if (!isSupabaseConfigured) return;
-        await (supabase as any).from('fna_budgets')
-          .delete()
-          .eq('org_id', orgId).eq('year', year).eq('version', version);
-        const rows = inserted.map((r) => ({
-          org_id: r.orgId, year: r.year, version: r.version,
-          account: r.account, month: r.month, amount: r.amount,
-        }));
-        for (let i = 0; i < rows.length; i += 500) {
-          await (supabase as any).from('fna_budgets').insert(rows.slice(i, i + 500));
-        }
-      } catch (e) {
-        console.warn('[saveBudget] Push Supabase failed (non-bloquant):', e);
-      }
-    })();
   }
+  // Suppression puis insertion. Pas de transaction au niveau DB (la couche
+  // DataProvider ne l'expose pas), mais l'ordre garantit la cohérence pour
+  // un usage mono-utilisateur. En cas d'écriture concurrente, le upsert
+  // côté Supabase évite les doublons.
+  await dataProvider.deleteBudgets(orgId, year, version);
+  if (toInsert.length) await dataProvider.bulkUpsertBudgets(toInsert);
 }
 
 // Duplique une version
 export async function duplicateVersion(
   orgId: string, year: number, from: string, to: string,
 ) {
-  const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, from]).toArray();
-  const copies = lines.map(({ id: _id, ...rest }) => ({ ...rest, version: to }));
-  if (copies.length) await db.budgets.bulkAdd(copies as BudgetLine[]);
+  const lines = await dataProvider.getBudgets(orgId, year, from);
+  const copies = lines.map(({ id: _id, ...rest }) => ({ ...rest, version: to } as BudgetLine));
+  if (copies.length) await dataProvider.bulkUpsertBudgets(copies);
 }
 
 // Supprime une version entière
 export async function deleteVersion(orgId: string, year: number, version: string) {
-  await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).delete();
+  await dataProvider.deleteBudgets(orgId, year, version);
 }
 
 // Calcul des écarts budget vs réalisé par compte
@@ -137,9 +122,11 @@ export async function computeVariance(
   const budgetMap = new Map(budget.map((b) => [b.account, b.total]));
 
   // Récupérer le réalisé : solde par compte de charges/produits pour l'année
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, entries] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+  ]);
   const periodIds = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
   const perAccount = new Map<string, number>();
   for (const e of entries) {
     if (!periodIds.has(e.periodId)) continue;

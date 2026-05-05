@@ -232,3 +232,170 @@ export async function fullSync(orgIds: string[], onProgress?: (p: SyncProgress) 
   }
   return result;
 }
+
+// ── PUSH ALL : Migration complète Dexie → Supabase ──────────────────
+// Pousse TOUTES les tables Dexie vers Supabase en une seule passe.
+// Utilisé pour la migration finale avant l'abandon de Dexie (Phase 2).
+//
+// Ordre : on pousse d'abord les tables "racines" (organizations, fiscal_years)
+// puis celles qui référencent (periods → fiscal_year_id, gl → period_id, etc.)
+// pour que les FK soient toujours satisfaites côté Supabase.
+
+export type PushAllProgress = {
+  step: string;
+  table: string;
+  current: number;
+  total: number;
+  rowsPushed: number;
+};
+
+export type PushAllResult = {
+  totalTables: number;
+  totalRows: number;
+  details: Array<{ table: string; rows: number; ok: boolean; error?: string }>;
+  duration: number;
+};
+
+const PUSH_STEPS: Array<{
+  step: string;
+  table: string;             // table Supabase (sans org filter ici, on filtre par orgId)
+  dexieKey: keyof Pick<typeof db,
+    'organizations' | 'fiscalYears' | 'periods' | 'accounts' | 'gl' | 'imports'
+    | 'budgets' | 'mappings' | 'reports' | 'templates' | 'attentionPoints' | 'actionPlans'
+    | 'analyticAxes' | 'analyticCodes' | 'analyticRules' | 'analyticAssignments'
+    | 'analyticBudgets' | 'activities' | 'channels' | 'chatMessages'>;
+  stripId?: boolean;          // strip Dexie auto-id avant insert (++id Dexie ≠ id Supabase)
+}> = [
+  { step: 'Sociétés',           table: 'fna_organizations',        dexieKey: 'organizations' },
+  { step: 'Exercices',          table: 'fna_fiscal_years',         dexieKey: 'fiscalYears' },
+  { step: 'Périodes',           table: 'fna_periods',              dexieKey: 'periods' },
+  { step: 'Plan comptable',     table: 'fna_accounts',             dexieKey: 'accounts' },
+  { step: 'Mappings comptes',   table: 'fna_account_mappings',     dexieKey: 'mappings' },
+  { step: 'Grand Livre',        table: 'fna_gl_entries',           dexieKey: 'gl',                stripId: true },
+  { step: 'Historique imports', table: 'fna_imports',              dexieKey: 'imports',           stripId: true },
+  { step: 'Budgets',            table: 'fna_budgets',              dexieKey: 'budgets',           stripId: true },
+  { step: 'Rapports',           table: 'fna_reports',              dexieKey: 'reports',           stripId: true },
+  { step: 'Modèles rapport',    table: 'fna_report_templates',     dexieKey: 'templates',         stripId: true },
+  { step: "Points d'attention", table: 'fna_attention_points',     dexieKey: 'attentionPoints',   stripId: true },
+  { step: "Plans d'action",     table: 'fna_action_plans',         dexieKey: 'actionPlans',       stripId: true },
+  { step: 'Axes analytiques',   table: 'fna_analytic_axes',        dexieKey: 'analyticAxes' },
+  { step: 'Codes analytiques',  table: 'fna_analytic_codes',       dexieKey: 'analyticCodes' },
+  { step: 'Règles analytiques', table: 'fna_analytic_rules',       dexieKey: 'analyticRules' },
+  { step: 'Affectations',       table: 'fna_analytic_assignments', dexieKey: 'analyticAssignments', stripId: true },
+  { step: 'Budgets analytiques',table: 'fna_analytic_budgets',     dexieKey: 'analyticBudgets',   stripId: true },
+  { step: 'Activités',          table: 'fna_activities',           dexieKey: 'activities',        stripId: true },
+  { step: 'Canaux chat',        table: 'fna_channels',             dexieKey: 'channels' },
+  { step: 'Messages chat',      table: 'fna_chat_messages',        dexieKey: 'chatMessages',      stripId: true },
+];
+
+async function getRowsForOrg(table: any, orgId: string): Promise<any[]> {
+  // db.organizations.get(orgId) → single row → wrap as array
+  if (table === db.organizations) {
+    const o = await db.organizations.get(orgId);
+    return o ? [o] : [];
+  }
+  // Toutes les autres ont un index orgId
+  return await table.where('orgId').equals(orgId).toArray();
+}
+
+export async function pushAllToSupabase(
+  orgIds: string[],
+  onProgress?: (p: PushAllProgress) => void,
+): Promise<PushAllResult> {
+  if (!isSupabaseConfigured) {
+    return { totalTables: 0, totalRows: 0, details: [], duration: 0 };
+  }
+  const t0 = Date.now();
+  const details: PushAllResult['details'] = [];
+  let totalRows = 0;
+
+  for (let i = 0; i < PUSH_STEPS.length; i++) {
+    const cfg = PUSH_STEPS[i];
+    const dexieTable = (db as any)[cfg.dexieKey];
+    let stepRows = 0;
+    let stepError: string | undefined;
+
+    try {
+      // Collecte toutes les lignes (multi-org)
+      const allRows: any[] = [];
+      for (const oid of orgIds) {
+        const rows = await getRowsForOrg(dexieTable, oid);
+        allRows.push(...rows);
+      }
+
+      onProgress?.({
+        step: cfg.step,
+        table: cfg.table,
+        current: i + 1,
+        total: PUSH_STEPS.length,
+        rowsPushed: 0,
+      });
+
+      if (allRows.length === 0) {
+        details.push({ table: cfg.table, rows: 0, ok: true });
+        continue;
+      }
+
+      // Convert camelCase → snake_case ; strip auto-id si nécessaire
+      const snakeRows = allRows.map((r) => {
+        const s = toSnake(r);
+        if (cfg.stripId) delete s.id;
+        // Forcer Number() sur les colonnes numériques (Dexie peut avoir des string)
+        if (s.debit != null) s.debit = Number(s.debit);
+        if (s.credit != null) s.credit = Number(s.credit);
+        if (s.amount != null) s.amount = Number(s.amount);
+        if (s.year != null) s.year = Number(s.year);
+        if (s.month != null) s.month = Number(s.month);
+        return s;
+      });
+
+      // Push par chunks de 500 — upsert pour idempotence (sauf gl: insert seul)
+      const CHUNK = 500;
+      for (let j = 0; j < snakeRows.length; j += CHUNK) {
+        const slice = snakeRows.slice(j, j + CHUNK);
+        // Pour les tables avec auto-id (gl, imports, etc.), insert simple.
+        // Pour les tables avec id stable (organizations, periods, etc.), upsert.
+        const useUpsert = !cfg.stripId;
+        const q = (supabase as any).from(cfg.table);
+        const { error } = useUpsert
+          ? await q.upsert(slice)
+          : await q.insert(slice);
+        if (error) {
+          stepError = error.message;
+          break;
+        }
+        stepRows += slice.length;
+
+        onProgress?.({
+          step: cfg.step,
+          table: cfg.table,
+          current: i + 1,
+          total: PUSH_STEPS.length,
+          rowsPushed: stepRows,
+        });
+      }
+
+      details.push({
+        table: cfg.table,
+        rows: stepRows,
+        ok: !stepError,
+        error: stepError,
+      });
+      totalRows += stepRows;
+    } catch (e: any) {
+      details.push({
+        table: cfg.table,
+        rows: stepRows,
+        ok: false,
+        error: e?.message ?? String(e),
+      });
+    }
+  }
+
+  return {
+    totalTables: PUSH_STEPS.length,
+    totalRows,
+    details,
+    duration: Date.now() - t0,
+  };
+}

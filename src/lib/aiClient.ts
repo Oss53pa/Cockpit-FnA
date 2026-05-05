@@ -128,19 +128,35 @@ export async function detectStatus(cfg: AIConfig = loadConfig()): Promise<AIStat
   return { available: false, provider: 'none', models: [], selectedModel: null, errorMessage: 'Aucun provider IA configuré.' };
 }
 
+// Cache du dernier statut OK pour éviter le flapping connecté/déconnecté
+// quand Ollama est temporairement lent (le polling toutes les 30-60s
+// déclenchait des "disconnect" intempestifs si la machine est sous charge).
+let lastOllamaStatus: AIStatus | null = null;
+
 async function checkOllamaStatus(cfg: AIConfig): Promise<AIStatus> {
   try {
-    const res = await fetch(`${cfg.ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    // Timeout 10s (vs 3s avant) — supporte les cold starts d'Ollama et les
+    // machines sous charge qui prennent plus de temps à répondre /api/tags.
+    const res = await fetch(`${cfg.ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return { available: false, provider: 'ollama', models: [], selectedModel: null, errorMessage: `HTTP ${res.status}` };
     const data = await res.json();
     const models = (data.models ?? []).map((m: any) => m.name as string);
     const selected = cfg.ollamaModel || models[0] || null;
-    return { available: true, provider: 'ollama', models, selectedModel: selected };
+    const status: AIStatus = { available: true, provider: 'ollama', models, selectedModel: selected };
+    lastOllamaStatus = status;
+    return status;
   } catch (e: any) {
+    // Si on avait un statut OK juste avant, on tolère un échec transitoire
+    // (timeout / cold start) — on garde le statut précédent pour l'UX, sans
+    // basculer brusquement à "déconnecté". Le prochain poll reconfirmera.
+    if (lastOllamaStatus?.available) {
+      return lastOllamaStatus;
+    }
+    const isNetwork = e?.message?.includes('Failed to fetch') || e?.name === 'TimeoutError';
     return {
       available: false, provider: 'ollama', models: [], selectedModel: null,
-      errorMessage: e?.message?.includes('Failed to fetch')
-        ? "Ollama non démarré. Lancez : ollama serve"
+      errorMessage: isNetwork
+        ? "Ollama non joignable. Vérifiez que `ollama serve` tourne sur la même machine que le navigateur (Ollama écoute en local sur 127.0.0.1)."
         : e?.message ?? 'Erreur réseau',
     };
   }

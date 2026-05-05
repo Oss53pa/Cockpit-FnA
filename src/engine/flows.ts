@@ -1,7 +1,9 @@
 // TFT, TAFIRE, Variation des capitaux propres — SYSCOHADA révisé 2017
+//
+// Source de données : Supabase via dataProvider (obligatoire).
 import { computeBalance } from './balance';
 import { computeBilan, computeSIG, Line } from './statements';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { sumMoneyWhere } from '../lib/moneySum';
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────
@@ -14,9 +16,11 @@ function get(lines: Line[], code: string): number {
 // affectations sur les comptes de capitaux et de tiers, là où le simple
 // solde net masque ces flux.
 async function getMovementsByPrefix(orgId: string, year: number, prefixes: string[]): Promise<{ debit: number; credit: number }> {
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, entries] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+  ]);
   const ids = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
   let d = 0, c = 0;
   for (const e of entries) {
     if (!ids.has(e.periodId)) continue;
@@ -134,9 +138,10 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
   const fluxInvestissement = acquisitions + cessions;
 
   // ── Flux de financement — VRAIS mouvements GL ──
-  // Augmentations de capital = mouvements CRÉDIT sur 101, 104, 105
-  // Réductions de capital   = mouvements DÉBIT sur 101, 104, 105
-  const movCapital = await getMovementsByPrefix(orgId, year, ['101', '102', '103', '104', '105']);
+  // BUG FIX (audit) : ajout du compte 108 (Compte de l'exploitant — entreprises
+  // individuelles), retrait du préfixe '10' qui englobait 109 (Capital non
+  // appelé, débiteur normal). Liste explicite des comptes de capital appelé.
+  const movCapital = await getMovementsByPrefix(orgId, year, ['101', '102', '103', '104', '105', '108']);
   const augCapital = movCapital.credit;
   const reducCapital = movCapital.debit;
 
@@ -150,11 +155,11 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
   const newEmprunts = movEmprunts.credit;
   const remboursementsEmprunts = movEmprunts.debit;
 
-  // Distributions de dividendes = mouvements CRÉDIT sur 457 (Associés - dividendes à payer)
-  // À défaut, on prend les mouvements DÉBIT sur 121 (RAN créditeur) qui matérialisent
-  // l'affectation du résultat (la part non reportée = distribuée).
+  // BUG FIX (audit) : Distributions de dividendes = mouvements DÉBIT sur 457
+  // (paiement effectif aux associés). Le CRÉDIT 457 = constatation de la dette,
+  // pas le décaissement. Le TFT méthode indirecte exige les flux EFFECTIFS.
   const movDistrib = await getMovementsByPrefix(orgId, year, ['457']);
-  const distributions = movDistrib.credit;
+  const distributions = movDistrib.debit;
 
   const fluxFinancement = augCapital - reducCapital + augSubv + newEmprunts - remboursementsEmprunts - distributions;
 
@@ -271,13 +276,20 @@ async function computeTFTForRange(orgId: string, year: number, fromMonth: number
 
   // (P1-5) Capital + emprunts : on utilise les MOUVEMENTS BRUTS de la période
   // (pas la simple différence ouverture/clôture) pour distinguer apports et
-  // remboursements. L'ancienne version cumulait les 2, donnant un "varEmprunts"
-  // qui pouvait masquer un emprunt nouveau de 1M et un remboursement de 1M.
-  const augCapitalBrut = sumMoneyWhere(periodBal, (r) => r.soldeC, (r) => r.account.startsWith('10') || r.account.startsWith('105'));
-  const reductionsCapitalBrut = sumMoneyWhere(periodBal, (r) => r.soldeD, (r) => r.account.startsWith('10') || r.account.startsWith('105'));
+  // remboursements.
+  // BUG FIX (audit) :
+  //   - capital : liste explicite 101-105 + 108 (exploitant), exclut 109 (débiteur).
+  //   - emprunts : ajout du préfixe '18' pour cohérence avec computeTFT annuel.
+  const isCapAcct = (a: string) =>
+    a.startsWith('101') || a.startsWith('102') || a.startsWith('103') ||
+    a.startsWith('104') || a.startsWith('105') || a.startsWith('108');
+  const isEmpAcct = (a: string) =>
+    a.startsWith('16') || a.startsWith('17') || a.startsWith('18');
+  const augCapitalBrut = sumMoneyWhere(periodBal, (r) => r.soldeC, (r) => isCapAcct(r.account));
+  const reductionsCapitalBrut = sumMoneyWhere(periodBal, (r) => r.soldeD, (r) => isCapAcct(r.account));
   const augCapital = augCapitalBrut - reductionsCapitalBrut;
-  const nouveauxEmprunts = sumMoneyWhere(periodBal, (r) => r.soldeC, (r) => r.account.startsWith('16') || r.account.startsWith('17'));
-  const remboursementsEmprunts = sumMoneyWhere(periodBal, (r) => r.soldeD, (r) => r.account.startsWith('16') || r.account.startsWith('17'));
+  const nouveauxEmprunts = sumMoneyWhere(periodBal, (r) => r.soldeC, (r) => isEmpAcct(r.account));
+  const remboursementsEmprunts = sumMoneyWhere(periodBal, (r) => r.soldeD, (r) => isEmpAcct(r.account));
   const varEmprunts = nouveauxEmprunts - remboursementsEmprunts;
   const fluxFin = augCapital + varEmprunts;
 
@@ -352,10 +364,11 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
     .filter((r) => r.account.startsWith('78') || r.account.startsWith('79'))
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
   // VNC strict 685 (charges sur cessions d'immo) — pas '81' qui inclut toutes les charges HAO
-  // Fix cohérent avec computeTFT (cf. ligne 96-99). Avant : '81' surestimait la VNC quand
-  // l'entreprise avait d'autres charges HAO (sinistres, provisions exceptionnelles).
   const vnc = closingBal.filter((r) => r.account.startsWith('685')).reduce((s, r) => s + r.soldeD, 0);
-  const pxCess = closingBal.filter((r) => r.account.startsWith('775')).reduce((s, r) => s + r.soldeC, 0);
+  // BUG FIX (audit) : prix de cession SYSCOHADA = compte 82 (Produits HAO de cession),
+  // PAS 775 qui n'existe pas dans le PCG SYSCOHADA révisé 2017 (775 = PCG français).
+  // Aligné avec computeTFT annuel l.104.
+  const pxCess = closingBal.filter((r) => r.account.startsWith('82')).reduce((s, r) => s + r.soldeC, 0);
   const plusValueCession = pxCess - vnc;
   const cafg = sig.resultat + dotations - reprises - plusValueCession;
 
@@ -437,7 +450,19 @@ export type CapitalMovement = {
   ouverture: number;
   augmentation: number;
   diminution: number;
+  /**
+   * Affectation du résultat N-1 — transfert net du RAN vers les réserves/dividendes.
+   * Décomposition fine :
+   *   - apportRAN : crédit cumulé du RAN dans l'exercice (entrée d'un nouveau résultat
+   *                 affecté en RAN, généralement à l'ouverture de l'exercice).
+   *   - repriseRAN : débit cumulé du RAN (sortie vers réserves ou dividendes payés).
+   * affectationResN1 = repriseRAN (montant qui ALIMENTE les réserves cette année).
+   */
   affectationResN1: number;
+  apportRAN?: number;
+  repriseRAN?: number;
+  /** Distributions de dividendes (compte 457 mouvement débit). */
+  distributions?: number;
   resultatExercice: number;
   cloture: number;
 };
@@ -447,29 +472,42 @@ export async function computeCapitalVariation(orgId: string, year: number): Prom
 
   const g = (lines: Line[], code: string) => lines.find((l) => l.code === code)?.value ?? 0;
 
-  // Définition des rubriques avec préfixes pour lire les vrais mouvements GL
-  // (pas de simple `max(diff, 0)` qui mélangerait augm + dim sur la même ligne).
+  // BUG FIX (audit) : la rubrique 'primes' incluait '12','13' dans `prefixes` ET
+  // dans le mvtRAN d'affectation → DOUBLE COMPTAGE des mouvements entre RAN
+  // (121/129/13) et réserves (105/106/11). On sépare proprement :
+  //   - 'primes' couvre uniquement les comptes RÉSERVES (105, 106, 11)
+  //   - L'affectation N-1 (12, 13) reste isolée comme transfert interne
   const rubriques = [
     { key: 'capital',  label: 'Capital social',                accountCodes: '101-104',  bilanCode: 'CA', prefixes: ['101', '102', '103', '104'] },
-    { key: 'primes',   label: 'Primes & réserves',             accountCodes: '105, 11, 12, 13', bilanCode: 'CD', prefixes: ['105', '106', '11', '12', '13'] },
+    { key: 'primes',   label: 'Primes & réserves',             accountCodes: '105, 106, 11', bilanCode: 'CD', prefixes: ['105', '106', '11'] },
     { key: 'subv',     label: "Subventions d'investissement",  accountCodes: '14',       bilanCode: 'CL', prefixes: ['14'] },
     { key: 'provRegl', label: 'Provisions réglementées',       accountCodes: '15',       bilanCode: 'CM', prefixes: ['15'] },
   ];
 
   const movements: CapitalMovement[] = [];
+  // Pré-calcul une seule fois des mouvements RAN (121/129/13) et 457 (dividendes)
+  // — réutilisés sur la rubrique 'primes'.
+  const mvtRAN = await getMovementsByPrefix(orgId, year, ['121', '129', '13']);
+  const mvtDistrib = await getMovementsByPrefix(orgId, year, ['457']);
+
   for (const r of rubriques) {
     const codeO = g(bilanO.passif, r.bilanCode);
     const codeC = g(bilanC.passif, r.bilanCode);
-    // Capitaux propres = comptes à solde C normal :
-    //   AUGMENTATION = mouvements CRÉDIT bruts de la période
-    //   DIMINUTION   = mouvements DÉBIT bruts de la période
     const mvt = await getMovementsByPrefix(orgId, year, r.prefixes);
-    // Affectation N-1 spécifique : mouvements croisés entre 121/13 (RAN) et 11x (réserves)
-    // → débit 121 + crédit 11x. On l'isole pour la rubrique "primes & réserves".
+    // Affectation N-1 : transfert interne RAN (121/129/13) → réserves (11x).
+    // BUG FIX (audit) : décomposition explicite en apport et reprise pour matérialiser
+    //   - apportRAN : crédit cumulé du RAN (entrée — résultat N-1 affecté).
+    //   - repriseRAN : débit cumulé du RAN (sortie vers réserves / dividendes).
+    //   - distributions : débit cumulé du compte 457 (versements aux associés).
     let affectationResN1 = 0;
+    let apportRAN: number | undefined;
+    let repriseRAN: number | undefined;
+    let distributions: number | undefined;
     if (r.key === 'primes') {
-      const mvtRAN = await getMovementsByPrefix(orgId, year, ['121', '129', '13']);
-      affectationResN1 = mvtRAN.debit; // affectation = sortie du RAN vers les réserves/dividendes
+      apportRAN = mvtRAN.credit;
+      repriseRAN = mvtRAN.debit;
+      affectationResN1 = repriseRAN; // ce qui alimente les réserves cette année
+      distributions = mvtDistrib.debit; // versements effectifs (≠ constatation au crédit)
     }
     movements.push({
       rubrique: r.label,
@@ -478,6 +516,9 @@ export async function computeCapitalVariation(orgId: string, year: number): Prom
       augmentation: mvt.credit,
       diminution: mvt.debit,
       affectationResN1,
+      apportRAN,
+      repriseRAN,
+      distributions,
       resultatExercice: 0,
       cloture: codeC,
     });

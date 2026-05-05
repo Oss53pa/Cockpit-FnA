@@ -1,74 +1,61 @@
 // Moteur de comptabilité analytique multi-axes — mapping, affectation, calculs
-import { db, AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, GLEntry } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+import type { AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, GLEntry } from '../db/schema';
+import { dataProvider } from '../db/provider';
 
 // ── CRUD Axes ──────────────────────────────────────────────────────────────
 export async function getAxes(orgId: string): Promise<AnalyticAxis[]> {
-  return db.analyticAxes.where('orgId').equals(orgId).sortBy('number');
+  const axes = await dataProvider.getAnalyticAxes(orgId);
+  return [...axes].sort((a, b) => a.number - b.number);
 }
 
 export async function saveAxis(axis: AnalyticAxis): Promise<void> {
-  await db.analyticAxes.put(axis);
+  await dataProvider.upsertAnalyticAxis(axis);
 }
 
 export async function deleteAxis(id: string): Promise<void> {
-  const codes = await db.analyticCodes.where('axisId').equals(id).toArray();
-  const codeIds = new Set(codes.map((c) => c.id));
-  await db.transaction('rw', [db.analyticAxes, db.analyticCodes, db.analyticAssignments, db.analyticRules], async () => {
-    await db.analyticAssignments.filter((a) => codeIds.has(a.codeId)).delete();
-    await db.analyticRules.filter((r) => codeIds.has(r.analyticCodeId)).delete();
-    await db.analyticCodes.where('axisId').equals(id).delete();
-    await db.analyticAxes.delete(id);
-  });
+  // Cascade gérée par le DAL (codes + assignments + rules)
+  await dataProvider.deleteAnalyticAxis(id);
 }
 
 // ── CRUD Codes ─────────────────────────────────────────────────────────────
 export async function getCodes(orgId: string, axisId?: string): Promise<AnalyticCode[]> {
-  let codes: AnalyticCode[];
-  if (axisId) {
-    codes = await db.analyticCodes.where({ orgId, axisId }).toArray();
-  } else {
-    codes = await db.analyticCodes.where('orgId').equals(orgId).toArray();
-  }
-  return codes.sort((a, b) => a.order - b.order || a.code.localeCompare(b.code));
+  const codes = await dataProvider.getAnalyticCodes(orgId, axisId);
+  return [...codes].sort((a, b) => a.order - b.order || a.code.localeCompare(b.code));
 }
 
 export async function saveCode(code: AnalyticCode): Promise<void> {
-  await db.analyticCodes.put(code);
+  await dataProvider.upsertAnalyticCode(code);
 }
 
 export async function saveCodes(codes: AnalyticCode[]): Promise<void> {
-  await db.analyticCodes.bulkPut(codes);
+  await dataProvider.bulkUpsertAnalyticCodes(codes);
 }
 
 export async function deleteCode(id: string): Promise<void> {
-  await db.transaction('rw', [db.analyticCodes, db.analyticAssignments], async () => {
-    // Détacher les enfants
-    await db.analyticCodes.where('parentId').equals(id).modify({ parentId: undefined });
-    await db.analyticAssignments.where('codeId').equals(id).delete();
-    await db.analyticCodes.delete(id);
-  });
+  await dataProvider.detachAnalyticChildren(id);
+  await dataProvider.deleteAnalyticCode(id);
 }
 
 // ── CRUD Règles ────────────────────────────────────────────────────────────
 export async function getRules(orgId: string): Promise<AnalyticRule[]> {
-  return (await db.analyticRules.where('orgId').equals(orgId).toArray())
-    .sort((a, b) => a.priority - b.priority);
+  const rules = await dataProvider.getAnalyticRules(orgId);
+  return [...rules].sort((a, b) => a.priority - b.priority);
 }
 
 export async function saveRule(rule: AnalyticRule): Promise<void> {
-  await db.analyticRules.put(rule);
+  await dataProvider.upsertAnalyticRule(rule);
 }
 
 export async function deleteRule(id: string): Promise<void> {
-  await db.analyticRules.delete(id);
+  await dataProvider.deleteAnalyticRule(id);
 }
 
 export async function reorderRules(_orgId: string, orderedIds: string[]): Promise<void> {
-  await db.transaction('rw', db.analyticRules, async () => {
-    for (let i = 0; i < orderedIds.length; i++) {
-      await db.analyticRules.update(orderedIds[i], { priority: i + 1 });
-    }
-  });
+  for (let i = 0; i < orderedIds.length; i++) {
+    await dataProvider.updateAnalyticRulePriority(orderedIds[i], i + 1);
+  }
 }
 
 // ── Moteur de mapping ──────────────────────────────────────────────────────
@@ -115,7 +102,7 @@ function conditionTypeToMethod(ct: string): AnalyticAssignment['method'] {
 export async function simulateRules(orgId: string, year?: number): Promise<MappingReport> {
   const rules = (await getRules(orgId)).filter((r) => r.active);
   const entries = await loadEntries(orgId, year);
-  const existing = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
+  const existing = await dataProvider.getAnalyticAssignments(orgId);
   const assignedSet = new Set(existing.map((a) => `${a.glEntryId}-${a.axisNumber}`));
 
   const byRule = new Map<string, { name: string; count: number }>();
@@ -154,7 +141,7 @@ export async function simulateRules(orgId: string, year?: number): Promise<Mappi
 export async function applyRules(orgId: string, year?: number): Promise<MappingReport> {
   const rules = (await getRules(orgId)).filter((r) => r.active);
   const entries = await loadEntries(orgId, year);
-  const existing = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
+  const existing = await dataProvider.getAnalyticAssignments(orgId);
   const assignedSet = new Set(existing.map((a) => `${a.glEntryId}-${a.axisNumber}`));
 
   const newAssignments: AnalyticAssignment[] = [];
@@ -184,7 +171,7 @@ export async function applyRules(orgId: string, year?: number): Promise<MappingR
   }
 
   if (newAssignments.length > 0) {
-    await db.analyticAssignments.bulkAdd(newAssignments);
+    await dataProvider.bulkInsertAnalyticAssignments(newAssignments);
   }
 
   return {
@@ -202,37 +189,43 @@ export async function applyRules(orgId: string, year?: number): Promise<MappingR
 export async function assignManual(
   orgId: string, glEntryIds: number[], axisNumber: number, codeId: string,
 ): Promise<number> {
-  const existing = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
+  const existing = await dataProvider.getAnalyticAssignments(orgId);
   const assignedSet = new Set(existing.map((a) => `${a.glEntryId}-${a.axisNumber}`));
   const toAdd: AnalyticAssignment[] = [];
 
   for (const id of glEntryIds) {
     const key = `${id}-${axisNumber}`;
     if (assignedSet.has(key)) {
-      // Mettre à jour l'affectation existante
       const ex = existing.find((a) => a.glEntryId === id && a.axisNumber === axisNumber);
-      if (ex?.id) await db.analyticAssignments.update(ex.id, { codeId, method: 'manual', assignedAt: Date.now(), ruleId: undefined });
+      if (ex?.id) {
+        await dataProvider.updateAnalyticAssignment(ex.id, {
+          codeId, method: 'manual', assignedAt: Date.now(), ruleId: undefined,
+        });
+      }
     } else {
       toAdd.push({ orgId, glEntryId: id, axisNumber, codeId, method: 'manual', assignedAt: Date.now() });
     }
   }
-  if (toAdd.length > 0) await db.analyticAssignments.bulkAdd(toAdd);
+  if (toAdd.length > 0) await dataProvider.bulkInsertAnalyticAssignments(toAdd);
   return glEntryIds.length;
 }
 
 /** Supprimer toutes les affectations auto (garder les manuelles) */
 export async function clearAutoAssignments(orgId: string): Promise<number> {
-  const toDelete = await db.analyticAssignments.where('orgId').equals(orgId).filter((a) => a.method !== 'manual').toArray();
-  await db.analyticAssignments.bulkDelete(toDelete.map((a) => a.id!));
-  return toDelete.length;
+  const all = await dataProvider.getAnalyticAssignments(orgId);
+  const auto = all.filter((a) => a.method !== 'manual');
+  await dataProvider.deleteAnalyticAssignmentsByOrgFilter(orgId, (a) => a.method !== 'manual');
+  return auto.length;
 }
 
 // ── Requêtes analytiques ───────────────────────────────────────────────────
 async function loadEntries(orgId: string, year?: number): Promise<GLEntry[]> {
-  if (!year) return db.gl.where('orgId').equals(orgId).toArray();
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  if (!year) return dataProvider.getGLEntries({ orgId });
+  const [periods, all] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+  ]);
   const pIds = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
-  const all = await db.gl.where('orgId').equals(orgId).toArray();
   return all.filter((e) => pIds.has(e.periodId));
 }
 
@@ -253,9 +246,12 @@ export type AnalyticDashRow = {
 export async function computeAnalyticDashboard(
   orgId: string, year: number, axisNumber: number,
 ): Promise<AnalyticDashRow[]> {
-  const entries = await loadEntries(orgId, year);
-  const assignments = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
-  const codes = await db.analyticCodes.where('orgId').equals(orgId).toArray();
+  const [entries, assignments, codes, budgets] = await Promise.all([
+    loadEntries(orgId, year),
+    dataProvider.getAnalyticAssignments(orgId),
+    dataProvider.getAnalyticCodes(orgId),
+    dataProvider.getAnalyticBudgets(orgId),
+  ]);
   const codeMap = new Map(codes.map((c) => [c.id, c]));
 
   // Index assignments par glEntryId pour l'axe demandé
@@ -275,8 +271,7 @@ export async function computeAnalyticDashboard(
     agg.set(codeId, cur);
   }
 
-  // Budgets
-  const budgets = await db.analyticBudgets.where('orgId').equals(orgId).toArray();
+  // Budgets pour l'année
   const budgetMap = new Map<string, number>();
   for (const b of budgets) {
     if (b.period.startsWith(String(year))) {
@@ -311,10 +306,12 @@ export async function computeAnalyticMonthly(
   orgId: string, year: number, axisNumber: number, codeId: string,
 ): Promise<{ months: string[]; charges: number[]; produits: number[] }> {
   const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, entries, assignments] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getAnalyticAssignments(orgId),
+  ]);
   const periodMonth = new Map(periods.filter((p) => p.year === year && p.month >= 1).map((p) => [p.id, p.month]));
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
-  const assignments = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
   const assignMap = new Map<number, string>();
   for (const a of assignments) {
     if (a.axisNumber === axisNumber) assignMap.set(a.glEntryId, a.codeId);
@@ -339,8 +336,10 @@ export async function computeAnalyticMonthly(
 export async function getUnmappedLines(
   orgId: string, year: number, axisNumber: number, limit = 200,
 ): Promise<GLEntry[]> {
-  const entries = await loadEntries(orgId, year);
-  const assignments = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
+  const [entries, assignments] = await Promise.all([
+    loadEntries(orgId, year),
+    dataProvider.getAnalyticAssignments(orgId),
+  ]);
   const assigned = new Set(assignments.filter((a) => a.axisNumber === axisNumber).map((a) => a.glEntryId));
   return entries.filter((e) => !assigned.has(e.id!)).slice(0, limit);
 }
@@ -349,9 +348,11 @@ export async function getUnmappedLines(
 export async function getCoverageStats(orgId: string, year?: number): Promise<{
   total: number; assigned: number; unassigned: number; rate: number; byAxis: { axis: number; name: string; assigned: number; rate: number }[];
 }> {
-  const entries = await loadEntries(orgId, year);
-  const assignments = await db.analyticAssignments.where('orgId').equals(orgId).toArray();
-  const axes = await getAxes(orgId);
+  const [entries, assignments, axes] = await Promise.all([
+    loadEntries(orgId, year),
+    dataProvider.getAnalyticAssignments(orgId),
+    getAxes(orgId),
+  ]);
   const total = entries.length;
 
   const allAssigned = new Set(assignments.map((a) => a.glEntryId));

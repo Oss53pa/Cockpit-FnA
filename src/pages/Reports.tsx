@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { dataProvider } from '../db/provider';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { Download, Eye, FileText, Mail, Plus, Save, Send, Settings as SettingsIcon, Sparkles, Trash2, Type, Hash, BarChart3, Table as TableIcon, MoveDown } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import clsx from 'clsx';
@@ -8,12 +9,13 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { EmailPreviewModal } from '../components/ui/EmailPreviewModal';
 import { Collapsible } from '../components/ui/Collapsible';
+import { UnclassifiedAccountsModal } from '../components/ui/UnclassifiedAccountsModal';
 import { toast } from '../components/ui/Toast';
-import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
+import { useBilanN1, useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyCR, useMonthlyBilan, useRatios, useStatements, useTFT } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
 import { computeRatios } from '../engine/ratios';
-import { db, ReportDoc } from '../db/schema';
+import type { ReportDoc } from '../db/schema';
 import { Block, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
 import { computeBilan, computeSIG } from '../engine/statements';
 import { fmtFull, fmtMoney } from '../lib/format';
@@ -148,12 +150,16 @@ const computeKPIs = (data: any) => {
     treso: '—', bfr: '—', actif: '—', capPropres: '—', dso: '—',
   };
   const get = (lines: any[], code: string) => lines?.find((l: any) => l.code === code)?.value ?? 0;
+  // BUG FIX (audit) : trésorerie NETTE = trésorerie active − trésorerie passive (concours).
+  // Cohérent avec le dashboard 'bfr' (cf. ligne 3137) — tous les KPI 'treso' affichent
+  // la même valeur partout (synthèse hebdo, exec, dashboards).
   const treso = get(bilan?.bilanActif, '_BT') - get(bilan?.bilanPassif, 'DV');
-  const stocks = get(bilan?.bilanActif, 'BB');
-  const creances = get(bilan?.bilanActif, 'BH');
-  const autresC = get(bilan?.bilanActif, 'BI');
+  // BUG FIX (audit) : BFR = total Actif circulant (_BK) − total Passif circulant (_DP).
+  // L'ancienne formule omettait l'actif circulant HAO (BJ) et donnait un BFR != celui du
+  // dashboard 'bfr' (qui utilise _BK − _DP). Maintenant homogène partout.
+  const actifCirc = get(bilan?.bilanActif, '_BK');
   const passifCirc = get(bilan?.bilanPassif, '_DP');
-  const bfr = stocks + creances + autresC - passifCirc;
+  const bfr = actifCirc - passifCirc;
   return {
     ca: fmtMoney(sig.ca ?? 0),
     rn: fmtMoney(sig.resultat ?? 0),
@@ -1136,6 +1142,7 @@ function filterConditionalBlocks(blocks: Block[], data: any): Block[] {
 
 export default function Reports() {
   const { bilan, cr, sig, balance } = useStatements();
+  const bilanN1 = useBilanN1(); // bilan exercice N-1 — utilisé pour ROE/ROA exacts
   const ratios = useRatios();
   const tft = useTFT();
   const capital = useCapitalVariation();
@@ -1161,10 +1168,15 @@ export default function Reports() {
   });
 
   // Journal des rapports persistés (vrais ReportDoc en DB)
-  const savedReports: ReportDoc[] = useLiveQuery(
-    () => (currentOrgId ? db.reports.where('orgId').equals(currentOrgId).reverse().sortBy('updatedAt') : Promise.resolve([] as ReportDoc[])),
-    [currentOrgId], [] as ReportDoc[],
-  ) ?? [];
+  const { data: savedReports = [] as ReportDoc[] } = useCloudData<ReportDoc[]>(
+    async () => {
+      if (!currentOrgId) return [] as ReportDoc[];
+      const all = await dataProvider.getReports(currentOrgId);
+      return [...all].sort((a, b) => b.updatedAt - a.updatedAt);
+    },
+    [currentOrgId],
+    { initial: [] as ReportDoc[], tag: 'reports' },
+  );
 
   // Sauvegarder le rapport courant comme document persistant
   const saveReport = async (newSave = false) => {
@@ -1184,11 +1196,13 @@ export default function Reports() {
     };
     try {
       if (currentReportId && !newSave) {
-        await db.reports.update(currentReportId, payload);
+        await dataProvider.upsertReport({ id: currentReportId, ...payload });
+        invalidateCloudData('reports');
         toast.success('Rapport mis à jour', config.identity.title);
       } else {
-        const id = await db.reports.add({ ...payload, createdAt: now });
-        setCurrentReportId(id as number);
+        const id = await dataProvider.upsertReport({ ...payload, createdAt: now });
+        invalidateCloudData('reports');
+        setCurrentReportId(id);
         toast.success('Rapport enregistré', config.identity.title);
       }
     } catch (e: any) {
@@ -1212,7 +1226,8 @@ export default function Reports() {
   const deleteReport = async (id: number) => {
     if (!confirm('Supprimer ce rapport définitivement ?')) return;
     try {
-      await db.reports.delete(id);
+      await dataProvider.deleteReport(id);
+      invalidateCloudData('reports');
       if (currentReportId === id) setCurrentReportId(null);
       toast.success('Rapport supprimé');
     } catch (e: any) {
@@ -1236,7 +1251,11 @@ export default function Reports() {
   const toggleLeft = () => { const n = !leftCollapsed; setLeftCollapsed(n); localStorage.setItem('reports-left-collapsed', String(n)); };
   const toggleRight = () => { const n = !rightCollapsed; setRightCollapsed(n); localStorage.setItem('reports-right-collapsed', String(n)); };
 
-  const templates = useLiveQuery(() => db.templates.where('orgId').equals(currentOrgId).toArray(), [currentOrgId]) ?? [];
+  const { data: templates = [] } = useCloudData(
+    () => currentOrgId ? dataProvider.getTemplates(currentOrgId) : Promise.resolve([]),
+    [currentOrgId],
+    { initial: [], tag: 'templates' },
+  );
 
   // Update period when year changes
   useEffect(() => { setConfig((c) => ({ ...c, identity: { ...c.identity, period: `Exercice ${currentYear}` } })); }, [currentYear]);
@@ -1352,10 +1371,16 @@ export default function Reports() {
   const palette = PALETTES[config.palette];
 
   // Détection données conditionnelles (analytique + stocks)
-  const hasAnalytical = useLiveQuery(async () => {
-    const sample = await db.gl.where('orgId').equals(currentOrgId).limit(500).toArray();
-    return sample.some((e) => !!e.analyticalSection || !!e.analyticalAxis);
-  }, [currentOrgId], false);
+  const { data: hasAnalytical = false } = useCloudData<boolean>(
+    async () => {
+      if (!currentOrgId) return false;
+      const all = await dataProvider.getGLEntries({ orgId: currentOrgId });
+      const sample = all.slice(0, 500);
+      return sample.some((e) => !!e.analyticalSection || !!e.analyticalAxis);
+    },
+    [currentOrgId],
+    { initial: false, tag: 'gl' },
+  );
   const hasStocks = balance.some((r) => r.account.startsWith('3') && Math.abs(r.solde) > 1);
 
   // Recalcul des données selon l'intervalle de période du rapport
@@ -1363,20 +1388,17 @@ export default function Reports() {
   const periodToMonth = config.identity.periodTo ? new Date(config.identity.periodTo).getMonth() + 1 : undefined;
   const hasPeriodFilter = periodFromMonth !== undefined && periodToMonth !== undefined;
 
-  const periodBalance = useLiveQuery(async () => {
+  const { data: periodBalance = null } = useCloudData<any>(async () => {
     if (!currentOrgId || !hasPeriodFilter) return null;
     const { computeBalance: cb } = await import('../engine/balance');
     return cb({ orgId: currentOrgId, year: currentYear, fromMonth: periodFromMonth, uptoMonth: periodToMonth, includeOpening: true });
-  }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], null);
+  }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], { initial: null, tag: 'gl' });
 
-  // Mouvements seuls (sans à-nouveaux) — utilisés pour calculer le résultat
-  // de l'exercice et éviter le double-comptage si les AN incluent par erreur
-  // des soldes sur les classes 6/7/8 (cas d'import balance N-1 incomplet).
-  const periodMovements = useLiveQuery(async () => {
+  const { data: periodMovements = null } = useCloudData<any>(async () => {
     if (!currentOrgId || !hasPeriodFilter) return null;
     const { computeBalance: cb } = await import('../engine/balance');
     return cb({ orgId: currentOrgId, year: currentYear, fromMonth: periodFromMonth, uptoMonth: periodToMonth, includeOpening: false });
-  }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], null);
+  }, [currentOrgId, currentYear, periodFromMonth, periodToMonth, hasPeriodFilter], { initial: null, tag: 'gl' });
 
   const periodStatements = useMemo(() => {
     if (!hasPeriodFilter || !periodBalance) return null;
@@ -1404,36 +1426,36 @@ export default function Reports() {
   }, [hasPeriodFilter, periodBalance, ratios, periodFromMonth, periodToMonth, currentYear, customRatioTargets]);
 
   // Balances auxiliaires (vraie ventilation par tier — pas de regroupement parent)
-  const auxClient = useLiveQuery(async () => {
+  const { data: auxClient = [] } = useCloudData(async () => {
     if (!currentOrgId) return [];
     const { computeAuxBalance } = await import('../engine/balance');
     return computeAuxBalance({ orgId: currentOrgId, year: currentYear, kind: 'client' });
-  }, [currentOrgId, currentYear], []);
-  const auxFournisseur = useLiveQuery(async () => {
+  }, [currentOrgId, currentYear], { initial: [], tag: 'gl' });
+  const { data: auxFournisseur = [] } = useCloudData(async () => {
     if (!currentOrgId) return [];
     const { computeAuxBalance } = await import('../engine/balance');
     return computeAuxBalance({ orgId: currentOrgId, year: currentYear, kind: 'fournisseur' });
-  }, [currentOrgId, currentYear], []);
+  }, [currentOrgId, currentYear], { initial: [], tag: 'gl' });
   // Balances ÂGÉES réelles (calculées depuis les dates GL — pas de %fictifs)
-  const agedClient = useLiveQuery(async () => {
+  const { data: agedClient = null } = useCloudData<any>(async () => {
     if (!currentOrgId) return null;
     const { agedBalance } = await import('../engine/analytics');
     return agedBalance(currentOrgId, currentYear, 'client');
-  }, [currentOrgId, currentYear], null);
-  const agedFournisseur = useLiveQuery(async () => {
+  }, [currentOrgId, currentYear], { initial: null, tag: 'gl' });
+  const { data: agedFournisseur = null } = useCloudData<any>(async () => {
     if (!currentOrgId) return null;
     const { agedBalance } = await import('../engine/analytics');
     return agedBalance(currentOrgId, currentYear, 'fournisseur');
-  }, [currentOrgId, currentYear], null);
+  }, [currentOrgId, currentYear], { initial: null, tag: 'gl' });
 
   // Vrais flux de trésorerie mensuels (mouvements classe 5) — pour Cashflow Statement
   // Distinct du CR : on prend les débits (encaissements) et crédits (décaissements)
   // sur les comptes de banque/caisse 50-58, pas les charges/produits 6/7.
-  const cashflowMonthly = useLiveQuery(async () => {
+  const { data: cashflowMonthly = null } = useCloudData<any>(async () => {
     if (!currentOrgId) return null;
     const { tresorerieMonthly } = await import('../engine/analytics');
     return tresorerieMonthly(currentOrgId, currentYear);
-  }, [currentOrgId, currentYear], null);
+  }, [currentOrgId, currentYear], { initial: null, tag: 'gl' });
 
   // Nb de jours de la période sélectionnée — utilisé pour annualiser DSO/DPO
   // sans surévaluer les délais quand on regarde un trimestre ou un semestre.
@@ -1450,6 +1472,9 @@ export default function Reports() {
   const data = useMemo(() => ({
     bilanActif: effectiveBilan?.actif ?? [],
     bilanPassif: effectiveBilan?.passif ?? [],
+    bilanN1Actif: bilanN1?.actif ?? null,
+    bilanN1Passif: bilanN1?.passif ?? null,
+    unclassifiedAccounts: effectiveBilan?.unclassifiedAccounts ?? [],
     cr: effectiveCR,
     sig: effectiveSig,
     balance: effectiveBalance,
@@ -1467,7 +1492,7 @@ export default function Reports() {
     hasAnalytical,
     hasStocks,
     periodDays,
-  }), [effectiveBilan, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays]);
+  }), [effectiveBilan, bilanN1, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays]);
 
   // Rafraîchir les KPIs du rapport par défaut une fois les données chargées (1 fois)
   useEffect(() => {
@@ -2869,6 +2894,8 @@ function TablePreview({ source, data, palette, title }: any) {
 
 function DashboardSnippet({ id, data, palette }: any) {
   const dash = DASHBOARD_CATALOG.find((d) => d.id === id);
+  // State pour le modal de diagnostic d'écart de balance (struct_actif/passif uniquement)
+  const [showEcartModal, setShowEcartModal] = useState(false);
   // Taux TVA dynamique depuis balance (fallback 18% UEMOA)
   const vatRate = useMemo(() => {
     try {
@@ -2878,16 +2905,25 @@ function DashboardSnippet({ id, data, palette }: any) {
   }, [data.balance]);
   const kpis = (() => {
     if (id === 'is_bvsa' || id === 'is_bvsa_monthly') {
+      // BUG FIX : on ne doit PAS sommer charges + produits (chacun étant signé
+      // positif dans budgetActual.ts) — ça donnait un "Réalisé total" absurde.
+      // Le bon KPI = Résultat (Produits − Charges), ou séparation claire.
       const ba = data.budgetActual ?? [];
-      const totR = ba.reduce((s: number, r: any) => s + (Number(r.realise) || 0), 0);
-      const totB = ba.reduce((s: number, r: any) => s + (Number(r.budget) || 0), 0);
-      const ecart = totR - totB;
-      const execPct = totB ? ((totR / totB) * 100).toFixed(1) + ' %' : '—';
+      const charges = ba.filter((r: any) => r.isCharge);
+      const produits = ba.filter((r: any) => !r.isCharge);
+      const realiseProd = produits.reduce((s: number, r: any) => s + (Number(r.realise) || 0), 0);
+      const realiseCharges = charges.reduce((s: number, r: any) => s + (Number(r.realise) || 0), 0);
+      const budgetProd = produits.reduce((s: number, r: any) => s + (Number(r.budget) || 0), 0);
+      const budgetCharges = charges.reduce((s: number, r: any) => s + (Number(r.budget) || 0), 0);
+      const resultatReel = realiseProd - realiseCharges;
+      const resultatBudget = budgetProd - budgetCharges;
+      const execProd = budgetProd ? ((realiseProd / budgetProd) * 100).toFixed(1) + ' %' : '—';
+      const execCharges = budgetCharges ? ((realiseCharges / budgetCharges) * 100).toFixed(1) + ' %' : '—';
       return [
-        { label: 'Réalisé total', value: fmtMoney(totR) },
-        { label: 'Budget total', value: fmtMoney(totB) },
-        { label: 'Écart global', value: fmtMoney(ecart) },
-        { label: 'Exécution', value: execPct },
+        { label: 'Produits réalisés', value: fmtMoney(realiseProd), subValue: `Budget : ${fmtMoney(budgetProd)} · Exéc. ${execProd}` },
+        { label: 'Charges réalisées', value: fmtMoney(realiseCharges), subValue: `Budget : ${fmtMoney(budgetCharges)} · Exéc. ${execCharges}` },
+        { label: 'Résultat réel', value: fmtMoney(resultatReel) },
+        { label: 'Écart vs budget', value: fmtMoney(resultatReel - resultatBudget) },
       ];
     }
     if (id === 'home' || id === 'cp' || id === 'crblock' || id?.startsWith('crblock_')) return [
@@ -2897,7 +2933,11 @@ function DashboardSnippet({ id, data, palette }: any) {
       { label: 'Marge brute', value: fmtMoney(data.sig?.margeBrute ?? 0) },
     ];
     if (id === 'cashflow') {
-      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      // BUG FIX (audit) : trésorerie NETTE = active − passive (cohérent avec
+      // computeKPIs.treso et le dashboard 'bfr').
+      const tresoActive = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const tresoPassive = data.bilanPassif?.find((l: any) => l.code === 'DV')?.value ?? 0;
+      const treso = tresoActive - tresoPassive;
       // VRAI cashflow : encaissements/décaissements totaux sur la période
       // (mouvements classe 5), pas le CA / résultat du CR.
       const cf = (data as any).cashflowMonthly as { encaissements: number[]; decaissements: number[] } | null;
@@ -2907,7 +2947,7 @@ function DashboardSnippet({ id, data, palette }: any) {
       return [
         { label: 'Total encaissé', value: fmtMoney(totalIn) },
         { label: 'Total décaissé', value: fmtMoney(totalOut) },
-        { label: 'Trésorerie de clôture', value: fmtMoney(treso) },
+        { label: 'Trésorerie nette de clôture', value: fmtMoney(treso) },
         { label: 'Cash flow net', value: fmtMoney(netCash), subValue: totalIn > 0 ? `${((netCash / totalIn) * 100).toFixed(1)} % des encaissements` : '' },
       ];
     }
@@ -2949,7 +2989,10 @@ function DashboardSnippet({ id, data, palette }: any) {
     if (id === 'ratios') return data.ratios.slice(0, 4).map((r: any) => ({ label: r.label, value: r.unit === '%' ? `${r.value.toFixed(1)} %` : `${r.value.toFixed(2)}` }));
     // ─── Dashboards Premium ★ ───
     if (id === 'exec') {
-      const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      // BUG FIX (audit) : trésorerie NETTE (cohérent avec exec dashboards & bfr).
+      const tresoActive = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
+      const tresoPassive = data.bilanPassif?.find((l: any) => l.code === 'DV')?.value ?? 0;
+      const treso = tresoActive - tresoPassive;
       const alertes = (data.ratios || []).filter((r: any) => r.status !== 'good').length;
       return [
         { label: 'CA', value: fmtMoney(data.sig?.ca ?? 0) },
@@ -2963,11 +3006,15 @@ function DashboardSnippet({ id, data, palette }: any) {
       return [];
     }
     if (id === 'breakeven') {
-      // Seuil de rentabilité SYSCOHADA = Charges fixes / Taux marge sur coûts variables
-      // Charges FIXES typiques : Personnel (66) + Dotations amortissements (681)
-      //                        + Loyers (622) + Assurances (625) + Charges financières (67)
-      // Charges VARIABLES typiques : Achats (60 hors 603) + Transports/61 + Services A 62
-      //                             + Impôts et taxes liés aux ventes (64) — en partie
+      // Seuil de rentabilité d'EXPLOITATION (pas de résultat global) :
+      //   Seuil = Charges fixes / Taux marge sur coûts variables
+      //
+      // BUG FIX (audit) :
+      //   - Les charges financières (67) sont HORS exploitation (résultat financier)
+      //     et NE doivent PAS entrer dans les CF du seuil opérationnel.
+      //   - Les achats sont strictement les comptes 60 hors 603 (var. stocks). 603
+      //     n'est PAS un achat — c'est un correctif à part. L'ancienne formule
+      //     `achats = 60(?!3) + 603` double-comptait par addition asymétrique.
       const ca = data.sig?.ca ?? 0;
       const balance = data.balance ?? [];
       const sumDebMoinsCre = (regex: RegExp) => balance
@@ -2977,21 +3024,23 @@ function DashboardSnippet({ id, data, palette }: any) {
       const loyers     = sumDebMoinsCre(/^622/);
       const assurances = sumDebMoinsCre(/^625/);
       const dotations  = sumDebMoinsCre(/^68/);
-      const chFin      = sumDebMoinsCre(/^67/);
-      const chargesFixes = personnel + loyers + assurances + dotations + chFin;
-      // Charges variables = Achats consommés + transports + services ext (62 hors 622)
-      const achats     = sumDebMoinsCre(/^60(?!3)/) + sumDebMoinsCre(/^603/); // achats + var stock
+      // Charges fixes = exploitation uniquement (sans 67 = charges financières).
+      const chargesFixes = personnel + loyers + assurances + dotations;
+      // Charges variables = Achats consommés (60 hors 603) + Var. stocks (603 séparément)
+      // + Transports (61) + Services extérieurs (62 hors 622/625) + Autres services (63)
+      const achatsConsommes = sumDebMoinsCre(/^60/) - sumDebMoinsCre(/^603/);
+      const varStocks       = sumDebMoinsCre(/^603/); // peut être positif ou négatif
       const transports = sumDebMoinsCre(/^61/);
-      const servExtA   = sumDebMoinsCre(/^62/) - loyers - assurances; // 62 hors 622 et 625
+      const servExtA   = sumDebMoinsCre(/^62/) - loyers - assurances; // 62 hors 622, 625
       const servExtB   = sumDebMoinsCre(/^63/);
-      const chargesVariables = achats + transports + servExtA + servExtB;
+      const chargesVariables = achatsConsommes + varStocks + transports + servExtA + servExtB;
       const margeCV = ca - chargesVariables;
       const tauxMargeCV = ca > 0 ? margeCV / ca : 0;
       const seuil = tauxMargeCV > 0 ? Math.round(chargesFixes / tauxMargeCV) : 0;
       const margeSec = ca - seuil;
       return [
         { label: 'CA', value: fmtMoney(ca), subValue: `Marge sur CV ${(tauxMargeCV * 100).toFixed(1)} %` },
-        { label: 'Charges fixes', value: fmtMoney(chargesFixes), subValue: 'Pers + Loy + Ass + Dot + Fin' },
+        { label: 'Charges fixes', value: fmtMoney(chargesFixes), subValue: 'Pers + Loy + Ass + Dot (hors fin.)' },
         { label: 'Seuil rentabilité', value: fmtMoney(seuil), subValue: 'CF / Taux marge CV' },
         { label: 'Marge sécurité', value: fmtMoney(margeSec), subValue: ca > 0 ? `${((margeSec / ca) * 100).toFixed(1)} % du CA` : '—' },
       ];
@@ -3574,7 +3623,7 @@ function DashboardSnippet({ id, data, palette }: any) {
       { label: 'Créances clients', value: get('BH'), color: '#0891b2' },
       { label: 'Autres créances', value: get('BI'), color: '#7c3aed' },
       { label: 'Trésorerie active', value: get('_BT'), color: '#16a34a' },
-      { label: 'Comptes non classés', value: get('_EC'), color: '#a3a3a3' },
+      { label: '⚠ Écart de balance', value: get('_EC'), color: '#dc2626' },
     ].filter((it) => Math.abs(it.value) > 0.01);
     const totalCalc = items.reduce((s, it) => s + it.value, 0) || totA || 1;
     return (
@@ -3618,16 +3667,25 @@ function DashboardSnippet({ id, data, palette }: any) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
-                {items.map((it, i) => (
-                  <tr key={i}>
-                    <td className="py-1 px-1.5 flex items-center gap-1.5">
-                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} />
-                      {it.label}
-                    </td>
-                    <td className="py-1 px-1.5 text-right num">{fmtMoney(it.value)}</td>
-                    <td className="py-1 px-1.5 text-right num font-semibold">{((it.value / totalCalc) * 100).toFixed(1)} %</td>
-                  </tr>
-                ))}
+                {items.map((it, i) => {
+                  const isEcart = it.label.startsWith('⚠');
+                  return (
+                    <tr
+                      key={i}
+                      className={isEcart ? 'cursor-pointer hover:bg-error/5' : ''}
+                      onClick={isEcart ? () => setShowEcartModal(true) : undefined}
+                      title={isEcart ? 'Cliquez pour voir le détail des comptes responsables' : undefined}
+                    >
+                      <td className="py-1 px-1.5 flex items-center gap-1.5">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} />
+                        {it.label}
+                        {isEcart && <span className="text-error text-[9px] ml-1">→ détail</span>}
+                      </td>
+                      <td className="py-1 px-1.5 text-right num">{fmtMoney(it.value)}</td>
+                      <td className="py-1 px-1.5 text-right num font-semibold">{((it.value / totalCalc) * 100).toFixed(1)} %</td>
+                    </tr>
+                  );
+                })}
                 <tr className="font-bold border-t-2" style={{ borderColor: palette.primary }}>
                   <td className="py-1 px-1.5">TOTAL ACTIF</td>
                   <td className="py-1 px-1.5 text-right num">{fmtMoney(totalCalc)}</td>
@@ -3637,6 +3695,12 @@ function DashboardSnippet({ id, data, palette }: any) {
             </table>
           </div>
         </div>
+        <UnclassifiedAccountsModal
+          open={showEcartModal}
+          onClose={() => setShowEcartModal(false)}
+          accounts={data.unclassifiedAccounts ?? []}
+          ecartTotal={get('_EC')}
+        />
       </div>
     );
   }
@@ -3657,7 +3721,7 @@ function DashboardSnippet({ id, data, palette }: any) {
       { label: 'Provisions risques', value: get('DP'), color: '#a16207' },
       { label: 'Dettes circulantes', value: get('_DP'), color: '#d97706' },
       { label: 'Trésorerie passive', value: get('DV'), color: '#7c3aed' },
-      { label: 'Comptes non classés', value: get('_ECP'), color: '#a3a3a3' },
+      { label: '⚠ Écart de balance', value: get('_ECP'), color: '#dc2626' },
     ].filter((it) => Math.abs(it.value) > 0.01).map((it) => ({ ...it, value: Math.abs(it.value) }));
     const totalCalc = items.reduce((s, it) => s + it.value, 0) || 1;
     return (
@@ -3699,16 +3763,25 @@ function DashboardSnippet({ id, data, palette }: any) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-primary-100 dark:divide-primary-900">
-                {items.map((it, i) => (
-                  <tr key={i}>
-                    <td className="py-1 px-1.5 flex items-center gap-1.5">
-                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} />
-                      {it.label}
-                    </td>
-                    <td className="py-1 px-1.5 text-right num">{fmtMoney(it.value)}</td>
-                    <td className="py-1 px-1.5 text-right num font-semibold">{((it.value / totalCalc) * 100).toFixed(1)} %</td>
-                  </tr>
-                ))}
+                {items.map((it, i) => {
+                  const isEcart = it.label.startsWith('⚠');
+                  return (
+                    <tr
+                      key={i}
+                      className={isEcart ? 'cursor-pointer hover:bg-error/5' : ''}
+                      onClick={isEcart ? () => setShowEcartModal(true) : undefined}
+                      title={isEcart ? 'Cliquez pour voir le détail des comptes responsables' : undefined}
+                    >
+                      <td className="py-1 px-1.5 flex items-center gap-1.5">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} />
+                        {it.label}
+                        {isEcart && <span className="text-error text-[9px] ml-1">→ détail</span>}
+                      </td>
+                      <td className="py-1 px-1.5 text-right num">{fmtMoney(it.value)}</td>
+                      <td className="py-1 px-1.5 text-right num font-semibold">{((it.value / totalCalc) * 100).toFixed(1)} %</td>
+                    </tr>
+                  );
+                })}
                 <tr className="font-bold border-t-2" style={{ borderColor: palette.primary }}>
                   <td className="py-1 px-1.5">TOTAL PASSIF</td>
                   <td className="py-1 px-1.5 text-right num">{fmtMoney(totalCalc)}</td>
@@ -3718,6 +3791,12 @@ function DashboardSnippet({ id, data, palette }: any) {
             </table>
           </div>
         </div>
+        <UnclassifiedAccountsModal
+          open={showEcartModal}
+          onClose={() => setShowEcartModal(false)}
+          accounts={data.unclassifiedAccounts ?? []}
+          ecartTotal={Math.abs(get('_ECP'))}
+        />
       </div>
     );
   }
@@ -3726,21 +3805,35 @@ function DashboardSnippet({ id, data, palette }: any) {
   if (id === 'pyramide_perf') {
     const sig = data.sig;
     const a = data.bilanActif ?? [], pas = data.bilanPassif ?? [];
+    const aN1 = data.bilanN1Actif as any[] | null, paN1 = data.bilanN1Passif as any[] | null;
     const ca = sig?.ca ?? 0;
     const rn = sig?.resultat ?? 0;
     const totA = a.find((l: any) => l.code === '_BZ')?.value ?? 0;
     const cp = pas.find((l: any) => l.code === '_CP')?.value ?? 0;
-    // ROE/ROA basés sur capitaux/actif d'OUVERTURE (sans le résultat de l'exercice)
-    const cpOuv = cp - rn;
-    const totAOuv = totA - rn;
+    // ROE/ROA selon norme IFRS = Résultat / capitaux propres MOYENS
+    // (= moyenne entre ouverture et clôture).
+    //
+    // SOURCE de l'ouverture, par ordre de priorité :
+    //   1. Bilan N-1 réel (si l'exercice N-1 a été importé) → exactitude IFRS.
+    //   2. Proxy : (clôture − résultat de l'exercice). Approximation acceptable
+    //      mais ignore apports/distributions/acquisitions de l'exercice.
+    const hasN1 = aN1 && paN1;
+    const cpOuverture = hasN1
+      ? (paN1!.find((l: any) => l.code === '_CP')?.value ?? 0)
+      : (cp - rn);
+    const totAOuverture = hasN1
+      ? (aN1!.find((l: any) => l.code === '_BZ')?.value ?? 0)
+      : (totA - rn);
+    const cpMoyen = (cp + cpOuverture) / 2;
+    const totAMoyen = (totA + totAOuverture) / 2;
     const marge = ca ? (rn / ca) * 100 : 0;
-    const rotation = totAOuv > 0 ? ca / totAOuv : 0;
-    // GARDE : capitaux propres ≤ 0 = situation nette dégradée → levier non
+    const rotation = totAMoyen > 0 ? ca / totAMoyen : 0;
+    // GARDE : capitaux propres moyens ≤ 0 = situation nette dégradée → levier non
     // significatif. On affiche "n.a." plutôt qu'une valeur trompeuse.
-    const cpInvalid = cpOuv <= 0;
-    const levier = cpInvalid ? 0 : totAOuv / cpOuv;
-    const roa = totAOuv > 0 ? (rn / totAOuv) * 100 : 0;
-    const roe = cpInvalid ? 0 : (rn / cpOuv) * 100;
+    const cpInvalid = cpMoyen <= 0;
+    const levier = cpInvalid ? 0 : totAMoyen / cpMoyen;
+    const roa = totAMoyen > 0 ? (rn / totAMoyen) * 100 : 0;
+    const roe = cpInvalid ? 0 : (rn / cpMoyen) * 100;
     const Box = ({ label, value, sub, color, big }: any) => (
       <div className="rounded p-2 text-center" style={{ background: color + '15', borderLeft: `3px solid ${color}` }}>
         <p className="text-[9px] uppercase text-primary-500 font-semibold">{label}</p>
@@ -3753,7 +3846,7 @@ function DashboardSnippet({ id, data, palette }: any) {
         <p className="text-xs font-semibold mb-3" style={{ color: palette.primary }}>{dash?.name ?? id}</p>
         {/* Niveau 1 : ROE en haut */}
         <div className="mb-2">
-          <Box label="ROE — Rentabilité des capitaux propres" value={cpInvalid ? 'n.a.' : `${roe.toFixed(2)} %`} sub={cpInvalid ? '⚠ Capitaux propres ouverture ≤ 0' : `= Résultat net / CP ouverture`} color={palette.primary} big />
+          <Box label="ROE — Rentabilité des capitaux propres" value={cpInvalid ? 'n.a.' : `${roe.toFixed(2)} %`} sub={cpInvalid ? '⚠ Capitaux propres moyens ≤ 0' : `= Résultat net / CP moyens · ouverture ${hasN1 ? 'N-1 réelle' : 'proxy (clôture − RN)'}`} color={palette.primary} big />
         </div>
         <div className="text-center text-xs text-primary-400 my-1">= Marge × Rotation × Levier</div>
         {/* Niveau 2 : ROA × Levier */}
@@ -4584,7 +4677,7 @@ function SaveModal({ open, onClose, config, orgId }: any) {
     setSaving(true);
     try {
       const now = Date.now();
-      await db.templates.add({
+      await dataProvider.upsertTemplate({
         orgId,
         name: name.trim(),
         description: desc.trim() || undefined,
@@ -4592,6 +4685,7 @@ function SaveModal({ open, onClose, config, orgId }: any) {
         createdAt: now,
         updatedAt: now,
       });
+      invalidateCloudData('templates');
       toast.success('Modèle enregistré', `"${name}" prêt à être réutilisé`);
       onClose();
     } catch (e: any) {
@@ -4683,7 +4777,8 @@ function LoadModal({ open, onClose, templates, onLoad }: any) {
   const remove = async (id: number) => {
     if (!confirm('Supprimer ce modèle ?')) return;
     try {
-      await db.templates.delete(id);
+      await dataProvider.deleteTemplate(id);
+      invalidateCloudData('templates');
       toast.success('Modèle supprimé');
     } catch (e: any) {
       toast.error('Erreur', e?.message ?? 'Suppression impossible.');

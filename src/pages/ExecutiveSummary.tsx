@@ -70,9 +70,13 @@ export default function ExecutiveSummary() {
   const margePct = ca ? (resultat / ca) * 100 : 0;
   const ebePct = ca ? (ebe / ca) * 100 : 0;
 
-  // Trésorerie nette (actif trésorerie − passif trésorerie)
-  const tresoActive = balance.filter((r) => r.account.match(/^5[0-8]/)).reduce((s, r) => s + r.soldeD, 0);
-  const tresoPass = balance.filter((r) => r.account.startsWith('56')).reduce((s, r) => s + r.soldeC, 0);
+  // BUG FIX (audit) : utiliser le _BT et DV du bilan (déjà calculés dans
+  // computeBilan) plutôt que recalculer depuis la balance brute. L'ancien code :
+  //   - sommait soldeD bruts (sans soustraire les soldeC d'un même compte 52)
+  //   - comptait 56 deux fois (en treso active via 5[0-8] ET en treso passive)
+  // → écart visible vs le bilan détaillé. Maintenant aligné.
+  const tresoActive = bilan ? (bilan.actif.find((l) => l.code === '_BT')?.value ?? 0) : 0;
+  const tresoPass   = bilan ? (bilan.passif.find((l) => l.code === 'DV')?.value ?? 0) : 0;
   const tresoNet = tresoActive - tresoPass;
 
   const totalActif = bilan ? (bilan.actif.find((l) => l.code === '_BZ')?.value ?? 0) : 0;

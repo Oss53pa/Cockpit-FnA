@@ -3,7 +3,12 @@
  * Utilisée quand l'app tourne dans Electron (window.electronAPI présent).
  */
 import type { DataProvider, GLFilter } from './provider';
-import type { Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine, ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate } from './schema';
+import type {
+  Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
+  ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
+  AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
+  Activity, Channel, ChatMessage,
+} from './schema';
 
 const api = () => (window as any).electronAPI;
 
@@ -43,6 +48,17 @@ export class ElectronProvider implements DataProvider {
   async deleteOrganization(id: string) {
     await api().db.deleteRows('organizations', { id });
   }
+  async deleteOrganizationCascade(id: string) {
+    const tables = [
+      'gl_entries', 'imports', 'budgets', 'account_mappings', 'accounts',
+      'periods', 'fiscal_years', 'attention_points', 'action_plans',
+      'reports', 'report_templates',
+    ];
+    for (const t of tables) {
+      try { await api().db.deleteRows(t, { org_id: id }); } catch { /* ignore */ }
+    }
+    await api().db.deleteRows('organizations', { id });
+  }
 
   // Fiscal years
   async getFiscalYears(orgId: string) {
@@ -51,6 +67,23 @@ export class ElectronProvider implements DataProvider {
   }
   async upsertFiscalYear(fy: FiscalYear) {
     await api().db.upsert('fiscal_years', { ...toSnake(fy), sync_status: 'pending' }, ['id']);
+  }
+  async bulkUpsertFiscalYears(fys: FiscalYear[]) {
+    for (const fy of fys) {
+      await api().db.upsert('fiscal_years', { ...toSnake(fy), sync_status: 'pending' }, ['id']);
+    }
+  }
+  async deleteFiscalYearCascade(fy: FiscalYear) {
+    await api().db.run(
+      'DELETE FROM gl_entries WHERE org_id = ? AND date >= ? AND date <= ?',
+      [fy.orgId, `${fy.year}-01-01`, `${fy.year}-12-31`],
+    );
+    await api().db.deleteRows('periods', { fiscal_year_id: fy.id });
+    await api().db.deleteRows('fiscal_years', { id: fy.id });
+  }
+  async setFiscalYearClosed(fy: FiscalYear, closed: boolean) {
+    await api().db.run('UPDATE fiscal_years SET closed = ? WHERE id = ?', [closed ? 1 : 0, fy.id]);
+    await api().db.run('UPDATE periods SET closed = ? WHERE fiscal_year_id = ?', [closed ? 1 : 0, fy.id]);
   }
 
   // Periods
@@ -61,16 +94,31 @@ export class ElectronProvider implements DataProvider {
   async upsertPeriod(p: Period) {
     await api().db.upsert('periods', { ...toSnake(p), sync_status: 'pending' }, ['id']);
   }
+  async bulkUpsertPeriods(ps: Period[]) {
+    for (const p of ps) {
+      await api().db.upsert('periods', { ...toSnake(p), sync_status: 'pending' }, ['id']);
+    }
+  }
 
   // Accounts
   async getAccounts(orgId: string) {
     const rows = await api().db.getAll('accounts', { org_id: orgId });
     return rows.map(toCamel) as Account[];
   }
+  async getAccount(orgId: string, code: string) {
+    const rows = await api().db.query('SELECT * FROM accounts WHERE org_id = ? AND code = ? LIMIT 1', [orgId, code]);
+    return rows[0] ? toCamel(rows[0]) as Account : undefined;
+  }
+  async upsertAccount(account: Account) {
+    await api().db.upsert('accounts', { ...toSnake(account), sync_status: 'pending' }, ['org_id', 'code']);
+  }
   async bulkUpsertAccounts(accounts: Account[]) {
     for (const a of accounts) {
       await api().db.upsert('accounts', { ...toSnake(a), sync_status: 'pending' }, ['org_id', 'code']);
     }
+  }
+  async deleteAccount(orgId: string, code: string) {
+    await api().db.deleteRows('accounts', { org_id: orgId, code });
   }
   async deleteAccounts(orgId: string) {
     await api().db.deleteRows('accounts', { org_id: orgId });
@@ -96,6 +144,14 @@ export class ElectronProvider implements DataProvider {
       return cols.map(c => c === 'sync_status' ? 'pending' : s[c] ?? null);
     });
     await api().db.bulkInsert('gl_entries', cols, rows);
+  }
+  async bulkUpsertGL(entries: GLEntry[]) {
+    for (const e of entries) {
+      await api().db.upsert('gl_entries', { ...toSnake(e), sync_status: 'pending' }, ['id']);
+    }
+  }
+  async updateGLEntry(id: number, changes: Partial<GLEntry>) {
+    await api().db.upsert('gl_entries', { id, ...toSnake(changes), sync_status: 'pending' }, ['id']);
   }
   async deleteGLByImport(importId: number) {
     await api().db.deleteRows('gl_entries', { import_id: importId });
@@ -130,6 +186,19 @@ export class ElectronProvider implements DataProvider {
   async getAllBudgets(orgId: string) {
     const rows = await api().db.getAll('budgets', { org_id: orgId });
     return rows.map(toCamel) as BudgetLine[];
+  }
+  async getBudgetsByYear(orgId: string, year: number) {
+    const rows = await api().db.query(
+      'SELECT * FROM budgets WHERE org_id = ? AND year = ?',
+      [orgId, year]
+    );
+    return rows.map(toCamel) as BudgetLine[];
+  }
+  async deleteAllBudgets(orgId: string) {
+    await api().db.deleteRows('budgets', { org_id: orgId });
+  }
+  async deleteImportsByKind(orgId: string, kind: ImportLog['kind']) {
+    await api().db.deleteRows('imports', { org_id: orgId, kind });
   }
   async bulkUpsertBudgets(lines: BudgetLine[]) {
     for (const l of lines) {
@@ -226,6 +295,54 @@ export class ElectronProvider implements DataProvider {
   async upsertMapping(m: AccountMapping) {
     await api().db.upsert('account_mappings', { ...toSnake(m), sync_status: 'pending' }, ['org_id', 'source_code']);
   }
+
+  // ── Analytique / Activités / Chat — STUBS Electron ─────────────────
+  // Le build Electron est secondaire. Si vous l'utilisez, étendez ces stubs
+  // avec les vraies tables SQLite. Pour l'instant, ils retournent des collections
+  // vides et lèvent sur les écritures pour signaler le manque d'implémentation.
+  private notImpl(): never { throw new Error('Méthode non implémentée pour Electron — utilisez Supabase.'); }
+
+  async getAnalyticAxes(_orgId: string): Promise<AnalyticAxis[]> { return []; }
+  async upsertAnalyticAxis(_a: AnalyticAxis) { this.notImpl(); }
+  async deleteAnalyticAxis(_id: string) { this.notImpl(); }
+
+  async getAnalyticCodes(_orgId: string, _axisId?: string): Promise<AnalyticCode[]> { return []; }
+  async upsertAnalyticCode(_c: AnalyticCode) { this.notImpl(); }
+  async bulkUpsertAnalyticCodes(_cs: AnalyticCode[]) { this.notImpl(); }
+  async deleteAnalyticCode(_id: string) { this.notImpl(); }
+  async detachAnalyticChildren(_parentId: string) { this.notImpl(); }
+
+  async getAnalyticRules(_orgId: string): Promise<AnalyticRule[]> { return []; }
+  async upsertAnalyticRule(_r: AnalyticRule) { this.notImpl(); }
+  async deleteAnalyticRule(_id: string) { this.notImpl(); }
+  async updateAnalyticRulePriority(_id: string, _p: number) { this.notImpl(); }
+
+  async getAnalyticAssignments(_orgId: string): Promise<AnalyticAssignment[]> { return []; }
+  async bulkInsertAnalyticAssignments(_xs: AnalyticAssignment[]) { this.notImpl(); }
+  async updateAnalyticAssignment(_id: number, _changes: Partial<AnalyticAssignment>) { this.notImpl(); }
+  async deleteAnalyticAssignmentsByOrgFilter(_orgId: string, _pred: (a: AnalyticAssignment) => boolean) { this.notImpl(); }
+  async deleteAnalyticAssignmentsByCode(_codeId: string) { this.notImpl(); }
+
+  async getAnalyticBudgets(_orgId: string): Promise<AnalyticBudget[]> { return []; }
+
+  async getActivities(_orgId: string): Promise<Activity[]> { return []; }
+  async getActivity(_id: number): Promise<Activity | undefined> { return undefined; }
+  async addActivity(_a: Omit<Activity, 'id'>): Promise<number> { return this.notImpl(); }
+  async updateActivity(_id: number, _changes: Partial<Activity>) { this.notImpl(); }
+  async deleteActivity(_id: number) { this.notImpl(); }
+
+  async getChannels(_orgId: string): Promise<Channel[]> { return []; }
+  async getChannel(_id: string): Promise<Channel | undefined> { return undefined; }
+  async upsertChannel(_c: Channel) { this.notImpl(); }
+  async deleteChannel(_id: string) { this.notImpl(); }
+  async findChannel(_orgId: string, _pred: (c: Channel) => boolean): Promise<Channel | undefined> { return undefined; }
+
+  async getChatMessage(_id: number): Promise<ChatMessage | undefined> { return undefined; }
+  async getChatMessagesByChannel(_channelId: string): Promise<ChatMessage[]> { return []; }
+  async getChatMessagesByOrg(_orgId: string): Promise<ChatMessage[]> { return []; }
+  async addChatMessage(_msg: Omit<ChatMessage, 'id'>): Promise<number> { return this.notImpl(); }
+  async updateChatMessage(_id: number, _changes: Partial<ChatMessage>) { this.notImpl(); }
+  async deleteChatMessage(_id: number) { this.notImpl(); }
 
   // File storage (local disk in Electron)
   async uploadFile(_orgId: string, _fileName: string, _file: File | Blob): Promise<string> {

@@ -5,26 +5,25 @@
 // Intégrations : mémoire permanente (apprentissage) + connaissance SYSCOHADA
 // + prédictions par régression linéaire sur historique observé.
 import { fmtMoney } from '../../lib/format';
-import { recordSnapshot, predictMetric, getInsights } from './memory';
+import { recordSnapshot, predictMetric, getInsightsSync } from './memory';
 import { getNormSectorielle, SYSCOHADA_KEY_RATIOS } from './syscohada-knowledge';
 import { searchKnowledge } from './knowledge/search';
 
 // Enregistre un snapshot des KPIs courants dans la mémoire permanente.
 // À appeler avant la génération des commentaires.
-export function feedMemory(orgId: string, data: any, context?: string) {
+// Async désormais (memory persiste vers Supabase chiffré).
+export async function feedMemory(orgId: string, data: any, context?: string): Promise<void> {
   if (!orgId) return;
   const sig = data.sig;
   const ca = sig?.ca ?? 0;
   const get = (l: any[], c: string) => (l ?? []).find((x: any) => x.code === c)?.value ?? 0;
-  recordSnapshot(orgId, {
+  await recordSnapshot(orgId, {
     ca,
     ebe: sig?.ebe ?? 0,
     rn: sig?.resultat ?? 0,
     treso: get(data.bilanActif, '_BT') - get(data.bilanPassif, 'DV'),
     bfr: get(data.bilanActif, '_BK') - get(data.bilanPassif, '_DP'),
-    // DSO depuis les ratios calculés (TVA dynamique) — fallback formule
-    dso: (data.ratios ?? []).find((r: any) => r.code === 'DSO')?.value ??
-         (ca > 0 ? Math.round((get(data.bilanActif, 'BH') / (ca * 1.18)) * 360) : 0),
+    dso: (data.ratios ?? []).find((r: any) => r.code === 'DSO')?.value ?? 0,
     capPropres: get(data.bilanPassif, '_CP'),
     totActif: get(data.bilanActif, '_BZ'),
     ratiosAlertes: (data.ratios ?? []).filter((r: any) => r.status !== 'good').length,
@@ -35,7 +34,10 @@ export function feedMemory(orgId: string, data: any, context?: string) {
 // Phrase de tendance basée sur l'historique mémoire
 function trendPhrase(orgId: string | undefined, metric: string, currentValue: number, unit = ''): string {
   if (!orgId) return '';
-  const insights = getInsights(orgId);
+  // CORRECTION (audit) : utilise le cache mémoire (sync) au lieu de fetcher
+  // depuis Supabase à chaque appel. `feedMemory(orgId, data)` doit être appelé
+  // AVANT pour s'assurer que le cache est frais.
+  const insights = getInsightsSync(orgId);
   const pattern = insights.patterns.find((p) => p.metric === metric);
   if (!pattern || pattern.lastValue === currentValue) return '';
   const arrow = pattern.trend === 'up' ? '↗' : pattern.trend === 'down' ? '↘' : '→';
@@ -547,8 +549,13 @@ export const AUTOGEN_MARKER = '[Proph3t-auto]';
 
 export function autoCommentReport(blocks: ReportBlock[], data: ReportData, opts?: { orgId?: string; context?: string }): { blocks: ReportBlock[]; count: number } {
   // Apprentissage : mémoriser les KPIs de cette session pour enrichir les
-  // analyses futures (tendances + prédictions)
-  if (opts?.orgId) feedMemory(opts.orgId, data, opts.context);
+  // analyses futures (tendances + prédictions).
+  // Fire-and-forget — la persistance Supabase ne doit pas bloquer le rendu du rapport.
+  if (opts?.orgId) {
+    feedMemory(opts.orgId, data, opts.context).catch((e) => {
+      console.warn('[reportCommentator] feedMemory async failed:', e);
+    });
+  }
 
   const result: ReportBlock[] = [];
   let count = 0;

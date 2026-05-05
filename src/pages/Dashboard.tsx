@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useParams } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -16,7 +15,8 @@ import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } 
 import { useChartTheme } from '../lib/chartTheme';
 import { bySection, loadLabels, computeBudgetActual } from '../engine/budgetActual';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { useCloudData } from '../hooks/useCloudData';
 import { fmtFull, fmtK } from '../lib/format';
 import { agedBalance, fiscalite, immobilisationsDetail, masseSalariale, monthlyByPrefix, topAccountsByPrefix, tresorerieMonthly, AgedTier } from '../engine/analytics';
 
@@ -1597,44 +1597,67 @@ function CycleFournisseur() {
 
   // Nombre de fournisseurs : distinct par DÉTAIL (tiers ou sous-compte auxiliaire,
   // PAS le compte parent 401/402/408).
-  const nbFournisseurs = useLiveQuery(async () => {
+  const { data: nbFournisseurs = 0 } = useCloudData<number>(async () => {
     if (!currentOrgId) return 0;
-    const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
+    const [periods, entries] = await Promise.all([
+      dataProvider.getPeriods(currentOrgId),
+      dataProvider.getGLEntries({ orgId: currentOrgId }),
+    ]);
     const ids = new Set(periods.filter((p) => p.year === currentYear).map((p) => p.id));
-    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
     const keys = new Set<string>();
     for (const e of entries) {
       if (!ids.has(e.periodId)) continue;
       if (!(e.account.startsWith('401') || e.account.startsWith('402') || e.account.startsWith('408'))) continue;
-      // 1) Code tiers si renseigné, 2) sous-compte auxiliaire (len > 3), 3) ignoré
       if (e.tiers && e.tiers.trim()) keys.add(e.tiers.trim());
       else if (e.account.length > 3) keys.add(e.account);
     }
     return keys.size;
-  }, [currentOrgId, currentYear], 0) ?? 0;
+  }, [currentOrgId, currentYear], { initial: 0, tag: 'gl' });
 
-  // Évolution mensuelle RÉELLE des dettes fournisseurs via le cumul des
-  // soldes créditeurs 40x mois par mois, plutôt qu'une simulation.
-  const dettesMonthly = useLiveQuery(async () => {
-    if (!currentOrgId) return { total: Array(12).fill(0), echues: Array(12).fill(0) };
-    const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
-    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
-    const total: number[] = Array(12).fill(0);
-    let running = 0;
-    for (let m = 1; m <= 12; m++) {
-      const p = periods.find((x) => x.year === currentYear && x.month === m);
-      if (!p) { total[m - 1] = running; continue; }
-      for (const e of entries) {
-        if (e.periodId !== p.id) continue;
-        if (!e.account.startsWith('40')) continue;
-        running += (e.credit - e.debit);
+  // Évolution mensuelle RÉELLE des dettes fournisseurs.
+  // - `total[m]` : cumul du solde des comptes 40 fin de mois m (depuis l'ouverture
+  //   incluant les RAN).
+  // - `echues[m]` : part ÉCHUE à fin de mois m, calculée par `agedBalanceMonthly`
+  //   qui exécute 12 snapshots de balance âgée (un par mois) — précis, pas de
+  //   ratio propagé. Coût acceptable : un seul fetch GL réutilisé sur 12 itérations.
+  const { data: dettesMonthly = { total: Array(12).fill(0), echues: Array(12).fill(0) } } = useCloudData<{ total: number[]; echues: number[] }>(
+    async () => {
+      if (!currentOrgId) return { total: Array(12).fill(0), echues: Array(12).fill(0) };
+      const [periods, entries] = await Promise.all([
+        dataProvider.getPeriods(currentOrgId),
+        dataProvider.getGLEntries({ orgId: currentOrgId }),
+      ]);
+      // Solde d'ouverture (mois 0 = à-nouveaux) sur les comptes 40
+      const openingPeriod = periods.find((p) => p.year === currentYear && p.month === 0);
+      let running = 0;
+      if (openingPeriod) {
+        for (const e of entries) {
+          if (e.periodId !== openingPeriod.id) continue;
+          if (!e.account.startsWith('40')) continue;
+          running += (e.credit - e.debit);
+        }
       }
-      total[m - 1] = running;
-    }
-    // Échues = approximation (30 % de la dette à partir de M+3)
-    const echues = total.map((v, i) => i < 3 ? 0 : Math.max(0, Math.round(v * 0.3)));
-    return { total, echues };
-  }, [currentOrgId, currentYear], { total: Array(12).fill(0), echues: Array(12).fill(0) }) ?? { total: Array(12).fill(0), echues: Array(12).fill(0) };
+
+      const total: number[] = Array(12).fill(0);
+      for (let m = 1; m <= 12; m++) {
+        const p = periods.find((x) => x.year === currentYear && x.month === m);
+        if (!p) { total[m - 1] = running; continue; }
+        for (const e of entries) {
+          if (e.periodId !== p.id) continue;
+          if (!e.account.startsWith('40')) continue;
+          running += (e.credit - e.debit);
+        }
+        total[m - 1] = running;
+      }
+      // Échus mensuels = aged balance par mois (snapshot historique précis).
+      const { agedBalanceMonthly } = await import('../engine/analytics');
+      const monthly = await agedBalanceMonthly(currentOrgId, currentYear, 'fournisseur');
+      const echues = monthly.map((s) => s.echusJusqu30 + s.echus3160 + s.echus6190 + s.echusPlus90);
+      return { total, echues };
+    },
+    [currentOrgId, currentYear],
+    { initial: { total: Array(12).fill(0), echues: Array(12).fill(0) }, tag: 'gl' },
+  );
 
   const dettes = balance.filter((r) => r.account.startsWith('40')).reduce((s, r) => s + r.soldeC, 0);
   const dpo = ratios.find((r) => r.code === 'DPO')?.value ?? 0;

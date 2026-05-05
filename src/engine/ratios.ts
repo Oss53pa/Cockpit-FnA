@@ -125,7 +125,10 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   //       − Reprises sur amortissements & provisions (classe 79)
   //       + VNC des immo cédées (685) − Produits de cessions (775)
   // Pour rester robuste sans dépendre de comptes optionnels, on prend la
-  // dotation NETTE = (D − C) sur 68 + 69 diminuée des reprises 79.
+  // dotation NETTE = (D − C) sur 68 (exploit) + 69 (HAO) diminuée des reprises 78+79.
+  // BUG FIX (audit) : la CAF SYSCOHADA additive standard inclut bien 68 ET 69
+  // (toutes dotations non décaissables). En revanche les REPRISES sont 78 (exploit)
+  // ET 79 (HAO) — l'ancien code ne capturait que 79.
   const dotN = (() => {
     let d = 0, c = 0;
     for (const r of rows) if (r.account.startsWith('68') || r.account.startsWith('69')) { d += r.soldeD; c += r.soldeC; }
@@ -133,7 +136,7 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   })();
   const repN = (() => {
     let d = 0, c = 0;
-    for (const r of rows) if (r.account.startsWith('79')) { d += r.soldeD; c += r.soldeC; }
+    for (const r of rows) if (r.account.startsWith('78') || r.account.startsWith('79')) { d += r.soldeD; c += r.soldeC; }
     return c - d;
   })();
   const caf = sig.resultat + dotN - repN;
@@ -163,15 +166,16 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   const caTTC = sig.ca * (1 + tauxTvaSortie);
   const dsoV = caTTC > 0 ? (creancesClients / caTTC) * periodDays : NaN;
 
-  // ── DPO : (Dettes fournisseurs TTC / Achats TTC) × 360 ──
-  // (P1-3) même logique TVA paramétrable que DSO ci-dessus.
-  // Achats RÉELS depuis la balance : 60 (achats marchandises/MP/non-stockés/EE)
-  //                                + 61 (transports), 62/63 (services ext.)
-  // Variations de stocks (603) exclues pour rester sur les achats consommés.
+  // ── DPO : (Dettes fournisseurs TTC / Achats TTC) × periodDays ──
+  // BUG FIX (audit) : achats STRICTS = compte 60 (achats consommés) hors 603
+  // (variations stocks). Les 61/62/63 sont des SERVICES extérieurs, pas des achats —
+  // les inclure gonflait le dénominateur et sous-estimait artificiellement le DPO.
+  // Pour DPO matière, on s'aligne sur les comptes fournisseurs (40x) qui ne
+  // matchent que les achats de biens consommés.
   const achatsHT = sumMoneyWhere(
     rows,
     (r) => r.soldeD - r.soldeC,
-    (r) => (r.account.startsWith('60') && !r.account.startsWith('603')) || r.account.startsWith('61') || r.account.startsWith('62') || r.account.startsWith('63'),
+    (r) => r.account.startsWith('60') && !r.account.startsWith('603'),
   );
   const tvaDeductible = sumMoneyWhere(rows, (r) => r.soldeD - r.soldeC, (r) => r.account.startsWith('445'));
   const tauxTvaEntreeRaw = achatsHT > 0 && tvaDeductible > 0 ? tvaDeductible / achatsHT : fallbackVat;
@@ -214,7 +218,10 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
     mk('LI', 'Liquidité immédiate', 'Liquidité', ratioVal(tresoActive, passifCirc + tresoPass), 'x', 'Trésorerie active / (Passif circ. + Trés. passive)', 0.3),
     mk('AF', 'Autonomie financière', 'Structure', ratioVal(capPropres, totalActif), 'ratio', 'Capitaux propres / Total passif', 0.5),
     mk('END', 'Endettement', 'Structure', ratioVal(dettesFin, capPropres), 'ratio', 'Dettes financières / Capitaux propres', 1.0, true),
-    mk('CAP_REMB', 'Capacité de remboursement', 'Structure', ratioVal(dettesFin, caf), 'x', 'Dettes financières / CAF', 4, true),
+    // BUG FIX (audit) : si CAF ≤ 0 (entreprise déficitaire ou avec perte de
+    // trésorerie), la capacité de remboursement est NaN (= "n.a." côté UI) plutôt
+    // qu'un nombre négatif ou ±∞ trompeur.
+    mk('CAP_REMB', 'Capacité de remboursement', 'Structure', caf > 0 ? ratioVal(dettesFin, caf) : NaN, 'x', 'Dettes financières / CAF', 4, true),
     { code: 'FR', label: 'Fonds de roulement (FR)', family: 'Structure', value: fr, unit: 'ratio', formula: 'Ressources stables − Actif immobilisé', target: 0, status: fr >= 0 ? 'good' : 'alert' },
     { code: 'BFR', label: 'Besoin en FR (BFR)', family: 'Structure', value: bfr, unit: 'ratio', formula: 'Stocks + Créances − Dettes exploitation', target: 0, status: 'good' },
     { code: 'TN', label: 'Trésorerie nette', family: 'Structure', value: tn, unit: 'ratio', formula: 'FR − BFR', target: 0, status: tn >= 0 ? 'good' : 'alert' },

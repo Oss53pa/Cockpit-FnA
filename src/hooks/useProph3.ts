@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../store/app';
 import { analyzeFinancials, askProph3, checkOllamaStatus } from '../engine/proph3/index';
 import type { Proph3Analysis, OllamaStatus } from '../engine/proph3/index';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/schema';
+import { useCloudData } from './useCloudData';
+import { dataProvider } from '../db/provider';
 
 export function useProph3() {
   const { currentOrgId, currentYear } = useApp();
@@ -14,7 +14,16 @@ export function useProph3() {
 
   useEffect(() => { checkOllamaStatus().then(setOllamaStatus); const i = setInterval(() => checkOllamaStatus().then(setOllamaStatus), 30_000); return () => clearInterval(i); }, []);
 
-  const glCount = useLiveQuery(() => db.gl.where('orgId').equals(currentOrgId).count(), [currentOrgId], 0);
+  // glCount — utilisé pour ne lancer l'analyse que s'il y a des données
+  const { data: glCount = 0 } = useCloudData(
+    async () => {
+      if (!currentOrgId) return 0;
+      const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
+      return entries.length;
+    },
+    [currentOrgId],
+    { initial: 0, tag: 'gl' },
+  );
 
   const analyze = useCallback(async () => {
     if (!currentOrgId) return; setLoading(true);
@@ -24,7 +33,7 @@ export function useProph3() {
   useEffect(() => { if (glCount > 0) analyze(); }, [glCount, analyze]);
 
   const ask = useCallback(async (q: string) => {
-    const org = await db.organizations.get(currentOrgId);
+    const org = await dataProvider.getOrganization(currentOrgId);
     return askProph3(q, analysis, org?.name, undefined, org?.currency);
   }, [currentOrgId, analysis]);
 

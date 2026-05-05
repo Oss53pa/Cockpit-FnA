@@ -26,11 +26,19 @@ export interface ChatMessage {
   content: string;
 }
 
+// Cache du dernier statut OK pour éviter le flapping (cf. aiClient.ts).
+let lastOllamaStatus: OllamaStatus | null = null;
+
 /** Vérifie si Ollama est disponible et liste les modèles installés */
 export async function checkOllama(): Promise<OllamaStatus> {
   try {
-    const res = await fetch(`${getBaseUrl()}/api/tags`, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return { available: false, models: [], selectedModel: null };
+    // Timeout 10s — supporte les cold starts d'Ollama.
+    const res = await fetch(`${getBaseUrl()}/api/tags`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) {
+      // Si on avait un statut OK avant, on garde l'affichage stable
+      if (lastOllamaStatus?.available) return lastOllamaStatus;
+      return { available: false, models: [], selectedModel: null };
+    }
     const data = await res.json();
     const models = (data.models ?? []).map((m: any) => ({
       name: m.name,
@@ -38,8 +46,12 @@ export async function checkOllama(): Promise<OllamaStatus> {
       modified_at: m.modified_at,
     }));
     const selected = localStorage.getItem('ollama-model') || models[0]?.name || null;
-    return { available: true, models, selectedModel: selected };
+    const status: OllamaStatus = { available: true, models, selectedModel: selected };
+    lastOllamaStatus = status;
+    return status;
   } catch {
+    // Tolérance échec transitoire si on était connecté juste avant
+    if (lastOllamaStatus?.available) return lastOllamaStatus;
     return { available: false, models: [], selectedModel: null };
   }
 }

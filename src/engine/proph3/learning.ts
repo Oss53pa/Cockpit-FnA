@@ -82,45 +82,153 @@ export interface LearningState {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Storage
+// Storage — Supabase (chiffré AES-GCM) + cache localStorage TTL 5 min
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// Architecture (post-audit) :
+//   - Source de vérité : table Supabase `fna_proph3_learning` (RLS par org_id).
+//   - Données chiffrées AES-GCM côté client (clé dérivée du user.id Supabase).
+//   - Cache en mémoire + localStorage pour latence, TTL 5 min.
+//   - Multi-device : tous les devices d'un user partagent la même ligne Supabase.
+//
+// API publique RESTE SYNCHRONE pour ne pas casser les ~20 callsites.
+// `loadLearningState(orgId)` async doit être appelé au moins UNE fois par session
+// pour rafraîchir le cache depuis Supabase. Les writes sont sync + persist async.
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { encryptJson, decryptJson } from '../../lib/proph3Crypto';
 
-const STORAGE_KEY = 'proph3t-learning';
+const CACHE_KEY = 'proph3t-learning-cache-v2';
+const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_PREDICTIONS = 1000;
 const MAX_PATTERNS = 100;
 
-function loadAll(): Record<string, LearningState> {
+interface CacheEntry { state: LearningState; loadedAt: number }
+const stateCache = new Map<string, CacheEntry>();
+
+function emptyState(orgId: string): LearningState {
+  return {
+    orgId, predictions: [], thresholds: {}, patterns: [],
+    accuracy: {}, lessonsLearned: [], totalIterations: 0, lastLearningRun: 0,
+  };
+}
+
+function loadLocalCache(): Record<string, CacheEntry> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    if (typeof localStorage === 'undefined') return {};
+    const raw = localStorage.getItem(CACHE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
-
-function saveAll(data: Record<string, LearningState>) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* ignore quota */ }
+function saveLocalCache(data: Record<string, CacheEntry>) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch { /* quota */ }
 }
 
-export function getLearningState(orgId: string): LearningState {
-  const all = loadAll();
-  if (!all[orgId]) {
-    all[orgId] = {
-      orgId,
-      predictions: [],
-      thresholds: {},
-      patterns: [],
-      accuracy: {},
-      lessonsLearned: [],
-      totalIterations: 0,
-      lastLearningRun: 0,
-    };
+async function getCryptoKeyId(): Promise<string | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id ?? null;
+  } catch { return null; }
+}
+
+async function fetchFromSupabase(orgId: string): Promise<LearningState | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const { data, error } = await (supabase as any)
+      .from('fna_proph3_learning')
+      .select('data, data_encrypted, iv')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (error || !data) return null;
+    if (data.data_encrypted && data.iv) {
+      const userId = await getCryptoKeyId();
+      if (userId) {
+        try {
+          return await decryptJson<LearningState>(userId, { data_encrypted: data.data_encrypted, iv: data.iv });
+        } catch (e) {
+          console.warn('[proph3 learning] Décryptage échoué:', e);
+        }
+      }
+    }
+    return (data.data as LearningState) ?? null;
+  } catch (e) {
+    console.warn('[proph3 learning] fetch failed:', e);
+    return null;
   }
-  return all[orgId];
+}
+
+async function persistToSupabase(state: LearningState): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  try {
+    const userId = await getCryptoKeyId();
+    let payload: { org_id: string; data?: any; data_encrypted?: string; iv?: string } = { org_id: state.orgId };
+    if (userId) {
+      const enc = await encryptJson(userId, state);
+      payload = { org_id: state.orgId, data: null, data_encrypted: enc.data_encrypted, iv: enc.iv };
+    } else {
+      payload = { org_id: state.orgId, data: state };
+    }
+    const { error } = await (supabase as any)
+      .from('fna_proph3_learning')
+      .upsert(payload, { onConflict: 'org_id' });
+    if (error) throw error;
+  } catch (e) {
+    console.warn('[proph3 learning] persist failed (non bloquant):', e);
+  }
+}
+
+/**
+ * Charge l'état Supabase dans le cache. À appeler au démarrage / changement d'org.
+ * Async — les opérations CRUD synchrones lisent ensuite le cache.
+ */
+export async function loadLearningState(orgId: string): Promise<LearningState> {
+  const inMem = stateCache.get(orgId);
+  if (inMem && (Date.now() - inMem.loadedAt) < CACHE_TTL_MS) return inMem.state;
+  const local = loadLocalCache();
+  const lsEntry = local[orgId];
+  if (lsEntry && (Date.now() - lsEntry.loadedAt) < CACHE_TTL_MS) {
+    stateCache.set(orgId, lsEntry);
+    return lsEntry.state;
+  }
+  const fetched = await fetchFromSupabase(orgId);
+  const state = fetched ?? emptyState(orgId);
+  const entry = { state, loadedAt: Date.now() };
+  stateCache.set(orgId, entry);
+  local[orgId] = entry;
+  saveLocalCache(local);
+  return state;
+}
+
+/**
+ * Lit l'état d'apprentissage depuis le cache (sync). Pour la première ouverture
+ * ou changement d'org, appelez `loadLearningState(orgId)` au préalable.
+ */
+export function getLearningState(orgId: string): LearningState {
+  const inMem = stateCache.get(orgId);
+  if (inMem) return inMem.state;
+  const local = loadLocalCache();
+  if (local[orgId]) {
+    stateCache.set(orgId, local[orgId]);
+    return local[orgId].state;
+  }
+  const empty = emptyState(orgId);
+  const entry = { state: empty, loadedAt: 0 };
+  stateCache.set(orgId, entry);
+  return empty;
 }
 
 function persist(state: LearningState) {
-  const all = loadAll();
-  all[state.orgId] = state;
-  saveAll(all);
+  // Met à jour les caches synchroement
+  const entry = { state, loadedAt: Date.now() };
+  stateCache.set(state.orgId, entry);
+  const local = loadLocalCache();
+  local[state.orgId] = entry;
+  saveLocalCache(local);
+  // Persiste vers Supabase en fire-and-forget (non bloquant)
+  persistToSupabase(state).catch(() => { /* logged dans persistToSupabase */ });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -182,26 +290,51 @@ export function resolvePrediction(orgId: string, predictionId: string, actualVal
 }
 
 /**
- * Auto-résolution : compare les prédictions échues à la valeur observée actuelle
- * passée en paramètre. Utile pour résoudre toutes les prédictions échues d'une
- * métrique donnée en une seule passe.
+ * Auto-résolution : compare les prédictions échues à la valeur observée actuelle.
+ *
+ * CORRECTION (audit) : la version précédente résolvait TOUTES les prédictions
+ * échues à la même valeur courante, peu importe à quel moment elles étaient
+ * supposées se réaliser. Une prédiction faite il y a 6 mois sur "CA fin
+ * d'exercice" était comparée au CA d'aujourd'hui — pas au CA réel de la date
+ * cible. Le MAPE était donc fictif.
+ *
+ * Maintenant : on ne résout que les prédictions dont `targetDate` tombe dans
+ * une fenêtre étroite [now - WINDOW_MS, now + WINDOW_MS] (par défaut ±7 jours).
+ * Au-delà, la prédiction est marquée `expired` et exclue du calcul d'accuracy.
+ * Pour les prédictions antérieures à la fenêtre, l'apprentissage requiert un
+ * snapshot historique daté (à venir : table `proph3_metric_snapshots`).
  */
+const RESOLVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // ±7 jours autour de targetDate
+
 export function autoResolveMetric(orgId: string, metric: string, currentValue: number): number {
   const state = getLearningState(orgId);
   const now = Date.now();
   let resolvedCount = 0;
+  let expiredCount = 0;
   for (const p of state.predictions) {
-    if (p.metric === metric && !p.resolved && p.targetDate <= now) {
-      p.actualValue = currentValue;
-      p.actualAt = now;
-      p.errorPct = Math.abs(currentValue) > 0.01
-        ? Math.abs((p.predictedValue - currentValue) / currentValue) * 100
-        : Math.abs(p.predictedValue - currentValue);
+    if (p.metric !== metric || p.resolved) continue;
+    if (p.targetDate > now + RESOLVE_WINDOW_MS) continue; // pas encore due
+    const ageSinceTarget = now - p.targetDate;
+    if (ageSinceTarget > RESOLVE_WINDOW_MS) {
+      // Échue depuis trop longtemps : on l'expire (sans calcul d'erreur,
+      // car la valeur courante n'est plus comparable à la valeur attendue à targetDate).
       p.resolved = true;
-      resolvedCount++;
+      p.actualAt = now;
+      // errorPct laissé undefined → exclu du MAPE
+      expiredCount++;
+      continue;
     }
+    // Dans la fenêtre [targetDate - 7j, targetDate + 7j] : la valeur courante
+    // est une bonne approximation de la valeur réelle au targetDate.
+    p.actualValue = currentValue;
+    p.actualAt = now;
+    p.errorPct = Math.abs(currentValue) > 0.01
+      ? Math.abs((p.predictedValue - currentValue) / currentValue) * 100
+      : Math.abs(p.predictedValue - currentValue);
+    p.resolved = true;
+    resolvedCount++;
   }
-  if (resolvedCount > 0) {
+  if (resolvedCount > 0 || expiredCount > 0) {
     updateModelAccuracy(state, metric);
     persist(state);
   }
@@ -209,22 +342,37 @@ export function autoResolveMetric(orgId: string, metric: string, currentValue: n
 }
 
 function updateModelAccuracy(state: LearningState, metric: string) {
+  // CORRECTION (audit) : on ne prend QUE les prédictions résolues AVEC errorPct
+  // défini (les prédictions expirées hors fenêtre sont exclues).
   const resolved = state.predictions.filter((p) => p.metric === metric && p.resolved && p.errorPct !== undefined);
   if (resolved.length === 0) return;
 
   const errors = resolved.map((p) => p.errorPct!);
-  const mae = errors.reduce((s, e) => s + e, 0) / errors.length;
   const totalPredictions = state.predictions.filter((p) => p.metric === metric).length;
+
+  // CORRECTION (audit) : MAE et MAPE sont DEUX métriques différentes :
+  //   - MAE (Mean Absolute Error) en unité métier (XOF) = mean(|predicted - actual|)
+  //   - MAPE (Mean Absolute Percentage Error) en % = mean(|predicted - actual| / |actual|) × 100
+  // L'ancienne implémentation copiait `mae` (qui était déjà en %) dans les deux
+  // champs — incohérent. On calcule maintenant les deux séparément.
+  const absErrors = resolved.map((p) => Math.abs(p.predictedValue - (p.actualValue ?? 0)));
+  const mae = absErrors.reduce((s, e) => s + e, 0) / absErrors.length;
+  const mape = errors.reduce((s, e) => s + e, 0) / errors.length;
 
   // Bias : moyenne des écarts signés (positif = surestimation)
   const signedErrors = resolved.map((p) => ((p.predictedValue - (p.actualValue ?? 0)) / Math.max(Math.abs(p.actualValue ?? 1), 1)) * 100);
   const bias = signedErrors.reduce((s, e) => s + e, 0) / signedErrors.length;
 
-  // Reliability : 100 - MAPE clampé, pondéré par taille échantillon
-  const sampleWeight = Math.min(1, resolved.length / 10);
-  const reliability = Math.max(0, Math.min(100, (100 - mae) * sampleWeight + 50 * (1 - sampleWeight)));
+  // CORRECTION (audit) : Reliability = (100 - MAPE) clampé entre 0 et 100,
+  // pondéré par taille d'échantillon vers une moyenne neutre de 50.
+  // L'ancienne formule mélangeait MAE (en unités) avec un prior 50 — non sens.
+  // Nouvelle formule : `(100 - mape) × sampleWeight + 50 × (1 - sampleWeight)`
+  // où sampleWeight croît jusqu'à 1 quand on a ≥ 30 résolutions.
+  const sampleWeight = Math.min(1, resolved.length / 30);
+  const baseScore = Math.max(0, Math.min(100, 100 - mape));
+  const reliability = Math.round(baseScore * sampleWeight + 50 * (1 - sampleWeight));
 
-  // Trend : comparer 5 dernières erreurs vs 5 précédentes
+  // Trend : comparer 3 dernières MAPE vs 3 précédentes
   let trend: ModelAccuracy['trend'] = 'stable';
   if (resolved.length >= 6) {
     const recent = errors.slice(-3).reduce((s, e) => s + e, 0) / 3;
@@ -237,10 +385,10 @@ function updateModelAccuracy(state: LearningState, metric: string) {
     metric,
     totalPredictions,
     resolvedPredictions: resolved.length,
-    meanAbsoluteError: mae,
-    meanAbsolutePctError: mae,
-    bias,
-    reliability: Math.round(reliability),
+    meanAbsoluteError: Math.round(mae),
+    meanAbsolutePctError: Math.round(mape * 100) / 100,
+    bias: Math.round(bias * 100) / 100,
+    reliability,
     trend,
     lastEval: Date.now(),
   };
@@ -380,8 +528,15 @@ export function detectRecurringPatterns(
     });
   }
 
-  // 4b. Alertes répétées — métrique en alerte ≥ 3 fois sur les 12 derniers
-  const recentAlerts = observations.filter((o) => o.severity === 'critical' || o.severity === 'warn');
+  // 4b. Alertes répétées — métrique en alerte ≥ 3 fois sur les 12 DERNIERS MOIS.
+  // CORRECTION (audit) : avant on prenait toutes les observations historiques
+  // sans filtre temporel, donc des orgs avec 5 ans d'historique cumulaient des
+  // alertes anciennes non significatives. Maintenant fenêtre glissante 12 mois.
+  const ALERT_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
+  const cutoffAlerts = Date.now() - ALERT_WINDOW_MS;
+  const recentAlerts = observations.filter((o) =>
+    (o.severity === 'critical' || o.severity === 'warn') && o.date >= cutoffAlerts,
+  );
   const alertCount = new Map<string, number>();
   for (const a of recentAlerts) alertCount.set(a.metric, (alertCount.get(a.metric) ?? 0) + 1);
   for (const [metric, count] of alertCount) {
@@ -566,7 +721,14 @@ export function runLearningCycle(
 // Reset (utile en debug ou pour repartir à zéro)
 // ═══════════════════════════════════════════════════════════════════════════
 export function clearLearning(orgId: string) {
-  const all = loadAll();
-  delete all[orgId];
-  saveAll(all);
+  // Vide les caches sync
+  stateCache.delete(orgId);
+  const local = loadLocalCache();
+  delete local[orgId];
+  saveLocalCache(local);
+  // Supprime la ligne Supabase (fire-and-forget)
+  if (isSupabaseConfigured) {
+    (supabase as any).from('fna_proph3_learning').delete().eq('org_id', orgId)
+      .catch?.((e: any) => console.warn('[proph3 learning] clearLearning Supabase failed:', e));
+  }
 }

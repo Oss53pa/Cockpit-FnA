@@ -15,13 +15,13 @@
  *  - Threads (réponses)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Send, Hash, Lock, MessageCircle, Users, Plus, X, Search,
   Smile, Reply, Pin, Settings as SettingsIcon, AtSign, ChevronDown,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { useApp } from '../store/app';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -62,16 +62,15 @@ export default function Chat() {
   const me = useMemo(() => getCurrentUser(), []);
   const orgUsers = useMemo(() => loadUsers(), []);
 
-  // ── Init DB + channel #général (écriture HORS liveQuery) ──
+  // ── Init channel #général ──
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   useEffect(() => {
     if (!currentOrgId) return;
     (async () => {
       try {
-        await db.open();
-        // Écriture en dehors de liveQuery (ReadOnlyError sinon)
         await getOrCreateGeneralChannel(currentOrgId, me.id);
+        invalidateCloudData('chat');
         setDbReady(true);
       } catch (e: any) {
         console.error('[Chat] Init error:', e);
@@ -80,15 +79,11 @@ export default function Chat() {
     })();
   }, [currentOrgId, me.id]);
 
-  // Lecture seule dans liveQuery (pas d'écriture !)
-  const channels = useLiveQuery(
-    async () => {
-      if (!currentOrgId || !dbReady) return [];
-      return await listChannels(currentOrgId, me.id);
-    },
+  const { data: channels = [] } = useCloudData(
+    async () => currentOrgId && dbReady ? await listChannels(currentOrgId, me.id) : [],
     [currentOrgId, me.id, dbReady],
-    [],
-  ) ?? [];
+    { initial: [], tag: 'chat' },
+  );
 
   // ── Sélectionne le 1er channel par défaut ──
   useEffect(() => {
@@ -97,28 +92,23 @@ export default function Chat() {
     }
   }, [channels, activeChannelId]);
 
-  // ── Messages du channel actif (live) ──
-  const messages = useLiveQuery(
+  // ── Messages du channel actif ──
+  const { data: messages = [] } = useCloudData(
     async () => {
       if (!activeChannelId || !dbReady) return [];
-      const msgs = await db.chatMessages
-        .where('channelId').equals(activeChannelId)
-        .toArray();
-      return msgs.sort((a, b) => a.createdAt - b.createdAt);
+      const msgs = await dataProvider.getChatMessagesByChannel(activeChannelId);
+      return [...msgs].sort((a, b) => a.createdAt - b.createdAt);
     },
     [activeChannelId, dbReady],
-    [],
-  ) ?? [];
+    { initial: [], tag: 'chat' },
+  );
 
-  // ── Compteurs unread (live) ──
-  const unreadCounts = useLiveQuery(
-    async () => {
-      if (!currentOrgId || !dbReady) return {};
-      return await getUnreadCount(currentOrgId, me.id);
-    },
+  // ── Compteurs unread ──
+  const { data: unreadCounts = {} } = useCloudData(
+    async () => currentOrgId && dbReady ? await getUnreadCount(currentOrgId, me.id) : {},
     [currentOrgId, me.id, messages.length, dbReady],
-    {},
-  ) ?? {};
+    { initial: {}, tag: 'chat' },
+  );
 
   // ── Marque le channel comme lu quand on l'ouvre ou quand de nouveaux messages arrivent ──
   useEffect(() => {
@@ -147,6 +137,7 @@ export default function Chat() {
       mentions: mentions.length > 0 ? mentions : undefined,
       replyTo: replyTo?.id,
     });
+    invalidateCloudData('chat');
     setComposerValue('');
     setReplyTo(null);
     composerRef.current?.focus();
@@ -310,13 +301,13 @@ export default function Chat() {
                       previousMessage={i > 0 ? messages[i - 1] : null}
                       isOwn={m.userId === me.id}
                       currentUserId={me.id}
-                      onReact={async (emoji) => { if (m.id) { await toggleReaction(m.id, emoji, me.id); } }}
+                      onReact={async (emoji) => { if (m.id) { await toggleReaction(m.id, emoji, me.id); invalidateCloudData('chat'); } }}
                       onReply={() => setReplyTo({ id: m.id!, content: m.content, userName: m.userName })}
                       onDelete={async () => {
                         if (!m.id) return;
                         if (!confirm('Supprimer ce message ?')) return;
                         const ok = await deleteMessage(m.id, me.id);
-                        if (ok) toast.success('Message supprimé');
+                        if (ok) { invalidateCloudData('chat'); toast.success('Message supprimé'); }
                       }}
                     />
                   ))

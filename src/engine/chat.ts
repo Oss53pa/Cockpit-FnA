@@ -1,7 +1,8 @@
 /**
  * Chat interne — moteur de messagerie entre collaborateurs.
  *
- * - Stockage Dexie (local-first) avec sync Supabase optionnelle
+ * Source de données : Supabase via dataProvider (obligatoire).
+ *
  * - Channels publics / privés / DM 1:1
  * - Mentions @user + réactions emoji
  * - Indicateurs lus/non-lus par utilisateur
@@ -14,11 +15,12 @@
  *   getUnreadCount(orgId, userId) -> Record<channelId, number>
  *   addReaction(messageId, emoji, userId)
  */
-import { db, type Channel, type ChatMessage } from '../db/schema';
+import type { Channel, ChatMessage } from '../db/schema';
+import { dataProvider } from '../db/provider';
 
 /** Récupère ou crée le channel public #général d'une société. */
 export async function getOrCreateGeneralChannel(orgId: string, currentUserId: string): Promise<Channel> {
-  const existing = await db.channels.where({ orgId, name: 'général' }).first();
+  const existing = await dataProvider.findChannel(orgId, (c) => c.name === 'général');
   if (existing) return existing;
 
   const channel: Channel = {
@@ -31,8 +33,7 @@ export async function getOrCreateGeneralChannel(orgId: string, currentUserId: st
     createdAt: Date.now(),
     isPinned: true,
   };
-  await db.channels.add(channel);
-  void import('./chatSync').then(({ pushChannelToCloud }) => pushChannelToCloud(channel)).catch(() => { /* ignore */ });
+  await dataProvider.upsertChannel(channel);
   return channel;
 }
 
@@ -51,17 +52,15 @@ export async function createChannel(
     description, createdBy, createdAt: Date.now(),
     members: kind === 'private' ? members : undefined,
   };
-  await db.channels.add(channel);
-  void import('./chatSync').then(({ pushChannelToCloud }) => pushChannelToCloud(channel)).catch(() => { /* ignore */ });
+  await dataProvider.upsertChannel(channel);
   return channel;
 }
 
 /** Crée ou retourne un DM 1:1 entre deux utilisateurs. */
 export async function getOrCreateDM(orgId: string, userA: string, userB: string): Promise<Channel> {
-  // ID déterministe (tri alphabétique pour que A→B et B→A donnent le même)
   const sorted = [userA, userB].sort();
   const id = `dm-${orgId}-${sorted[0]}-${sorted[1]}`;
-  const existing = await db.channels.get(id);
+  const existing = await dataProvider.getChannel(id);
   if (existing) return existing;
 
   const channel: Channel = {
@@ -71,18 +70,16 @@ export async function getOrCreateDM(orgId: string, userA: string, userB: string)
     createdBy: userA,
     createdAt: Date.now(),
   };
-  await db.channels.add(channel);
-  void import('./chatSync').then(({ pushChannelToCloud }) => pushChannelToCloud(channel)).catch(() => { /* ignore */ });
+  await dataProvider.upsertChannel(channel);
   return channel;
 }
 
 /** Liste les channels accessibles à un utilisateur dans une société. */
 export async function listChannels(orgId: string, userId: string): Promise<Channel[]> {
-  const all = await db.channels.where('orgId').equals(orgId).toArray();
+  const all = await dataProvider.getChannels(orgId);
   return all
     .filter((c) => c.kind === 'public' || c.members?.includes(userId))
     .sort((a, b) => {
-      // Pinned d'abord, puis par dernière activité (créationAt par défaut)
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt);
     });
@@ -99,7 +96,7 @@ export async function sendMessage(params: {
   replyTo?: number;
   attachment?: ChatMessage['attachment'];
 }): Promise<number> {
-  const msg: ChatMessage = {
+  const msg: Omit<ChatMessage, 'id'> = {
     orgId: params.orgId,
     channelId: params.channelId,
     userId: params.userId,
@@ -108,35 +105,26 @@ export async function sendMessage(params: {
     mentions: params.mentions,
     replyTo: params.replyTo,
     attachment: params.attachment,
-    readBy: [params.userId], // l'auteur est marqué comme lu d'office
+    readBy: [params.userId],
     createdAt: Date.now(),
   };
-  const id = await db.chatMessages.add(msg);
+  const id = await dataProvider.addChatMessage(msg);
   // Met à jour updatedAt du channel pour le tri
-  await db.channels.update(params.channelId, { updatedAt: Date.now() });
-  // Sync cloud (fire-and-forget — n'attend pas)
-  void (async () => {
-    try {
-      const { pushMessageToCloud } = await import('./chatSync');
-      await pushMessageToCloud({ ...msg, id: id as number });
-    } catch { /* ignore */ }
-  })();
-  return id as number;
+  const channel = await dataProvider.getChannel(params.channelId);
+  if (channel) await dataProvider.upsertChannel({ ...channel, updatedAt: Date.now() });
+  return id;
 }
 
-/** Récupère les messages d'un channel (les plus récents en premier). */
+/** Récupère les messages d'un channel (ordre chronologique, dernier limit). */
 export async function getMessages(channelId: string, limit = 100): Promise<ChatMessage[]> {
-  const messages = await db.chatMessages
-    .where('channelId').equals(channelId)
-    .reverse()
-    .limit(limit)
-    .toArray();
-  return messages.reverse(); // ordre chronologique pour l'affichage
+  const all = await dataProvider.getChatMessagesByChannel(channelId);
+  // Garder les `limit` derniers, ordre chronologique
+  return all.slice(Math.max(0, all.length - limit));
 }
 
 /** Marque tous les messages d'un channel comme lus pour un utilisateur. */
 export async function markChannelRead(channelId: string, userId: string): Promise<void> {
-  const messages = await db.chatMessages.where('channelId').equals(channelId).toArray();
+  const messages = await dataProvider.getChatMessagesByChannel(channelId);
   const updates = messages
     .filter((m) => !m.readBy?.includes(userId))
     .map((m) => ({
@@ -144,16 +132,16 @@ export async function markChannelRead(channelId: string, userId: string): Promis
       readBy: [...(m.readBy ?? []), userId],
     }));
   for (const u of updates) {
-    await db.chatMessages.update(u.id, { readBy: u.readBy });
+    await dataProvider.updateChatMessage(u.id, { readBy: u.readBy });
   }
 }
 
 /** Compte les messages non-lus par channel pour un utilisateur. */
 export async function getUnreadCount(orgId: string, userId: string): Promise<Record<string, number>> {
-  const messages = await db.chatMessages.where('orgId').equals(orgId).toArray();
+  const messages = await dataProvider.getChatMessagesByOrg(orgId);
   const counts: Record<string, number> = {};
   for (const m of messages) {
-    if (m.userId === userId) continue; // l'utilisateur ne se compte pas comme non-lu pour ses propres messages
+    if (m.userId === userId) continue;
     if (m.readBy?.includes(userId)) continue;
     counts[m.channelId] = (counts[m.channelId] ?? 0) + 1;
   }
@@ -168,7 +156,7 @@ export async function getTotalUnread(orgId: string, userId: string): Promise<num
 
 /** Ajoute / retire une réaction emoji sur un message. */
 export async function toggleReaction(messageId: number, emoji: string, userId: string): Promise<void> {
-  const msg = await db.chatMessages.get(messageId);
+  const msg = await dataProvider.getChatMessage(messageId);
   if (!msg) return;
   const reactions = { ...(msg.reactions ?? {}) };
   const users = reactions[emoji] ?? [];
@@ -178,30 +166,23 @@ export async function toggleReaction(messageId: number, emoji: string, userId: s
   } else {
     reactions[emoji] = [...users, userId];
   }
-  await db.chatMessages.update(messageId, { reactions });
-  void import('./chatSync').then(({ updateMessageInCloud }) =>
-    updateMessageInCloud(messageId, { reactions })).catch(() => { /* ignore */ });
+  await dataProvider.updateChatMessage(messageId, { reactions });
 }
 
 /** Edite le contenu d'un message (uniquement par l'auteur). */
 export async function editMessage(messageId: number, userId: string, newContent: string): Promise<boolean> {
-  const msg = await db.chatMessages.get(messageId);
+  const msg = await dataProvider.getChatMessage(messageId);
   if (!msg || msg.userId !== userId) return false;
   const editedAt = Date.now();
-  await db.chatMessages.update(messageId, { content: newContent, editedAt });
-  void import('./chatSync').then(({ updateMessageInCloud }) =>
-    updateMessageInCloud(messageId, { content: newContent, editedAt })).catch(() => { /* ignore */ });
+  await dataProvider.updateChatMessage(messageId, { content: newContent, editedAt });
   return true;
 }
 
 /** Supprime un message (uniquement par l'auteur). */
 export async function deleteMessage(messageId: number, userId: string): Promise<boolean> {
-  const msg = await db.chatMessages.get(messageId);
+  const msg = await dataProvider.getChatMessage(messageId);
   if (!msg || msg.userId !== userId) return false;
-  // Sync cloud AVANT suppression locale (pour avoir encore la ligne en BDD au moment du push)
-  await import('./chatSync').then(({ deleteMessageFromCloud }) =>
-    deleteMessageFromCloud(messageId)).catch(() => { /* ignore */ });
-  await db.chatMessages.delete(messageId);
+  await dataProvider.deleteChatMessage(messageId);
   return true;
 }
 

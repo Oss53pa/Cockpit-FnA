@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Hash, HelpCircle, Lock, LogOut, Menu, Settings, ChevronDown, Search, LogIn } from 'lucide-react';
 import { useApp } from '../../store/app';
 import { useBalance, useImportsHistory, useOrganizations, usePeriods, useRatios } from '../../hooks/useFinancials';
-import { db } from '../../db/schema';
+import { useCloudData } from '../../hooks/useCloudData';
+import { dataProvider } from '../../db/provider';
 import { HelpModal } from '../ui/HelpModal';
 import { PaletteSwitcher } from './PaletteSwitcher';
 import { toast } from '../ui/Toast';
@@ -15,10 +15,11 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const glImports = useImportsHistory(currentOrgId, 'GL');
   const orgs = useOrganizations();
   const allPeriods = usePeriods(currentOrgId);
-  const fiscalYears = useLiveQuery(
-    () => (currentOrgId ? db.fiscalYears.where('orgId').equals(currentOrgId).toArray() : Promise.resolve([] as Array<{ year: number }>)),
-    [currentOrgId], [] as Array<{ year: number }>,
-  ) ?? [];
+  const { data: fiscalYears = [] } = useCloudData(
+    () => currentOrgId ? dataProvider.getFiscalYears(currentOrgId) : Promise.resolve([] as Array<{ year: number }>),
+    [currentOrgId],
+    { initial: [] as Array<{ year: number }>, tag: 'fiscalYears' },
+  );
   const periods = allPeriods.filter((p) => p.year === currentYear && p.month >= 1);
   const yearsSet = new Set<number>([
     ...allPeriods.map((p) => p.year),

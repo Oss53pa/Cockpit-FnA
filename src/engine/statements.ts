@@ -12,6 +12,24 @@ export type Line = {
   accountCodes?: string;   // codes comptables sources (ex : "20", "21, 281", "411-418")
 };
 
+/**
+ * Diagnostic d'un compte responsable d'un écart de bilan.
+ * Permet à l'utilisateur d'identifier la source du déséquilibre et d'agir.
+ */
+export type UnclassifiedAccount = {
+  account: string;
+  label: string;
+  solde: number;
+  /** Catégorie de l'anomalie : explique POURQUOI ce compte crée un écart. */
+  reason:
+    | 'gestion_with_an'        // compte 6/7/8 avec solde non nul = à-nouveau erroné
+    | 'sign_inverted_amort'    // 28x ou 29x avec solde débiteur (anormal)
+    | 'sign_inverted_provision'// 49x avec solde débiteur (anormal)
+    | 'unmapped_account'       // compte qui ne match aucun préfixe SYSCOHADA connu
+    | 'partial_an';            // compte 1-5 avec à-nouveau partiel (debit ≠ credit dans la même balance)
+  hint: string;                // message d'aide affiché à l'utilisateur
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BILAN — format SYSCOHADA
 // Les comptes de charges/produits (classe 6,7,8) et de capitaux propres (10-15)
@@ -27,7 +45,85 @@ export type Line = {
  *                    reports à nouveau déjà passés en réserves.
  *                    Si absent, le résultat est calculé sur `rows`.
  */
-export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { actif: Line[]; passif: Line[]; totalActif: number; totalPassif: number } {
+/**
+ * Détecte les comptes qui contribuent à un écart de bilan, avec catégorisation
+ * de la cause probable. Permet à l'utilisateur d'identifier QUOI corriger
+ * dans son Grand Livre source (ERP) ou via la page Plan Comptable.
+ */
+export function findUnclassifiedAccounts(rows: BalanceRow[]): UnclassifiedAccount[] {
+  const result: UnclassifiedAccount[] = [];
+  const SYSCO_KNOWN_PREFIXES = [
+    '10','11','12','13','14','15','16','17','18','19',  // capitaux & dettes financières
+    '20','21','22','23','24','25','26','27','28','29',  // immobilisations + amorts
+    '31','32','33','34','35','36','37','38','39',       // stocks
+    '40','41','42','43','44','45','46','47','48','49',  // tiers
+    '50','51','52','53','54','55','56','57','58','59',  // trésorerie
+  ];
+
+  for (const r of rows) {
+    if (Math.abs(r.solde) < 1) continue; // ignorer les soldes nuls
+    const code = r.account;
+    const c0 = code[0];
+
+    // Cas 1 : Comptes de gestion (classes 6/7/8) avec à-nouveau erroné.
+    // SYSCOHADA art. 38 : les charges/produits sont SOLDÉS à la clôture et
+    // affectés au résultat. Un solde non nul après import = RAN incorrect.
+    if (c0 === '6' || c0 === '7' || c0 === '8') {
+      const cls = c0 === '6' ? 'charges' : c0 === '7' ? 'produits' : 'HAO/impôts';
+      result.push({
+        account: code,
+        label: r.label,
+        solde: r.solde,
+        reason: 'gestion_with_an',
+        hint: `Compte ${cls} avec à-nouveau de ${r.solde >= 0 ? '+' : ''}${Math.round(r.solde).toLocaleString('fr-FR')}. Les comptes 6/7/8 doivent être soldés à la clôture (SYSCOHADA art. 38). Ré-importez le GL sans les RAN sur classes 6/7/8.`,
+      });
+      continue;
+    }
+
+    // Cas 2 : Amortissements (28x/29x) avec solde DÉBITEUR (anormal).
+    // Les amortissements cumulés sont des comptes correcteurs créditeurs.
+    if ((code.startsWith('28') || code.startsWith('29')) && r.soldeD > r.soldeC) {
+      result.push({
+        account: code,
+        label: r.label,
+        solde: r.solde,
+        reason: 'sign_inverted_amort',
+        hint: `Amortissement à solde débiteur (${Math.round(r.soldeD).toLocaleString('fr-FR')}). Anormal — les comptes 28x/29x doivent être créditeurs. Vérifiez les écritures de dotation/reprise.`,
+      });
+      continue;
+    }
+
+    // Cas 3 : Provisions sur tiers (49x) avec solde DÉBITEUR (anormal).
+    if (code.startsWith('49') && r.soldeD > r.soldeC) {
+      result.push({
+        account: code,
+        label: r.label,
+        solde: r.solde,
+        reason: 'sign_inverted_provision',
+        hint: `Provision sur tiers à solde débiteur (${Math.round(r.soldeD).toLocaleString('fr-FR')}). Anormal — les provisions sont créditrices.`,
+      });
+      continue;
+    }
+
+    // Cas 4 : Compte hors mapping SYSCOHADA (commence par 0 ou 9, ou code étrange).
+    const prefix2 = code.substring(0, 2);
+    if (!SYSCO_KNOWN_PREFIXES.includes(prefix2)) {
+      result.push({
+        account: code,
+        label: r.label,
+        solde: r.solde,
+        reason: 'unmapped_account',
+        hint: `Compte hors plan SYSCOHADA (${prefix2}xxx). Solde de ${Math.round(r.solde).toLocaleString('fr-FR')}. Vérifiez le mapping dans la page Plan Comptable, ou supprimez ce compte technique.`,
+      });
+      continue;
+    }
+  }
+
+  // Tri par valeur absolue décroissante : les plus gros écarts en haut
+  return result.sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
+}
+
+export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { actif: Line[]; passif: Line[]; totalActif: number; totalPassif: number; unclassifiedAccounts: UnclassifiedAccount[] } {
   // Fonctions d'aide : solde D positif pour actif, solde C positif pour passif.
   // Utilise sumMoneyWhere (Money interne, bigint) pour éviter les erreurs
   // d'arrondi flottant sur les cumuls de balances volumineuses (1M+ écritures).
@@ -51,16 +147,14 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   // ── ACTIF ──────────────────────────────────────────────────────────
   // Approche par solde net : chaque compte de classes 2-5 apparaît UNE SEULE FOIS
   // soit à l'actif (soldeD) soit au passif (soldeC), jamais les deux.
-  const actifImmoBrut_Incorp = soldeD('20', '21');
-  const actifImmoBrut_Corp   = soldeD('22', '23', '24', '25');
-  const actifImmoBrut_Fin    = soldeD('26', '27');
-  // Comptes de classe 1 à solde DÉBITEUR (cas atypiques mais doivent être en actif) :
-  //   109 = Actionnaires, capital souscrit non appelé
-  //   169 = Primes de remboursement des obligations à amortir
+  // BUG FIX (audit) : 109 (Capital souscrit non appelé) et 169 (Primes de
+  // remboursement des obligations) sont placés sur une LIGNE DÉDIÉE 'AB' (juste
+  // avant l'actif immobilisé) — c'est la convention SYSCOHADA art. 38. L'ancienne
+  // version les ajoutait dans `immoNet` mais PAS dans le détail AD+AE+AF+AG,
+  // créant un désaccord visuel `_AZ ≠ ΣAD..AG`.
   const capitalNonAppele = soldeD('109');
   const primesRemb       = soldeD('169');
-  const amorts = soldeC('28', '29'); // amortissements cumulés = créditeurs
-  const immoNet = actifImmoBrut_Incorp + actifImmoBrut_Corp + actifImmoBrut_Fin + capitalNonAppele + primesRemb - amorts;
+  const ab               = capitalNonAppele + primesRemb;
 
   const stocks = soldeD('31', '32', '33', '34', '35', '36', '37', '38') - soldeC('39');
   // Créances clients NETTES = 411/412/413/414/415/416/418 BRUT − provisions 491
@@ -71,7 +165,9 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   //   498 = provisions sur risques d'organismes financiers
   const provClients = soldeC('491');
   const provFourn = soldeC('492');
-  const provAutres = soldeC('493', '494', '495', '496', '497', '498');
+  // BUG FIX (audit) : '497' n'existe pas en SYSCOHADA révisé 2017.
+  // Comptes officiels : 491 (clients), 492 (fourn.), 493 (autres), 494, 495, 496, 498.
+  const provAutres = soldeC('493', '494', '495', '496', '498');
   const creancesClients = soldeD('41') - provClients;
   // Autres créances : classes 40, 42-48 à solde débiteur, NET des provisions
   // applicables (492 sur fournisseurs débiteurs + 493-498 sur autres tiers).
@@ -97,10 +193,18 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
     }
   }
 
-  const totalActifImmo = immoNet;
+  // BUG FIX (audit) : `_AZ` doit STRICTEMENT égaler la somme des lignes affichées
+  // AD + AE + AF + AG (sans 109/169 qui sont sur la ligne 'AB' séparée).
+  const ad = soldeD('20');
+  const ae = soldeD('21') - soldeC('281');
+  const af = soldeD('22','23','24','25') - soldeC('282','283','284','285');
+  const ag = soldeD('26','27') - soldeC('29');
+  const totalActifImmo = ad + ae + af + ag;
   const totalActifCirc = stocks + creancesClients + autresCreances;
   const totalTreso = tresoActive;
-  let totalActif = totalActifImmo + totalActifCirc + totalTreso;
+  // AB (capital non appelé + primes de remboursement) compté dans le total général
+  // mais affiché en ligne séparée avant l'actif immobilisé.
+  let totalActif = ab + totalActifImmo + totalActifCirc + totalTreso;
 
   // (P1-1) Décomposition AE/AF/AG harmonisée :
   //   AE (incorp.)  : classe 21 − amortissements 281
@@ -110,10 +214,12 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   // exactement les mêmes amortissements/provisions, ventilés par nature d'immobilisation.
   // SYSCOHADA art. 38 — Plan comptable révisé 2017.
   const actif: Line[] = [
-    { code: 'AD', label: 'Charges immobilisées', value: soldeD('20'), indent: 1, accountCodes: '20' },
-    { code: 'AE', label: 'Immobilisations incorporelles', value: soldeD('21') - soldeC('281'), indent: 1, accountCodes: '21 − 281' },
-    { code: 'AF', label: 'Immobilisations corporelles', value: soldeD('22','23','24','25') - soldeC('282','283','284','285'), indent: 1, accountCodes: '22-25 − 282-285' },
-    { code: 'AG', label: 'Immobilisations financières', value: soldeD('26','27') - soldeC('29'), indent: 1, accountCodes: '26, 27 − 29' },
+    // AB est affiché uniquement si non nul (cas atypique)
+    ...(Math.abs(ab) > 0.5 ? [{ code: 'AB', label: 'Capital souscrit non appelé', value: ab, indent: 1, accountCodes: '109, 169' }] : []),
+    { code: 'AD', label: 'Charges immobilisées', value: ad, indent: 1, accountCodes: '20' },
+    { code: 'AE', label: 'Immobilisations incorporelles', value: ae, indent: 1, accountCodes: '21 − 281' },
+    { code: 'AF', label: 'Immobilisations corporelles', value: af, indent: 1, accountCodes: '22-25 − 282-285' },
+    { code: 'AG', label: 'Immobilisations financières', value: ag, indent: 1, accountCodes: '26, 27 − 29' },
     { code: '_AZ', label: 'TOTAL ACTIF IMMOBILISÉ', value: totalActifImmo, total: true, accountCodes: '20 à 29' },
     { code: 'BA', label: 'Actif circulant HAO', value: soldeD('485'), indent: 1, accountCodes: '485' },
     { code: 'BB', label: 'Stocks et en-cours', value: stocks, indent: 1, accountCodes: '31-38 − 39' },
@@ -168,32 +274,37 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
     { code: 'DV', label: 'Trésorerie - Passif (concours bancaires)', value: tresoPass, indent: 1, accountCodes: '56' },
   ];
 
-  // ─── ÉQUILIBRAGE FORCÉ DU BILAN ─────────────────────────────────────
+  // ─── DIAGNOSTIC D'ÉQUILIBRE DU BILAN ────────────────────────────────
   // En partie double, Σ(soldeD − soldeC) = 0 sur toutes les écritures donc
-  // Total Actif = Total Passif. Si écart, c'est qu'un compte n'a pas été pris
-  // dans nos catégories (mapping incomplet, comptes exotiques, écritures
-  // déséquilibrées, AN sur classes 6/7/8). On l'AJOUTE explicitement comme
-  // ligne d'écart pour garantir l'équilibre visuel + signaler l'anomalie.
+  // Total Actif = Total Passif. Si écart il y a, c'est qu'au moins UNE des
+  // sources suivantes existe :
+  //   1. Pièces du GL déséquilibrées (sum_debit ≠ sum_credit) — cas le plus
+  //      fréquent : RAN exportés par l'ERP source sans équilibrage propre.
+  //   2. Comptes de classe 1-5 non capturés par nos préfixes (cas marginal,
+  //      indique un mapping plan comptable incomplet).
+  //   3. Écritures sur classes 6/7/8 mal classées comme à-nouveaux.
+  // On AJOUTE une ligne d'écart explicite pour rendre l'anomalie visible —
+  // mais le label dit clairement « écart à analyser », pas « Comptes non classés »
+  // (qui était trompeur : le user pensait voir des comptes manquants).
   const ecartFinal = totalPassif - totalActif;
   if (Math.abs(ecartFinal) > 1) {
     if (ecartFinal > 0) {
-      // Passif > Actif : ajouter un poste d'actif "régularisation"
+      // Passif > Actif : on injecte côté actif pour visualiser l'anomalie
       actif.push({
         code: '_EC',
-        label: '⚠ Écart de balance à analyser (régularisation)',
+        label: '⚠ Écart de balance — pièces GL déséquilibrées',
         value: ecartFinal,
         indent: 1,
-        accountCodes: 'Comptes ignorés ou écritures déséquilibrées',
+        accountCodes: 'Σ(crédit) > Σ(débit) — vérifier RAN ou imports source',
       });
       totalActif = totalPassif;
     } else {
-      // Actif > Passif : ajouter un poste de passif "régularisation"
       passif.push({
         code: '_ECP',
-        label: '⚠ Écart de balance à analyser (régularisation)',
+        label: '⚠ Écart de balance — pièces GL déséquilibrées',
         value: -ecartFinal,
         indent: 1,
-        accountCodes: 'Comptes ignorés ou écritures déséquilibrées',
+        accountCodes: 'Σ(débit) > Σ(crédit) — vérifier RAN ou imports source',
       });
       totalPassif = totalActif;
     }
@@ -202,7 +313,11 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   actif.push({ code: '_BZ', label: 'TOTAL GÉNÉRAL ACTIF', value: totalActif, total: true, grand: true, accountCodes: 'Classes 2 à 5' });
   passif.push({ code: '_DZ', label: 'TOTAL GÉNÉRAL PASSIF', value: totalPassif, total: true, grand: true, accountCodes: 'Classes 1, 4, 5' });
 
-  return { actif, passif, totalActif, totalPassif };
+  // Détection des comptes responsables de l'écart, pour permettre à l'utilisateur
+  // d'identifier et corriger les anomalies.
+  const unclassifiedAccounts = Math.abs(ecartFinal) > 1 ? findUnclassifiedAccounts(rows) : [];
+
+  return { actif, passif, totalActif, totalPassif, unclassifiedAccounts };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,7 +1,10 @@
 // Audit complet du Grand Livre — détecte 15+ catégories d'anomalies
 // comptables et de qualité des données. Conforme aux contrôles SYSCOHADA
 // et aux meilleures pratiques d'audit comptable.
-import { db, GLEntry } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+import type { GLEntry } from '../db/schema';
+import { dataProvider } from '../db/provider';
 
 export type Severity = 'critical' | 'major' | 'minor' | 'info';
 
@@ -47,9 +50,11 @@ export async function auditGL(
   thresholds?: { amountAnomaly?: number },
 ): Promise<AuditReport> {
   const minAmount = thresholds?.amountAnomaly ?? 1000;
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
-  const accounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const [entries, periods, accounts] = await Promise.all([
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getPeriods(orgId),
+    dataProvider.getAccounts(orgId),
+  ]);
   const accountByCode = new Map(accounts.map((a) => [a.code, a] as const));
   const periodById = new Map(periods.map((p) => [p.id, p] as const));
 
@@ -282,7 +287,7 @@ export async function auditGL(
   }
 
   // ─── 14. ÉCRITURES TROP ANCIENNES (avant ouverture exercice) ───
-  const fiscalYears = await db.fiscalYears.where('orgId').equals(orgId).toArray();
+  const fiscalYears = await dataProvider.getFiscalYears(orgId);
   const minYear = fiscalYears.length > 0 ? Math.min(...fiscalYears.map((fy) => fy.year)) : 0;
   const tooOld = filtered.filter((e) => {
     const y = parseInt(e.date.substring(0, 4));

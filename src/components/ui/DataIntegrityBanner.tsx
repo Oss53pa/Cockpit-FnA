@@ -15,10 +15,10 @@
  *  - Lien vers /imports pour gérer/supprimer les imports redondants
  */
 import { useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertTriangle, FileWarning, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../../db/schema';
+import { dataProvider } from '../../db/provider';
+import { useCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
 
 export function DataIntegrityBanner() {
@@ -28,26 +28,22 @@ export function DataIntegrityBanner() {
   const setCurrentImport = useApp((s) => s.setCurrentImport);
   const navigate = useNavigate();
 
-  const diagnostics = useLiveQuery(async () => {
+  const { data: diagnostics } = useCloudData(async () => {
     if (!currentOrgId) return null;
 
     // Liste des imports GL actifs
-    const imports = await db.imports
-      .where('orgId').equals(currentOrgId)
-      .filter((i) => i.kind === 'GL')
-      .toArray();
+    const allImports = await dataProvider.getImports(currentOrgId);
+    const imports = allImports.filter((i) => i.kind === 'GL');
 
     if (imports.length <= 1) return { hasMultipleImports: false, importCount: imports.length, overlapCount: 0, totalEntries: 0 };
 
     // Compte d'entrées par import
-    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+    const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
     const entriesByImport = new Map<string | undefined, number>();
     for (const e of entries) {
       entriesByImport.set(e.importId, (entriesByImport.get(e.importId) ?? 0) + 1);
     }
 
-    // Détecte si plusieurs imports ont des entrées sur les mêmes périodes
-    // (= chevauchement => risque de double comptage)
     const periodsByImport = new Map<string, Set<string>>();
     for (const e of entries) {
       if (!e.importId) continue;
@@ -71,7 +67,7 @@ export function DataIntegrityBanner() {
       totalEntries: entries.length,
       entriesByImport: Array.from(entriesByImport.entries()).map(([id, count]) => ({ id, count })),
     };
-  }, [currentOrgId, currentYear]);
+  }, [currentOrgId, currentYear], { tag: ['imports', 'gl'] });
 
   const dismissed = useMemo(() => {
     if (typeof window === 'undefined') return false;

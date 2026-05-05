@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Send, Settings as SettingsIcon, Shield, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
 import { AdminGate } from '../components/auth/AdminGate';
 import { lockAdmin } from '../lib/adminAuth';
@@ -19,8 +18,11 @@ import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
 import { PALETTES, PaletteKey, useTheme } from '../store/theme';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { ensureSeeded } from '../db/seed';
+import { pushAllToSupabase, type PushAllProgress, type PushAllResult } from '../db/supabaseSync';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 type Tab = 'apparence' | 'societes' | 'exercices' | 'ratios' | 'donnees' | 'users' | 'ia' | 'emails' | 'integrations';
 
@@ -217,7 +219,7 @@ function TabApparence() {
 
 // ─── SOCIÉTÉS ───────────────────────────────────────────────────────
 function TabSocietes() {
-  const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
+  const { data: orgs = [] } = useCloudData(() => dataProvider.getOrganizations(), [], { initial: [], tag: 'organizations' });
   const { currentOrgId, setCurrentOrg } = useApp();
   const [openNew, setOpenNew] = useState(false);
   const [editingOrg, setEditingOrg] = useState<any | null>(null);
@@ -243,7 +245,8 @@ function TabSocietes() {
     if (!editingOrg || !form.name.trim()) return;
     setSaving(true);
     try {
-      await db.organizations.update(editingOrg.id, {
+      await dataProvider.upsertOrganization({
+        ...editingOrg,
         name: form.name.trim(),
         sector: form.sector,
         currency: form.currency,
@@ -254,6 +257,7 @@ function TabSocietes() {
         email: form.email || undefined,
         website: form.website || undefined,
       } as any);
+      invalidateCloudData('organizations');
       setEditingOrg(null);
     } finally { setSaving(false); }
   };
@@ -263,18 +267,21 @@ function TabSocietes() {
     setSaving(true);
     try {
       const id = 'org-' + Date.now();
-      await db.organizations.add({
+      await dataProvider.upsertOrganization({
         id, name: form.name.trim(), sector: form.sector, currency: form.currency,
         rccm: form.rccm || undefined, ifu: form.ifu || undefined, createdAt: Date.now(),
       });
       const year = new Date().getFullYear();
-      await db.fiscalYears.add({ id: `${id}-${year}`, orgId: id, year, startDate: `${year}-01-01`, endDate: `${year}-12-31`, closed: false });
+      await dataProvider.upsertFiscalYear({ id: `${id}-${year}`, orgId: id, year, startDate: `${year}-01-01`, endDate: `${year}-12-31`, closed: false });
       const monthLabels = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
       const periods = Array.from({ length: 12 }, (_, i) => ({
         id: `${id}-${year}-${String(i + 1).padStart(2, '0')}`, orgId: id, fiscalYearId: `${id}-${year}`,
         year, month: i + 1, label: `${monthLabels[i]} ${year}`, closed: false,
       }));
-      await db.periods.bulkPut(periods);
+      await dataProvider.bulkUpsertPeriods(periods);
+      invalidateCloudData('organizations');
+      invalidateCloudData('fiscalYears');
+      invalidateCloudData('periods');
       setOpenNew(false);
       setForm({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
       setCurrentOrg(id);
@@ -283,16 +290,12 @@ function TabSocietes() {
 
   const remove = async (id: string) => {
     if (!confirm('Supprimer cette société ? Toutes les données associées seront effacées.')) return;
-    await db.transaction('rw', [db.organizations, db.fiscalYears, db.periods, db.accounts, db.gl, db.imports, db.budgets, db.mappings], async () => {
-      await db.gl.where('orgId').equals(id).delete();
-      await db.imports.where('orgId').equals(id).delete();
-      await db.budgets.where('orgId').equals(id).delete();
-      await db.accounts.where('orgId').equals(id).delete();
-      await db.mappings.where('orgId').equals(id).delete();
-      await db.periods.where('orgId').equals(id).delete();
-      await db.fiscalYears.where('orgId').equals(id).delete();
-      await db.organizations.delete(id);
-    });
+    await dataProvider.deleteOrganizationCascade(id);
+    invalidateCloudData('organizations');
+    invalidateCloudData('fiscalYears');
+    invalidateCloudData('periods');
+    invalidateCloudData('accounts');
+    invalidateCloudData('gl');
     if (currentOrgId === id && orgs.length > 1) {
       const next = orgs.find((o: any) => o.id !== id);
       if (next) setCurrentOrg(next.id);
@@ -393,18 +396,24 @@ function TabSocietes() {
 // ─── EXERCICES ──────────────────────────────────────────────────────
 function TabExercices() {
   const { currentOrgId, currentYear, setCurrentYear } = useApp();
-  const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
+  const { data: orgs = [] } = useCloudData(() => dataProvider.getOrganizations(), [], { initial: [], tag: 'organizations' });
   const currentOrg = orgs.find((o: any) => o.id === currentOrgId);
 
-  const fiscalYears = useLiveQuery(
-    () => (currentOrgId ? db.fiscalYears.where('orgId').equals(currentOrgId).sortBy('year') : Promise.resolve([] as any[])),
-    [currentOrgId], [] as any[],
-  ) ?? [];
+  const { data: fiscalYears = [] } = useCloudData(
+    async () => {
+      if (!currentOrgId) return [] as any[];
+      const fys = await dataProvider.getFiscalYears(currentOrgId);
+      return [...fys].sort((a, b) => a.year - b.year);
+    },
+    [currentOrgId],
+    { initial: [], tag: 'fiscalYears' },
+  );
 
-  const periods = useLiveQuery(
-    () => (currentOrgId ? db.periods.where('orgId').equals(currentOrgId).toArray() : Promise.resolve([] as any[])),
-    [currentOrgId], [] as any[],
-  ) ?? [];
+  const { data: periods = [] } = useCloudData(
+    () => currentOrgId ? dataProvider.getPeriods(currentOrgId) : Promise.resolve([] as any[]),
+    [currentOrgId],
+    { initial: [], tag: 'periods' },
+  );
 
   const periodCountByYear = (year: number) => periods.filter((p: any) => p.year === year && p.month >= 1).length;
 
@@ -427,7 +436,7 @@ function TabExercices() {
     setSaving(true);
     try {
       const fyId = `${currentOrgId}-${form.year}`;
-      await db.fiscalYears.add({
+      await dataProvider.upsertFiscalYear({
         id: fyId, orgId: currentOrgId, year: form.year,
         startDate: form.startDate, endDate: form.endDate, closed: false,
       });
@@ -438,20 +447,23 @@ function TabExercices() {
           orgId: currentOrgId, fiscalYearId: fyId, year: form.year, month: i + 1,
           label: `${monthLabels[i]} ${form.year}`, closed: false,
         }));
-        await db.periods.bulkPut(newPeriods);
+        await dataProvider.bulkUpsertPeriods(newPeriods);
       }
+      invalidateCloudData('fiscalYears');
+      invalidateCloudData('periods');
       setOpenNew(false);
       setCurrentYear(form.year);
     } finally { setSaving(false); }
   };
 
   const toggleClosed = async (fy: any) => {
-    await db.fiscalYears.update(fy.id, { closed: !fy.closed });
-    await db.periods.where('fiscalYearId').equals(fy.id).modify({ closed: !fy.closed });
+    await dataProvider.setFiscalYearClosed(fy, !fy.closed);
+    invalidateCloudData('fiscalYears');
+    invalidateCloudData('periods');
   };
 
   const remove = async (fy: any) => {
-    const entries = await db.gl.where('orgId').equals(fy.orgId).toArray();
+    const entries = await dataProvider.getGLEntries({ orgId: fy.orgId });
     const yearEntries = entries.filter((e: any) => {
       const y = parseInt(e.date.substring(0, 4), 10);
       return y === fy.year;
@@ -461,15 +473,10 @@ function TabExercices() {
       : `Supprimer l'exercice ${fy.year} ?`;
     if (!confirm(msg)) return;
 
-    await db.transaction('rw', [db.fiscalYears, db.periods, db.gl], async () => {
-      // 1) supprimer les écritures de l'année
-      const ids = yearEntries.map((e: any) => e.id!).filter(Boolean);
-      if (ids.length) await db.gl.bulkDelete(ids);
-      // 2) supprimer les périodes de cet exercice
-      await db.periods.where('fiscalYearId').equals(fy.id).delete();
-      // 3) supprimer l'exercice
-      await db.fiscalYears.delete(fy.id);
-    });
+    await dataProvider.deleteFiscalYearCascade(fy);
+    invalidateCloudData('fiscalYears');
+    invalidateCloudData('periods');
+    invalidateCloudData('gl');
     if (currentYear === fy.year) {
       const remaining = fiscalYears.filter((x: any) => x.id !== fy.id);
       if (remaining.length) setCurrentYear(remaining[remaining.length - 1].year);
@@ -707,31 +714,99 @@ function TabRatios() {
 function TabDonnees() {
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<PushAllProgress | null>(null);
+  const [syncResult, setSyncResult] = useState<PushAllResult | null>(null);
 
-  const stats = useLiveQuery(async () => ({
-    orgs: await db.organizations.count(),
-    periods: await db.periods.count(),
-    gl: await db.gl.count(),
-    accounts: await db.accounts.count(),
-    imports: await db.imports.count(),
-    budgets: await db.budgets.count(),
-    templates: await db.templates.count(),
-  }), [], { orgs: 0, periods: 0, gl: 0, accounts: 0, imports: 0, budgets: 0, templates: 0 });
+  const { data: stats = { orgs: 0, periods: 0, gl: 0, accounts: 0, imports: 0, budgets: 0, templates: 0 } } = useCloudData(
+    async () => {
+      const orgs = await dataProvider.getOrganizations();
+      // Aggrégats multi-org : on additionne les compteurs de chaque société.
+      let periods = 0, gl = 0, accounts = 0, imports = 0, budgets = 0, templates = 0;
+      for (const o of orgs) {
+        const [ps, glRows, accs, imps, buds, tpls] = await Promise.all([
+          dataProvider.getPeriods(o.id),
+          dataProvider.getGLEntries({ orgId: o.id }),
+          dataProvider.getAccounts(o.id),
+          dataProvider.getImports(o.id),
+          dataProvider.getAllBudgets(o.id),
+          dataProvider.getTemplates(o.id),
+        ]);
+        periods += ps.length; gl += glRows.length; accounts += accs.length;
+        imports += imps.length; budgets += buds.length; templates += tpls.length;
+      }
+      return { orgs: orgs.length, periods, gl, accounts, imports, budgets, templates };
+    },
+    [],
+    { initial: { orgs: 0, periods: 0, gl: 0, accounts: 0, imports: 0, budgets: 0, templates: 0 }, tag: ['organizations', 'gl', 'accounts', 'budgets', 'imports'] },
+  );
 
+  const runFullCloudSync = async () => {
+    setSyncRunning(true);
+    setSyncResult(null);
+    setSyncProgress(null);
+    try {
+      const allOrgs = await dataProvider.getOrganizations();
+      const orgIds = allOrgs.map((o) => o.id);
+      if (orgIds.length === 0) {
+        toast.error('Aucune société', 'Rien à synchroniser : aucune société locale.');
+        setSyncRunning(false);
+        return;
+      }
+      const result = await pushAllToSupabase(orgIds, (p) => setSyncProgress(p));
+      setSyncResult(result);
+      const failed = result.details.filter((d) => !d.ok);
+      if (failed.length === 0) {
+        toast.success(
+          'Migration cloud complète',
+          `${result.totalRows.toLocaleString()} lignes poussées sur ${result.totalTables} tables en ${(result.duration / 1000).toFixed(1)}s.`,
+        );
+      } else {
+        toast.error(
+          'Migration partielle',
+          `${failed.length} table(s) en erreur. Voir le détail dans la fenêtre.`,
+        );
+      }
+    } catch (e: any) {
+      toast.error('Erreur de synchronisation', e?.message ?? String(e));
+    } finally {
+      setSyncRunning(false);
+    }
+  };
+
+  // Export — lit toutes les tables Supabase pour produire un backup JSON.
   const exportDB = async () => {
-    const data = {
-      version: 2, exportedAt: new Date().toISOString(),
-      organizations: await db.organizations.toArray(),
-      fiscalYears: await db.fiscalYears.toArray(),
-      periods: await db.periods.toArray(),
-      accounts: await db.accounts.toArray(),
-      gl: await db.gl.toArray(),
-      imports: await db.imports.toArray(),
-      budgets: await db.budgets.toArray(),
-      mappings: await db.mappings.toArray(),
-      reports: await db.reports.toArray(),
-      templates: await db.templates.toArray(),
+    const orgs = await dataProvider.getOrganizations();
+    const data: any = {
+      version: 3, exportedAt: new Date().toISOString(),
+      organizations: orgs,
+      fiscalYears: [] as any[], periods: [] as any[], accounts: [] as any[],
+      gl: [] as any[], imports: [] as any[], budgets: [] as any[],
+      mappings: [] as any[], reports: [] as any[], templates: [] as any[],
     };
+    for (const o of orgs) {
+      const [fys, ps, accs, gl, imps, buds, maps, reps, tpls] = await Promise.all([
+        dataProvider.getFiscalYears(o.id),
+        dataProvider.getPeriods(o.id),
+        dataProvider.getAccounts(o.id),
+        dataProvider.getGLEntries({ orgId: o.id }),
+        dataProvider.getImports(o.id),
+        dataProvider.getAllBudgets(o.id),
+        dataProvider.getMappings(o.id),
+        dataProvider.getReports(o.id),
+        dataProvider.getTemplates(o.id),
+      ]);
+      data.fiscalYears.push(...fys);
+      data.periods.push(...ps);
+      data.accounts.push(...accs);
+      data.gl.push(...gl);
+      data.imports.push(...imps);
+      data.budgets.push(...buds);
+      data.mappings.push(...maps);
+      data.reports.push(...reps);
+      data.templates.push(...tpls);
+    }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -739,24 +814,32 @@ function TabDonnees() {
     URL.revokeObjectURL(url);
   };
 
+  // Import — restaure le backup JSON dans Supabase (upsert).
   const importDB = async (file: File) => {
-    if (!confirm('Importer remplacera les données existantes. Continuer ?')) return;
+    if (!confirm('Importer ajoutera/écrasera les données existantes. Continuer ?')) return;
     setBusy(true);
     try {
       const data = JSON.parse(await file.text());
-      await db.transaction('rw', [db.organizations, db.fiscalYears, db.periods, db.accounts, db.gl, db.imports, db.budgets, db.mappings, db.reports, db.templates], async () => {
-        await Promise.all([db.organizations, db.fiscalYears, db.periods, db.accounts, db.gl, db.imports, db.budgets, db.mappings, db.reports, db.templates].map((t) => t.clear()));
-        if (data.organizations) await db.organizations.bulkAdd(data.organizations);
-        if (data.fiscalYears) await db.fiscalYears.bulkAdd(data.fiscalYears);
-        if (data.periods) await db.periods.bulkAdd(data.periods);
-        if (data.accounts) await db.accounts.bulkAdd(data.accounts);
-        if (data.gl) await db.gl.bulkAdd(data.gl.map(({ id: _i, ...r }: any) => r));
-        if (data.imports) await db.imports.bulkAdd(data.imports.map(({ id: _i, ...r }: any) => r));
-        if (data.budgets) await db.budgets.bulkAdd(data.budgets.map(({ id: _i, ...r }: any) => r));
-        if (data.mappings) await db.mappings.bulkAdd(data.mappings);
-        if (data.reports) await db.reports.bulkAdd(data.reports.map(({ id: _i, ...r }: any) => r));
-        if (data.templates) await db.templates.bulkAdd(data.templates.map(({ id: _i, ...r }: any) => r));
-      });
+      // Ordre : organizations → fiscal_years → periods → accounts → mappings →
+      // imports → gl → budgets → reports → templates (FK au niveau Supabase).
+      if (data.organizations) for (const o of data.organizations) await dataProvider.upsertOrganization(o);
+      if (data.fiscalYears) await dataProvider.bulkUpsertFiscalYears(data.fiscalYears);
+      if (data.periods) await dataProvider.bulkUpsertPeriods(data.periods);
+      if (data.accounts) await dataProvider.bulkUpsertAccounts(data.accounts);
+      if (data.mappings) for (const m of data.mappings) await dataProvider.upsertMapping(m);
+      if (data.imports) for (const im of data.imports) {
+        const { id: _i, ...rest } = im;
+        await dataProvider.addImport(rest);
+      }
+      if (data.gl) {
+        const stripped = data.gl.map(({ id: _i, ...r }: any) => r);
+        await dataProvider.bulkInsertGL(stripped);
+      }
+      if (data.budgets) await dataProvider.bulkUpsertBudgets(data.budgets);
+      if (data.reports) for (const r of data.reports) await dataProvider.upsertReport(r);
+      if (data.templates) for (const t of data.templates) await dataProvider.upsertTemplate(t);
+      // Invalide tout
+      ['organizations', 'fiscalYears', 'periods', 'accounts', 'gl', 'imports', 'budgets'].forEach((t) => invalidateCloudData(t));
       toast.success('Import terminé', 'Sauvegarde restaurée avec succès');
     } catch (e: any) { toast.error("Erreur d'import", e.message); } finally { setBusy(false); }
   };
@@ -785,6 +868,38 @@ function TabDonnees() {
         </div>
       </Card>
 
+      <Card title="Migration cloud" subtitle="Pousser toutes les données locales vers Supabase (multi-device)">
+        {!isSupabaseConfigured ? (
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm">
+            <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Supabase non configuré</p>
+              <p className="text-xs text-primary-500 mt-1">
+                Définissez <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code> pour activer la synchronisation.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-primary-500 mb-3">
+              Pousse toutes les sociétés, exercices, écritures, budgets, rapports, points d'attention,
+              plans d'action, axes analytiques et messages chat vers le cloud Supabase. Indispensable
+              avant la migration finale (abandon de Dexie).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" onClick={() => setSyncOpen(true)} disabled={busy || syncRunning}>
+                <Cloud className="w-4 h-4" /> Sync complet vers le cloud
+              </button>
+              {syncResult && (
+                <span className="text-xs text-primary-500 self-center">
+                  Dernière sync : {syncResult.totalRows.toLocaleString()} lignes en {(syncResult.duration / 1000).toFixed(1)}s
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </Card>
+
       <Card title="Zone dangereuse" subtitle="Opérations irréversibles">
         <Row label="Réinitialiser toutes les données" hint="Supprime définitivement toutes les sociétés, écritures, budgets et rapports">
           <button className="btn text-error border border-error/30 hover:bg-error/10" onClick={() => setResetOpen(true)}>
@@ -796,7 +911,13 @@ function TabDonnees() {
       <Modal open={resetOpen} onClose={() => setResetOpen(false)} title="Réinitialiser toutes les données ?" subtitle="Cette action est irréversible"
         footer={<>
           <button className="btn-outline" onClick={() => setResetOpen(false)}>Annuler</button>
-          <button className="btn text-primary-50 bg-error hover:bg-error/90" onClick={async () => { setBusy(true); await db.delete(); location.reload(); }} disabled={busy}>
+          <button className="btn text-primary-50 bg-error hover:bg-error/90" onClick={async () => {
+            setBusy(true);
+            // Supabase obligatoire : on supprime tous les orgs en cascade.
+            const orgs = await dataProvider.getOrganizations();
+            for (const o of orgs) await dataProvider.deleteOrganizationCascade(o.id);
+            location.reload();
+          }} disabled={busy}>
             {busy ? 'Suppression…' : 'Confirmer la suppression'}
           </button>
         </>}>
@@ -807,6 +928,116 @@ function TabDonnees() {
             <p className="text-xs text-primary-500 mt-2">L'application rechargera et regénérera les données de démonstration.</p>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={syncOpen}
+        onClose={() => { if (!syncRunning) { setSyncOpen(false); setSyncResult(null); setSyncProgress(null); } }}
+        title="Sync complet vers le cloud"
+        subtitle="Migration finale Dexie → Supabase"
+        footer={<>
+          {!syncRunning && !syncResult && (
+            <>
+              <button className="btn-outline" onClick={() => setSyncOpen(false)}>Annuler</button>
+              <button className="btn-primary" onClick={runFullCloudSync}>
+                <Cloud className="w-4 h-4" /> Lancer la synchronisation
+              </button>
+            </>
+          )}
+          {syncRunning && (
+            <button className="btn-outline" disabled>
+              Synchronisation en cours…
+            </button>
+          )}
+          {!syncRunning && syncResult && (
+            <button className="btn-primary" onClick={() => { setSyncOpen(false); setSyncResult(null); setSyncProgress(null); }}>
+              Fermer
+            </button>
+          )}
+        </>}
+      >
+        {!syncRunning && !syncResult && (
+          <div className="space-y-3 text-sm">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-primary-50 dark:bg-primary-900/30">
+              <Cloud className="w-4 h-4 text-primary-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Que va-t-il se passer ?</p>
+                <ul className="list-disc list-inside text-xs text-primary-500 mt-1 space-y-0.5">
+                  <li>Toutes les données de toutes les sociétés locales seront poussées vers Supabase.</li>
+                  <li>Les lignes existantes côté cloud seront mises à jour (upsert) ou complétées.</li>
+                  <li>L'opération peut prendre plusieurs minutes selon le volume de Grand Livre.</li>
+                  <li>Vos données locales restent intactes — elles ne sont pas supprimées.</li>
+                </ul>
+              </div>
+            </div>
+            <div className="text-xs text-primary-500">
+              Sociétés à synchroniser : <strong>{stats.orgs}</strong> · Écritures GL : <strong>{stats.gl.toLocaleString()}</strong> · Lignes budget : <strong>{stats.budgets.toLocaleString()}</strong>
+            </div>
+          </div>
+        )}
+
+        {syncRunning && syncProgress && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">{syncProgress.step}</span>
+              <span className="text-xs text-primary-500">
+                {syncProgress.current} / {syncProgress.total}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-primary-100 dark:bg-primary-900 overflow-hidden">
+              <div
+                className="h-full bg-accent-500 transition-all"
+                style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
+              />
+            </div>
+            <div className="text-xs text-primary-500">
+              Table : <code>{syncProgress.table}</code> · Lignes poussées : {syncProgress.rowsPushed.toLocaleString()}
+            </div>
+          </div>
+        )}
+
+        {!syncRunning && syncResult && (
+          <div className="space-y-3 text-sm">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-success/10 border border-success/30">
+              <CheckCircle2 className="w-4 h-4 text-success shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Synchronisation terminée</p>
+                <p className="text-xs text-primary-500 mt-1">
+                  {syncResult.totalRows.toLocaleString()} lignes poussées sur {syncResult.totalTables} tables en {(syncResult.duration / 1000).toFixed(1)}s.
+                </p>
+              </div>
+            </div>
+            <div className="max-h-64 overflow-y-auto border border-primary-200 dark:border-primary-800 rounded-lg">
+              <table className="w-full text-xs">
+                <thead className="bg-primary-50 dark:bg-primary-900/30 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium">Table</th>
+                    <th className="text-right px-3 py-2 font-medium">Lignes</th>
+                    <th className="text-left px-3 py-2 font-medium">État</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncResult.details.map((d) => (
+                    <tr key={d.table} className="border-t border-primary-100 dark:border-primary-800/50">
+                      <td className="px-3 py-1.5 font-mono">{d.table}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{d.rows.toLocaleString()}</td>
+                      <td className="px-3 py-1.5">
+                        {d.ok ? (
+                          <span className="text-success">OK</span>
+                        ) : (
+                          <span className="text-error" title={d.error}>Erreur</span>
+                        )}
+                        {d.error && (
+                          <span className="text-[10px] text-primary-500 block truncate max-w-xs">{d.error}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
@@ -950,7 +1181,7 @@ function TabUsers() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [invitePreview, setInvitePreview] = useState<{ user: AppUser; orgs: { id: string; name: string }[] } | null>(null);
-  const orgs = useLiveQuery(() => db.organizations.toArray(), [], []) ?? [];
+  const { data: orgs = [] } = useCloudData(() => dataProvider.getOrganizations(), [], { initial: [], tag: 'organizations' });
   const { currentOrgId } = useApp();
 
   // Pull cloud au mount + à chaque changement org : merge avec localStorage.

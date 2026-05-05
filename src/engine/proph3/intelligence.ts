@@ -21,11 +21,12 @@
  * insight est traçable à une règle métier explicite.
  */
 
-import { db, type GLEntry } from '../../db/schema';
+import type { GLEntry } from '../../db/schema';
+import { dataProvider } from '../../db/provider';
 import { computeBalance } from '../balance';
 import { computeBilan, computeSIG } from '../statements';
 import { computeRatios, type Ratio } from '../ratios';
-import { addObservation, getMemory } from './memory';
+import { addObservation, getMemory, getMemorySync } from './memory';
 import { runLearningCycle, recordPrediction, getLearningState, type LearningCycleResult, type ModelAccuracy, type RecurringPattern, type LearnedThreshold } from './learning';
 import { verifyChain } from '../../lib/auditHash';
 import { isPeriodLocked } from '../../lib/periodLock';
@@ -108,35 +109,58 @@ export interface QuickPrediction {
  */
 export function generateQuickPredictions(orgId: string, sig: { ca: number; resultat: number; ebe: number }, ctx: TemporalContext): QuickPrediction[] {
   const out: QuickPrediction[] = [];
-  const mem = getMemory(orgId);
+  // Lecture synchrone du cache mémoire — `runIntelligenceAnalysis` aura
+  // préalablement appelé `getMemory()` async pour rafraîchir.
+  const mem = getMemorySync(orgId);
 
-  // Run-rate annualisé : on extrapole le réalisé YTD jusqu'en fin d'exercice.
-  const annualize = (ytd: number) => ctx.progressPct > 0 ? ytd * (100 / ctx.progressPct) : ytd;
+  // CORRECTION (audit) : annualisation NAÏVE (linéaire) remplacée par une
+  // approche tenant compte de la saisonnalité historique si elle est mémorisée.
+  // Si pas d'historique, on retombe sur la projection linéaire en signalant
+  // explicitement la confiance "low" et en avertissant dans le commentaire.
+  //
+  // Formule sectorielle : si l'utilisateur a un pattern saisonnier mémorisé
+  // (mem.patterns.seasonality_ca = part du CA réalisée à ce stade de l'année),
+  // on utilise (ytd / part) au lieu de (ytd × 100 / progressPct).
+  const seasonalityCA = (mem.patterns as any).seasonality_ca?.expectedSharePct ?? null;
+  const annualize = (ytd: number, useSeasonality: boolean): number => {
+    if (useSeasonality && seasonalityCA != null && seasonalityCA > 5 && seasonalityCA <= 100) {
+      return ytd * (100 / seasonalityCA);
+    }
+    return ctx.progressPct > 0 ? ytd * (100 / ctx.progressPct) : ytd;
+  };
+  const isSeasonalActivity = seasonalityCA != null;
 
   if (sig.ca > 0) {
-    const annualCA = annualize(sig.ca);
+    const annualCA = annualize(sig.ca, true);
     const variation = ((annualCA - sig.ca) / Math.max(1, sig.ca)) * 100;
+    const baseComment = isSeasonalActivity
+      ? `Projection saisonnière (part historique à ce stade : ${seasonalityCA.toFixed(0)} %).`
+      : `Run-rate linéaire sur ${ctx.progressPct.toFixed(0)} % de l'exercice — précision limitée si activité saisonnière.`;
     out.push({
       metric: "CA fin d'exercice",
       current: sig.ca,
       predicted: Math.round(annualCA),
       variation,
       trend: variation > 5 ? 'up' : variation < -5 ? 'down' : 'stable',
-      confidence: ctx.progressPct > 50 ? 'high' : ctx.progressPct > 25 ? 'medium' : 'low',
+      // CORRECTION (audit) : confiance basse par défaut sans saisonnalité connue.
+      // L'extrapolation linéaire ne mérite "high" que pour activité non-saisonnière.
+      confidence: isSeasonalActivity ? (ctx.progressPct > 50 ? 'high' : 'medium')
+        : (ctx.progressPct > 75 ? 'medium' : 'low'),
       horizon: 'fin_exercice',
-      comment: `Run-rate annualisé sur ${ctx.progressPct.toFixed(0)} % de l'exercice écoulés.`,
+      comment: baseComment,
     });
   }
 
   if (sig.resultat !== 0) {
-    const annualRN = annualize(sig.resultat);
+    const annualRN = annualize(sig.resultat, true);
     out.push({
       metric: "Résultat fin d'exercice",
       current: sig.resultat,
       predicted: Math.round(annualRN),
       variation: ((annualRN - sig.resultat) / Math.max(1, Math.abs(sig.resultat))) * 100,
       trend: annualRN > sig.resultat ? 'up' : annualRN < sig.resultat ? 'down' : 'stable',
-      confidence: ctx.progressPct > 50 ? 'high' : 'medium',
+      confidence: isSeasonalActivity ? (ctx.progressPct > 50 ? 'high' : 'medium')
+        : (ctx.progressPct > 75 ? 'medium' : 'low'),
       horizon: 'fin_exercice',
       comment: annualRN < 0 ? '⚠ Projection de perte sur l\'exercice — action requise.' : 'Projection de bénéfice.',
     });
@@ -182,7 +206,7 @@ export interface Correction {
  */
 export async function detectCorrections(orgId: string, year: number): Promise<Correction[]> {
   const corrections: Correction[] = [];
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const entries = await dataProvider.getGLEntries({ orgId });
   const yearEntries = entries.filter((e) => new Date(e.date).getFullYear() === year);
 
   // 3a. Déséquilibres par pièce (debit ≠ credit sur même piece)
@@ -337,7 +361,13 @@ export function generateSmartSuggestions(
       title: 'Délai de paiement clients élevé',
       rationale: `DSO = ${dso.value.toFixed(0)} jours (cible < 60j en zone UEMOA).`,
       action: `Mettre en place un cycle de relance automatique : J+15 (rappel courtois), J+30 (relance), J+45 (mise en demeure), J+60 (recouvrement contentieux). ${ctx.phase === 'closing' ? 'Avant clôture, lancer également un nettoyage des créances douteuses (compte 416 + provisions 491).' : ''}`,
-      expectedGain: `Réduire le DSO de 10 jours libère ~${((dso.value - 50) / 360 * sig.ca / 1_000_000).toFixed(1)} M XOF de trésorerie.`,
+      // CORRECTION (audit) : on libère exactement (DSO - cible) jours de CA / 360.
+      // L'unité monétaire est exprimée via fmtMoney qui respecte la devise tenant.
+      expectedGain: `Réduire le DSO de 10 jours libère ~${(() => {
+        const cibleDSO = 60; // cible UEMOA standard
+        const gainXOF = Math.round(((dso.value - cibleDSO) / 360) * sig.ca);
+        return new Intl.NumberFormat('fr-FR').format(Math.max(0, gainXOF));
+      })()} de trésorerie (devise tenant).`,
       complexity: 'low',
       triggerMetric: 'DSO',
       triggerValue: dso.value,
@@ -453,7 +483,7 @@ export async function runComprehensiveAudit(orgId: string, year: number): Promis
 
   // 5a. Intégrité hash chain
   try {
-    const entries = await db.gl.where('orgId').equals(orgId).toArray();
+    const entries = await dataProvider.getGLEntries({ orgId });
     const yearEntries = entries
       .filter((e) => new Date(e.date).getFullYear() === year)
       .sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -501,8 +531,11 @@ export async function runComprehensiveAudit(orgId: string, year: number): Promis
   });
 
   // 5d. Cohérence CR ↔ Bilan : Résultat exercice
+  // CORRECTION (audit) : le code SYSCOHADA pour "Résultat net de l'exercice"
+  // au passif est 'CF' (cf. statements.ts l.165). Les codes '_CR' et 'CR'
+  // n'existent pas — l'ancien check trouvait toujours 0 → faux positif.
   const { sig } = computeSIG(balance);
-  const resBilan = passif.find((l) => l.code === '_CR' || l.code === 'CR')?.value ?? 0;
+  const resBilan = passif.find((l) => l.code === 'CF')?.value ?? 0;
   const ecartRes = Math.abs(sig.resultat - resBilan);
   checks.push({
     id: 'coherence-resultat',
@@ -609,11 +642,22 @@ export async function runIntelligenceAnalysis(orgId: string, year: number): Prom
   const audit = await runComprehensiveAudit(orgId, year);
   const suggestions = generateSmartSuggestions(ratios, sig, context, corrections);
 
-  // Mémoriser observations clés
-  if (sig.ca > 0) addObservation(orgId, { category: 'kpi', metric: 'ca', value: sig.ca, context: `Exercice ${year}` });
-  if (sig.resultat !== 0) addObservation(orgId, { category: 'kpi', metric: 'resultat', value: sig.resultat, context: `Exercice ${year}` });
+  // Mémoriser observations clés (async — persistées dans Supabase chiffré)
+  if (sig.ca > 0) await addObservation(orgId, { category: 'kpi', metric: 'ca', value: sig.ca, context: `Exercice ${year}` });
+  if (sig.resultat !== 0) await addObservation(orgId, { category: 'kpi', metric: 'resultat', value: sig.resultat, context: `Exercice ${year}` });
   for (const r of ratios.slice(0, 5)) {
-    if (Number.isFinite(r.value)) addObservation(orgId, { category: 'ratio', metric: r.code.toLowerCase(), value: r.value, context: `Exercice ${year}`, severity: r.status === 'alert' ? 'critical' : r.status === 'warn' ? 'warn' : 'info' });
+    if (!Number.isFinite(r.value)) continue;
+    const severity: 'critical' | 'warn' | undefined =
+      r.status === 'alert' ? 'critical' :
+      r.status === 'warn' ? 'warn' :
+      undefined;
+    await addObservation(orgId, {
+      category: 'ratio',
+      metric: r.code.toLowerCase(),
+      value: r.value,
+      context: `Exercice ${year}`,
+      ...(severity ? { severity } : {}),
+    });
   }
 
   // ── APPRENTISSAGE : boucle fermée prédiction ↔ réalité ──────────────────
@@ -627,7 +671,8 @@ export async function runIntelligenceAnalysis(orgId: string, year: number): Prom
   }
 
   // 2) Préparer l'historique depuis Memory pour apprendre les seuils + patterns
-  const memSnapshot = getMemory(orgId);
+  // (await pour récupérer la version Supabase la plus récente)
+  const memSnapshot = await getMemory(orgId);
   const history = memSnapshot.observations.map((o) => ({ date: o.date, metric: o.metric, value: o.value, severity: o.severity }));
 
   // 3) Enregistrer les prédictions de ce cycle pour évaluation future

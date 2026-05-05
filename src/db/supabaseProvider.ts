@@ -3,7 +3,12 @@
  * Utilisée quand VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY sont configurés.
  */
 import type { DataProvider, GLFilter } from './provider';
-import type { Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine, ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate } from './schema';
+import type {
+  Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
+  ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
+  AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
+  Activity, Channel, ChatMessage,
+} from './schema';
 import { supabase as supabaseTyped } from '../lib/supabase';
 
 import { toSnake, toCamel } from './caseConvert';
@@ -36,6 +41,23 @@ export class SupabaseProvider implements DataProvider {
   async deleteOrganization(id: string) {
     check(await supabase.from('fna_organizations').delete().eq('id', id));
   }
+  async deleteOrganizationCascade(id: string) {
+    // Ordre : enfants d'abord pour respecter les FK (au cas où Supabase n'ait pas
+    // ON DELETE CASCADE configuré sur toutes les FK fna_*).
+    const tables = [
+      'fna_gl_entries', 'fna_imports', 'fna_budgets', 'fna_account_mappings',
+      'fna_accounts', 'fna_periods', 'fna_fiscal_years',
+      'fna_attention_points', 'fna_action_plans', 'fna_reports',
+      'fna_report_templates', 'fna_chat_messages', 'fna_channels',
+      'fna_activities', 'fna_analytic_assignments', 'fna_analytic_budgets',
+      'fna_analytic_codes', 'fna_analytic_rules', 'fna_analytic_axes',
+    ];
+    for (const t of tables) {
+      // On ignore les erreurs (table sans la colonne org_id ou rangée déjà absente)
+      await supabase.from(t).delete().eq('org_id', id);
+    }
+    check(await supabase.from('fna_organizations').delete().eq('id', id));
+  }
 
   // Fiscal years
   async getFiscalYears(orgId: string) {
@@ -44,6 +66,28 @@ export class SupabaseProvider implements DataProvider {
   }
   async upsertFiscalYear(fy: FiscalYear) {
     check(await supabase.from('fna_fiscal_years').upsert(toSnake(fy)));
+  }
+  async bulkUpsertFiscalYears(fys: FiscalYear[]) {
+    if (fys.length === 0) return;
+    const rows = fys.map((f) => toSnake(f));
+    for (let i = 0; i < rows.length; i += 500) {
+      check(await supabase.from('fna_fiscal_years').upsert(rows.slice(i, i + 500)));
+    }
+  }
+  async deleteFiscalYearCascade(fy: FiscalYear) {
+    // 1) Supprime les GL entries dont la date tombe dans cette année
+    check(await supabase.from('fna_gl_entries').delete()
+      .eq('org_id', fy.orgId)
+      .gte('date', `${fy.year}-01-01`)
+      .lte('date', `${fy.year}-12-31`));
+    // 2) Supprime les périodes de cet exercice
+    check(await supabase.from('fna_periods').delete().eq('fiscal_year_id', fy.id));
+    // 3) Supprime l'exercice
+    check(await supabase.from('fna_fiscal_years').delete().eq('id', fy.id));
+  }
+  async setFiscalYearClosed(fy: FiscalYear, closed: boolean) {
+    check(await supabase.from('fna_fiscal_years').update({ closed }).eq('id', fy.id));
+    check(await supabase.from('fna_periods').update({ closed }).eq('fiscal_year_id', fy.id));
   }
 
   // Periods
@@ -54,18 +98,35 @@ export class SupabaseProvider implements DataProvider {
   async upsertPeriod(p: Period) {
     check(await supabase.from('fna_periods').upsert(toSnake(p)));
   }
+  async bulkUpsertPeriods(ps: Period[]) {
+    if (ps.length === 0) return;
+    const rows = ps.map((p) => toSnake(p));
+    for (let i = 0; i < rows.length; i += 500) {
+      check(await supabase.from('fna_periods').upsert(rows.slice(i, i + 500)));
+    }
+  }
 
   // Accounts
   async getAccounts(orgId: string) {
     const { data } = await supabase.from('fna_accounts').select('*').eq('org_id', orgId);
     return (data ?? []).map((r: any) => toCamel(r)) as Account[];
   }
+  async getAccount(orgId: string, code: string) {
+    const { data } = await supabase.from('fna_accounts').select('*')
+      .eq('org_id', orgId).eq('code', code).maybeSingle();
+    return data ? toCamel(data) as Account : undefined;
+  }
+  async upsertAccount(account: Account) {
+    check(await supabase.from('fna_accounts').upsert(toSnake(account)));
+  }
   async bulkUpsertAccounts(accounts: Account[]) {
     const rows = accounts.map(a => toSnake(a));
-    // Batch in chunks of 500
     for (let i = 0; i < rows.length; i += 500) {
       check(await supabase.from('fna_accounts').upsert(rows.slice(i, i + 500)));
     }
+  }
+  async deleteAccount(orgId: string, code: string) {
+    check(await supabase.from('fna_accounts').delete().eq('org_id', orgId).eq('code', code));
   }
   async deleteAccounts(orgId: string) {
     check(await supabase.from('fna_accounts').delete().eq('org_id', orgId));
@@ -87,6 +148,16 @@ export class SupabaseProvider implements DataProvider {
     for (let i = 0; i < rows.length; i += 500) {
       check(await supabase.from('fna_gl_entries').insert(rows.slice(i, i + 500)));
     }
+  }
+  async bulkUpsertGL(entries: GLEntry[]) {
+    if (entries.length === 0) return;
+    const rows = entries.map(e => toSnake(e));
+    for (let i = 0; i < rows.length; i += 500) {
+      check(await supabase.from('fna_gl_entries').upsert(rows.slice(i, i + 500)));
+    }
+  }
+  async updateGLEntry(id: number, changes: Partial<GLEntry>) {
+    check(await supabase.from('fna_gl_entries').update(toSnake(changes)).eq('id', id));
   }
   async deleteGLByImport(importId: number) {
     check(await supabase.from('fna_gl_entries').delete().eq('import_id', importId));
@@ -117,6 +188,11 @@ export class SupabaseProvider implements DataProvider {
     const { data } = await supabase.from('fna_budgets').select('*').eq('org_id', orgId);
     return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
   }
+  async getBudgetsByYear(orgId: string, year: number) {
+    const { data } = await supabase.from('fna_budgets').select('*')
+      .eq('org_id', orgId).eq('year', year);
+    return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
+  }
   async bulkUpsertBudgets(lines: BudgetLine[]) {
     const rows = lines.map(l => toSnake(l));
     for (let i = 0; i < rows.length; i += 500) {
@@ -125,6 +201,12 @@ export class SupabaseProvider implements DataProvider {
   }
   async deleteBudgets(orgId: string, year: number, version: string) {
     check(await supabase.from('fna_budgets').delete().eq('org_id', orgId).eq('year', year).eq('version', version));
+  }
+  async deleteAllBudgets(orgId: string) {
+    check(await supabase.from('fna_budgets').delete().eq('org_id', orgId));
+  }
+  async deleteImportsByKind(orgId: string, kind: ImportLog['kind']) {
+    check(await supabase.from('fna_imports').delete().eq('org_id', orgId).eq('kind', kind));
   }
 
   // Reports
@@ -214,6 +296,162 @@ export class SupabaseProvider implements DataProvider {
   }
   async upsertMapping(m: AccountMapping) {
     check(await supabase.from('fna_account_mappings').upsert(toSnake(m)));
+  }
+
+  // ── Comptabilité analytique ────────────────────────────────────────
+  async getAnalyticAxes(orgId: string) {
+    const { data } = await supabase.from('fna_analytic_axes').select('*').eq('org_id', orgId).order('number');
+    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticAxis[];
+  }
+  async upsertAnalyticAxis(axis: AnalyticAxis) {
+    check(await supabase.from('fna_analytic_axes').upsert(toSnake(axis)));
+  }
+  async deleteAnalyticAxis(id: string) {
+    // Cascade : on charge d'abord les codes liés pour supprimer assignments + rules
+    const { data: codes } = await supabase.from('fna_analytic_codes').select('id').eq('axis_id', id);
+    const codeIds = (codes ?? []).map((c: any) => c.id);
+    if (codeIds.length > 0) {
+      check(await supabase.from('fna_analytic_assignments').delete().in('code_id', codeIds));
+      check(await supabase.from('fna_analytic_rules').delete().in('analytic_code_id', codeIds));
+    }
+    check(await supabase.from('fna_analytic_codes').delete().eq('axis_id', id));
+    check(await supabase.from('fna_analytic_axes').delete().eq('id', id));
+  }
+
+  async getAnalyticCodes(orgId: string, axisId?: string) {
+    let q = supabase.from('fna_analytic_codes').select('*').eq('org_id', orgId);
+    if (axisId) q = q.eq('axis_id', axisId);
+    const { data } = await q;
+    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticCode[];
+  }
+  async upsertAnalyticCode(code: AnalyticCode) {
+    check(await supabase.from('fna_analytic_codes').upsert(toSnake(code)));
+  }
+  async bulkUpsertAnalyticCodes(codes: AnalyticCode[]) {
+    if (codes.length === 0) return;
+    const rows = codes.map((c) => toSnake(c));
+    for (let i = 0; i < rows.length; i += 500) {
+      check(await supabase.from('fna_analytic_codes').upsert(rows.slice(i, i + 500)));
+    }
+  }
+  async deleteAnalyticCode(id: string) {
+    check(await supabase.from('fna_analytic_assignments').delete().eq('code_id', id));
+    check(await supabase.from('fna_analytic_codes').delete().eq('id', id));
+  }
+  async detachAnalyticChildren(parentId: string) {
+    check(await supabase.from('fna_analytic_codes').update({ parent_id: null }).eq('parent_id', parentId));
+  }
+
+  async getAnalyticRules(orgId: string) {
+    const { data } = await supabase.from('fna_analytic_rules').select('*').eq('org_id', orgId).order('priority');
+    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticRule[];
+  }
+  async upsertAnalyticRule(rule: AnalyticRule) {
+    check(await supabase.from('fna_analytic_rules').upsert(toSnake(rule)));
+  }
+  async deleteAnalyticRule(id: string) {
+    check(await supabase.from('fna_analytic_rules').delete().eq('id', id));
+  }
+  async updateAnalyticRulePriority(id: string, priority: number) {
+    check(await supabase.from('fna_analytic_rules').update({ priority }).eq('id', id));
+  }
+
+  async getAnalyticAssignments(orgId: string) {
+    const { data } = await supabase.from('fna_analytic_assignments').select('*').eq('org_id', orgId);
+    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticAssignment[];
+  }
+  async bulkInsertAnalyticAssignments(assignments: AnalyticAssignment[]) {
+    if (assignments.length === 0) return;
+    const rows = assignments.map((a) => { const s = toSnake(a); delete s.id; return s; });
+    for (let i = 0; i < rows.length; i += 500) {
+      check(await supabase.from('fna_analytic_assignments').insert(rows.slice(i, i + 500)));
+    }
+  }
+  async updateAnalyticAssignment(id: number, changes: Partial<AnalyticAssignment>) {
+    check(await supabase.from('fna_analytic_assignments').update(toSnake(changes)).eq('id', id));
+  }
+  async deleteAnalyticAssignmentsByOrgFilter(orgId: string, predicate: (a: AnalyticAssignment) => boolean) {
+    // Supabase ne supporte pas les predicates JS — on charge puis filtre puis delete par ids.
+    const all = await this.getAnalyticAssignments(orgId);
+    const ids = all.filter(predicate).map((a) => a.id).filter((x): x is number => typeof x === 'number');
+    if (ids.length === 0) return;
+    for (let i = 0; i < ids.length; i += 500) {
+      check(await supabase.from('fna_analytic_assignments').delete().in('id', ids.slice(i, i + 500)));
+    }
+  }
+  async deleteAnalyticAssignmentsByCode(codeId: string) {
+    check(await supabase.from('fna_analytic_assignments').delete().eq('code_id', codeId));
+  }
+
+  async getAnalyticBudgets(orgId: string) {
+    const { data } = await supabase.from('fna_analytic_budgets').select('*').eq('org_id', orgId);
+    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticBudget[];
+  }
+
+  // ── Activités ──────────────────────────────────────────────────────
+  async getActivities(orgId: string) {
+    const { data } = await supabase.from('fna_activities').select('*')
+      .eq('org_id', orgId).order('created_at', { ascending: false });
+    return (data ?? []).map((r: any) => toCamel(r)) as Activity[];
+  }
+  async getActivity(id: number) {
+    const { data } = await supabase.from('fna_activities').select('*').eq('id', id).maybeSingle();
+    return data ? toCamel(data) as Activity : undefined;
+  }
+  async addActivity(act: Omit<Activity, 'id'>) {
+    const row = toSnake(act); delete row.id;
+    const result = check(await supabase.from('fna_activities').insert(row).select('id').single());
+    return (result as any).id;
+  }
+  async updateActivity(id: number, changes: Partial<Activity>) {
+    check(await supabase.from('fna_activities').update(toSnake(changes)).eq('id', id));
+  }
+  async deleteActivity(id: number) {
+    check(await supabase.from('fna_activities').delete().eq('id', id));
+  }
+
+  // ── Chat ───────────────────────────────────────────────────────────
+  async getChannels(orgId: string) {
+    const { data } = await supabase.from('fna_channels').select('*').eq('org_id', orgId);
+    return (data ?? []).map((r: any) => toCamel(r)) as Channel[];
+  }
+  async getChannel(id: string) {
+    const { data } = await supabase.from('fna_channels').select('*').eq('id', id).maybeSingle();
+    return data ? toCamel(data) as Channel : undefined;
+  }
+  async upsertChannel(c: Channel) {
+    check(await supabase.from('fna_channels').upsert(toSnake(c)));
+  }
+  async deleteChannel(id: string) {
+    check(await supabase.from('fna_channels').delete().eq('id', id));
+  }
+  async findChannel(orgId: string, predicate: (c: Channel) => boolean) {
+    const all = await this.getChannels(orgId);
+    return all.find(predicate);
+  }
+
+  async getChatMessage(id: number) {
+    const { data } = await supabase.from('fna_chat_messages').select('*').eq('id', id).maybeSingle();
+    return data ? toCamel(data) as ChatMessage : undefined;
+  }
+  async getChatMessagesByChannel(channelId: string) {
+    const { data } = await supabase.from('fna_chat_messages').select('*').eq('channel_id', channelId).order('created_at');
+    return (data ?? []).map((r: any) => toCamel(r)) as ChatMessage[];
+  }
+  async getChatMessagesByOrg(orgId: string) {
+    const { data } = await supabase.from('fna_chat_messages').select('*').eq('org_id', orgId);
+    return (data ?? []).map((r: any) => toCamel(r)) as ChatMessage[];
+  }
+  async addChatMessage(msg: Omit<ChatMessage, 'id'>) {
+    const row = toSnake(msg); delete row.id;
+    const result = check(await supabase.from('fna_chat_messages').insert(row).select('id').single());
+    return (result as any).id;
+  }
+  async updateChatMessage(id: number, changes: Partial<ChatMessage>) {
+    check(await supabase.from('fna_chat_messages').update(toSnake(changes)).eq('id', id));
+  }
+  async deleteChatMessage(id: number) {
+    check(await supabase.from('fna_chat_messages').delete().eq('id', id));
   }
 
   // File storage

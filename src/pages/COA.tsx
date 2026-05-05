@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, FileWarning, FolderTree, Search, Trash2, XCircle } from 'lucide-react';
 import { downloadCOATemplate } from '../engine/templates';
 import { importCOAv2 } from '../engine/importer';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -11,7 +11,8 @@ import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { toast } from '../components/ui/Toast';
 import { SYSCOHADA_COA, SyscoAccount, findSyscoAccount } from '../syscohada/coa';
-import { db, Account, GLEntry, ImportLog } from '../db/schema';
+import type { Account, GLEntry, ImportLog } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { useApp } from '../store/app';
 import { fmtFull } from '../lib/format';
 
@@ -40,16 +41,21 @@ export default function COA() {
 
   const coaImports = useImportsHistory(currentOrgId, 'COA');
 
-  const accounts = useLiveQuery(
-    () => (currentOrgId ? db.accounts.where('orgId').equals(currentOrgId).toArray() : Promise.resolve([] as Account[])),
-    [currentOrgId], [] as Account[],
+  const { data: accounts = [] as Account[] } = useCloudData<Account[]>(
+    () => currentOrgId ? dataProvider.getAccounts(currentOrgId) : Promise.resolve([] as Account[]),
+    [currentOrgId],
+    { initial: [] as Account[], tag: 'accounts' },
   );
 
-  const mouvementes = useLiveQuery(async () => {
-    if (!currentOrgId) return new Set<string>();
-    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
-    return new Set(entries.map((e) => e.account));
-  }, [currentOrgId], new Set<string>());
+  const { data: mouvementes = new Set<string>() } = useCloudData<Set<string>>(
+    async () => {
+      if (!currentOrgId) return new Set<string>();
+      const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
+      return new Set(entries.map((e) => e.account));
+    },
+    [currentOrgId],
+    { initial: new Set<string>(), tag: 'gl' },
+  );
 
   const filteredSysco = useMemo(() => {
     return SYSCOHADA_COA.filter((a) => {
@@ -136,9 +142,10 @@ export default function COA() {
             </button>
             <button className="btn-outline" onClick={async () => {
               if (!confirm(`Vider le Plan Comptable de l'entreprise ?\n${accounts.length} compte(s) seront supprimés. Le Grand Livre n'est PAS impacté.`)) return;
-              const toDel = (await db.accounts.where('orgId').equals(currentOrgId).toArray()).map((a) => [a.orgId, a.code] as [string, string]);
-              await db.accounts.bulkDelete(toDel);
-              toast.success('Plan comptable vidé', `${toDel.length} comptes supprimés — réimportez via l'onglet Import`);
+              const all = await dataProvider.getAccounts(currentOrgId);
+              await dataProvider.deleteAccounts(currentOrgId);
+              invalidateCloudData('accounts');
+              toast.success('Plan comptable vidé', `${all.length} comptes supprimés — réimportez via l'onglet Import`);
               window.location.reload();
             }}>
               Vider PC
@@ -203,7 +210,7 @@ export default function COA() {
             <div className="flex gap-2 flex-wrap">
             <button className="btn-outline !py-1.5 text-xs" onClick={async () => {
               if (!confirm('Générer le Plan Comptable à partir des comptes mouvementés du Grand Livre ?\nLes libellés seront ceux des écritures GL (le plus fréquent par compte).')) return;
-              const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+              const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
               if (entries.length === 0) { toast.warning('Pas de Grand Livre', 'Importez d\'abord un GL pour générer le plan comptable'); return; }
               const freq = new Map<string, Map<string, number>>();
               for (const e of entries) {
@@ -231,26 +238,28 @@ export default function COA() {
                 });
               }
               if (toCreate.length === 0) { toast.info('Plan déjà à jour', 'Tous les comptes du GL existent déjà'); return; }
-              await db.accounts.bulkPut(toCreate);
+              await dataProvider.bulkUpsertAccounts(toCreate);
+              invalidateCloudData('accounts');
               toast.success('Comptes créés', `${toCreate.length} comptes ajoutés depuis le Grand Livre`);
             }}>Générer depuis le GL</button>
             <button className="btn-primary !py-1.5 text-xs" onClick={async () => {
               const code = prompt('Code du nouveau compte (ex: 706111) :', '');
               if (!code || !code.trim()) return;
               const trimmed = code.trim();
-              const existing = await db.accounts.where({ orgId: currentOrgId, code: trimmed }).first();
+              const existing = await dataProvider.getAccount(currentOrgId, trimmed);
               if (existing) { toast.warning('Compte existant', `Le compte ${trimmed} existe déjà`); return; }
               const label = prompt('Libellé du compte :', '');
               if (!label || !label.trim()) return;
               const sysco = SYSCOHADA_COA.find((a) => trimmed.startsWith(a.code));
-              await db.accounts.put({
+              await dataProvider.upsertAccount({
                 orgId: currentOrgId,
                 code: trimmed,
                 label: label.trim(),
                 syscoCode: sysco?.code,
                 class: trimmed[0],
-                type: sysco?.type ?? 'X',
+                type: (sysco?.type as Account['type']) ?? 'X',
               });
+              invalidateCloudData('accounts');
               toast.success('Compte ajouté', `Compte ${trimmed} créé avec succès`);
             }}>+ Ajouter compte</button>
             </div>
@@ -413,28 +422,45 @@ function ImportedTree({ items, mouvementes, activeClass, onSelect }: { items: Ac
 
 // ─── MODAL DÉTAIL D'UN COMPTE ────────────────────────────────────────
 function AccountDetailModal({ orgId, account, onClose }: { orgId: string; account: { code: string; label: string; type?: string; class?: string }; onClose: () => void }) {
-  const entries = useLiveQuery(async () => {
-    if (!orgId) return [] as GLEntry[];
-    return await db.gl.where('orgId').equals(orgId).filter((e) => e.account === account.code || e.account.startsWith(account.code)).toArray();
-  }, [orgId, account.code], [] as GLEntry[]);
+  const { data: entries = [] as GLEntry[] } = useCloudData<GLEntry[]>(
+    async () => {
+      if (!orgId) return [] as GLEntry[];
+      const all = await dataProvider.getGLEntries({ orgId });
+      return all.filter((e) => e.account === account.code || e.account.startsWith(account.code));
+    },
+    [orgId, account.code],
+    { initial: [] as GLEntry[], tag: 'gl' },
+  );
 
   // Édition du compte (uniquement pour les comptes société, pas SYSCOHADA)
   const [editing, setEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(account.label);
   const [editType, setEditType] = useState(account.type ?? 'X');
-  const isCompanyAccount = useLiveQuery(async () => {
-    if (!orgId) return false;
-    const found = await db.accounts.where({ orgId, code: account.code }).first();
-    return !!found;
-  }, [orgId, account.code], false);
+  const { data: isCompanyAccount = false } = useCloudData<boolean>(
+    async () => {
+      if (!orgId) return false;
+      const found = await dataProvider.getAccount(orgId, account.code);
+      return !!found;
+    },
+    [orgId, account.code],
+    { initial: false, tag: 'accounts' },
+  );
   const saveEdit = async () => {
-    const existing = await db.accounts.where({ orgId, code: account.code }).first();
-    if (existing) await db.accounts.put({ ...existing, label: editLabel.trim() || existing.label, type: editType as Account['type'] });
+    const existing = await dataProvider.getAccount(orgId, account.code);
+    if (existing) {
+      await dataProvider.upsertAccount({
+        ...existing,
+        label: editLabel.trim() || existing.label,
+        type: editType as Account['type'],
+      });
+      invalidateCloudData('accounts');
+    }
     setEditing(false);
   };
   const deleteAccount = async () => {
     if (!confirm(`Supprimer le compte ${account.code} du Plan Comptable de l'entreprise ?\nLes écritures du Grand Livre ne sont PAS impactées.`)) return;
-    await db.accounts.where({ orgId, code: account.code }).delete();
+    await dataProvider.deleteAccount(orgId, account.code);
+    invalidateCloudData('accounts');
     onClose();
   };
 
@@ -607,7 +633,8 @@ function COAImportTab({
   const deleteImport = async (imp: ImportLog) => {
     if (!imp.id) return;
     if (!confirm("Supprimer cet import de l'historique ? (les comptes ne sont pas supprimés)")) return;
-    await db.imports.delete(imp.id);
+    await dataProvider.deleteImport(imp.id);
+    invalidateCloudData('imports');
   };
 
   return (

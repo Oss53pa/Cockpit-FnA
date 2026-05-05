@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertTriangle, CheckCircle2, Clock, Link2, Plus, Target, Trash2, Zap, LayoutGrid, Rows3, LayoutDashboard } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -11,7 +10,9 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { TabSwitch } from '../components/ui/TabSwitch';
-import { db, ActionPlan, AttentionPoint } from '../db/schema';
+import type { ActionPlan, AttentionPoint } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { useApp } from '../store/app';
 import { fmtMoney } from '../lib/format';
 
@@ -28,8 +29,24 @@ export default function Actions() {
   const { currentOrgId } = useApp();
   const [tab, setTab] = useState<Tab>('attention');
 
-  const points = useLiveQuery(() => db.attentionPoints.where('orgId').equals(currentOrgId).reverse().sortBy('detectedAt'), [currentOrgId]) ?? [];
-  const plans = useLiveQuery(() => db.actionPlans.where('orgId').equals(currentOrgId).reverse().sortBy('createdAt'), [currentOrgId]) ?? [];
+  const { data: points = [] as AttentionPoint[] } = useCloudData<AttentionPoint[]>(
+    async () => {
+      if (!currentOrgId) return [] as AttentionPoint[];
+      const rows = await dataProvider.getAttentionPoints(currentOrgId);
+      return [...rows].sort((a, b) => b.detectedAt - a.detectedAt);
+    },
+    [currentOrgId],
+    { initial: [] as AttentionPoint[], tag: 'attentionPoints' },
+  );
+  const { data: plans = [] as ActionPlan[] } = useCloudData<ActionPlan[]>(
+    async () => {
+      if (!currentOrgId) return [] as ActionPlan[];
+      const rows = await dataProvider.getActionPlans(currentOrgId);
+      return [...rows].sort((a, b) => b.createdAt - a.createdAt);
+    },
+    [currentOrgId],
+    { initial: [] as ActionPlan[], tag: 'actionPlans' },
+  );
 
   const pCount = {
     open: points.filter((p) => p.status === 'open').length,
@@ -103,8 +120,16 @@ function PointsView({ points, plans }: { points: AttentionPoint[]; plans: Action
 
   const linkedFor = (pid?: number) => plans.filter((pl) => pl.attentionPointId === pid).length;
   const onEdit = (p: AttentionPoint) => { setEditing(p); setOpen(true); };
-  const onDelete = async (p: AttentionPoint) => { if (confirm('Supprimer ?')) await db.attentionPoints.delete(p.id!); };
-  const onStatusChange = async (p: AttentionPoint, s: AttentionPoint['status']) => await db.attentionPoints.update(p.id!, { status: s, resolvedAt: s === 'resolved' ? Date.now() : undefined });
+  const onDelete = async (p: AttentionPoint) => {
+    if (confirm('Supprimer ?')) {
+      await dataProvider.deleteAttentionPoint(p.id!);
+      invalidateCloudData('attentionPoints');
+    }
+  };
+  const onStatusChange = async (p: AttentionPoint, s: AttentionPoint['status']) => {
+    await dataProvider.upsertAttentionPoint({ ...p, status: s, resolvedAt: s === 'resolved' ? Date.now() : undefined });
+    invalidateCloudData('attentionPoints');
+  };
 
   return (
     <Card
@@ -158,8 +183,9 @@ function PointsView({ points, plans }: { points: AttentionPoint[]; plans: Action
         onClose={() => setOpen(false)}
         initial={editing}
         onSave={async (data) => {
-          if (editing?.id) await db.attentionPoints.update(editing.id, data);
-          else await db.attentionPoints.add({ ...data, orgId: currentOrgId, detectedAt: Date.now(), status: 'open' } as AttentionPoint);
+          if (editing?.id) await dataProvider.upsertAttentionPoint({ ...editing, ...data });
+          else await dataProvider.upsertAttentionPoint({ ...data, orgId: currentOrgId, detectedAt: Date.now(), status: 'open' } as AttentionPoint);
+          invalidateCloudData('attentionPoints');
           setOpen(false);
         }}
       />
@@ -381,9 +407,20 @@ function PlanView({ plans, points }: { plans: ActionPlan[]; points: AttentionPoi
   );
   const isLate = (p: ActionPlan) => p.status !== 'done' && p.status !== 'cancelled' && p.dueDate && p.dueDate < today;
   const onEdit = (p: ActionPlan) => { setEditing(p); setOpen(true); };
-  const onDelete = async (p: ActionPlan) => { if (confirm('Supprimer ?')) await db.actionPlans.delete(p.id!); };
-  const onStatusChange = async (p: ActionPlan, s: ActionPlan['status']) => await db.actionPlans.update(p.id!, { status: s, updatedAt: Date.now(), completedAt: s === 'done' ? Date.now() : undefined });
-  const onProgressChange = async (p: ActionPlan, v: number) => await db.actionPlans.update(p.id!, { progress: v, updatedAt: Date.now() });
+  const onDelete = async (p: ActionPlan) => {
+    if (confirm('Supprimer ?')) {
+      await dataProvider.deleteActionPlan(p.id!);
+      invalidateCloudData('actionPlans');
+    }
+  };
+  const onStatusChange = async (p: ActionPlan, s: ActionPlan['status']) => {
+    await dataProvider.upsertActionPlan({ ...p, status: s, updatedAt: Date.now(), completedAt: s === 'done' ? Date.now() : undefined });
+    invalidateCloudData('actionPlans');
+  };
+  const onProgressChange = async (p: ActionPlan, v: number) => {
+    await dataProvider.upsertActionPlan({ ...p, progress: v, updatedAt: Date.now() });
+    invalidateCloudData('actionPlans');
+  };
 
   return (
     <Card
@@ -442,8 +479,9 @@ function PlanView({ plans, points }: { plans: ActionPlan[]; points: AttentionPoi
         points={points}
         onSave={async (data) => {
           const now = Date.now();
-          if (editing?.id) await db.actionPlans.update(editing.id, { ...data, updatedAt: now });
-          else await db.actionPlans.add({ ...data, orgId: currentOrgId, createdAt: now, updatedAt: now, progress: data.progress ?? 0 } as ActionPlan);
+          if (editing?.id) await dataProvider.upsertActionPlan({ ...editing, ...data, updatedAt: now });
+          else await dataProvider.upsertActionPlan({ ...data, orgId: currentOrgId, createdAt: now, updatedAt: now, progress: data.progress ?? 0 } as ActionPlan);
+          invalidateCloudData('actionPlans');
           setOpen(false);
         }}
       />

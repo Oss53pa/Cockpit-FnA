@@ -9,13 +9,14 @@
  * type, statut et contexte. Toggle ouvert/fermé persisté dans localStorage.
  */
 import { useMemo, useState, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation } from 'react-router-dom';
 import {
   MessageSquare, Edit2, CheckCircle2, AlertCircle, X, ChevronRight, Send, Filter, Trash2, History,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { db, type Activity, type ActivityKind, type ActivityStatus } from '../../db/schema';
+import type { Activity, ActivityKind } from '../../db/schema';
+import { dataProvider } from '../../db/provider';
+import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
 import { toast } from '../ui/Toast';
 
@@ -50,10 +51,11 @@ export function ActivitySidebarToggle() {
   const open = typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_OPEN_KEY) === '1';
   const [, setTick] = useState(0);
 
-  const activities = useLiveQuery(
-    () => orgId ? db.activities.where('orgId').equals(orgId).filter((a) => a.status === 'open').toArray() : Promise.resolve([]),
-    [orgId], [],
-  ) ?? [];
+  const { data: activities = [] } = useCloudData<Activity[]>(
+    async () => orgId ? (await dataProvider.getActivities(orgId)).filter((a) => a.status === 'open') : [],
+    [orgId],
+    { initial: [], tag: 'activities' },
+  );
 
   const toggle = () => {
     localStorage.setItem(SIDEBAR_OPEN_KEY, open ? '0' : '1');
@@ -106,10 +108,11 @@ export function ActivitySidebar() {
     window.dispatchEvent(new Event('activity-sidebar-toggle'));
   };
 
-  const all = useLiveQuery(
-    () => orgId ? db.activities.where('orgId').equals(orgId).reverse().sortBy('createdAt') : Promise.resolve([]),
-    [orgId], [],
-  ) ?? [];
+  const { data: all = [] } = useCloudData<Activity[]>(
+    () => orgId ? dataProvider.getActivities(orgId) : Promise.resolve([]),
+    [orgId],
+    { initial: [], tag: 'activities' },
+  );
 
   const filtered = useMemo(() => {
     return all.filter((a: Activity) => {
@@ -159,12 +162,10 @@ export function ActivitySidebar() {
         createdAt: Date.now(),
         ...(newKind === 'validation' ? { resolvedAt: Date.now(), resolvedBy: authorName } : {}),
       };
-      const localId = await db.activities.add(activity);
+      await dataProvider.addActivity(activity);
+      invalidateCloudData('activities');
       setNewContent('');
       toast.success(`${KIND_LABELS[newKind].slice(0, -1)} ajoutée`);
-      // Sync cloud (fire-and-forget)
-      void import('../../engine/activitySync').then(({ pushActivityToCloud }) =>
-        pushActivityToCloud({ ...activity, id: localId as number })).catch(() => { /* ignore */ });
     } catch (e: any) {
       toast.error('Erreur', e?.message ?? 'Ajout impossible.');
     }
@@ -180,22 +181,21 @@ export function ActivitySidebar() {
       return 'Utilisateur local';
     })();
     const updates = { status: 'resolved' as const, resolvedAt: Date.now(), resolvedBy: authorName };
-    await db.activities.update(a.id, updates);
-    void import('../../engine/activitySync').then(({ updateActivityInCloud }) =>
-      updateActivityInCloud(a.id!, updates)).catch(() => { /* ignore */ });
+    await dataProvider.updateActivity(a.id, updates);
+    invalidateCloudData('activities');
     toast.success('Résolu');
   };
 
   const archiveActivity = async (a: Activity) => {
     if (!a.id) return;
-    await db.activities.update(a.id, { status: 'archived' });
-    void import('../../engine/activitySync').then(({ updateActivityInCloud }) =>
-      updateActivityInCloud(a.id!, { status: 'archived' })).catch(() => { /* ignore */ });
+    await dataProvider.updateActivity(a.id, { status: 'archived' });
+    invalidateCloudData('activities');
   };
 
   const deleteActivity = async (a: Activity) => {
     if (!a.id || !confirm('Supprimer définitivement cet élément ?')) return;
-    await db.activities.delete(a.id);
+    await dataProvider.deleteActivity(a.id);
+    invalidateCloudData('activities');
     toast.success('Supprimé');
   };
 

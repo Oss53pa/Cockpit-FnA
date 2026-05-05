@@ -1,5 +1,9 @@
 // Moteur de calcul — Balances dérivées du Grand Livre
-import { db, GLEntry } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+// Aucun accès direct à `db` Dexie — voir src/db/provider.ts pour le pattern.
+import type { GLEntry } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { findSyscoAccount, classOf } from '../syscohada/coa';
 
 export type AuxBalanceRow = {
@@ -17,10 +21,13 @@ export async function computeAuxBalance(opts: {
 }): Promise<AuxBalanceRow[]> {
   const { orgId, year, kind, importId } = opts;
   const prefix = kind === 'client' ? '411' : '401';
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, entries, accounts] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getAccounts(orgId),
+  ]);
   const ids = new Set(periods.filter((p) => year === undefined || p.year === year).map((p) => p.id));
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
-  const accountLabels = new Map((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => [a.code, a.label] as const));
+  const accountLabels = new Map(accounts.map((a) => [a.code, a.label] as const));
 
   // Filtrer une fois pour toutes les écritures du préfixe
   const auxEntries = entries.filter((e) =>
@@ -50,11 +57,21 @@ export async function computeAuxBalance(opts: {
     let label: string;
     let tier: string;
 
-    if (hasTiers && e.tiers) {
-      // Niveau 1 : code tiers explicite
-      key = `T:${e.tiers}`;
-      label = e.label?.trim() || accountLabels.get(e.account) || '—';
-      tier = e.tiers;
+    if (hasTiers) {
+      // BUG FIX : si l'org dispose de codes tiers, on N'AGRÈGE QUE par tiers.
+      // Les écritures sans code tiers (typiquement OD techniques sur le compte
+      // parent 401 / 411) sont regroupées dans un bucket unique « Sans tiers »
+      // — pas en lignes séparées par compte parent (qui faisaient doublon avec
+      // les lignes individuelles des tiers).
+      if (e.tiers) {
+        key = `T:${e.tiers}`;
+        label = e.label?.trim() || accountLabels.get(e.account) || '—';
+        tier = e.tiers;
+      } else {
+        key = `__SANS_TIERS__:${e.account}`;
+        label = `Sans tiers (${e.account})`;
+        tier = `— ${e.account}`;
+      }
     } else if (hasMultipleAuxAccounts) {
       // Niveau 2 : plusieurs comptes auxiliaires distincts → un par tier
       key = `A:${e.account}`;
@@ -121,7 +138,7 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
   const { orgId, year, fromMonth, uptoMonth, includeOpening = true, importId } = opts;
 
   // Récupérer les périodes concernées
-  let periods = await db.periods.where('orgId').equals(orgId).toArray();
+  let periods = await dataProvider.getPeriods(orgId);
   if (year !== undefined) periods = periods.filter((p) => p.year === year);
 
   const fm = fromMonth ?? 1;
@@ -132,7 +149,7 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
   });
 
   const periodIds = new Set(periods.map((p) => p.id));
-  const all = await db.gl.where('orgId').equals(orgId).toArray();
+  const all = await dataProvider.getGLEntries({ orgId });
   const entries: GLEntry[] = all.filter((e) =>
     periodIds.has(e.periodId) && (!importId || importId === 'all' || e.importId === importId),
   );
@@ -161,8 +178,8 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
     return best || undefined;
   };
 
-  // Récupérer les libellés officiels (db.accounts) — peut être vide si Plan Comptable non importé
-  const accMeta = await db.accounts.where('orgId').equals(orgId).toArray();
+  // Récupérer les libellés officiels (Plan Comptable) — peut être vide si non importé
+  const accMeta = await dataProvider.getAccounts(orgId);
   const labelMap = new Map(accMeta.map((a) => [a.code, a]));
 
   const rows: BalanceRow[] = [];

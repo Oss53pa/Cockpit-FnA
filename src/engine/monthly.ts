@@ -1,5 +1,7 @@
 // Calculs mensuels — CR et Bilan sur 12 mois
-import { db } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+import { dataProvider } from '../db/provider';
 import { computeBalance } from './balance';
 import { computeBilan, Line } from './statements';
 import { CR_FLOW, CRSection, getSectionDefs, INTERMEDIATE_LABELS, loadLabels } from './budgetActual';
@@ -37,14 +39,16 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   const labels = loadLabels(orgId);
 
   // 1) Pour chaque mois, balance + map compte → (débit, crédit) sur CE mois uniquement
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, allEntries, orgAccounts] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getAccounts(orgId),
+  ]);
   const monthPeriod = (m: number) => periods.find((p) => p.year === year && p.month === m);
-  const allEntries = await db.gl.where('orgId').equals(orgId).toArray();
   // Plan comptable propre à l'entreprise — priorité :
-  // 1) db.accounts (si Plan Comptable importé explicitement)
+  // 1) accounts (si Plan Comptable importé explicitement)
   // 2) libellé le plus fréquent dans les écritures GL (e.label)
   // 3) libellé SYSCOHADA générique (fallback)
-  const orgAccounts = await db.accounts.where('orgId').equals(orgId).toArray();
   const orgLabelByCode = new Map(orgAccounts.map((a) => [a.code, a.label] as const));
   // Calcul du libellé GL le plus fréquent par compte
   const glLabelFreq = new Map<string, Map<string, number>>();
@@ -78,7 +82,10 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     for (const e of entries) {
       const c = e.account[0];
       if (c !== '6' && c !== '7' && c !== '8') continue;
-      const isCharge = c === '6' || e.account.startsWith('81') || e.account.startsWith('83') || e.account.startsWith('85') || e.account.startsWith('87') || e.account.startsWith('89');
+      const isCharge = c === '6'
+        || e.account.startsWith('81') || e.account.startsWith('83')
+        || e.account.startsWith('85') || e.account.startsWith('87')
+        || e.account.startsWith('89');
       const net = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
       const map = netByMonthAccount[m];
       map.set(e.account, (map.get(e.account) ?? 0) + net);
@@ -87,9 +94,9 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
 
   // ── Budget mensuel par compte (dernière version) ──
   const budgetByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
-  const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
+  const allBudgets = await dataProvider.getBudgetsByYear(orgId, year);
   if (allBudgets.length === 0) {
-    const allOrgBudgets = await db.budgets.where('orgId').equals(orgId).toArray();
+    const allOrgBudgets = await dataProvider.getAllBudgets(orgId);
     if (allOrgBudgets.length > 0) {
       const yearsWithBudget = Array.from(new Set(allOrgBudgets.map((b) => b.year))).sort((a, b) => b - a);
       console.warn('[monthly] Pas de budget pour ' + year + ' (orgId=' + orgId + '). Annees disponibles : ' + yearsWithBudget.join(', '));
@@ -118,10 +125,7 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   const n1ByMonthAccount = Array.from({ length: 12 }, () => new Map<string, number>());
 
   // Etape 1 : tente d'abord BUDGET N-1
-  const allBudgetsN1 = await db.budgets
-    .where('[orgId+year+version]')
-    .between([orgId, year - 1, ''], [orgId, year - 1, '￿'])
-    .toArray();
+  const allBudgetsN1 = await dataProvider.getBudgetsByYear(orgId, year - 1);
   let n1Source: 'budget' | 'gl' | 'none' = 'none';
   if (allBudgetsN1.length > 0) {
     const versionsN1 = Array.from(new Set(allBudgetsN1.map((b) => b.version))).sort();
@@ -147,7 +151,10 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
         if (!periodIdsN1.has(e.periodId)) continue;
         const c = e.account[0];
         if (c !== '6' && c !== '7' && c !== '8') continue;
-        const isCharge = c === '6' || e.account.startsWith('81') || e.account.startsWith('83') || e.account.startsWith('85') || e.account.startsWith('87') || e.account.startsWith('89');
+        const isCharge = c === '6'
+        || e.account.startsWith('81') || e.account.startsWith('83')
+        || e.account.startsWith('85') || e.account.startsWith('87')
+        || e.account.startsWith('89');
         const net = isCharge ? (e.debit - e.credit) : (e.credit - e.debit);
         const m = periodMapN1.get(e.periodId);
         if (m === undefined) continue;
@@ -353,8 +360,15 @@ export async function computeMonthlyBilan(orgId: string, year: number) {
   const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   const snapshots: { actif: Line[]; passif: Line[] }[] = [];
   for (let m = 1; m <= 12; m++) {
-    const rows = await computeBalance({ orgId, year, uptoMonth: m, includeOpening: true });
-    snapshots.push(computeBilan(rows));
+    // BUG FIX (audit) : on calcule AUSSI les mouvements (sans à-nouveaux) pour
+    // que `computeBilan` puisse calculer le résultat de l'exercice depuis les
+    // mouvements et non les soldes cumulés (qui peuvent contenir des RAN
+    // erronés sur classes 6/7/8). Cohérent avec computeBilan annuel.
+    const [rows, movements] = await Promise.all([
+      computeBalance({ orgId, year, uptoMonth: m, includeOpening: true }),
+      computeBalance({ orgId, year, uptoMonth: m, includeOpening: false }),
+    ]);
+    snapshots.push(computeBilan(rows, movements));
   }
   const templateA = snapshots[0]?.actif ?? [];
   const templateP = snapshots[0]?.passif ?? [];

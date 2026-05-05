@@ -1,5 +1,7 @@
 // Comptabilité analytique — P&L par centre de coût / section
-import { db } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+import { dataProvider } from '../db/provider';
 
 export interface AnalyticalRow {
   section: string;
@@ -11,14 +13,14 @@ export interface AnalyticalRow {
 }
 
 export async function listAxes(orgId: string): Promise<string[]> {
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const entries = await dataProvider.getGLEntries({ orgId });
   const axes = new Set<string>();
   for (const e of entries) if (e.analyticalAxis) axes.add(e.analyticalAxis);
   return Array.from(axes).sort();
 }
 
 export async function listSections(orgId: string, axis?: string): Promise<string[]> {
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const entries = await dataProvider.getGLEntries({ orgId });
   const sections = new Set<string>();
   for (const e of entries) {
     if (axis && e.analyticalAxis !== axis) continue;
@@ -28,9 +30,11 @@ export async function listSections(orgId: string, axis?: string): Promise<string
 }
 
 export async function computeAnalyticalPL(orgId: string, year: number, axis?: string): Promise<AnalyticalRow[]> {
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, entries] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+  ]);
   const pIds = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
 
   const map = new Map<string, { charges: number; produits: number }>();
 
@@ -60,8 +64,10 @@ export async function computeAnalyticalPL(orgId: string, year: number, axis?: st
 
 export async function computeAnalyticalMonthly(orgId: string, year: number, section: string): Promise<{ months: string[]; charges: number[]; produits: number[] }> {
   const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
+  const [periods, entries] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+  ]);
   const charges = Array(12).fill(0), produits = Array(12).fill(0);
 
   for (const p of periods.filter((p) => p.year === year && p.month >= 1)) {

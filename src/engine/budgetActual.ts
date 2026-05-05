@@ -1,5 +1,7 @@
 // Comparaison Budget vs Réalisé sur le compte de résultat
-import { db } from '../db/schema';
+//
+// Source de données : Supabase via dataProvider (obligatoire).
+import { dataProvider } from '../db/provider';
 import { findSyscoAccount } from '../syscohada/coa';
 import { Line } from './statements';
 import { getActiveModel, modelToSectionDefs, modelToOrder, migrateLegacySettings } from './crModels';
@@ -177,11 +179,13 @@ export async function computeBudgetActual(
 ): Promise<BudgetActualRow[]> {
   const fm = opts?.fromMonth ?? 1;
   const tm = opts?.toMonth ?? 12;
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
+  const [periods, entries, orgAccounts] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getAccounts(orgId),
+  ]);
   const ids = new Set(periods.filter((p) => p.year === year && p.month >= fm && p.month <= tm).map((p) => p.id));
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
-  // Libellés : db.accounts → e.label le plus fréquent → SYSCOHADA → code brut
-  const orgAccounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  // Libellés : accounts → e.label le plus fréquent → SYSCOHADA → code brut
   const orgLabelByCode = new Map(orgAccounts.map((a) => [a.code, a.label] as const));
   const glFreq = new Map<string, Map<string, number>>();
   for (const e of entries) {
@@ -229,12 +233,16 @@ export async function computeBudgetActual(
   const budgetMap = new Map<string, number>();
   let resolvedVersion = version;
   if (!resolvedVersion) {
-    const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
-    const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
-    resolvedVersion = versions[versions.length - 1]; // dernière version par ordre alphabétique
+    const allBudgets = await dataProvider.getBudgetsByYear(orgId, year);
+    // BUG FIX (audit) : tri sémantique (numeric) au lieu d'alphabétique strict.
+    // Avant : 'V10' < 'V2' alphabétiquement → mauvaise version résolue.
+    // Maintenant : `Intl.Collator` avec `numeric: true` tri 'V2' < 'V10' < 'V_final'.
+    const versions = Array.from(new Set(allBudgets.map((b) => b.version)))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    resolvedVersion = versions[versions.length - 1]; // dernière version (tri sémantique)
   }
   if (resolvedVersion) {
-    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, resolvedVersion]).toArray();
+    const lines = await dataProvider.getBudgets(orgId, year, resolvedVersion);
     for (const l of lines) {
       // Filtrer le budget mensuel sur l'intervalle sélectionné
       if (l.month < fm || l.month > tm) continue;
@@ -360,9 +368,11 @@ export type MonthlyBudgetRow = {
 
 export async function computeBudgetActualMonthly(orgId: string, year: number, version?: string): Promise<{ months: string[]; rows: MonthlyBudgetRow[] }> {
   const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
-  const orgAccounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const [periods, entries, orgAccounts] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getAccounts(orgId),
+  ]);
   const orgLabelByCode = new Map(orgAccounts.map((a) => [a.code, a.label] as const));
   // Libellé GL le plus fréquent par compte (fallback si Plan Comptable non importé)
   const glFreqM = new Map<string, Map<string, number>>();
@@ -432,12 +442,12 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
   const budgetMonthly = new Map<string, number[]>();
   let resolvedVersion = version;
   if (!resolvedVersion) {
-    const allBudgets = await db.budgets.where('[orgId+year+version]').between([orgId, year, ''], [orgId, year, '\uffff']).toArray();
+    const allBudgets = await dataProvider.getBudgetsByYear(orgId, year);
     const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
     resolvedVersion = versions[versions.length - 1];
   }
   if (resolvedVersion) {
-    const lines = await db.budgets.where('[orgId+year+version]').equals([orgId, year, resolvedVersion]).toArray();
+    const lines = await dataProvider.getBudgets(orgId, year, resolvedVersion);
     for (const l of lines) {
       const arr = budgetMonthly.get(l.account) ?? Array(12).fill(0);
       arr[l.month - 1] += l.amount;
@@ -485,7 +495,12 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
     const rN1 = realiseN1.get(account) ?? Array(12).fill(0);
     const bud = budgetMonthly.get(account) ?? Array(12).fill(0);
     const sysco = findSyscoAccount(account);
-    const isCharge = account.startsWith('6');
+    // BUG FIX (audit) : la classification charge/produit doit traiter la classe 8 (HAO)
+    // selon SYSCOHADA art. 38 — sous-classes 81/83/85/87/89 = charges, 82/84/86/88 = produits.
+    const c0 = account[0];
+    const sub2 = account.substring(0, 2);
+    const isCharge = c0 === '6'
+      || (c0 === '8' && ['81', '83', '85', '87', '89'].includes(sub2));
 
     const months = rN.map((r, i) => ({
       realise: r,

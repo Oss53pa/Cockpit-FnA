@@ -1,8 +1,11 @@
 // Parser et importeur du Grand Livre (CSV / XLSX)
+//
+// Source de données : Supabase via dataProvider (obligatoire).
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { db, GLEntry, Account } from '../db/schema';
+import type { GLEntry, Account } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { findSyscoAccount, classOf, SYSCOHADA_COA } from '../syscohada/coa';
 import { hashEntry, type HashableEntry } from '../lib/auditHash';
 import { assertPeriodOpen, PeriodLockedError } from '../lib/periodLock';
@@ -258,7 +261,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   if (!colCode) return { imported: 0, updated: 0, errors: [`Colonne "Code" introuvable (ni par nom, ni par contenu). Headers : ${headers.join(', ')}`], sheetName };
   if (!colLabel) return { imported: 0, updated: 0, errors: [`Colonne "Libellé" introuvable (ni par nom, ni par contenu). Headers : ${headers.join(', ')}`], sheetName };
 
-  const existing = new Set((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => a.code));
+  const existing = new Set((await dataProvider.getAccounts(orgId)).map((a) => a.code));
   const toImport: Account[] = [];
   const errors: string[] = [];
   let updatedCount = 0;
@@ -332,10 +335,10 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   }
 
   if (toImport.length > 0) {
-    await db.accounts.bulkPut(toImport);
+    await dataProvider.bulkUpsertAccounts(toImport);
   }
   // Toujours enregistrer en historique (même 0 import) pour traçabilité
-  await db.imports.add({
+  await dataProvider.addImport({
     orgId, date: Date.now(), user: 'Utilisateur local', fileName: file.name,
     source: 'Excel (v2)', kind: 'COA', count: toImport.length, rejected: errors.length,
     status: toImport.length === 0 ? 'error' : (errors.length === 0 ? 'success' : 'partial'),
@@ -395,47 +398,19 @@ export async function importBudgetV2(
 
   console.log('🟡 [importBudgetV2] Comptes trouvés:', perAccount.size);
 
-  let lines = 0;
-  let insertedRows: any[] = [];
-  await db.transaction('rw', db.budgets, async () => {
-    await db.budgets.where('[orgId+year+version]').equals([orgId, year, version]).delete();
-    const toInsert: any[] = [];
-    for (const [account, arr] of perAccount) {
-      let pushed = false;
-      for (let m = 0; m < 12; m++) {
-        if (arr[m] !== 0) { toInsert.push({ orgId, year, version, account, month: m + 1, amount: arr[m] }); pushed = true; }
-      }
-      if (!pushed) toInsert.push({ orgId, year, version, account, month: 1, amount: 0 });
+  // Construire les lignes à insérer
+  const toInsert: any[] = [];
+  for (const [account, arr] of perAccount) {
+    let pushed = false;
+    for (let m = 0; m < 12; m++) {
+      if (arr[m] !== 0) { toInsert.push({ orgId, year, version, account, month: m + 1, amount: arr[m] }); pushed = true; }
     }
-    if (toInsert.length) await db.budgets.bulkAdd(toInsert);
-    lines = toInsert.length;
-    insertedRows = toInsert;
-  });
-
-  // Push vers Supabase (fire-and-forget) pour multi-device
-  if (insertedRows.length > 0) {
-    void (async () => {
-      try {
-        const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
-        if (!isSupabaseConfigured) return;
-        // Supprime d'abord les anciennes lignes pour la combo (orgId+year+version)
-        await (supabase as any).from('fna_budgets')
-          .delete()
-          .eq('org_id', orgId).eq('year', year).eq('version', version);
-        // Insère les nouvelles (par batch de 500 pour Supabase)
-        const rows = insertedRows.map((r) => ({
-          org_id: r.orgId, year: r.year, version: r.version,
-          account: r.account, month: r.month, amount: r.amount,
-        }));
-        for (let i = 0; i < rows.length; i += 500) {
-          await (supabase as any).from('fna_budgets').insert(rows.slice(i, i + 500));
-        }
-        console.log(`✅ [importBudgetV2] Push Supabase: ${rows.length} lignes`);
-      } catch (e) {
-        console.warn('[importBudgetV2] Push Supabase failed (non-bloquant):', e);
-      }
-    })();
+    if (!pushed) toInsert.push({ orgId, year, version, account, month: 1, amount: 0 });
   }
+  // Supprimer puis ré-insérer (DAL gère le push Supabase nativement)
+  await dataProvider.deleteBudgets(orgId, year, version);
+  if (toInsert.length) await dataProvider.bulkUpsertBudgets(toInsert);
+  const lines = toInsert.length;
 
   // Détecte les fichiers VIDES (modèle téléchargé sans avoir été rempli) :
   // si TOUS les montants sont à 0, on prévient l'utilisateur.
@@ -449,7 +424,7 @@ export async function importBudgetV2(
     );
   }
 
-  await db.imports.add({
+  await dataProvider.addImport({
     orgId, date: Date.now(), user: 'Utilisateur local', fileName: file.name,
     source: 'Excel (v2)', kind: 'BUDGET',
     year, version, // ← maintenant stockés en top-level (avant : seulement dans report JSON)
@@ -845,9 +820,11 @@ export async function importGL(
   // transaction Dexie. Les awaits sur des valeurs non-Dexie ou les itérations
   // longues à l'intérieur d'une transaction provoquent "Transaction committed
   // too early".
-  const existingPeriodsAll = await db.periods.where('orgId').equals(opts.orgId).toArray();
+  const [existingPeriodsAll, existingFYs] = await Promise.all([
+    dataProvider.getPeriods(opts.orgId),
+    dataProvider.getFiscalYears(opts.orgId),
+  ]);
   const periodIndex = new Map(existingPeriodsAll.map((p) => [`${p.year}-${p.month}`, p.id]));
-  const existingFYs = await db.fiscalYears.where('orgId').equals(opts.orgId).toArray();
   const fyIndex = new Map(existingFYs.map((fy) => [fy.year, fy.id]));
   // Pattern de détection des écritures d'à-nouveaux (Report À Nouveau = RAN)
   // STRICT : uniquement code journal exact + libellé sur comptes BILAN (classes 1-5).
@@ -905,81 +882,71 @@ export async function importGL(
   // sont disponibles dans les entrées GL (e.label) et utilisés en fallback par
   // les moteurs d'affichage (balance.ts, monthly.ts, budgetActual.ts).
 
-  // ── TRANSACTION : uniquement des opérations Dexie consécutives ───────────
-  await db.transaction('rw', [db.gl, db.accounts, db.imports, db.periods, db.fiscalYears], async () => {
-    if (newFYs.length > 0) await db.fiscalYears.bulkPut(newFYs);
-    if (newPeriods.length > 0) await db.periods.bulkPut(newPeriods);
+  // Pas de transaction au niveau DB : la couche dataProvider ne l'expose pas.
+  // L'ordre est : insert FYs/periods → insert imports log → insert GL entries.
+  if (newFYs.length > 0) await dataProvider.bulkUpsertFiscalYears(newFYs);
+  if (newPeriods.length > 0) await dataProvider.bulkUpsertPeriods(newPeriods);
 
-    const importId = await db.imports.add({
-      orgId: opts.orgId,
-      date: Date.now(),
-      user: opts.user,
-      fileName: file.name,
-      source: opts.source,
-      kind: 'GL',
-      count: entries.length,
-      rejected: errors.length,
-      status: errors.length === 0 ? 'success' : (entries.length > 0 ? 'partial' : 'error'),
-      report: JSON.stringify({ unknown: [...unknownAccounts], errors: errors.slice(0, 100) }),
-    });
-
-    if (entries.length > 0) {
-      // ── Verrouillage périodes clôturées (P2-12) ──
-      // Avant insertion, vérifier qu'aucune écriture ne tombe dans une période fermée.
-      // Si oui : abort l'import entier (transaction Dexie rollback automatique).
-      const datesUniques = Array.from(new Set(entries.map((e) => e.date)));
-      for (const date of datesUniques) {
-        try {
-          await assertPeriodOpen(date, opts.orgId);
-        } catch (err) {
-          if (err instanceof PeriodLockedError) {
-            errors.push({ row: 0, reason: `Import refusé : ${err.message}` });
-            throw err; // rollback Dexie
-          }
-          throw err;
-        }
-      }
-
-      // ── Audit trail SHA-256 (P2-11) ──
-      // Récupère le DERNIER hash de la chaîne pour cet orgId, pour chaîner
-      // proprement avec l'import en cours. Première écriture de l'orgId : prev = ''.
-      const lastEntries = await db.gl
-        .where('orgId').equals(opts.orgId)
-        .reverse()
-        .limit(1)
-        .toArray();
-      let prevHash = lastEntries[0]?.hash ?? '';
-
-      // Calcule hash + previousHash pour chaque écriture, puis insère.
-      const tagged: GLEntry[] = [];
-      for (const e of entries) {
-        const tempEntry: GLEntry = { ...e, importId: String(importId) };
-        const hashable: HashableEntry = {
-          // L'id Dexie n'est pas encore connu (auto-increment) — on utilise
-          // une signature stable basée sur orgId+date+account+piece+importId
-          id: `${opts.orgId}-${e.date}-${e.account}-${e.piece}-${importId}`,
-          date: e.date,
-          journal: e.journal,
-          piece: e.piece,
-          account: e.account,
-          label: e.label,
-          debit: e.debit,
-          credit: e.credit,
-          tiers: e.tiers,
-        };
-        const hash = await hashEntry(hashable, prevHash);
-        tagged.push({ ...tempEntry, hash, previousHash: prevHash });
-        prevHash = hash;
-      }
-      await db.gl.bulkAdd(tagged);
-    }
+  const importId = await dataProvider.addImport({
+    orgId: opts.orgId,
+    date: Date.now(),
+    user: opts.user,
+    fileName: file.name,
+    source: opts.source,
+    kind: 'GL',
+    count: entries.length,
+    rejected: errors.length,
+    status: errors.length === 0 ? 'success' : (entries.length > 0 ? 'partial' : 'error'),
+    report: JSON.stringify({ unknown: [...unknownAccounts], errors: errors.slice(0, 100) }),
   });
 
-  // Push vers Supabase en arrière-plan (fire & forget)
-  import('../db/supabaseSync').then(({ pushOrgToSupabase, pushGLToSupabase }) => {
-    pushOrgToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push org failed:', e));
-    pushGLToSupabase(opts.orgId).catch((e) => console.warn('[Sync] Push GL failed:', e));
-  }).catch((e) => console.warn('[Sync] Module supabaseSync unavailable:', e));
+  if (entries.length > 0) {
+    // ── Verrouillage périodes clôturées (P2-12) ──
+    // Avant insertion, vérifier qu'aucune écriture ne tombe dans une période fermée.
+    const datesUniques = Array.from(new Set(entries.map((e) => e.date)));
+    for (const date of datesUniques) {
+      try {
+        await assertPeriodOpen(date, opts.orgId);
+      } catch (err) {
+        if (err instanceof PeriodLockedError) {
+          errors.push({ row: 0, reason: `Import refusé : ${err.message}` });
+          throw err;
+        }
+        throw err;
+      }
+    }
+
+    // ── Audit trail SHA-256 (P2-11) ──
+    // Récupère le DERNIER hash de la chaîne pour cet orgId, pour chaîner
+    // proprement avec l'import en cours. Première écriture de l'orgId : prev = ''.
+    const allOrgEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
+    // Trier par id décroissant pour obtenir la dernière écriture insérée
+    const lastEntry = allOrgEntries
+      .filter((e) => typeof e.id === 'number')
+      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
+    let prevHash = lastEntry?.hash ?? '';
+
+    // Calcule hash + previousHash pour chaque écriture, puis insère.
+    const tagged: GLEntry[] = [];
+    for (const e of entries) {
+      const tempEntry: GLEntry = { ...e, importId: String(importId) };
+      const hashable: HashableEntry = {
+        id: `${opts.orgId}-${e.date}-${e.account}-${e.piece}-${importId}`,
+        date: e.date,
+        journal: e.journal,
+        piece: e.piece,
+        account: e.account,
+        label: e.label,
+        debit: e.debit,
+        credit: e.credit,
+        tiers: e.tiers,
+      };
+      const hash = await hashEntry(hashable, prevHash);
+      tagged.push({ ...tempEntry, hash, previousHash: prevHash });
+      prevHash = hash;
+    }
+    await dataProvider.bulkInsertGL(tagged);
+  }
 
   // Statistique des années présentes dans les écritures
   const yearMap = new Map<number, number>();
@@ -1089,13 +1056,13 @@ export async function importCOA(
 
   let updated = 0;
   if (toImport.length > 0) {
-    const existing = new Set((await db.accounts.where('orgId').equals(orgId).toArray()).map((a) => a.code));
+    const existing = new Set((await dataProvider.getAccounts(orgId)).map((a) => a.code));
     updated = toImport.filter((a) => existing.has(a.code)).length;
-    await db.accounts.bulkPut(toImport);
+    await dataProvider.bulkUpsertAccounts(toImport);
   }
 
   // Trace l'import dans la table "imports" pour le versionning
-  await db.imports.add({
+  await dataProvider.addImport({
     orgId,
     date: Date.now(),
     user: opts?.user ?? 'Utilisateur local',
@@ -1107,11 +1074,6 @@ export async function importCOA(
     status: errors.length === 0 ? 'success' : (toImport.length > 0 ? 'partial' : 'error'),
     report: JSON.stringify({ updated, errors: errors.slice(0, 100) }),
   });
-
-  // Push vers Supabase en arrière-plan
-  import('../db/supabaseSync').then(({ pushOrgToSupabase }) => {
-    pushOrgToSupabase(orgId).catch((e) => console.warn('[Sync] Push COA failed:', e));
-  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
 
   return {
     totalRows: rows.length,
@@ -1220,35 +1182,29 @@ export async function importBudget(
   });
 
   // Enregistrement : écrase la version cible (semantique "load or replace")
-  let lines = 0;
-  await db.transaction('rw', db.budgets, async () => {
-    await db.budgets
-      .where('[orgId+year+version]')
-      .equals([orgId, opts.year, opts.version])
-      .delete();
-    const toInsert: Array<{ orgId: string; year: number; version: string; account: string; month: number; amount: number }> = [];
-    for (const [account, arr] of perAccount) {
-      for (let m = 0; m < 12; m++) {
-        if (arr[m] !== 0) {
-          toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: m + 1, amount: arr[m] });
-        }
+  const toInsert: Array<{ orgId: string; year: number; version: string; account: string; month: number; amount: number }> = [];
+  for (const [account, arr] of perAccount) {
+    for (let m = 0; m < 12; m++) {
+      if (arr[m] !== 0) {
+        toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: m + 1, amount: arr[m] });
       }
     }
-    // Si tous les montants sont à 0, insérer au moins UNE ligne par compte
-    // (mois 1, montant 0) pour que loadBudget retrouve les comptes vides
-    // et que l'utilisateur puisse les éditer manuellement.
-    for (const [account] of perAccount) {
-      const hasAny = toInsert.some((t) => t.account === account);
-      if (!hasAny) {
-        toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: 1, amount: 0 });
-      }
+  }
+  // Si tous les montants sont à 0, insérer au moins UNE ligne par compte
+  // (mois 1, montant 0) pour que loadBudget retrouve les comptes vides
+  // et que l'utilisateur puisse les éditer manuellement.
+  for (const [account] of perAccount) {
+    const hasAny = toInsert.some((t) => t.account === account);
+    if (!hasAny) {
+      toInsert.push({ orgId, year: opts.year, version: opts.version, account, month: 1, amount: 0 });
     }
-    if (toInsert.length) await db.budgets.bulkAdd(toInsert as any);
-    lines = toInsert.length;
-  });
+  }
+  await dataProvider.deleteBudgets(orgId, opts.year, opts.version);
+  if (toInsert.length) await dataProvider.bulkUpsertBudgets(toInsert as any);
+  const lines = toInsert.length;
 
-  // Trace dans db.imports
-  await db.imports.add({
+  // Trace dans imports
+  await dataProvider.addImport({
     orgId,
     date: Date.now(),
     user: opts.user ?? 'Utilisateur local',
@@ -1262,11 +1218,6 @@ export async function importBudget(
     year: opts.year,
     version: opts.version,
   });
-
-  // Push vers Supabase en arrière-plan
-  import('../db/supabaseSync').then(({ pushOrgToSupabase }) => {
-    pushOrgToSupabase(orgId).catch((e) => console.warn('[Sync] Push budget failed:', e));
-  }).catch((e) => console.warn('[Sync] Module unavailable:', e));
 
   return {
     totalRows: rows.length,
@@ -1288,62 +1239,56 @@ export async function migrateGLPeriods(orgId: string): Promise<{ migrated: numbe
   let migrated = 0;
   let periodsCreated = 0;
 
-  await db.transaction('rw', [db.gl, db.periods, db.fiscalYears], async () => {
-    const entries = await db.gl.where('orgId').equals(orgId).toArray();
-    const periods = await db.periods.where('orgId').equals(orgId).toArray();
-    const periodIndex = new Map(periods.map((p) => [`${p.year}-${p.month}`, p.id]));
-    const fiscalYears = await db.fiscalYears.where('orgId').equals(orgId).toArray();
-    const fyIndex = new Map(fiscalYears.map((fy) => [fy.year, fy.id]));
+  const [entries, periods, fiscalYears] = await Promise.all([
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getPeriods(orgId),
+    dataProvider.getFiscalYears(orgId),
+  ]);
+  const periodIndex = new Map(periods.map((p) => [`${p.year}-${p.month}`, p.id]));
+  const fyIndex = new Map(fiscalYears.map((fy) => [fy.year, fy.id]));
+  const periodById = new Map(periods.map((p) => [p.id, p]));
 
-    const updates: { key: number; changes: { periodId: string } }[] = [];
+  const updates: { id: number; changes: { periodId: string } }[] = [];
 
-    // Pré-charger les périodes pour savoir si une écriture est actuellement
-    // routée vers le mois 0 (à-nouveaux). On ne touche aux comptes bilan
-    // (classes 1-5) QUE si leur periodId n'existe pas. Pour les comptes de
-    // gestion (6/7/8), on force la réaffectation sur le mois de la date — ils
-    // ne devraient JAMAIS être en mois 0 (à-nouveaux), c'est un bug d'import.
-    const periodById = new Map(periods.map((p) => [p.id, p]));
+  for (const e of entries) {
+    if (!e.date || e.date.length < 7) continue;
+    const y = parseInt(e.date.substring(0, 4));
+    const m = parseInt(e.date.substring(5, 7));
+    if (isNaN(y) || isNaN(m) || m < 1 || m > 12) continue;
 
-    for (const e of entries) {
-      if (!e.date || e.date.length < 7) continue;
-      const y = parseInt(e.date.substring(0, 4));
-      const m = parseInt(e.date.substring(5, 7));
-      if (isNaN(y) || isNaN(m) || m < 1 || m > 12) continue;
+    // Skip les écritures bilan déjà routées sur une période valide (préserve les RAN légitimes)
+    const c0 = e.account?.[0];
+    const isGestion = c0 === '6' || c0 === '7' || c0 === '8';
+    const currentPeriod = e.periodId ? periodById.get(e.periodId) : undefined;
+    if (!isGestion && currentPeriod && currentPeriod.year === y) continue;
 
-      // Skip les écritures bilan déjà routées sur une période valide (préserve les RAN légitimes)
-      const c0 = e.account?.[0];
-      const isGestion = c0 === '6' || c0 === '7' || c0 === '8';
-      const currentPeriod = e.periodId ? periodById.get(e.periodId) : undefined;
-      if (!isGestion && currentPeriod && currentPeriod.year === y) continue;
+    const key = `${y}-${m}`;
+    let pId = periodIndex.get(key);
 
-      const key = `${y}-${m}`;
-      let pId = periodIndex.get(key);
-
-      if (!pId) {
-        // Créer l'exercice si besoin
-        let fyId = fyIndex.get(y);
-        if (!fyId) {
-          fyId = `fy-${orgId}-${y}`;
-          await db.fiscalYears.put({ id: fyId, orgId, year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31`, closed: false });
-          fyIndex.set(y, fyId);
-        }
-        pId = `p-${orgId}-${y}-${m}`;
-        await db.periods.put({ id: pId, orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
-        periodIndex.set(key, pId);
-        periodsCreated++;
+    if (!pId) {
+      // Créer l'exercice si besoin
+      let fyId = fyIndex.get(y);
+      if (!fyId) {
+        fyId = `fy-${orgId}-${y}`;
+        await dataProvider.upsertFiscalYear({ id: fyId, orgId, year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31`, closed: false });
+        fyIndex.set(y, fyId);
       }
-
-      if (e.periodId !== pId) {
-        updates.push({ key: e.id!, changes: { periodId: pId } });
-      }
+      pId = `p-${orgId}-${y}-${m}`;
+      await dataProvider.upsertPeriod({ id: pId, orgId, fiscalYearId: fyId, year: y, month: m, label: `${MONTH_LABELS[m]} ${y}`, closed: false });
+      periodIndex.set(key, pId);
+      periodsCreated++;
     }
 
-    // Appliquer les mises à jour par lots
-    for (const u of updates) {
-      await db.gl.update(u.key, u.changes);
+    if (e.periodId !== pId && typeof e.id === 'number') {
+      updates.push({ id: e.id, changes: { periodId: pId } });
     }
-    migrated = updates.length;
-  });
+  }
+
+  // Appliquer les mises à jour
+  for (const u of updates) {
+    await dataProvider.updateGLEntry(u.id, u.changes);
+  }
+  migrated = updates.length;
 
   return { migrated, periodsCreated };
 }
@@ -1355,8 +1300,10 @@ export async function migrateGLPeriods(orgId: string): Promise<{ migrated: numbe
 // ne correspondent pas au plan de l'entreprise.
 export async function resyncAccountLabels(orgId: string): Promise<{ updated: number }> {
   let updated = 0;
-  const entries = await db.gl.where('orgId').equals(orgId).toArray();
-  const accounts = await db.accounts.where('orgId').equals(orgId).toArray();
+  const [entries, accounts] = await Promise.all([
+    dataProvider.getGLEntries({ orgId }),
+    dataProvider.getAccounts(orgId),
+  ]);
 
   // Calculer le libellé le plus fréquent par compte
   const freq = new Map<string, Map<string, number>>();
@@ -1375,7 +1322,7 @@ export async function resyncAccountLabels(orgId: string): Promise<{ updated: num
     let best = ''; let bestN = 0;
     for (const [k, v] of m) if (v > bestN) { best = k; bestN = v; }
     if (best && best !== acc.label) {
-      await db.accounts.put({ ...acc, label: best });
+      await dataProvider.bulkUpsertAccounts([{ ...acc, label: best }]);
       updated++;
     }
   }
@@ -1483,7 +1430,7 @@ export async function importGLTiers(
   });
 
   // 2) Charger les écritures GL existantes pour rapprochement
-  const glEntries = await db.gl.where('orgId').equals(opts.orgId).toArray();
+  const glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
 
   // Index pour rapprochement rapide : clé = date|account|debit|credit
   // (journal et pièce sont optionnels car pas toujours présents dans le tiers)
@@ -1501,7 +1448,7 @@ export async function importGLTiers(
   const matched = new Set<number>(); // IDs GL déjà rapprochés (évite doublons)
 
   // Résolution des périodes pour les créations éventuelles
-  const existingPeriods = await db.periods.where('orgId').equals(opts.orgId).toArray();
+  const existingPeriods = await dataProvider.getPeriods(opts.orgId);
   const periodByKey = new Map(existingPeriods.map((p) => [`${p.year}-${p.month}`, p.id]));
 
   for (const tl of tiersLines) {
@@ -1551,32 +1498,30 @@ export async function importGLTiers(
     }
   }
 
-  // 4) Écrire en base
-  await db.transaction('rw', [db.gl, db.imports], async () => {
-    const importId = await db.imports.add({
-      orgId: opts.orgId,
-      date: Date.now(),
-      user: opts.user,
-      fileName: file.name,
-      source: opts.source,
-      kind: 'TIERS',
-      count: enriched + created,
-      rejected: errors.length,
-      status: errors.length === 0 ? 'success' : (enriched + created > 0 ? 'partial' : 'error'),
-      report: JSON.stringify({ errors: errors.slice(0, 50) }),
-    });
-
-    // Mettre à jour les écritures enrichies
-    if (toUpdate.length > 0) {
-      await db.gl.bulkPut(toUpdate);
-    }
-
-    // Créer les nouvelles écritures (mode standalone)
-    if (toCreate.length > 0) {
-      const tagged = toCreate.map((e) => ({ ...e, importId: String(importId) }));
-      await db.gl.bulkAdd(tagged);
-    }
+  // 4) Écrire en base — séquentiel, pas de transaction globale
+  const importId = await dataProvider.addImport({
+    orgId: opts.orgId,
+    date: Date.now(),
+    user: opts.user,
+    fileName: file.name,
+    source: opts.source,
+    kind: 'TIERS',
+    count: enriched + created,
+    rejected: errors.length,
+    status: errors.length === 0 ? 'success' : (enriched + created > 0 ? 'partial' : 'error'),
+    report: JSON.stringify({ errors: errors.slice(0, 50) }),
   });
+
+  // Mettre à jour les écritures enrichies (upsert par id)
+  if (toUpdate.length > 0) {
+    await dataProvider.bulkUpsertGL(toUpdate);
+  }
+
+  // Créer les nouvelles écritures (mode standalone)
+  if (toCreate.length > 0) {
+    const tagged = toCreate.map((e) => ({ ...e, importId: String(importId) }));
+    await dataProvider.bulkInsertGL(tagged as GLEntry[]);
+  }
 
   // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif
   const coherenceCheck: TiersImportReport['coherenceCheck'] = [];

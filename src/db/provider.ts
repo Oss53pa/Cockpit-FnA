@@ -1,9 +1,53 @@
 /**
  * DataProvider — couche d'abstraction entre l'app et le stockage.
- * Permet de basculer entre Dexie (local), Supabase (cloud) ou Electron (SQLite)
- * sans toucher au code métier.
+ *
+ * Supabase est la source de vérité OBLIGATOIRE en mode web.
+ * Mode Electron (build desktop) : SQLite local via IPC.
+ * Dexie n'est plus utilisé par les engines migrés — il subsiste uniquement
+ * pour les modules en cours de migration (cf. liste plus bas).
+ *
+ * ─── GUIDE DE MIGRATION DEPUIS Dexie direct (`db.*`) ─────────────────────────
+ *
+ * Patterns à substituer dans les engines & composants :
+ *
+ * | Avant (Dexie direct)                                          | Après (DAL)                                     |
+ * |---------------------------------------------------------------|-------------------------------------------------|
+ * | db.organizations.toArray()                                    | dataProvider.getOrganizations()                 |
+ * | db.organizations.get(id)                                      | dataProvider.getOrganization(id)                |
+ * | db.fiscalYears.where('orgId').equals(o).toArray()             | dataProvider.getFiscalYears(o)                  |
+ * | db.periods.where('orgId').equals(o).toArray()                 | dataProvider.getPeriods(o)                      |
+ * | db.accounts.where('orgId').equals(o).toArray()                | dataProvider.getAccounts(o)                     |
+ * | db.gl.where('orgId').equals(o).toArray()                      | dataProvider.getGLEntries({orgId:o})            |
+ * | db.gl.where('[orgId+periodId]').equals([o,p]).toArray()       | dataProvider.getGLEntries({orgId:o,periodId:p}) |
+ * | db.budgets.where('[orgId+year+version]').equals([o,y,v])      | dataProvider.getBudgets(o,y,v)                  |
+ * | db.budgets.where('[orgId+year+version]').between([o,y,'']…)   | dataProvider.getBudgetsByYear(o,y)              |
+ * | db.budgets.where('orgId').equals(o).toArray()                 | dataProvider.getAllBudgets(o)                   |
+ * | db.imports.where('orgId').equals(o).toArray()                 | dataProvider.getImports(o)                      |
+ * | db.reports.where('orgId').equals(o).toArray()                 | dataProvider.getReports(o)                      |
+ * | db.attentionPoints / actionPoints / templates / mappings      | méthodes équivalentes du DAL                    |
+ *
+ * Bonnes pratiques :
+ *  - Paralléliser les lectures avec `Promise.all([...])` quand possible.
+ *  - Toujours typer le retour avec les types exportés depuis `./schema` (Period[], GLEntry[]…).
+ *  - Pour les écritures atomiques (delete + insert), suivre le pattern de `saveBudget`
+ *    dans `engine/budget.ts` : pas de transaction DB, mais ordre garanti.
+ *
+ * Modules NON encore migrés (nécessitent extension du DAL) :
+ *  - Comptabilité analytique (analytic_axes / codes / rules / assignments / budgets)
+ *  - Activités (activities)
+ *  - Chat (channels, chat_messages)
+ *  - Audit period lock (period_audit_log)
+ *
+ * Composants React : `useLiveQuery` ne fonctionne qu'avec Dexie. Pour migrer un
+ * composant, utiliser `useEffect` + `useState` + appel `dataProvider.*` (ou créer
+ * un hook `useDataProvider` dédié si le besoin se généralise).
  */
-import type { Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine, ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate } from './schema';
+import type {
+  Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
+  ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
+  AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
+  Activity, Channel, ChatMessage,
+} from './schema';
 
 export interface GLFilter {
   orgId: string;
@@ -20,21 +64,38 @@ export interface DataProvider {
   getOrganization(id: string): Promise<Organization | undefined>;
   upsertOrganization(org: Organization): Promise<void>;
   deleteOrganization(id: string): Promise<void>;
+  /** Suppression cascade : org + fiscal_years + periods + accounts + gl + imports + budgets + mappings. */
+  deleteOrganizationCascade(id: string): Promise<void>;
 
   // Fiscal years & Periods
   getFiscalYears(orgId: string): Promise<FiscalYear[]>;
   upsertFiscalYear(fy: FiscalYear): Promise<void>;
+  bulkUpsertFiscalYears(fys: FiscalYear[]): Promise<void>;
+  /** Supprime un exercice + toutes ses périodes + toutes les écritures GL de cette année. */
+  deleteFiscalYearCascade(fy: FiscalYear): Promise<void>;
+  /** Bascule le flag `closed` sur l'exercice + toutes ses périodes. */
+  setFiscalYearClosed(fy: FiscalYear, closed: boolean): Promise<void>;
   getPeriods(orgId: string): Promise<Period[]>;
   upsertPeriod(p: Period): Promise<void>;
+  bulkUpsertPeriods(ps: Period[]): Promise<void>;
 
   // Accounts
   getAccounts(orgId: string): Promise<Account[]>;
+  getAccount(orgId: string, code: string): Promise<Account | undefined>;
+  upsertAccount(account: Account): Promise<void>;
   bulkUpsertAccounts(accounts: Account[]): Promise<void>;
+  /** Supprime un compte spécifique (orgId + code). */
+  deleteAccount(orgId: string, code: string): Promise<void>;
+  /** Supprime tous les comptes d'une organisation. */
   deleteAccounts(orgId: string): Promise<void>;
 
   // GL Entries
   getGLEntries(filter: GLFilter): Promise<GLEntry[]>;
   bulkInsertGL(entries: GLEntry[]): Promise<void>;
+  /** Bulk upsert basé sur l'id (insertion ou mise à jour). */
+  bulkUpsertGL(entries: GLEntry[]): Promise<void>;
+  /** Mise à jour partielle d'une écriture par id. */
+  updateGLEntry(id: number, changes: Partial<GLEntry>): Promise<void>;
   deleteGLByImport(importId: number): Promise<void>;
 
   // Imports
@@ -44,9 +105,15 @@ export interface DataProvider {
 
   // Budgets
   getBudgets(orgId: string, year: number, version: string): Promise<BudgetLine[]>;
+  /** Toutes les lignes pour `orgId` + `year`, toutes versions confondues. */
+  getBudgetsByYear(orgId: string, year: number): Promise<BudgetLine[]>;
   getAllBudgets(orgId: string): Promise<BudgetLine[]>;
   bulkUpsertBudgets(lines: BudgetLine[]): Promise<void>;
   deleteBudgets(orgId: string, year: number, version: string): Promise<void>;
+  /** Supprime TOUS les budgets d'une organisation (toutes années & versions). */
+  deleteAllBudgets(orgId: string): Promise<void>;
+  /** Supprime tous les imports d'un kind donné. */
+  deleteImportsByKind(orgId: string, kind: ImportLog['kind']): Promise<void>;
 
   // Reports
   getReports(orgId: string): Promise<ReportDoc[]>;
@@ -73,28 +140,82 @@ export interface DataProvider {
   getMappings(orgId: string): Promise<AccountMapping[]>;
   upsertMapping(m: AccountMapping): Promise<void>;
 
+  // ── Comptabilité analytique ────────────────────────────────────────
+  getAnalyticAxes(orgId: string): Promise<AnalyticAxis[]>;
+  upsertAnalyticAxis(axis: AnalyticAxis): Promise<void>;
+  deleteAnalyticAxis(id: string): Promise<void>;
+
+  getAnalyticCodes(orgId: string, axisId?: string): Promise<AnalyticCode[]>;
+  upsertAnalyticCode(code: AnalyticCode): Promise<void>;
+  bulkUpsertAnalyticCodes(codes: AnalyticCode[]): Promise<void>;
+  deleteAnalyticCode(id: string): Promise<void>;
+  /** Détache les codes enfants (set parentId = undefined) */
+  detachAnalyticChildren(parentId: string): Promise<void>;
+
+  getAnalyticRules(orgId: string): Promise<AnalyticRule[]>;
+  upsertAnalyticRule(rule: AnalyticRule): Promise<void>;
+  deleteAnalyticRule(id: string): Promise<void>;
+  updateAnalyticRulePriority(id: string, priority: number): Promise<void>;
+
+  getAnalyticAssignments(orgId: string): Promise<AnalyticAssignment[]>;
+  bulkInsertAnalyticAssignments(assignments: AnalyticAssignment[]): Promise<void>;
+  updateAnalyticAssignment(id: number, changes: Partial<AnalyticAssignment>): Promise<void>;
+  deleteAnalyticAssignmentsByOrgFilter(orgId: string, predicate: (a: AnalyticAssignment) => boolean): Promise<void>;
+  deleteAnalyticAssignmentsByCode(codeId: string): Promise<void>;
+
+  getAnalyticBudgets(orgId: string): Promise<AnalyticBudget[]>;
+
+  // ── Activités (annotations / commentaires / corrections) ──────────
+  getActivities(orgId: string): Promise<Activity[]>;
+  getActivity(id: number): Promise<Activity | undefined>;
+  addActivity(act: Omit<Activity, 'id'>): Promise<number>;
+  updateActivity(id: number, changes: Partial<Activity>): Promise<void>;
+  deleteActivity(id: number): Promise<void>;
+
+  // ── Chat (channels + messages) ────────────────────────────────────
+  getChannels(orgId: string): Promise<Channel[]>;
+  getChannel(id: string): Promise<Channel | undefined>;
+  upsertChannel(c: Channel): Promise<void>;
+  deleteChannel(id: string): Promise<void>;
+  /** Première channel correspondant à `predicate` (pour les "lookups par nom"). */
+  findChannel(orgId: string, predicate: (c: Channel) => boolean): Promise<Channel | undefined>;
+
+  getChatMessage(id: number): Promise<ChatMessage | undefined>;
+  getChatMessagesByChannel(channelId: string): Promise<ChatMessage[]>;
+  getChatMessagesByOrg(orgId: string): Promise<ChatMessage[]>;
+  addChatMessage(msg: Omit<ChatMessage, 'id'>): Promise<number>;
+  updateChatMessage(id: number, changes: Partial<ChatMessage>): Promise<void>;
+  deleteChatMessage(id: number): Promise<void>;
+
   // File storage
   uploadFile(orgId: string, fileName: string, file: File | Blob): Promise<string>;
   downloadFile(path: string): Promise<Blob>;
 }
 
 // ─── Provider selection ─────────────────────────────────────────────
+//
+// Supabase est OBLIGATOIRE. Pas de fallback Dexie.
+// Si les variables d'environnement VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
+// ne sont pas définies, l'app refuse de démarrer avec un message explicite.
+// (Mode Electron mis à part — il utilise SQLite local via IPC.)
 import { isSupabaseConfigured } from '../lib/supabase';
-import { DexieProvider } from './dexieProvider';
 import { SupabaseProvider } from './supabaseProvider';
 
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
 function selectProvider(): DataProvider {
   if (isElectron) {
-    // Sprint 6: Electron SQLite provider
+    // Sprint 6: Electron SQLite provider (build desktop)
     const { ElectronProvider } = require('./electronProvider');
     return new ElectronProvider();
   }
-  if (isSupabaseConfigured) {
-    return new SupabaseProvider();
+  if (!isSupabaseConfigured) {
+    throw new Error(
+      'Cockpit FnA requiert Supabase. Définissez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY ' +
+      'dans votre fichier .env (ou les variables d\'environnement de déploiement).',
+    );
   }
-  return new DexieProvider();
+  return new SupabaseProvider();
 }
 
 export const dataProvider: DataProvider = selectProvider();

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import clsx from 'clsx';
 import { Search, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -8,7 +7,9 @@ import { TabSwitch } from '../components/ui/TabSwitch';
 import { toast } from '../components/ui/Toast';
 import { VirtualTable, type Column } from '../components/ui/VirtualTable';
 import { useApp } from '../store/app';
-import { db, type GLEntry, type ImportLog } from '../db/schema';
+import type { GLEntry, ImportLog } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { useCloudData } from '../hooks/useCloudData';
 import { computeBalance, computeAuxBalance, type BalanceRow, type AuxBalanceRow } from '../engine/balance';
 import { agedBalance, type AgedTier } from '../engine/analytics';
 import { fmtFull } from '../lib/format';
@@ -30,7 +31,14 @@ const TABS: { key: Tab; label: string }[] = [
 // ─── Page racine ──────────────────────────────────────────────────
 export default function GrandLivre() {
   const { currentOrgId, currentYear } = useApp();
-  const [tab, setTab] = useState<Tab>('import');
+  // Si on arrive via "?account=XXX" (depuis le modal d'écart de balance), on
+  // ouvre directement l'onglet Grand Livre. Sinon, onglet Import par défaut.
+  const initialTab: Tab = (() => {
+    if (typeof window === 'undefined') return 'import';
+    const params = new URLSearchParams(window.location.search);
+    return params.has('account') ? 'gl' : 'import';
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [importId, setImportId] = useState<string>('all');
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any | null>(null);
@@ -55,7 +63,8 @@ export default function GrandLivre() {
   const runVerifyChain = async () => {
     setVerifying(true);
     try {
-      const entries = await db.gl.where('orgId').equals(currentOrgId).sortBy('id');
+      const all = await dataProvider.getGLEntries({ orgId: currentOrgId });
+      const entries = [...all].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
       const chain = entries.map((e) => ({
         id: e.id ?? '',
         date: e.date,
@@ -88,11 +97,15 @@ export default function GrandLivre() {
     }
   };
 
-  const imports = useLiveQuery(async () => {
-    if (!currentOrgId) return [] as ImportLog[];
-    const list = await db.imports.where('orgId').equals(currentOrgId).toArray();
-    return list.filter((i) => i.kind === 'GL').sort((a, b) => b.date - a.date);
-  }, [currentOrgId], [] as ImportLog[]);
+  const { data: imports = [] as ImportLog[] } = useCloudData<ImportLog[]>(
+    async () => {
+      if (!currentOrgId) return [] as ImportLog[];
+      const list = await dataProvider.getImports(currentOrgId);
+      return list.filter((i) => i.kind === 'GL').sort((a, b) => b.date - a.date);
+    },
+    [currentOrgId],
+    { initial: [] as ImportLog[], tag: 'imports' },
+  );
 
   const showVersionPicker = tab !== 'import' && imports.length > 0;
 
@@ -328,16 +341,35 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
   const [journal, setJournal] = useState('all');
   const [accountPrefix, setAccountPrefix] = useState('');
 
-  const periodIds = useLiveQuery(async () => {
-    if (!orgId) return new Set<string>();
-    const periods = await db.periods.where('orgId').equals(orgId).filter((p) => p.year === year).toArray();
-    return new Set(periods.map((p) => p.id));
-  }, [orgId, year], new Set<string>());
+  // Si on arrive via "?account=XXX" (depuis le modal d'écart de balance dans Reports),
+  // on préfiltre automatiquement le GL sur ce compte.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accountParam = params.get('account');
+    if (accountParam) {
+      setAccountPrefix(accountParam);
+      // Nettoie l'URL pour que le filtre persiste sans rester dans l'URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('account');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
-  const entries = useLiveQuery(async () => {
-    if (!orgId) return [] as GLEntry[];
-    return db.gl.where('orgId').equals(orgId).toArray();
-  }, [orgId], [] as GLEntry[]);
+  const { data: periodIds = new Set<string>() } = useCloudData<Set<string>>(
+    async () => {
+      if (!orgId) return new Set<string>();
+      const periods = await dataProvider.getPeriods(orgId);
+      return new Set(periods.filter((p) => p.year === year).map((p) => p.id));
+    },
+    [orgId, year],
+    { initial: new Set<string>(), tag: 'periods' },
+  );
+
+  const { data: entries = [] as GLEntry[] } = useCloudData<GLEntry[]>(
+    () => orgId ? dataProvider.getGLEntries({ orgId }) : Promise.resolve([] as GLEntry[]),
+    [orgId],
+    { initial: [] as GLEntry[], tag: 'gl' },
+  );
 
   const journals = useMemo(() => Array.from(new Set(entries.map((e) => e.journal))).sort(), [entries]);
 
@@ -428,9 +460,11 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
   useEffect(() => {
     if (!orgId) return;
     (async () => {
-      const periods = await db.periods.where('orgId').equals(orgId).toArray();
+      const [periods, all] = await Promise.all([
+        dataProvider.getPeriods(orgId),
+        dataProvider.getGLEntries({ orgId }),
+      ]);
       const periodIds = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
-      const all = await db.gl.where('orgId').equals(orgId).toArray();
       const filtered = all.filter((e) => periodIds.has(e.periodId) && (!importId || importId === 'all' || e.importId === importId));
       setDiagEntries(filtered);
     })();
