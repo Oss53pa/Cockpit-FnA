@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { pullFromSupabase } from '../db/supabaseSync';
+import { pullFromSupabase, autoRecoverDexieToSupabase } from '../db/supabaseSync';
 import type { User, Session } from '@supabase/supabase-js';
 
 // Helper: les tables fna_* ne sont pas typees dans Database — bypass le typing
@@ -133,6 +133,30 @@ export function useAuth() {
         await pullFromSupabase(orgIds, (p) => {
           setState(s => ({ ...s, syncStatus: p.step }));
         });
+
+        // ── AUTO-RECOVERY : restaure les données Dexie orphelines ──
+        // Cas typique : l'utilisateur avait des données dans Dexie (cache local)
+        // mais Supabase est vide pour cet org (la sync n'avait jamais été
+        // poussée). L'app ne lisant plus que Supabase, l'utilisateur voyait
+        // un écran vide alors que ses données étaient dans IndexedDB.
+        // Cette détection automatique pousse Dexie → Supabase au login si
+        // le cas est détecté. Idempotent : marker localStorage évite re-trigger.
+        try {
+          setState(s => ({ ...s, syncStatus: 'Vérification données locales...' }));
+          const recovery = await autoRecoverDexieToSupabase(orgIds, (msg) => {
+            setState(s => ({ ...s, syncStatus: msg }));
+          });
+          if (recovery.needed && recovery.migrated.length > 0) {
+            const totalRows = recovery.migrated.reduce((s, m) => s + m.rows, 0);
+            console.info(`[useAuth] Auto-recovery réussie : ${totalRows} lignes restaurées vers Supabase pour ${recovery.migrated.length} société(s).`);
+            setState(s => ({ ...s, syncStatus: `✓ ${totalRows} lignes restaurées depuis le cache local` }));
+            // Petite pause pour que l'utilisateur voie le message
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        } catch (e) {
+          console.warn('[useAuth] Auto-recovery échouée (non bloquant) :', e);
+        }
+
         // Sync chat + activities pour chaque org (fire-and-forget)
         for (const orgId of orgIds) {
           void Promise.all([

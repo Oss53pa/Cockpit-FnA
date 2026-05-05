@@ -233,6 +233,96 @@ export async function fullSync(orgIds: string[], onProgress?: (p: SyncProgress) 
   return result;
 }
 
+// ── AUTO-RECOVERY : détecte les données locales orphelines ──────────
+// Cas typique : un user avait des données dans Dexie (ancienne version),
+// la migration vers Supabase n'a jamais été déclenchée, et l'app maintenant
+// lit uniquement Supabase (donc affiche vide). On détecte ce cas et on push
+// automatiquement les données Dexie vers Supabase pour rétablir la situation.
+//
+// Conditions de déclenchement :
+//   - Au moins UN orgId a des écritures GL dans Dexie
+//   - Cet orgId n'a AUCUNE écriture GL dans Supabase
+//   - Le marqueur de migration (`localStorage.fna-auto-recovery-done`) n'est pas posé
+//
+// Renvoie le nombre de lignes migrées par org (0 = pas de migration nécessaire).
+export type AutoRecoveryResult = {
+  needed: boolean;
+  migrated: { orgId: string; rows: number }[];
+  skipped: string[];     // orgIds qui n'avaient pas besoin de migration
+  errors: { orgId: string; error: string }[];
+};
+
+const RECOVERY_MARKER_KEY = 'fna-auto-recovery-done';
+
+export async function autoRecoverDexieToSupabase(
+  orgIds: string[],
+  onProgress?: (msg: string) => void,
+): Promise<AutoRecoveryResult> {
+  const result: AutoRecoveryResult = { needed: false, migrated: [], skipped: [], errors: [] };
+  if (!isSupabaseConfigured) return result;
+
+  // Marker : on ne re-tente pas si déjà fait sur ce device.
+  // (L'utilisateur peut forcer via le bouton "Sync vers cloud" Settings.)
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(RECOVERY_MARKER_KEY) === '1') {
+      return result;
+    }
+  } catch { /* sandboxed */ }
+
+  for (const orgId of orgIds) {
+    try {
+      // 1) Compte les écritures GL dans Dexie pour cet org
+      const dexieGLCount = await db.gl.where('orgId').equals(orgId).count();
+      if (dexieGLCount === 0) {
+        result.skipped.push(orgId);
+        continue;
+      }
+
+      // 2) Vérifie si Supabase a déjà des écritures pour cet org
+      const { count: supabaseGLCount, error } = await supabase
+        .from('fna_gl_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('org_id', orgId);
+      if (error) {
+        console.warn(`[autoRecovery] Check Supabase failed for ${orgId}:`, error);
+        result.errors.push({ orgId, error: error.message });
+        continue;
+      }
+
+      if ((supabaseGLCount ?? 0) > 0) {
+        // Supabase a déjà des données → pas besoin de migration
+        result.skipped.push(orgId);
+        continue;
+      }
+
+      // 3) Cas critique : Dexie a des données, Supabase est vide → on migre.
+      result.needed = true;
+      onProgress?.(`Restauration des données locales pour ${orgId}…`);
+      console.info(`[autoRecovery] Migration ${orgId} : ${dexieGLCount} écritures Dexie → Supabase`);
+
+      // Push toutes les tables avec dépendances dans le bon ordre.
+      const pushResult = await pushAllToSupabase([orgId], (p) => {
+        onProgress?.(`${p.step} (${p.current}/${p.total})…`);
+      });
+      const totalRows = pushResult.totalRows;
+      result.migrated.push({ orgId, rows: totalRows });
+      console.info(`[autoRecovery] ${orgId} migré : ${totalRows} lignes`);
+    } catch (e: any) {
+      console.error(`[autoRecovery] Erreur pour ${orgId}:`, e);
+      result.errors.push({ orgId, error: e?.message ?? String(e) });
+    }
+  }
+
+  // Pose le marker pour ne pas re-tenter
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(RECOVERY_MARKER_KEY, '1');
+    }
+  } catch { /* sandboxed */ }
+
+  return result;
+}
+
 // ── PUSH ALL : Migration complète Dexie → Supabase ──────────────────
 // Pousse TOUTES les tables Dexie vers Supabase en une seule passe.
 // Utilisé pour la migration finale avant l'abandon de Dexie (Phase 2).
