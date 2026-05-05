@@ -42,7 +42,11 @@
       "mcp__a58aae78-1ce6-4205-900f-0d0e6f7f4178__apply_migration",
       "Bash(curl -s -X POST \"https://vgtmljfayiysuvrcmunt.supabase.co/functions/v1/cockpit-send-email?debug=1\" -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndG1samZheWl5c3V2cmNtdW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NzgyMDUsImV4cCI6MjA4NjU1NDIwNX0.a2pyz1up8ZmZk-Tl51B0v6n3eVNkBPG5L_BJAM20qt4\" -H \"Content-Type: application/json\" -d '{}')",
       "Bash(python -c ' *)",
-      "Bash(python)"
+      "Bash(python)",
+      "mcp__56330ec3-a24d-455c-a7ea-6684f6563914__list_teams",
+      "mcp__56330ec3-a24d-455c-a7ea-6684f6563914__list_projects",
+      "Read(//c/devs/Cockpit FnA/**)",
+      "Bash(sed -i -e 's|bg-\\\\[#B8954A\\\\]/\\\\[0.05\\\\]|bg-[#5E8772]/[0.05]|g' -e 's|border-\\\\[#1F1F23\\\\]|border-[#171717]|g' -e 's|from-\\\\[#f8f7f4\\\\]|from-[#FAFAFA]|g' -e 's|to-\\\\[#f0ede6\\\\]|to-[#F4F3F1]|g' -e 's|border-\\\\[#e8e5de\\\\]|border-[#EAEAEA]|g' -e 's|bg-\\\\[#1F1F23\\\\]|bg-[#171717]|g' -e 's|bg-\\\\[#D4B870\\\\]/\\\\[0.10\\\\]|bg-[#7FA88E]/[0.10]|g' -e 's|from-\\\\[#E8D5A0\\\\] via-\\\\[#D4B870\\\\] to-\\\\[#E8D5A0\\\\]|from-[#A4C9B4] via-[#7FA88E] to-[#A4C9B4]|g' -e 's|bg-\\\\[#D4B870\\\\] hover:bg-\\\\[#E8D5A0\\\\] text-\\\\[#1F1F23\\\\]|bg-[#7FA88E] hover:bg-[#5E8772] text-[#171717]|g' src/pages/Landing.tsx)"
     ]
   }
 }
