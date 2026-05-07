@@ -1,13 +1,37 @@
 // Seed de données DEMO — entreprise fictive SYSCOHADA réaliste
 // Charge un GL + Plan Comptable + Budget complet + Alertes + Plan d'action
 // + Mémoire Proph3t pour démo immédiate de bout en bout
+//
+// Stratégie de stockage :
+//   - Si user authentifié → org-id = `demo-org-{userId8}` + push complet vers Supabase
+//     (isolation par utilisateur, RLS auto via fna_user_orgs lors du pushAllToSupabase).
+//   - Si user non authentifié → org-id = `demo-org` + Dexie uniquement (mode dégradé).
 import { db, GLEntry, Account, AttentionPoint, ActionPlan } from '../db/schema';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { pushAllToSupabase } from '../db/supabaseSync';
 
-const DEMO_ORG_ID = 'demo-org';
 const DEMO_YEAR = new Date().getFullYear();
 
-// Comptes SYSCOHADA réalistes pour PME industrielle
-const DEMO_ACCOUNTS: Account[] = [
+/**
+ * Calcule l'org-id démo en fonction de l'utilisateur courant.
+ * - Authentifié → `demo-org-{8 premiers caracteres du userId}` (isolation cloud)
+ * - Anonyme → `demo-org` (Dexie uniquement)
+ */
+async function resolveDemoOrgId(): Promise<{ orgId: string; userId: string | null }> {
+  if (!isSupabaseConfigured) return { orgId: 'demo-org', userId: null };
+  try {
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user?.id ?? null;
+    if (!userId) return { orgId: 'demo-org', userId: null };
+    return { orgId: `demo-org-${userId.slice(0, 8)}`, userId };
+  } catch {
+    return { orgId: 'demo-org', userId: null };
+  }
+}
+
+// Comptes SYSCOHADA réalistes pour PME industrielle (factory accepting orgId)
+function buildDemoAccounts(DEMO_ORG_ID: string): Account[] {
+  return [
   // Capitaux propres
   { orgId: DEMO_ORG_ID, code: '101', label: 'Capital social', class: '1', type: 'P', syscoCode: '101' },
   { orgId: DEMO_ORG_ID, code: '111', label: 'Réserve légale', class: '1', type: 'P', syscoCode: '111' },
@@ -58,10 +82,11 @@ const DEMO_ACCOUNTS: Account[] = [
   { orgId: DEMO_ORG_ID, code: '702', label: 'Ventes de produits finis', class: '7', type: 'R', syscoCode: '702' },
   { orgId: DEMO_ORG_ID, code: '706', label: 'Services vendus', class: '7', type: 'R', syscoCode: '706' },
   { orgId: DEMO_ORG_ID, code: '771', label: 'Intérêts perçus', class: '7', type: 'R', syscoCode: '771' },
-];
+  ];
+}
 
 // Génère un GL réaliste : ventes mensuelles, achats, salaires, OD, paiements
-function generateGL(): Omit<GLEntry, 'id' | 'periodId' | 'importId'>[] {
+function generateGL(DEMO_ORG_ID: string): Omit<GLEntry, 'id' | 'periodId' | 'importId'>[] {
   const entries: Omit<GLEntry, 'id' | 'periodId' | 'importId'>[] = [];
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
   const clients = ['411001', '411002', '411003', '411004'];
@@ -208,7 +233,11 @@ function generateGL(): Omit<GLEntry, 'id' | 'periodId' | 'importId'>[] {
   return entries;
 }
 
-export async function loadDemoData(): Promise<{ accounts: number; entries: number; ca: number }> {
+export async function loadDemoData(): Promise<{ accounts: number; entries: number; ca: number; orgId: string }> {
+  // Org-id user-specific (cloud) ou statique (offline)
+  const { orgId: DEMO_ORG_ID, userId } = await resolveDemoOrgId();
+  const DEMO_ACCOUNTS = buildDemoAccounts(DEMO_ORG_ID);
+
   // Reset éventuel — toutes les tables liées à l'org démo
   await db.transaction(
     'rw',
@@ -269,7 +298,7 @@ export async function loadDemoData(): Promise<{ accounts: number; entries: numbe
   });
 
   // Génération + tagging des écritures avec periodId
-  const rawEntries = generateGL();
+  const rawEntries = generateGL(DEMO_ORG_ID);
   const periodByKey = new Map(periods.map((p) => [`${p.year}-${p.month}`, p.id] as const));
   const taggedEntries: GLEntry[] = rawEntries.map((e) => {
     const month = e.journal === 'AN' ? 0 : parseInt(e.date.substring(5, 7));
@@ -467,13 +496,36 @@ export async function loadDemoData(): Promise<{ accounts: number; entries: numbe
   });
 
   const ca = budgetData.filter((b) => b.account.startsWith('7')).reduce((s, b) => s + b.annual, 0);
-  return { accounts: DEMO_ACCOUNTS.length, entries: taggedEntries.length, ca };
+
+  // ─── Push vers Supabase si user authentifié ─────────────────────────
+  // RLS auto via fna_user_orgs upsert dans pushAllToSupabase.
+  // Sans auth, on reste en mode Dexie-only (dégradé : la plupart des hooks
+  // useFinancials lisent dataProvider → SupabaseProvider donc verront vide).
+  if (isSupabaseConfigured && userId) {
+    try {
+      console.info('[demoSeed] Push démo vers Supabase pour user', userId.slice(0, 8));
+      await pushAllToSupabase([DEMO_ORG_ID]);
+      console.info('[demoSeed] ✓ Démo poussée vers Supabase (org', DEMO_ORG_ID + ')');
+    } catch (e) {
+      console.warn('[demoSeed] ⚠ Push Supabase échoué (Dexie OK) :', e);
+    }
+  } else if (!userId) {
+    console.warn(
+      '[demoSeed] User non authentifié — démo en Dexie uniquement.\n' +
+      'Pour profiter de la démo dans toute l\'app, connectez-vous d\'abord.',
+    );
+  }
+
+  return { accounts: DEMO_ACCOUNTS.length, entries: taggedEntries.length, ca, orgId: DEMO_ORG_ID };
 }
 
 // ────────────────────────────────────────────────────────────────────
 // Sortie du mode démo : supprime toutes les données + flag
 // ────────────────────────────────────────────────────────────────────
 export async function unloadDemoData(): Promise<void> {
+  const { orgId: DEMO_ORG_ID, userId } = await resolveDemoOrgId();
+
+  // Suppression locale Dexie
   await db.transaction(
     'rw',
     [db.organizations, db.fiscalYears, db.periods, db.accounts, db.gl, db.imports, db.budgets,
@@ -492,9 +544,40 @@ export async function unloadDemoData(): Promise<void> {
       await db.organizations.delete(DEMO_ORG_ID);
     },
   );
+
+  // Suppression cloud Supabase si user authentifié
+  if (isSupabaseConfigured && userId) {
+    try {
+      const tables = [
+        'fna_gl_entries', 'fna_imports', 'fna_budgets', 'fna_accounts',
+        'fna_periods', 'fna_fiscal_years', 'fna_attention_points',
+        'fna_action_plans', 'fna_reports', 'fna_report_templates',
+      ];
+      for (const t of tables) {
+        await (supabase as any).from(t).delete().eq('org_id', DEMO_ORG_ID);
+      }
+      await (supabase as any).from('fna_organizations').delete().eq('id', DEMO_ORG_ID);
+      await (supabase as any).from('fna_user_orgs').delete()
+        .eq('user_id', userId).eq('org_id', DEMO_ORG_ID);
+    } catch (e) {
+      console.warn('[demoSeed] Suppression Supabase démo échouée:', e);
+    }
+  }
+
   try { localStorage.removeItem('proph3t-memory'); } catch { /* noop */ }
   try { localStorage.removeItem('demo-mode'); } catch { /* noop */ }
   try { localStorage.removeItem('demo-tour-step'); } catch { /* noop */ }
 }
 
-export const DEMO_ORG_ID_EXPORT = DEMO_ORG_ID;
+/**
+ * Renvoie l'org-id démo pour le user courant (à utiliser depuis l'UI après loadDemoData).
+ * Sans auth, retourne 'demo-org' (mode dégradé Dexie).
+ */
+export async function getDemoOrgId(): Promise<string> {
+  const { orgId } = await resolveDemoOrgId();
+  return orgId;
+}
+
+// Constante synchrone (legacy) — pointe vers la version anonyme.
+// Préférer getDemoOrgId() ou la valeur retournée par loadDemoData() pour le bon scope user.
+export const DEMO_ORG_ID_EXPORT = 'demo-org';

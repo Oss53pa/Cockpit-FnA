@@ -10,6 +10,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ToastContainer } from './components/ui/Toast';
 import { CommandPalette } from './components/ui/CommandPalette';
+import { OnboardingModal } from './components/ui/OnboardingModal';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
@@ -77,6 +78,7 @@ const BoardPack = lazyWithRetry(() => import('./pages/BoardPack'));
 const SectorBenchmark = lazyWithRetry(() => import('./pages/SectorBenchmark'));
 const Proph3tIntelligence = lazyWithRetry(() => import('./pages/Proph3tIntelligence'));
 const CREditor = lazyWithRetry(() => import('./pages/CREditor'));
+const CompanyDiagnostic = lazyWithRetry(() => import('./pages/CompanyDiagnostic'));
 
 function PageFallback() {
   return (
@@ -144,6 +146,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <DemoTour />
       <ActivitySidebarToggle />
       <ActivitySidebar />
+      <OnboardingModal />
     </div>
   );
 }
@@ -171,6 +174,7 @@ function App() {
         <Route path="/home" element={<ProtectedRoute><DemoBanner /><Home /><FloatingAI /><DemoTour /></ProtectedRoute>} />
         <Route path="/dashboards" element={<ProtectedRoute><AppLayout><Dashboards /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/home" element={<ProtectedRoute><AppLayout><DashboardHome /></AppLayout></ProtectedRoute>} />
+        <Route path="/diagnostic" element={<ProtectedRoute><AppLayout><CompanyDiagnostic /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/:id" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute><AppLayout><Alerts /></AppLayout></ProtectedRoute>} />
         <Route path="/actions" element={<ProtectedRoute><AppLayout><Actions /></AppLayout></ProtectedRoute>} />

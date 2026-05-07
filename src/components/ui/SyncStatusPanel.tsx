@@ -44,6 +44,11 @@ export function SyncStatusPanel() {
       setStats((s) => ({ ...s, loading: false }));
       return;
     }
+    // Mode démo : pas de diagnostic sync (tout est hardcodé)
+    if (currentOrgId.startsWith('demo-org') && localStorage.getItem('demo-mode') === '1') {
+      setStats((s) => ({ ...s, loading: false }));
+      return;
+    }
     (async () => {
       try {
         // Cloud counts (RLS-filtered)

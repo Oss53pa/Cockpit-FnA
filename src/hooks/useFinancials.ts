@@ -3,6 +3,10 @@
 // Source de données : Supabase via dataProvider (obligatoire).
 // Pour la réactivité : les composants qui modifient les données doivent appeler
 // `invalidateCloudData('imports')`, `'budgets'`, etc. après leur écriture.
+//
+// MODE DÉMO : si `localStorage['demo-mode']==='1'` ET `currentOrgId` commence
+// par `demo-org`, les hooks renvoient les fixtures hardcodées de demoFixtures.ts
+// (pas de fetch dataProvider). Permet la démo sans authentification ni Supabase.
 import { useCloudData } from './useCloudData';
 import type { ImportLog, Organization, Period } from '../db/schema';
 import { dataProvider } from '../db/provider';
@@ -14,13 +18,26 @@ import { computeCapitalVariation, computeMonthlyTFT, computeTAFIRE, computeTFT }
 import { computeBudgetActual, BudgetActualRow } from '../engine/budgetActual';
 import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
+import {
+  isDemoActive,
+  DEMO_ORG, DEMO_BALANCE, DEMO_SIG, DEMO_CR, DEMO_BILAN,
+  DEMO_RATIOS, DEMO_MONTHLY_CA, DEMO_PERIODS, DEMO_IMPORTS,
+} from '../engine/demoFixtures';
 
 export function useOrganizations(): Organization[] {
+  const orgId = useApp((s) => s.currentOrgId);
   const { data } = useCloudData<Organization[]>(
     () => dataProvider.getOrganizations(),
     [],
     { initial: [] as Organization[], tag: 'organizations' },
   );
+  // Mode démo : injecter l'org démo si pas déjà présente
+  if (isDemoActive(orgId)) {
+    const realOrgId = orgId || DEMO_ORG.id;
+    const demoOrg: Organization = { ...DEMO_ORG, id: realOrgId };
+    const exists = data.some((o) => o.id === realOrgId);
+    return exists ? data : [demoOrg, ...data];
+  }
   return data;
 }
 
@@ -30,6 +47,9 @@ export function usePeriods(orgId: string | undefined): Period[] {
     [orgId],
     { initial: [] as Period[], tag: 'periods' },
   );
+  if (isDemoActive(orgId) && data.length === 0) {
+    return DEMO_PERIODS.map((p) => ({ ...p, orgId: orgId || p.orgId })) as Period[];
+  }
   return data;
 }
 
@@ -44,6 +64,12 @@ export function useImportsHistory(orgId: string, kind?: ImportLog['kind'] | Impo
   const { data } = useCloudData<ImportLog[]>(
     async () => {
       if (!orgId) return [] as ImportLog[];
+      if (isDemoActive(orgId)) {
+        const all = DEMO_IMPORTS.map((i) => ({ ...i, orgId })) as unknown as ImportLog[];
+        if (!kind) return all;
+        const kinds = Array.isArray(kind) ? new Set(kind) : new Set([kind]);
+        return all.filter((i) => kinds.has(i.kind));
+      }
       const all = await dataProvider.getImports(orgId);
       if (!kind) return all;
       const kinds = Array.isArray(kind) ? new Set(kind) : new Set([kind]);
@@ -105,6 +131,7 @@ export function useBalance() {
     [currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth, importId],
     { initial: [], tag: ['gl', 'periods'] },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.length === 0)) return DEMO_BALANCE;
   return data;
 }
 
@@ -133,12 +160,30 @@ export function useBalanceMovements() {
     [currentOrgId, currentYear, currentPeriodId, fromMonth, toMonth, importId],
     { initial: [], tag: ['gl', 'periods'] },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.length === 0)) {
+    // En démo, utiliser uniquement les comptes de gestion (6/7) pour les mouvements
+    return DEMO_BALANCE.filter((b) => b.account.startsWith('6') || b.account.startsWith('7'));
+  }
   return data;
 }
 
 export function useStatements() {
+  const orgId = useApp((s) => s.currentOrgId);
   const balance = useBalance();
   const movements = useBalanceMovements();
+
+  // Démo : retourner directement les fixtures pré-calculées
+  if (isDemoActive(orgId)) {
+    return {
+      balance: DEMO_BALANCE,
+      movements: DEMO_BALANCE.filter((b) => b.account.startsWith('6') || b.account.startsWith('7')),
+      bilan: DEMO_BILAN,
+      cr: DEMO_CR,
+      sig: DEMO_SIG,
+      unclassifiedAccounts: [],
+    };
+  }
+
   if (!balance || balance.length === 0) {
     return { balance: [], movements: [], bilan: null, cr: [], sig: null, unclassifiedAccounts: [] };
   }
@@ -178,6 +223,8 @@ export function useRatios() {
     [currentOrgId, currentYear, fromMonth, toMonth],
     { initial: null, tag: 'gl' },
   );
+
+  if (isDemoActive(currentOrgId)) return DEMO_RATIOS;
 
   if (!balance || balance.length === 0) return [];
 
@@ -361,6 +408,15 @@ export function useMonthlyCA() {
     [currentOrgId, currentYear, fromMonth, toMonth],
     { initial: [], tag: ['gl', 'budgets'] },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.length === 0)) {
+    return DEMO_MONTHLY_CA.map((m) => ({
+      mois: m.label,
+      month: m.month,
+      realise: m.value,
+      budget: Math.round(m.value * 1.05),
+      n1: Math.round(m.value * 0.88),
+    }));
+  }
   return data;
 }
 

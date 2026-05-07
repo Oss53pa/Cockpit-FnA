@@ -4,7 +4,7 @@ import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
   X, ChevronsLeft, ChevronsRight, ChevronRight, PieChart, ClipboardList, Search, Users, FileEdit,
-  HelpCircle, MessageCircle,
+  HelpCircle, MessageCircle, Stethoscope,
 } from 'lucide-react';
 import { useCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
@@ -17,6 +17,7 @@ const sections = [
     items: [
       { to: '/home', icon: Home, label: 'Accueil' },
       { to: '/dashboard/home', icon: LayoutDashboard, label: 'Synthèse' },
+      { to: '/diagnostic', icon: Stethoscope, label: 'Santé entreprise' },
       { to: '/dashboards', icon: BarChart3, label: 'Catalogue' },
       { to: '/alerts', icon: Bell, label: 'Alertes' },
       { to: '/actions', icon: Target, label: "Plan d'action" },

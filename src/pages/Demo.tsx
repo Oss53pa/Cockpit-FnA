@@ -7,7 +7,7 @@ import {
   Sparkles, Database, ArrowRight, Check, AlertCircle, Loader2, RefreshCw,
   LayoutDashboard, FileSpreadsheet, BookOpen, FileText, Bot, ShieldCheck, ExternalLink, Home,
 } from 'lucide-react';
-import { loadDemoData, DEMO_ORG_ID_EXPORT, unloadDemoData } from '../engine/demoSeed';
+import { loadDemoData, unloadDemoData } from '../engine/demoSeed';
 import { useApp } from '../store/app';
 import { setDemoMode, setTourStep, resetTour } from '../lib/demoMode';
 
@@ -51,7 +51,8 @@ export default function Demo() {
     try {
       const result = await loadDemoData();
       setStats(result);
-      setCurrentOrg(DEMO_ORG_ID_EXPORT);
+      // Utiliser l'org-id réellement créé (user-specific en cloud, statique en offline)
+      setCurrentOrg(result.orgId);
       setCurrentYear(new Date().getFullYear());
       // Active le mode démo + reset du parcours
       setDemoMode(true);
