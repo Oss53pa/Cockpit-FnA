@@ -23,7 +23,7 @@ import { db } from '../db/schema'; // pour la migration Dexie → Supabase (lect
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { ensureSeeded } from '../db/seed';
 import { pushAllToSupabase, type PushAllProgress, type PushAllResult } from '../db/supabaseSync';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 type Tab = 'apparence' | 'societes' | 'exercices' | 'ratios' | 'donnees' | 'users' | 'ia' | 'emails' | 'integrations';
 
@@ -272,6 +272,22 @@ function TabSocietes() {
         id, name: form.name.trim(), sector: form.sector, currency: form.currency,
         rccm: form.rccm || undefined, ifu: form.ifu || undefined, createdAt: Date.now(),
       });
+      // BUG FIX URGENT : associer immédiatement le user créateur à cette org
+      // dans fna_user_orgs, sinon les RLS suivantes (fna_accounts, fna_gl_entries…)
+      // bloquent toute écriture parce que l'org_id n'est pas dans `fna_auth_org_ids()`.
+      if (isSupabaseConfigured) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const userId = sessionData.session?.user?.id;
+          if (userId) {
+            await (supabase as any)
+              .from('fna_user_orgs')
+              .upsert({ user_id: userId, org_id: id, role: 'admin' }, { onConflict: 'user_id,org_id' });
+          }
+        } catch (e) {
+          console.warn('[Settings] fna_user_orgs upsert failed (non bloquant):', e);
+        }
+      }
       const year = new Date().getFullYear();
       await dataProvider.upsertFiscalYear({ id: `${id}-${year}`, orgId: id, year, startDate: `${year}-01-01`, endDate: `${year}-12-31`, closed: false });
       const monthLabels = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -901,12 +917,59 @@ function TabDonnees() {
               <button className="btn-primary" onClick={() => setSyncOpen(true)} disabled={busy || syncRunning}>
                 <Cloud className="w-4 h-4" /> Sync complet vers le cloud
               </button>
+              <button className="btn-outline" disabled={busy} onClick={async () => {
+                // Réparation accès cloud : ajoute la mapping fna_user_orgs pour TOUTES
+                // les org_ids connues localement (Dexie + Supabase + currentOrgId).
+                // Résout l'erreur RLS "new row violates row-level security policy"
+                // quand l'utilisateur a créé une org avant le fix d'auto-mapping.
+                setBusy(true);
+                try {
+                  const { data: sessionData } = await supabase.auth.getSession();
+                  const userId = sessionData.session?.user?.id;
+                  if (!userId) {
+                    toast.error('Non connecté', 'Connectez-vous d\'abord à Supabase.');
+                    return;
+                  }
+                  const dexieOrgs = await db.organizations.toArray().catch(() => [] as any[]);
+                  const cloudOrgs = await dataProvider.getOrganizations().catch(() => [] as any[]);
+                  const currentOrgId = (() => {
+                    try { return localStorage.getItem('cockpit-current-org-id') ?? null; } catch { return null; }
+                  })();
+                  const orgIds = Array.from(new Set([
+                    ...dexieOrgs.map((o: any) => o.id),
+                    ...cloudOrgs.map((o: any) => o.id),
+                    ...(currentOrgId ? [currentOrgId] : []),
+                  ])).filter(Boolean);
+                  if (orgIds.length === 0) {
+                    toast.warning('Aucune société', 'Rien à réparer — créez d\'abord une société.');
+                    return;
+                  }
+                  const rows = orgIds.map((oid) => ({ user_id: userId, org_id: oid, role: 'admin' as const }));
+                  const { error } = await (supabase as any)
+                    .from('fna_user_orgs')
+                    .upsert(rows, { onConflict: 'user_id,org_id', ignoreDuplicates: true });
+                  if (error) throw error;
+                  invalidateCloudData('organizations');
+                  toast.success(
+                    'Accès réparé',
+                    `${orgIds.length} société(s) associée(s) à votre compte. Réessayez l'import.`,
+                  );
+                } catch (e: any) {
+                  toast.error('Erreur', e?.message ?? 'Impossible de réparer l\'accès cloud.');
+                } finally { setBusy(false); }
+              }}>
+                <Shield className="w-4 h-4" /> Réparer l'accès cloud (RLS)
+              </button>
               {syncResult && (
                 <span className="text-xs text-primary-500 self-center">
                   Dernière sync : {syncResult.totalRows.toLocaleString()} lignes en {(syncResult.duration / 1000).toFixed(1)}s
                 </span>
               )}
             </div>
+            <p className="text-xs text-primary-500 mt-2">
+              💡 Si l'import échoue avec « <em>row-level security policy</em> », cliquez sur
+              <strong> Réparer l'accès cloud</strong> puis réessayez.
+            </p>
           </>
         )}
       </Card>

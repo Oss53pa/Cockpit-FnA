@@ -10,7 +10,7 @@ const ALT_FILL: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgCol
 // ─── TEMPLATE GRAND LIVRE ───────────────────────────────────────────
 export async function downloadGLTemplate(orgName?: string, year?: number) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
   const yyyy = year ?? new Date().getFullYear();
 
@@ -116,7 +116,7 @@ export async function downloadGLTemplate(orgName?: string, year?: number) {
 // ─── TEMPLATE GRAND LIVRE TIERS ─────────────────────────────────────
 export async function downloadTiersTemplate(orgName?: string, year?: number) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
   const yyyy = year ?? new Date().getFullYear();
   const ws = wb.addWorksheet('GL Tiers');
@@ -143,7 +143,7 @@ export async function downloadTiersTemplate(orgName?: string, year?: number) {
 
   // Feuille instructions
   const wsHelp = wb.addWorksheet('Instructions');
-  wsHelp.addRow(['IMPORT GRAND LIVRE TIERS — CockPit F&A']);
+  wsHelp.addRow(['IMPORT GRAND LIVRE TIERS — Cockpit FnA']);
   wsHelp.addRow([]);
   wsHelp.addRow(['Ce fichier sert à importer le détail des tiers (clients 411 et fournisseurs 401).']);
   wsHelp.addRow(['Il enrichit les écritures du Grand Livre Général avec le code et le nom du tiers.']);
@@ -164,7 +164,7 @@ export async function downloadTiersTemplate(orgName?: string, year?: number) {
 // ─── TEMPLATE BALANCE GÉNÉRALE ──────────────────────────────────────
 export async function downloadBalanceGeneraleTemplate(orgName?: string, year?: number) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
   const yyyy = year ?? new Date().getFullYear();
 
@@ -216,7 +216,7 @@ export async function downloadBalanceGeneraleTemplate(orgName?: string, year?: n
 // ─── TEMPLATE BALANCE AUXILIAIRE ────────────────────────────────────
 export async function downloadBalanceAuxiliaireTemplate(orgName?: string, year?: number, kind: 'clients' | 'fournisseurs' = 'clients') {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
   const yyyy = year ?? new Date().getFullYear();
 
@@ -270,7 +270,7 @@ export async function downloadBalanceAuxiliaireTemplate(orgName?: string, year?:
 // ─── TEMPLATE BALANCE ÂGÉE ──────────────────────────────────────────
 export async function downloadBalanceAgeeTemplate(orgName?: string, year?: number, kind: 'clients' | 'fournisseurs' = 'clients') {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
   const yyyy = year ?? new Date().getFullYear();
 
@@ -319,7 +319,7 @@ export async function downloadBalanceAgeeTemplate(orgName?: string, year?: numbe
 // ─── TEMPLATE PLAN COMPTABLE ───────────────────────────────────────
 export async function downloadCOATemplate(orgName?: string) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
 
   // Feuille 1 : INSTRUCTIONS
@@ -335,7 +335,7 @@ export async function downloadCOATemplate(orgName?: string) {
     '4. Type : A (Actif), P (Passif), C (Charge), R (Produit), X (autre).',
     '5. Classe : premier chiffre du compte (1 à 9).',
     '6. Les comptes auxiliaires (clients, fournisseurs) sont également acceptés.',
-    '7. Importer ensuite le fichier dans CockPit → Plan comptable → Importer.',
+    '7. Importer ensuite le fichier dans Cockpit FnA → Plan comptable → Importer.',
   ].forEach((c) => wsInfo.addRow([c]));
   wsInfo.getColumn(1).width = 100;
 
@@ -391,7 +391,7 @@ export async function downloadCOATemplate(orgName?: string) {
 export async function downloadBudgetTemplate(orgName?: string, year?: number, version: string = 'V1_initial') {
   const yyyy = year ?? new Date().getFullYear();
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
 
   // Feuille 1 : INSTRUCTIONS
@@ -406,8 +406,8 @@ export async function downloadBudgetTemplate(orgName?: string, year?: number, ve
     "2. Saisissez les montants prévisionnels mensuels de Janvier à Décembre.",
     "3. La colonne « Total annuel » se calcule automatiquement.",
     "4. Vous pouvez ajouter / supprimer des comptes selon vos besoins.",
-    "5. Pour répartir un montant annuel : utilisez l'outil de répartition dans CockPit → Budget.",
-    "6. Importer ensuite le fichier dans CockPit → Budget → Importer le budget.",
+    "5. Pour répartir un montant annuel : utilisez l'outil de répartition dans Cockpit FnA → Budget.",
+    "6. Importer ensuite le fichier dans Cockpit FnA → Budget → Importer le budget.",
     "7. Plusieurs versions possibles : V1_initial, V2_revise, Forecast, Budget_cible…",
   ].forEach((c) => wsInfo.addRow([c]));
   wsInfo.getColumn(1).width = 100;

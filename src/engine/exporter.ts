@@ -24,7 +24,7 @@ export async function exportStatementsXLSX(params: {
   ratios: Ratio[];
 }) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'CockPit F&A';
+  wb.creator = 'Cockpit FnA';
   wb.created = new Date();
 
   const header = (ws: ExcelJS.Worksheet, title: string) => {
@@ -92,7 +92,7 @@ export async function exportStatementsXLSX(params: {
   wsR.columns = [{ width: 14 }, { width: 10 }, { width: 32 }, { width: 14 }, { width: 8 }, { width: 10 }, { width: 10 }, { width: 60 }];
 
   const buf = await wb.xlsx.writeBuffer();
-  saveAs(new Blob([buf]), `CockPit_${params.org}_${params.period}.xlsx`);
+  saveAs(new Blob([buf]), `CockpitFnA_${params.org}_${params.period}.xlsx`);
 }
 
 // ─── PDF ────────────────────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ export function exportStatementsPDF(params: {
     doc.line(margin, 200, 555, 200);
     doc.setFontSize(9);
     doc.setTextColor(115, 115, 115);
-    doc.text('SYSCOHADA révisé 2017 — CockPit F&A', margin, 800);
+    doc.text('SYSCOHADA révisé 2017 — Cockpit FnA', margin, 800);
   };
   cover();
 
@@ -202,5 +202,5 @@ export function exportStatementsPDF(params: {
     doc.text(`Page ${i} / ${pageCount}`, 520, 820);
   }
 
-  doc.save(`CockPit_${params.org}_${params.period}.pdf`);
+  doc.save(`CockpitFnA_${params.org}_${params.period}.pdf`);
 }

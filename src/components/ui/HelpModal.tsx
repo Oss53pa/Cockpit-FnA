@@ -10,7 +10,7 @@ export function HelpModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [tab, setTab] = useState<Tab>('objet');
 
   return (
-    <Modal open={open} onClose={onClose} title="Cockpit Finance & Accounting" subtitle="Objet et mode d'emploi" size="lg">
+    <Modal open={open} onClose={onClose} title="Cockpit FnA — Finance and Accounting" subtitle="Objet et mode d'emploi" size="lg">
       <TabSwitch
         value={tab}
         onChange={setTab}

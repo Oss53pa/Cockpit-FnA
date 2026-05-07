@@ -222,7 +222,7 @@ export default function Home() {
 
         {/* FOOTER */}
         <div className="text-center text-[10px] text-primary-400 mt-10 space-y-0.5">
-          <p>CockPit F&amp;A · SYSCOHADA révisé 2017 · © {currentYear}</p>
+          <p>Cockpit FnA · SYSCOHADA révisé 2017 · © {currentYear}</p>
           <p>
             Une application <a href="https://atlas-studio.app" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-500 hover:text-accent transition-colors">Atlas Studio</a>
           </p>

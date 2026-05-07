@@ -426,7 +426,7 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
       doc.line(margin, H - 35, W - margin, H - 35);
       if (config.options.includeFooter) {
         doc.text(CONFIDENTIALITY_LABEL[config.identity.confidentiality], margin, H - 20);
-        doc.text('CockPit F&A · SYSCOHADA révisé 2017', W / 2, H - 20, { align: 'center' });
+        doc.text('Cockpit FnA · SYSCOHADA révisé 2017', W / 2, H - 20, { align: 'center' });
       }
       if (config.options.includePageNumbers) {
         doc.text(`Page ${i} / ${total}`, W - margin, H - 20, { align: 'right' });
