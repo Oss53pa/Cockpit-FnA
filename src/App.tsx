@@ -41,6 +41,7 @@ const GrandLivre     = lazyWithRetry(() => import('./pages/GrandLivre'));
 const Analytical     = lazyWithRetry(() => import('./pages/Analytical'));
 const AuditTrail     = lazyWithRetry(() => import('./pages/AuditTrail'));
 const Settings       = lazyWithRetry(() => import('./pages/Settings'));
+const TeamSettings   = lazyWithRetry(() => import('./pages/settings/TeamSettingsPage'));
 const Guide          = lazyWithRetry(() => import('./pages/Guide'));
 const Chat           = lazyWithRetry(() => import('./pages/Chat'));
 const ExecutiveSummary = lazyWithRetry(() => import('./pages/ExecutiveSummary'));
@@ -185,6 +186,7 @@ function App() {
         <Route path="/analytical" element={<ProtectedRoute><AppLayout><Analytical /></AppLayout></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute><AppLayout><AuditTrail /></AppLayout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
+        <Route path="/settings/team" element={<ProtectedRoute><AppLayout><TeamSettings /></AppLayout></ProtectedRoute>} />
         <Route path="/guide" element={<ProtectedRoute><AppLayout><Guide /></AppLayout></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><AppLayout><Chat /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/exec" element={<ProtectedRoute><AppLayout><ExecutiveSummary /></AppLayout></ProtectedRoute>} />
