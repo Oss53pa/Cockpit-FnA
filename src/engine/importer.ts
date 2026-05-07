@@ -453,7 +453,7 @@ export type ColumnMapping = {
 };
 
 // ── Patterns de détection des colonnes ──────────────────────────────────────
-// Accepte le format CockPit (COMPTE, LIBELLE, DATE, JOURNAL, NUMERO DE SAISIE,
+// Accepte le format Cockpit FnA (COMPTE, LIBELLE, DATE, JOURNAL, NUMERO DE SAISIE,
 // DESCRIPTION, LETTRAGE, DEBIT, CREDIT) + formats hérités (Date, Pièce, Libellé)
 const patterns: Record<keyof ColumnMapping, RegExp[]> = {
   date: [/^date/i, /^jour/i, /^dt$/i],

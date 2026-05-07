@@ -1,4 +1,4 @@
-// Landing page CockPit F&A — qualité Liass'Pilot / Atlas Studio
+// Landing page Cockpit FnA — qualité Liass'Pilot / Atlas Studio
 // Animations scroll, gradient text, hover effects, sections enrichies, dark mode
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -98,7 +98,7 @@ const TESTIMONIALS = [
 ];
 
 const FAQ = [
-  { q: 'CockPit F&A est-il vraiment conforme au SYSCOHADA révisé 2017 ?', a: 'Oui à 100 %. Plan comptable OHADA intégré, états financiers conformes (Bilan, CR par nature, TFT, variation CP), 10 contrôles automatiques de conformité, base de connaissance Proph3t avec 24 chunks référencés AUDCIF.' },
+  { q: 'Cockpit FnA est-il vraiment conforme au SYSCOHADA révisé 2017 ?', a: 'Oui à 100 %. Plan comptable OHADA intégré, états financiers conformes (Bilan, CR par nature, TFT, variation CP), 10 contrôles automatiques de conformité, base de connaissance Proph3t avec 24 chunks référencés AUDCIF.' },
   { q: 'Mes données sortent-elles de mon ordinateur ?', a: 'Non, jamais. Toutes les données restent dans IndexedDB de votre navigateur. Aucune connexion internet requise. Souveraineté totale.' },
   { q: 'Quels logiciels comptables puis-je connecter ?', a: 'Deux modes : (1) Import par fichier CSV/Excel/TXT depuis n\'importe quel logiciel — détection auto des colonnes. (2) Connexion API directe en temps réel pour Sage 100c/X3, Cegid Quadra, Odoo, SAP B1, QuickBooks, Wave. Pour les autres logiciels (SAARI, Perfecto, Sage Coala...), import par fichier suffit. Connecteur sur-mesure possible sur demande.' },
   { q: 'Combien de temps pour produire un rapport mensuel complet ?', a: 'Moins de 5 minutes : importer le GL → cliquer "Auto-commenter avec Proph3t" → "Télécharger PDF". 23 sections incluses (synthèse, P&L, bilan, budget, cycles, trésorerie, RH, ratios, compliance, signatures).' },
@@ -188,7 +188,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="font-display text-2xl font-bold tracking-tight" style={c.s}>
-              CockPit <span style={c.sAccent}>F&A</span>
+              Cockpit <span style={c.sAccent}>FnA</span>
             </div>
             <span style={c.sMuted}>·</span>
             <span className="text-xs uppercase tracking-widest" style={c.sTer}>SYSCOHADA 2017</span>
@@ -469,7 +469,7 @@ export default function Landing() {
             <div className={`inline-flex items-center gap-2 px-3 py-1.5 ${c.accentBgLight} border ${c.accentBorder} rounded-full text-xs font-semibold mb-5`} style={c.sAccent}>
               <Star className="w-3.5 h-3.5" /> Conçu pour les pros OHADA
             </div>
-            <h2 className="text-3xl md:text-5xl font-medium mb-4" style={c.s}>Pour qui est CockPit F&A ?</h2>
+            <h2 className="text-3xl md:text-5xl font-medium mb-4" style={c.s}>Pour qui est Cockpit FnA ?</h2>
           </div>
           <div ref={testimonials.ref} className={`grid grid-cols-1 md:grid-cols-3 gap-6 anim-stagger ${testimonials.className}`}>
             {TESTIMONIALS.map((tt, i) => (
@@ -696,7 +696,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
               <div className="flex items-center gap-3 mb-4">
-                <div className="font-display text-2xl font-bold" style={c.s}>CockPit <span style={c.sAccent}>F&A</span></div>
+                <div className="font-display text-2xl font-bold" style={c.s}>Cockpit <span style={c.sAccent}>FnA</span></div>
               </div>
               <p className="text-sm mb-4 max-w-md" style={c.sSec}>
                 Le cockpit financier conçu pour les 17 pays de l'espace OHADA.
@@ -729,7 +729,7 @@ export default function Landing() {
             </div>
           </div>
           <div className={`pt-6 border-t ${c.border} flex flex-col md:flex-row items-center justify-between gap-3 text-xs`} style={c.sTer}>
-            <div>© {new Date().getFullYear()} CockPit F&A — Une solution Atlas Studio</div>
+            <div>© {new Date().getFullYear()} Cockpit FnA — Une solution Atlas Studio</div>
             <div className="flex items-center gap-4">
               <a href="#" className="hover:opacity-80">Mentions légales</a>
               <a href="#" className="hover:opacity-80">Confidentialité</a>

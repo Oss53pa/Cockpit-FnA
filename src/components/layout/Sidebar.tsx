@@ -118,7 +118,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {
       {/* Header — wordmark Grand Hotel (signature unique de l'app) */}
       <div className="px-5 pt-6 pb-5 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">CockPit</p>
+          <p className="font-display text-2xl leading-none text-primary-900 dark:text-primary-50 truncate">Cockpit FnA</p>
           <p className="text-[10px] uppercase tracking-[0.18em] text-primary-400 mt-1.5 font-medium">SYSCOHADA 2017</p>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">

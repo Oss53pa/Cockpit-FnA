@@ -138,7 +138,7 @@ export const ERP_TEMPLATES: ERPTemplate[] = [
   {
     id: 'generic',
     name: 'Générique',
-    description: 'Format standard CockPit F&A',
+    description: 'Format standard Cockpit FnA',
     separator: ';',
     encoding: 'utf-8',
     dateFormat: 'YYYY-MM-DD',

@@ -2,7 +2,7 @@
  * TeamSettingsPage.tsx — Page "Paramètres → Utilisateurs" générique
  * ==================================================================
  * Composant réutilisable pour gérer l'équipe d'un tenant dans n'importe
- * quelle app Atlas Studio (Cockpit F&A, Atlas F&A, CockpitJourney,
+ * quelle app Atlas Studio (Cockpit FnA, Atlas FnA, CockpitJourney,
  * TableSmart, Advist, Liass'Pilot).
  *
  * Source de vérité : table licence_seats (système universel Atlas Studio)
@@ -23,7 +23,12 @@
  */
 
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase as supabaseTyped } from "../../lib/supabase";
+
+// Bypass typing : les tables licence_seats ne sont pas dans Database typed
+// (système Atlas Studio universel partagé entre apps).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseTyped as any;
 
 type Role = "app_super_admin" | "app_admin" | "editor" | "viewer";
 

@@ -2532,7 +2532,7 @@ function BackCoverPage({ config, palette, org }: any) {
         <p>Émis par {config.identity.author} · {new Date().toLocaleDateString('fr-FR')}</p>
         {(org?.rccm || org?.ifu) && <p>{[org?.rccm && `RCCM : ${org.rccm}`, org?.ifu && `IFU : ${org.ifu}`].filter(Boolean).join(' · ')}</p>}
         {org?.address && <p>{org.address}</p>}
-        <p className="mt-2 italic">Généré avec CockPit F&A · SYSCOHADA 2017</p>
+        <p className="mt-2 italic">Généré avec Cockpit FnA · SYSCOHADA 2017</p>
       </div>
     </div>
   );

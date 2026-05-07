@@ -85,7 +85,7 @@ export function buildReport(params: ReportParams, data: ReportData): jsPDF {
     doc.setDrawColor(229, 229, 229);
     doc.line(margin, H - 40, W - margin, H - 40);
     doc.text(CONFIDENTIALITY_LABEL[params.confidentiality], margin, H - 25);
-    doc.text('CockPit F&A · SYSCOHADA révisé 2017', W / 2, H - 25, { align: 'center' });
+    doc.text('Cockpit FnA · SYSCOHADA révisé 2017', W / 2, H - 25, { align: 'center' });
     doc.text(`Page ${pageNum} / ${totalPages}`, W - margin, H - 25, { align: 'right' });
     doc.setTextColor(10, 10, 10);
   };
@@ -136,7 +136,7 @@ export function buildReport(params: ReportParams, data: ReportData): jsPDF {
 
     doc.setFontSize(8);
     doc.setTextColor(115, 115, 115);
-    doc.text('SYSCOHADA révisé 2017 · CockPit F&A', W / 2, H - margin - 15, { align: 'center' });
+    doc.text('SYSCOHADA révisé 2017 · Cockpit FnA', W / 2, H - margin - 15, { align: 'center' });
   }
 
   // ─── PLACEHOLDER TOC (remplie après construction) ───────────────────

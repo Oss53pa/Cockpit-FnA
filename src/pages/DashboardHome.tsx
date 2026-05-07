@@ -8,6 +8,7 @@ import { ResponsivePie } from '@nivo/pie';
 import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
+import { SyncStatusPanel } from '../components/ui/SyncStatusPanel';
 import { KPICard } from '../components/ui/KPICardV2';
 import { KpiCockpit } from '../components/ui/KpiCockpit';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -150,6 +151,7 @@ export default function DashboardHome() {
         }
       />
 
+      <SyncStatusPanel />
       <DataIntegrityBanner />
 
       {system === 'SMT' && (
@@ -340,7 +342,7 @@ export default function DashboardHome() {
 
       <div className="mt-5 pt-3 border-t border-primary-200 dark:border-primary-800 flex justify-between items-center text-[11px] text-primary-400">
         <span>Dernière synchronisation : {new Date().toLocaleString('fr-FR')}</span>
-        <span>CockPit F&amp;A v0.2 — SYSCOHADA révisé 2017</span>
+        <span>Cockpit FnA v0.2 — SYSCOHADA révisé 2017</span>
       </div>
     </div>
   );

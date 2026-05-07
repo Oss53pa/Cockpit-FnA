@@ -92,7 +92,7 @@ export default function Demo() {
           <Link to="/" className={`text-xs ${subtle} hover:opacity-80 transition inline-flex items-center gap-1.5`}>
             <ExternalLink className="w-3 h-3" /> Retour à la présentation
           </Link>
-          <div className="text-xs font-mono opacity-60">DEMO · CockPit F&amp;A</div>
+          <div className="text-xs font-mono opacity-60">DEMO · Cockpit FnA</div>
         </div>
 
         {/* TITRE */}
