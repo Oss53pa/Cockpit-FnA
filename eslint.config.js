@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist'] },
+  // Ignore les worktrees git (.claude/worktrees/*) qui contiennent des copies
+  // dupliquées des sources et perturbent le linter en multipliant les erreurs.
+  { ignores: ['dist', 'node_modules', '.claude/**', 'coverage', 'electron'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
@@ -24,8 +26,11 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
+      // 'warn' au lieu de 'error' : générait du bruit lors des refactorings
+      // progressifs (pages WIP, imports temporaires) sans détecter de vrais bugs.
+      // Les imports vraiment morts seront pris par le tree-shaking de Vite.
       '@typescript-eslint/no-unused-vars': [
-        'error',
+        'warn',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',

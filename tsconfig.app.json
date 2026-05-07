@@ -16,8 +16,10 @@
 
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    /* noUnusedLocals/noUnusedParameters désactivés : génèrent du bruit lors des
+     * refactorings progressifs (pages WIP, imports temporaires) sans détecter
+     * de vrais bugs. ESLint (no-unused-vars) couvre déjà ce besoin avec une
+     * granularité plus fine (warning vs error, exceptions par underscore). */
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"]

@@ -4,8 +4,8 @@ import clsx from 'clsx';
  * Skeleton loader avec shimmer animation premium.
  * Remplace les "Chargement..." spinners par des placeholders structurés.
  */
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={clsx('skeleton', className)} aria-hidden />;
+export function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={clsx('skeleton', className)} style={style} aria-hidden />;
 }
 
 /** Skeleton typographique (1 ligne de texte). */

@@ -162,15 +162,24 @@ export async function agedBalance(
   const cutoff = analysisDate.toISOString().substring(0, 10);
 
   // Permet de réutiliser les données déjà chargées (cas agedBalanceMonthly).
-  const { periods, entries, accounts } = opts?.entriesPreloaded
-    ?? await Promise.all([
+  let periods: any[];
+  let entries: any[];
+  let accounts: any[];
+  if (opts?.entriesPreloaded) {
+    periods = opts.entriesPreloaded.periods;
+    entries = opts.entriesPreloaded.entries;
+    accounts = opts.entriesPreloaded.accounts;
+  } else {
+    const [p, e, a] = await Promise.all([
       dataProvider.getPeriods(orgId),
       dataProvider.getGLEntries({ orgId }),
       dataProvider.getAccounts(orgId),
-    ]).then(([periods, entries, accounts]) => ({ periods, entries, accounts }));
-  const accountLabels = new Map(accounts.map((a) => [a.code, a.label] as const));
+    ]);
+    periods = p; entries = e; accounts = a;
+  }
+  const accountLabels = new Map(accounts.map((a: any) => [a.code, a.label] as const));
   const ranPeriodIds = new Set(
-    periods.filter((p) => p.year === year && p.month === 0).map((p) => p.id),
+    periods.filter((p: any) => p.year === year && p.month === 0).map((p: any) => p.id),
   );
   const isRanEntry = (e: { periodId: string; journal?: string }) => {
     if (ranPeriodIds.has(e.periodId)) return true;

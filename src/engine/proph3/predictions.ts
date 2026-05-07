@@ -35,7 +35,6 @@
 //   • Régression OLS Fourier avec ridge Tikhonov λ=1e-6·trace(A)/m pour
 //     stabilité numérique (pivot Gauss avec pivot partiel).
 import { dataProvider } from '../../db/provider';
-import { computeBalance } from '../balance';
 
 export interface TimePoint { date: string; value: number; }
 export interface ForecastResult {

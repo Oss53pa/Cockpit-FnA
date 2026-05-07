@@ -1196,7 +1196,7 @@ export default function Reports() {
     };
     try {
       if (currentReportId && !newSave) {
-        await dataProvider.upsertReport({ id: currentReportId, ...payload });
+        await dataProvider.upsertReport({ id: currentReportId, createdAt: now, ...payload });
         invalidateCloudData('reports');
         toast.success('Rapport mis à jour', config.identity.title);
       } else {
@@ -2899,6 +2899,7 @@ function DashboardSnippet({ id, data, palette }: any) {
   // Taux TVA dynamique depuis balance (fallback 18% UEMOA)
   const vatRate = useMemo(() => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { computeVatRate } = require('../engine/ratios');
       return computeVatRate(data.balance ?? []);
     } catch { return 0.18; }

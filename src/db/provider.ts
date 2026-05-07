@@ -206,6 +206,7 @@ const isElectron = typeof window !== 'undefined' && !!(window as any).electronAP
 function selectProvider(): DataProvider {
   if (isElectron) {
     // Sprint 6: Electron SQLite provider (build desktop)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { ElectronProvider } = require('./electronProvider');
     return new ElectronProvider();
   }

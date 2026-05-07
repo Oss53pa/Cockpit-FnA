@@ -255,21 +255,32 @@ export type AutoRecoveryResult = {
 const RECOVERY_MARKER_KEY = 'fna-auto-recovery-done';
 
 export async function autoRecoverDexieToSupabase(
-  orgIds: string[],
+  authOrgIds: string[],
   onProgress?: (msg: string) => void,
 ): Promise<AutoRecoveryResult> {
   const result: AutoRecoveryResult = { needed: false, migrated: [], skipped: [], errors: [] };
   if (!isSupabaseConfigured) return result;
 
   // Marker : on ne re-tente pas si déjà fait sur ce device.
-  // (L'utilisateur peut forcer via le bouton "Sync vers cloud" Settings.)
   try {
     if (typeof localStorage !== 'undefined' && localStorage.getItem(RECOVERY_MARKER_KEY) === '1') {
       return result;
     }
   } catch { /* sandboxed */ }
 
-  for (const orgId of orgIds) {
+  // BUG FIX URGENT : on UNIONNE les orgIds passés (depuis fna_user_orgs auth)
+  // avec les orgIds présents dans Dexie. Cas critique : l'utilisateur a des
+  // données dans Dexie sous des orgIds qui ne sont PAS dans fna_user_orgs
+  // (org créée localement avant authentification, ou ID régénéré).
+  let dexieOrgIds: string[] = [];
+  try {
+    const dexieOrgs = await db.organizations.toArray();
+    dexieOrgIds = dexieOrgs.map((o: any) => o.id);
+  } catch { /* Dexie inaccessible */ }
+  const orgIdsToCheck = Array.from(new Set([...authOrgIds, ...dexieOrgIds]));
+  console.info(`[autoRecovery] Vérification ${orgIdsToCheck.length} org(s) (auth: ${authOrgIds.length}, dexie: ${dexieOrgIds.length})`);
+
+  for (const orgId of orgIdsToCheck) {
     try {
       // 1) Compte les écritures GL dans Dexie pour cet org
       const dexieGLCount = await db.gl.where('orgId').equals(orgId).count();
@@ -398,6 +409,25 @@ export async function pushAllToSupabase(
   const t0 = Date.now();
   const details: PushAllResult['details'] = [];
   let totalRows = 0;
+
+  // BUG FIX URGENT : avant de pousser les tables, on ASSOCIE l'utilisateur courant
+  // aux orgs migrées via fna_user_orgs (RLS) — sinon il ne pourra pas relire ses
+  // propres données. Si l'org existe déjà avec une autre association, on ne touche
+  // pas (upsert sans écrasement de role).
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user?.id;
+    if (userId) {
+      const userOrgsRows = orgIds.map((oid) => ({
+        user_id: userId, org_id: oid, role: 'admin' as const,
+      }));
+      // upsert sans écraser le rôle si déjà présent
+      await supabase.from('fna_user_orgs').upsert(userOrgsRows, { onConflict: 'user_id,org_id', ignoreDuplicates: true });
+      console.info(`[pushAllToSupabase] Associé user ${userId} à ${orgIds.length} org(s) via fna_user_orgs`);
+    }
+  } catch (e) {
+    console.warn('[pushAllToSupabase] fna_user_orgs upsert failed (non bloquant):', e);
+  }
 
   for (let i = 0; i < PUSH_STEPS.length; i++) {
     const cfg = PUSH_STEPS[i];

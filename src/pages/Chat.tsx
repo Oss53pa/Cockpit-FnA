@@ -244,7 +244,7 @@ export default function Chat() {
               dms={dms}
               activeId={activeChannelId}
               unreadCounts={unreadCounts}
-              onOpen={async (otherId) => {
+              onOpen={async (otherId: string) => {
                 if (!currentOrgId) return;
                 const dm = await getOrCreateDM(currentOrgId, me.id, otherId);
                 setActiveChannelId(dm.id);
@@ -301,7 +301,7 @@ export default function Chat() {
                       previousMessage={i > 0 ? messages[i - 1] : null}
                       isOwn={m.userId === me.id}
                       currentUserId={me.id}
-                      onReact={async (emoji) => { if (m.id) { await toggleReaction(m.id, emoji, me.id); invalidateCloudData('chat'); } }}
+                      onReact={async (emoji: string) => { if (m.id) { await toggleReaction(m.id, emoji, me.id); invalidateCloudData('chat'); } }}
                       onReply={() => setReplyTo({ id: m.id!, content: m.content, userName: m.userName })}
                       onDelete={async () => {
                         if (!m.id) return;
@@ -410,7 +410,7 @@ export default function Chat() {
           orgId={currentOrgId}
           createdBy={me.id}
           orgUsers={orgUsers}
-          onCreated={(id) => {
+          onCreated={(id: string) => {
             setActiveChannelId(id);
             setShowNewChannel(false);
           }}

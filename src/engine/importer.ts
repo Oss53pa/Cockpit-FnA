@@ -586,7 +586,7 @@ function parseAmount(s: any): number {
   // figure space (U+2007), thin space (U+2009), em/en spaces, etc.
   const str = String(s)
     .replace(/[\s\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, '')
-    .replace(/[^\d,.\-]/g, '');
+    .replace(/[^\d,.-]/g, '');
   // Détection virgule/point
   const hasC = str.includes(',');
   const hasP = str.includes('.');

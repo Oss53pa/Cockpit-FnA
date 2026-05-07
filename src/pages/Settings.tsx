@@ -19,6 +19,7 @@ import { useApp } from '../store/app';
 import { useSettings } from '../store/settings';
 import { PALETTES, PaletteKey, useTheme } from '../store/theme';
 import { dataProvider } from '../db/provider';
+import { db } from '../db/schema'; // pour la migration Dexie → Supabase (lecture cache local)
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { ensureSeeded } from '../db/seed';
 import { pushAllToSupabase, type PushAllProgress, type PushAllResult } from '../db/supabaseSync';
@@ -747,10 +748,20 @@ function TabDonnees() {
     setSyncResult(null);
     setSyncProgress(null);
     try {
-      const allOrgs = await dataProvider.getOrganizations();
-      const orgIds = allOrgs.map((o) => o.id);
+      // BUG FIX URGENT : on lit les orgIds depuis Dexie (le cache local) ET Supabase
+      // pour faire l'UNION. Lire uniquement Supabase échoue quand le cas critique est
+      // justement que Supabase est vide alors que Dexie a des données.
+      const [dexieOrgs, cloudOrgs] = await Promise.all([
+        db.organizations.toArray().catch(() => [] as any[]),
+        dataProvider.getOrganizations().catch(() => [] as any[]),
+      ]);
+      const orgIdsSet = new Set<string>([
+        ...dexieOrgs.map((o: any) => o.id),
+        ...cloudOrgs.map((o: any) => o.id),
+      ]);
+      const orgIds = Array.from(orgIdsSet);
       if (orgIds.length === 0) {
-        toast.error('Aucune société', 'Rien à synchroniser : aucune société locale.');
+        toast.error('Aucune société', 'Rien à synchroniser : aucune société locale ni cloud.');
         setSyncRunning(false);
         return;
       }
