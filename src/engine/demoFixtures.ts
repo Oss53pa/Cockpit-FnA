@@ -16,7 +16,7 @@
 import type { BalanceRow } from './balance';
 import type { SIG, Line } from './statements';
 import type { Ratio } from './ratios';
-import type { AttentionPoint, ActionPlan, Organization } from '../db/schema';
+import type { AttentionPoint, ActionPlan, Organization, Account } from '../db/schema';
 
 const Y = new Date().getFullYear();
 
@@ -348,3 +348,190 @@ export const DEMO_PERIODS = Array.from({ length: 12 }, (_, i) => ({
   fiscalYearId: `fy-demo-${Y}`,
   year: Y, month: i + 1, label: `${monthLabels[i + 1]} ${Y}`, closed: false,
 }));
+
+// ────────────────────────────────────────────────────────────────────
+// Bilan mensuel — 12 snapshots cumulés (croissance progressive)
+// ────────────────────────────────────────────────────────────────────
+const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+function spread(baseAnnual: number, profile?: number[]): number[] {
+  // Profile par défaut : croissance linéaire jusqu'au YTD final
+  if (profile) return profile.map((p) => Math.round(baseAnnual * p));
+  return MONTHS_SHORT.map((_, i) => Math.round(baseAnnual * (i + 1) / 12));
+}
+
+// Profile plus réaliste pour les bilans (varient mois par mois sans linéaire pur)
+const PROFILE_BS_GROWTH = [0.55, 0.62, 0.68, 0.72, 0.76, 0.80, 0.83, 0.85, 0.89, 0.93, 0.97, 1.00];
+const PROFILE_BS_STABLE = [0.95, 0.96, 0.97, 0.97, 0.98, 0.98, 0.99, 0.99, 1.00, 1.00, 1.00, 1.00];
+
+export const DEMO_MONTHLY_BILAN = {
+  months: MONTHS_SHORT,
+  actif: [
+    {
+      code: 'AD', label: 'Immobilisations corporelles nettes',
+      values: spread(ACTIFS_NETS_IMMO, PROFILE_BS_STABLE),
+      ytd: ACTIFS_NETS_IMMO, total: true,
+    },
+    { code: 'BA', label: 'Stocks', values: spread(21_100_000, PROFILE_BS_GROWTH), ytd: 21_100_000 },
+    { code: 'BB', label: 'Créances clients', values: spread(52_300_000, PROFILE_BS_GROWTH), ytd: 52_300_000 },
+    { code: 'BG', label: 'TVA déductible', values: spread(6_400_000, PROFILE_BS_GROWTH), ytd: 6_400_000 },
+    {
+      code: 'BJ', label: 'Trésorerie active',
+      values: spread(TRESO_ACTIVE, PROFILE_BS_GROWTH), ytd: TRESO_ACTIVE, total: true,
+    },
+    {
+      code: 'BZ', label: 'Total actif',
+      values: spread(TOTAL_ACTIF, PROFILE_BS_GROWTH), ytd: TOTAL_ACTIF, grand: true,
+    },
+  ],
+  passif: [
+    { code: 'CA', label: 'Capital social', values: spread(50_000_000, PROFILE_BS_STABLE), ytd: 50_000_000 },
+    { code: 'CD', label: 'Réserves', values: spread(5_000_000, PROFILE_BS_STABLE), ytd: 5_000_000 },
+    { code: 'CE', label: 'Report à nouveau', values: spread(12_500_000, PROFILE_BS_STABLE), ytd: 12_500_000 },
+    {
+      code: 'CL', label: 'Résultat net',
+      values: MONTHS_SHORT.map((_, i) => Math.round(RN_DEMO * (i + 1) / 12)),
+      ytd: RN_DEMO,
+    },
+    {
+      code: 'CP', label: 'Capitaux propres',
+      values: MONTHS_SHORT.map((_, i) => Math.round((50_000_000 + 5_000_000 + 12_500_000) * PROFILE_BS_STABLE[i] + RN_DEMO * (i + 1) / 12)),
+      ytd: 50_000_000 + 5_000_000 + 12_500_000 + RN_DEMO,
+      total: true,
+    },
+    { code: 'DA', label: 'Emprunts bancaires', values: spread(25_800_000, [1.07, 1.06, 1.05, 1.04, 1.03, 1.02, 1.01, 1.00, 0.99, 0.98, 0.97, 1.00]), ytd: 25_800_000 },
+    { code: 'DJ', label: 'Dettes fournisseurs', values: spread(38_500_000, PROFILE_BS_GROWTH), ytd: 38_500_000 },
+    { code: 'DK', label: 'Dettes fiscales', values: spread(9_500_000, PROFILE_BS_GROWTH), ytd: 9_500_000 },
+    { code: 'DL', label: 'Dettes sociales', values: spread(10_000_000, PROFILE_BS_GROWTH), ytd: 10_000_000 },
+    {
+      code: 'DZ', label: 'Total passif',
+      values: spread(TOTAL_ACTIF, PROFILE_BS_GROWTH), ytd: TOTAL_ACTIF, grand: true,
+    },
+  ],
+};
+
+// ────────────────────────────────────────────────────────────────────
+// CR mensuel — 12 mois de produits/charges
+// ────────────────────────────────────────────────────────────────────
+const MONTHLY_PROFILE_CA = [
+  17_000_000, 19_500_000, 21_000_000, 20_200_000, 22_300_000, 23_100_000,
+  21_900_000, 18_400_000, 24_500_000, 26_800_000, 25_300_000, 34_000_000,
+];
+function pctOfCa(annualBase: number) {
+  const totalCA = MONTHLY_PROFILE_CA.reduce((s, v) => s + v, 0);
+  return MONTHLY_PROFILE_CA.map((m) => Math.round((m / totalCA) * annualBase));
+}
+const MONTHLY_ACHATS = pctOfCa(ACHATS_CONSO);
+const MONTHLY_AUTRES_CHARGES = pctOfCa(14_400_000 + 4_200_000 + 2_640_000 + 3_100_000 + 3_360_000 + 1_020_000);
+const MONTHLY_PERSONNEL = MONTHS_SHORT.map(() => Math.round((102_000_000 + 20_400_000) / 12));
+const MONTHLY_DOTATIONS = MONTHS_SHORT.map(() => Math.round(9_500_000 / 12));
+const MONTHLY_INTERETS = MONTHS_SHORT.map(() => Math.round(2_100_000 / 12));
+const MONTHLY_IMPOT = MONTHS_SHORT.map((_, i) => i === 11 ? IMPOT_DEMO : 0);
+
+const monthlyEbe = MONTHS_SHORT.map((_, i) =>
+  MONTHLY_PROFILE_CA[i] - MONTHLY_ACHATS[i] - MONTHLY_AUTRES_CHARGES[i] - MONTHLY_PERSONNEL[i],
+);
+const monthlyRn = MONTHS_SHORT.map((_, i) =>
+  monthlyEbe[i] - MONTHLY_DOTATIONS[i] - MONTHLY_INTERETS[i] - MONTHLY_IMPOT[i],
+);
+
+function ytd(arr: number[]) {
+  return arr.reduce((s, v) => s + v, 0);
+}
+
+export const DEMO_MONTHLY_CR = {
+  months: MONTHS_SHORT,
+  lines: [
+    { code: 'CA', label: 'Chiffre d\'affaires', values: MONTHLY_PROFILE_CA, ytd: ytd(MONTHLY_PROFILE_CA), total: true },
+    { code: 'ACH', label: 'Achats consommés', values: MONTHLY_ACHATS, ytd: ytd(MONTHLY_ACHATS), isCharge: true },
+    { code: 'AUT', label: 'Autres charges externes', values: MONTHLY_AUTRES_CHARGES, ytd: ytd(MONTHLY_AUTRES_CHARGES), isCharge: true },
+    { code: 'PERS', label: 'Charges de personnel', values: MONTHLY_PERSONNEL, ytd: ytd(MONTHLY_PERSONNEL), isCharge: true },
+    { code: 'EBE', label: 'EBE', values: monthlyEbe, ytd: ytd(monthlyEbe), total: true, intermediate: true },
+    { code: 'DOT', label: 'Dotations amortissements', values: MONTHLY_DOTATIONS, ytd: ytd(MONTHLY_DOTATIONS), isCharge: true },
+    { code: 'INT', label: 'Charges financières', values: MONTHLY_INTERETS, ytd: ytd(MONTHLY_INTERETS), isCharge: true },
+    { code: 'IS', label: 'Impôts sur les bénéfices', values: MONTHLY_IMPOT, ytd: ytd(MONTHLY_IMPOT), isCharge: true },
+    { code: 'RN', label: 'Résultat net', values: monthlyRn, ytd: ytd(monthlyRn), grand: true },
+  ],
+};
+
+// ────────────────────────────────────────────────────────────────────
+// TFT (Tableau Flux de Trésorerie) — synthétique
+// ────────────────────────────────────────────────────────────────────
+export const DEMO_TFT = {
+  fluxOperationnel: RN_DEMO + 9_500_000 + 2_500_000, // RN + dotations + var BFR
+  fluxInvestissement: -3_500_000,
+  fluxFinancement: -4_200_000,
+  variationTreso: (RN_DEMO + 9_500_000 + 2_500_000) - 3_500_000 - 4_200_000,
+  tresoOuverture: 22_500_000,
+  tresoCloture: TRESO_ACTIVE,
+  lines: [
+    { code: 'CAF', label: 'Capacité d\'autofinancement', value: RN_DEMO + 9_500_000 },
+    { code: 'BFR', label: 'Variation du BFR', value: 2_500_000 },
+    { code: 'FOP', label: 'Flux opérationnels', value: RN_DEMO + 9_500_000 + 2_500_000, total: true },
+    { code: 'FINV', label: 'Flux d\'investissement', value: -3_500_000, total: true },
+    { code: 'FFIN', label: 'Flux de financement', value: -4_200_000, total: true },
+    { code: 'VAR', label: 'Variation de trésorerie', value: (RN_DEMO + 9_500_000 + 2_500_000) - 3_500_000 - 4_200_000, grand: true },
+  ],
+};
+
+export const DEMO_MONTHLY_TFT = {
+  months: MONTHS_SHORT,
+  lines: [
+    { code: 'FOP', label: 'Flux opérationnels', values: MONTHS_SHORT.map((_, i) => Math.round((RN_DEMO + 9_500_000 + 2_500_000) / 12 * (1 + (i % 3) * 0.1))), ytd: RN_DEMO + 9_500_000 + 2_500_000 },
+    { code: 'FINV', label: 'Flux d\'investissement', values: MONTHS_SHORT.map((_, i) => i === 5 ? -2_000_000 : i === 9 ? -1_500_000 : 0), ytd: -3_500_000 },
+    { code: 'FFIN', label: 'Flux de financement', values: MONTHS_SHORT.map(() => -350_000), ytd: -4_200_000 },
+  ],
+};
+
+// TAFIRE — placeholder synthétique
+export const DEMO_TAFIRE = {
+  ressources: [
+    { code: 'CAF', label: 'Capacité d\'autofinancement', value: RN_DEMO + 9_500_000 },
+    { code: 'CESS', label: 'Cessions d\'immobilisations', value: 0 },
+    { code: 'SUBV', label: 'Subventions reçues', value: 0 },
+  ],
+  emplois: [
+    { code: 'INV', label: 'Investissements', value: 3_500_000 },
+    { code: 'REMB', label: 'Remboursements emprunts', value: 4_200_000 },
+  ],
+  total: { ressources: RN_DEMO + 9_500_000, emplois: 7_700_000, ecart: (RN_DEMO + 9_500_000) - 7_700_000 },
+};
+
+// Variation des capitaux propres
+export const DEMO_CAPITAL_VAR = [
+  { libelle: 'Solde à l\'ouverture', capital: 50_000_000, reserves: 5_000_000, ran: 12_500_000, resultat: 0, total: 67_500_000 },
+  { libelle: 'Affectation N-1', capital: 0, reserves: 0, ran: 0, resultat: 0, total: 0 },
+  { libelle: 'Résultat N', capital: 0, reserves: 0, ran: 0, resultat: RN_DEMO, total: RN_DEMO },
+  { libelle: 'Solde à la clôture', capital: 50_000_000, reserves: 5_000_000, ran: 12_500_000, resultat: RN_DEMO, total: 67_500_000 + RN_DEMO },
+];
+
+// Bilan N-1 (pour comparaison)
+export const DEMO_BILAN_N1 = {
+  actif: DEMO_BILAN.actif.map((l) => ({ ...l, value: Math.round(l.value * 0.85) })),
+  passif: DEMO_BILAN.passif.map((l) => ({ ...l, value: Math.round(l.value * 0.85) })),
+  totalActif: Math.round(TOTAL_ACTIF * 0.85),
+  totalPassif: Math.round(TOTAL_ACTIF * 0.85),
+  unclassifiedAccounts: [] as never[],
+};
+
+// ────────────────────────────────────────────────────────────────────
+// Plan comptable (dérivé de la balance pour le COA et les imports)
+// ────────────────────────────────────────────────────────────────────
+const ACCOUNT_TYPES: Record<string, 'A' | 'P' | 'C' | 'R'> = {
+  '1': 'P', '2': 'A', '3': 'A', '4': 'A', '5': 'A', '6': 'C', '7': 'R',
+};
+export const DEMO_ACCOUNTS: Account[] = DEMO_BALANCE.map((b) => ({
+  orgId: 'demo-org',
+  code: b.account,
+  label: b.label,
+  class: b.class || b.account[0],
+  type: ACCOUNT_TYPES[b.account[0]] || 'A',
+  syscoCode: b.syscoCode,
+})) as Account[];
+
+// Budget vs Réalisé synthétique
+export const DEMO_BUDGET_ACTUAL = [
+  { account: '70', label: 'Ventes', budget: 290_000_000, actual: CA_DEMO, variance: CA_DEMO - 290_000_000, variancePct: ((CA_DEMO - 290_000_000) / 290_000_000) * 100 },
+  { account: '60', label: 'Achats', budget: 60_000_000, actual: ACHATS_CONSO, variance: ACHATS_CONSO - 60_000_000, variancePct: ((ACHATS_CONSO - 60_000_000) / 60_000_000) * 100 },
+  { account: '66', label: 'Charges personnel', budget: 120_000_000, actual: 122_400_000, variance: 2_400_000, variancePct: 2.0 },
+];

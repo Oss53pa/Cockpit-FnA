@@ -25,6 +25,7 @@ import { useCloudData } from '../hooks/useCloudData';
 import { dataProvider } from '../db/provider';
 import type { AttentionPoint } from '../db/schema';
 import { fmtMoney } from '../lib/format';
+import { isDemoActive, DEMO_ATTENTION_POINTS } from '../engine/demoFixtures';
 
 type HealthDimension = {
   key: string;
@@ -43,14 +44,17 @@ export default function CompanyDiagnostic() {
   const ratios = useRatios();
   const monthlyCA = useMonthlyCA();
 
-  // Charge les attention points pour les afficher
-  const { data: attentionPoints } = useCloudData<AttentionPoint[]>(
+  // Charge les attention points pour les afficher (fixtures en mode démo)
+  const { data: attentionPointsRaw } = useCloudData<AttentionPoint[]>(
     () => currentOrgId
       ? dataProvider.getAttentionPoints(currentOrgId)
       : Promise.resolve([] as AttentionPoint[]),
     [currentOrgId],
     { initial: [] as AttentionPoint[], tag: 'attentionPoints' },
   );
+  const attentionPoints = isDemoActive(currentOrgId) && attentionPointsRaw.length === 0
+    ? DEMO_ATTENTION_POINTS
+    : attentionPointsRaw;
 
   // Anomalies GL — calculées synchroniquement depuis la balance
   const anomalies = useMemo(() => {

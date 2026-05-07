@@ -15,6 +15,7 @@ import type { Account, GLEntry, ImportLog } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { useApp } from '../store/app';
 import { fmtFull } from '../lib/format';
+import { isDemoActive, DEMO_ACCOUNTS, DEMO_BALANCE } from '../engine/demoFixtures';
 
 const CLASS_LABELS: Record<string, string> = {
   '1': 'Classe 1 — Ressources durables',
@@ -41,13 +42,16 @@ export default function COA() {
 
   const coaImports = useImportsHistory(currentOrgId, 'COA');
 
-  const { data: accounts = [] as Account[] } = useCloudData<Account[]>(
+  const { data: accountsRaw = [] as Account[] } = useCloudData<Account[]>(
     () => currentOrgId ? dataProvider.getAccounts(currentOrgId) : Promise.resolve([] as Account[]),
     [currentOrgId],
     { initial: [] as Account[], tag: 'accounts' },
   );
+  const accounts: Account[] = isDemoActive(currentOrgId) && accountsRaw.length === 0
+    ? DEMO_ACCOUNTS
+    : accountsRaw;
 
-  const { data: mouvementes = new Set<string>() } = useCloudData<Set<string>>(
+  const { data: mouvementesRaw = new Set<string>() } = useCloudData<Set<string>>(
     async () => {
       if (!currentOrgId) return new Set<string>();
       const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
@@ -56,6 +60,9 @@ export default function COA() {
     [currentOrgId],
     { initial: new Set<string>(), tag: 'gl' },
   );
+  const mouvementes = isDemoActive(currentOrgId) && mouvementesRaw.size === 0
+    ? new Set(DEMO_BALANCE.map((b) => b.account))
+    : mouvementesRaw;
 
   const filteredSysco = useMemo(() => {
     return SYSCOHADA_COA.filter((a) => {

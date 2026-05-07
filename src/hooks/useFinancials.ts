@@ -22,6 +22,8 @@ import {
   isDemoActive,
   DEMO_ORG, DEMO_BALANCE, DEMO_SIG, DEMO_CR, DEMO_BILAN,
   DEMO_RATIOS, DEMO_MONTHLY_CA, DEMO_PERIODS, DEMO_IMPORTS,
+  DEMO_MONTHLY_BILAN, DEMO_MONTHLY_CR, DEMO_TFT, DEMO_MONTHLY_TFT,
+  DEMO_TAFIRE, DEMO_CAPITAL_VAR, DEMO_BILAN_N1, DEMO_BUDGET_ACTUAL,
 } from '../engine/demoFixtures';
 
 export function useOrganizations(): Organization[] {
@@ -250,6 +252,9 @@ export function useMonthlyCR() {
     [currentOrgId, currentYear],
     { initial: { months: [], lines: [] }, tag: ['gl', 'budgets'] },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.lines.length === 0)) {
+    return DEMO_MONTHLY_CR as any;
+  }
   return data;
 }
 
@@ -260,6 +265,9 @@ export function useMonthlyBilan() {
     [currentOrgId, currentYear],
     { initial: { months: [], actif: [], passif: [] }, tag: 'gl' },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.actif.length === 0)) {
+    return DEMO_MONTHLY_BILAN as any;
+  }
   return data;
 }
 
@@ -270,6 +278,7 @@ export function useTFT() {
     [currentOrgId, currentYear],
     { initial: null, tag: 'gl' },
   );
+  if (isDemoActive(currentOrgId) && !data) return DEMO_TFT as any;
   return data;
 }
 
@@ -280,6 +289,9 @@ export function useMonthlyTFT() {
     [currentOrgId, currentYear],
     { initial: { months: [], lines: [] }, tag: 'gl' },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.lines.length === 0)) {
+    return DEMO_MONTHLY_TFT as any;
+  }
   return data;
 }
 
@@ -290,6 +302,7 @@ export function useTAFIRE() {
     [currentOrgId, currentYear],
     { initial: null, tag: 'gl' },
   );
+  if (isDemoActive(currentOrgId) && !data) return DEMO_TAFIRE as any;
   return data;
 }
 
@@ -331,6 +344,7 @@ export function useBilanN1() {
     [currentOrgId, currentYear],
     { initial: null, tag: 'gl' },
   );
+  if (isDemoActive(currentOrgId) && !data) return DEMO_BILAN_N1 as any;
   return data;
 }
 
@@ -341,6 +355,9 @@ export function useCapitalVariation() {
     [currentOrgId, currentYear],
     { initial: [], tag: 'gl' },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.length === 0)) {
+    return DEMO_CAPITAL_VAR as any;
+  }
   return data;
 }
 
@@ -351,6 +368,9 @@ export function useBudgetActual(version?: string): BudgetActualRow[] {
     [currentOrgId, currentYear, version, fromMonth, toMonth],
     { initial: [] as BudgetActualRow[], tag: ['gl', 'budgets'] },
   );
+  if (isDemoActive(currentOrgId) && (!data || data.length === 0)) {
+    return DEMO_BUDGET_ACTUAL as unknown as BudgetActualRow[];
+  }
   return data;
 }
 

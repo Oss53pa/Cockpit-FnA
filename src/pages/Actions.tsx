@@ -15,6 +15,7 @@ import { dataProvider } from '../db/provider';
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { useApp } from '../store/app';
 import { fmtMoney } from '../lib/format';
+import { isDemoActive, DEMO_ATTENTION_POINTS, DEMO_ACTION_PLANS } from '../engine/demoFixtures';
 
 type Tab = 'attention' | 'plan';
 
@@ -29,7 +30,7 @@ export default function Actions() {
   const { currentOrgId } = useApp();
   const [tab, setTab] = useState<Tab>('attention');
 
-  const { data: points = [] as AttentionPoint[] } = useCloudData<AttentionPoint[]>(
+  const { data: pointsRaw = [] as AttentionPoint[] } = useCloudData<AttentionPoint[]>(
     async () => {
       if (!currentOrgId) return [] as AttentionPoint[];
       const rows = await dataProvider.getAttentionPoints(currentOrgId);
@@ -38,7 +39,7 @@ export default function Actions() {
     [currentOrgId],
     { initial: [] as AttentionPoint[], tag: 'attentionPoints' },
   );
-  const { data: plans = [] as ActionPlan[] } = useCloudData<ActionPlan[]>(
+  const { data: plansRaw = [] as ActionPlan[] } = useCloudData<ActionPlan[]>(
     async () => {
       if (!currentOrgId) return [] as ActionPlan[];
       const rows = await dataProvider.getActionPlans(currentOrgId);
@@ -47,6 +48,14 @@ export default function Actions() {
     [currentOrgId],
     { initial: [] as ActionPlan[], tag: 'actionPlans' },
   );
+
+  // Mode démo : injection de fixtures si vide
+  const points: AttentionPoint[] = isDemoActive(currentOrgId) && pointsRaw.length === 0
+    ? DEMO_ATTENTION_POINTS
+    : pointsRaw;
+  const plans: ActionPlan[] = isDemoActive(currentOrgId) && plansRaw.length === 0
+    ? DEMO_ACTION_PLANS
+    : plansRaw;
 
   const pCount = {
     open: points.filter((p) => p.status === 'open').length,
