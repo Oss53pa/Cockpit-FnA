@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { FloatingAI } from './components/layout/FloatingAI';
@@ -18,10 +18,12 @@ import { useAmountMode } from './lib/format';
 import { useOrgResolver } from './hooks/useOrgResolver';
 import Home from './pages/Home';
 
-// Auth pages
+// Auth pages — format unifié Atlas Studio Suite
+// /login, /signup, /forgot-password, /reset-password
 const Login          = lazyWithRetry(() => import('./pages/auth/Login'));
-const Register       = lazyWithRetry(() => import('./pages/auth/Register'));
+const Signup         = lazyWithRetry(() => import('./pages/auth/Signup'));
 const ForgotPassword = lazyWithRetry(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword  = lazyWithRetry(() => import('./pages/auth/ResetPassword'));
 const AuthCallback   = lazyWithRetry(() => import('./pages/auth/Callback'));
 const AcceptInvite   = lazyWithRetry(() => import('./pages/auth/AcceptInvite'));
 
@@ -166,8 +168,11 @@ function App() {
       <Routes>
         {/* Auth pages — publiques */}
         <Route path="/login" element={<Suspense fallback={<PageFallback />}><Login /></Suspense>} />
-        <Route path="/register" element={<Suspense fallback={<PageFallback />}><Register /></Suspense>} />
+        <Route path="/signup" element={<Suspense fallback={<PageFallback />}><Signup /></Suspense>} />
+        {/* /register : alias rétro-compatible vers /signup */}
+        <Route path="/register" element={<Navigate to="/signup" replace />} />
         <Route path="/forgot-password" element={<Suspense fallback={<PageFallback />}><ForgotPassword /></Suspense>} />
+        <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
         <Route path="/auth/callback" element={<Suspense fallback={<PageFallback />}><AuthCallback /></Suspense>} />
         <Route path="/auth/accept-invite" element={<Suspense fallback={<PageFallback />}><AcceptInvite /></Suspense>} />
 

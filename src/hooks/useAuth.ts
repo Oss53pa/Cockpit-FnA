@@ -200,8 +200,29 @@ export function useAuth() {
     if (error) throw error;
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, orgName: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+  /**
+   * Inscription utilisateur.
+   * @param email - email du user
+   * @param password - mot de passe (min 8 chars)
+   * @param fullNameOrOrg - rétro-compat : si string, considéré comme nom complet
+   *                        utilisé à la fois pour user_metadata.full_name et
+   *                        comme nom d'organisation par défaut (modifiable plus tard).
+   *                        Si objet { full_name, org_name? }, plus précis.
+   */
+  const signUp = useCallback(async (
+    email: string,
+    password: string,
+    fullNameOrOrg: string | { full_name: string; org_name?: string }
+  ) => {
+    const fullName = typeof fullNameOrOrg === 'string' ? fullNameOrOrg : fullNameOrOrg.full_name;
+    const orgName = typeof fullNameOrOrg === 'string'
+      ? fullNameOrOrg
+      : (fullNameOrOrg.org_name || `${fullNameOrOrg.full_name} — Espace`);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    });
     if (error) throw error;
     // Créer l'organisation et le lien user-org
     if (data.user) {
