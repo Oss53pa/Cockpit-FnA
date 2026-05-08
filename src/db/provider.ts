@@ -194,29 +194,45 @@ export interface DataProvider {
 
 // ─── Provider selection ─────────────────────────────────────────────
 //
-// Supabase est OBLIGATOIRE. Pas de fallback Dexie.
-// Si les variables d'environnement VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
-// ne sont pas définies, l'app refuse de démarrer avec un message explicite.
-// (Mode Electron mis à part — il utilise SQLite local via IPC.)
+// Supabase est OBLIGATOIRE en prod. Mode démo : DemoProvider intercepte
+// toutes les lectures pour `demo-org*` et renvoie des fixtures hardcodées
+// (cf. demoProvider.ts + demoFixtures.ts) — aucune auth requise.
 import { isSupabaseConfigured } from '../lib/supabase';
 import { SupabaseProvider } from './supabaseProvider';
+import { DemoProvider } from './demoProvider';
 
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
+// Stub provider — utilisé quand Supabase n'est pas configuré ET qu'on est
+// en mode démo. Toutes les méthodes throw : DemoProvider doit intercepter
+// avant d'appeler ce fallback (vérification orgId 'demo-org*').
+function createStubProvider(): DataProvider {
+  const fail = () => {
+    throw new Error('Supabase non configuré. Connectez-vous ou activez le mode démo.');
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Proxy({} as any, {
+    get: (_, prop) => {
+      if (prop === 'then') return undefined;
+      // Retourne une fonction qui lance — async ou sync OK car DemoProvider
+      // intercepte avant pour les orgIds 'demo-org*'
+      return (..._args: unknown[]) => fail();
+    },
+  }) as DataProvider;
+}
 
 function selectProvider(): DataProvider {
   if (isElectron) {
     // Sprint 6: Electron SQLite provider (build desktop)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { ElectronProvider } = require('./electronProvider');
-    return new ElectronProvider();
+    return new DemoProvider(new ElectronProvider());
   }
   if (!isSupabaseConfigured) {
-    throw new Error(
-      'Cockpit FnA requiert Supabase. Définissez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY ' +
-      'dans votre fichier .env (ou les variables d\'environnement de déploiement).',
-    );
+    // Démo possible sans Supabase — DemoProvider gère tout en local
+    return new DemoProvider(createStubProvider());
   }
-  return new SupabaseProvider();
+  return new DemoProvider(new SupabaseProvider());
 }
 
 export const dataProvider: DataProvider = selectProvider();
