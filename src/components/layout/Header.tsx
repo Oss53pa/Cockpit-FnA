@@ -7,6 +7,7 @@ import { useCloudData } from '../../hooks/useCloudData';
 import { dataProvider } from '../../db/provider';
 import { HelpModal } from '../ui/HelpModal';
 import { PaletteSwitcher } from './PaletteSwitcher';
+import { OrgSwitcher } from './OrgSwitcher';
 import { toast } from '../ui/Toast';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -232,6 +233,8 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
 
           {/* Palette switcher — bascule rapide entre les 3 directions visuelles */}
+          <OrgSwitcher />
+
           <PaletteSwitcher />
 
           <button

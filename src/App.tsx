@@ -14,6 +14,7 @@ import { OnboardingModal } from './components/ui/OnboardingModal';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
+import { useOrgResolver } from './hooks/useOrgResolver';
 import Home from './pages/Home';
 
 // Auth pages
@@ -103,6 +104,9 @@ function PageTransition({ children }: { children: React.ReactNode }) {
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
+  // Résout dynamiquement currentOrgId depuis fna_user_orgs (plus de hardcode `sa-001`).
+  // Si l'user n'a aucune org, OnboardingModal se déclenche (cf. plus bas).
+  useOrgResolver();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   // Triple mécanisme pour garantir le re-render au toggle Entier ↔ Abrégé :

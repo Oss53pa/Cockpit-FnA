@@ -24,8 +24,9 @@ export function DemoBanner() {
       await unloadDemoData();
       setDemoMode(false);
       resetTour();
-      // Switch sur une org neutre (ou sa-001 si elle existe)
-      setCurrentOrg('sa-001');
+      // Reset l'org : useAuth + OrgContext rechargeront la 1re org de l'user
+      // au prochain rendu (ou OnboardingModal sera déclenché si aucune org).
+      setCurrentOrg('');
       navigate('/');
     } finally {
       setBusy(false);

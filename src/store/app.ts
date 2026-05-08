@@ -64,7 +64,11 @@ export const useApp = create<AppState>((set) => ({
       } catch { /* ignore */ }
       return { theme: next };
     }),
-  currentOrgId: localStorage.getItem('current-org') || 'sa-001',
+  // Plus de hardcode `sa-001` : le currentOrgId est désormais résolu dynamiquement.
+  // - Au login : useAuth/OrgContext charge fna_user_orgs et appelle setCurrentOrg
+  // - Si user sans org : OnboardingModal force la création de la 1ère société
+  // - Mode démo : Demo.tsx appelle setCurrentOrg(`demo-org-${userId}`)
+  currentOrgId: localStorage.getItem('current-org') || '',
   setCurrentOrg: (id) => {
     localStorage.setItem('current-org', id);
     set({ currentOrgId: id });

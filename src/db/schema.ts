@@ -12,6 +12,12 @@ export type Organization = {
   ifu?: string;
   address?: string;
   createdAt: number;
+  /**
+   * Rôle de l'utilisateur courant DANS cette org (issu de fna_user_orgs).
+   * Renseigné par SupabaseProvider.getOrganizations() qui JOIN fna_user_orgs.
+   * Optionnel : absent en mode démo / Dexie cache / Electron.
+   */
+  role?: 'admin' | 'editor' | 'viewer';
 };
 
 export type FiscalYear = {

@@ -27,9 +27,42 @@ function check<T>(result: { data: T | null; error: any }): T {
 // ── Provider ─────────────────────────────────────────────────────────
 export class SupabaseProvider implements DataProvider {
   // Organizations
+  /**
+   * Récupère UNIQUEMENT les organisations de l'utilisateur courant via JOIN
+   * fna_user_orgs → fna_organizations. Retourne aussi le `role` (admin/editor/viewer).
+   *
+   * Sans authentification (ex. mode démo non logué), Supabase RLS bloque
+   * les SELECT et on retourne []. Le DemoProvider injecte la DEMO_ORG en
+   * amont (cf. demoProvider.ts) pour ce cas.
+   */
   async getOrganizations(): Promise<Organization[]> {
-    const { data } = await supabase.from('fna_organizations').select('*');
-    return (data ?? []).map((r: any) => toCamel(r)) as Organization[];
+    // 1) Récupère l'user courant
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData?.session?.user?.id;
+    if (!userId) {
+      // Pas de session → fallback sur SELECT direct (RLS protège déjà)
+      const { data } = await supabase.from('fna_organizations').select('*');
+      return (data ?? []).map((r: any) => toCamel(r)) as Organization[];
+    }
+
+    // 2) JOIN fna_user_orgs → fna_organizations pour récupérer rôle + org
+    const { data, error } = await supabase
+      .from('fna_user_orgs')
+      .select('role, fna_organizations:org_id (*)')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.warn('[SupabaseProvider] fna_user_orgs query failed, fallback:', error.message);
+      const { data: fallback } = await supabase.from('fna_organizations').select('*');
+      return (fallback ?? []).map((r: any) => toCamel(r)) as Organization[];
+    }
+
+    return (data ?? [])
+      .filter((row: any) => row.fna_organizations)
+      .map((row: any) => ({
+        ...(toCamel(row.fna_organizations) as Organization),
+        role: row.role as 'admin' | 'editor' | 'viewer',
+      }));
   }
   async getOrganization(id: string) {
     const { data } = await supabase.from('fna_organizations').select('*').eq('id', id).single();
