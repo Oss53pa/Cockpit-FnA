@@ -10,10 +10,12 @@
  * Sélection persistée : `useApp.currentOrgId` (localStorage `current-org`).
  */
 import { useEffect, useRef, useState } from 'react';
-import { Building2, Check, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, Check, ChevronDown, Plus, Settings as SettingsIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { useApp } from '../../store/app';
 import { useOrganizations } from '../../hooks/useFinancials';
+import { invalidateAllCloudData } from '../../hooks/useCloudData';
 
 export function OrgSwitcher() {
   const orgs = useOrganizations();
@@ -21,6 +23,7 @@ export function OrgSwitcher() {
   const setCurrentOrg = useApp((s) => s.setCurrentOrg);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const currentOrg = orgs.find((o) => o.id === currentOrgId);
 
@@ -76,7 +79,7 @@ export function OrgSwitcher() {
           <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
             Changer de société · {orgs.length} disponibles
           </div>
-          <div className="max-h-[60vh] overflow-y-auto py-1">
+          <div className="max-h-[50vh] overflow-y-auto py-1">
             {orgs.map((org) => {
               const active = org.id === currentOrgId;
               return (
@@ -85,8 +88,9 @@ export function OrgSwitcher() {
                   onClick={() => {
                     setCurrentOrg(org.id);
                     setOpen(false);
-                    // Reload pour purger les caches React Query liés à l'ancienne org
-                    setTimeout(() => window.location.reload(), 50);
+                    // Invalide tous les hooks useCloudData → re-fetch propre
+                    // sans full reload (préserve l'état UI / formulaires).
+                    invalidateAllCloudData();
                   }}
                   role="option"
                   aria-selected={active}
@@ -114,6 +118,23 @@ export function OrgSwitcher() {
                 </button>
               );
             })}
+          </div>
+          {/* Footer : self-service create + manage */}
+          <div className="border-t border-primary-200 dark:border-primary-800 py-1">
+            <button
+              onClick={() => { setOpen(false); navigate('/settings'); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/40 transition"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="font-medium">Créer une nouvelle société</span>
+            </button>
+            <button
+              onClick={() => { setOpen(false); navigate('/settings'); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/40 transition"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+              <span>Gérer les sociétés</span>
+            </button>
           </div>
         </div>
       )}

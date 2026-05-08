@@ -6,6 +6,7 @@ import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
+import { useOrgPermissions } from '../hooks/useOrgPermissions';
 import { detectColumns, importGL, migrateGLPeriods, resyncAccountLabels, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
@@ -26,6 +27,7 @@ export default function Imports() {
   const org = useCurrentOrg();
   const history = useImportsHistory(currentOrgId, 'GL');
   const periods = usePeriods(currentOrgId).filter((p) => p.year === currentYear && p.month >= 1);
+  const { canEdit, roleLabel } = useOrgPermissions();
 
   const [step, setStep] = useState<'idle' | 'mapping' | 'result'>('idle');
   const [file, setFile] = useState<File | null>(null);
@@ -204,7 +206,12 @@ export default function Imports() {
           </div>
           <div className="flex gap-2 mt-6 pt-4 border-t border-primary-200 dark:border-primary-800">
             <button className="btn-outline" onClick={reset}>Annuler</button>
-            <button className="btn-primary" onClick={runImport} disabled={loading}>
+            <button
+              className="btn-primary"
+              onClick={runImport}
+              disabled={loading || !canEdit}
+              title={!canEdit ? `Lecture seule (${roleLabel}) — import désactivé` : ''}
+            >
               {loading ? 'Import en cours…' : 'Lancer l\'import'}
             </button>
           </div>
@@ -381,7 +388,12 @@ export default function Imports() {
                     {i.status === 'error' && <Badge variant="error"><XCircle className="w-3 h-3" /> Échec</Badge>}
                   </td>
                   <td className="py-2 px-3 text-center">
-                    <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => deleteImport(i)} title="Supprimer cet import et ses écritures">
+                    <button
+                      className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                      onClick={() => deleteImport(i)}
+                      disabled={!canEdit}
+                      title={canEdit ? 'Supprimer cet import et ses écritures' : `Lecture seule (${roleLabel}) — suppression désactivée`}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

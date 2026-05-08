@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, Pencil, Unlock, Moon, Plus, Send, Settings as SettingsIcon, Shield, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Calendar, CheckCircle2, Cloud, Database, Download, Lock, LogOut, Pencil, Unlock, Moon, Plus, Send, Settings as SettingsIcon, Shield, Sun, Target, Trash2, Upload, Users } from 'lucide-react';
 import { AdminGate } from '../components/auth/AdminGate';
 import { lockAdmin } from '../lib/adminAuth';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -319,6 +319,39 @@ function TabSocietes() {
     }
   };
 
+  /**
+   * Quitter une société (sans la supprimer pour les autres users).
+   * Supprime uniquement la ligne fna_user_orgs entre cet user et l'org.
+   * L'org continue d'exister pour les autres membres.
+   */
+  const leaveOrg = async (id: string, name: string) => {
+    if (!confirm(`Quitter la société "${name}" ? Vous n'y aurez plus accès. L'org reste pour les autres membres.`)) return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (!userId) {
+        alert('Vous devez être connecté pour quitter une société.');
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('fna_user_orgs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('org_id', id);
+      if (error) throw error;
+      invalidateCloudData('organizations');
+      // Si on quitte l'org active, basculer sur la suivante
+      if (currentOrgId === id) {
+        const next = orgs.find((o: any) => o.id !== id);
+        setCurrentOrg(next?.id ?? '');
+      }
+    } catch (e) {
+      const msg = (e as Error).message ?? 'Erreur inconnue';
+      alert(`Impossible de quitter la société : ${msg}`);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Card title={`Sociétés (${orgs.length})`} subtitle="Multi-sociétés, multi-sites, consolidation"
@@ -342,12 +375,31 @@ function TabSocietes() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <button className="btn-ghost !p-1.5 text-primary-500 hover:text-primary-900 dark:hover:text-primary-100" onClick={() => openEdit(o)} title="Modifier">
+                  <button
+                    className="btn-ghost !p-1.5 text-primary-500 hover:text-primary-900 dark:hover:text-primary-100"
+                    onClick={() => openEdit(o)}
+                    title={o.role === 'admin' || !o.role ? 'Modifier' : `Lecture seule (${o.role})`}
+                    disabled={o.role && o.role !== 'admin'}
+                  >
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10" onClick={() => remove(o.id)} title="Supprimer">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {o.role === 'admin' || !o.role ? (
+                    <button
+                      className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10"
+                      onClick={() => remove(o.id)}
+                      title="Supprimer la société (toutes données effacées)"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-ghost !p-1.5 text-primary-500 hover:text-warning hover:bg-warning/10"
+                      onClick={() => leaveOrg(o.id, o.name)}
+                      title="Quitter la société (vous n'y aurez plus accès)"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

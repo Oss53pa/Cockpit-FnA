@@ -11,6 +11,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ToastContainer } from './components/ui/Toast';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { OnboardingModal } from './components/ui/OnboardingModal';
+import { ReadOnlyBanner } from './components/ui/ReadOnlyBanner';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
@@ -139,6 +140,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       />
       <div className="flex-1 flex flex-col min-w-0 border-l border-primary-200/60 dark:border-primary-800/60">
         <DemoBanner />
+        <ReadOnlyBanner />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main key={`${amountMode}-${remountKey}`} className="flex-1 p-4 sm:p-6 lg:p-8">
           <Suspense fallback={<PageFallback />}>

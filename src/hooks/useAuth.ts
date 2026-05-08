@@ -105,6 +105,13 @@ export function useAuth() {
       } else if (event === 'SIGNED_OUT') {
         // Nettoie au logout pour eviter ghost user dans sidebar/chat
         sessionStorage.removeItem('cockpit-current-user');
+        // CRITIQUE multi-tenant : ne pas conserver l'org de l'user précédent
+        // sur un device partagé. useOrgResolver re-pioche au prochain login.
+        localStorage.removeItem('current-org');
+        // Clear aussi les flags démo et autres caches user-spécifiques
+        localStorage.removeItem('demo-mode');
+        localStorage.removeItem('demo-tour-step');
+        localStorage.removeItem('demo-tour-done');
         try {
           window.dispatchEvent(new CustomEvent('cockpit-auth-changed', { detail: null }));
         } catch { /* ignore */ }
@@ -216,6 +223,12 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    // Reset Zustand currentOrgId pour qu'au prochain login useOrgResolver
+    // re-pioche dynamiquement (pas d'org fantôme du user précédent).
+    try {
+      const { useApp } = await import('../store/app');
+      useApp.getState().setCurrentOrg('');
+    } catch { /* ignore */ }
     setState({ user: null, session: null, loading: false, syncing: false, syncStatus: '', role: 'admin', orgIds: [] });
   }, []);
 

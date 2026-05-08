@@ -44,6 +44,19 @@ export function invalidateMany(tags: string[]): void {
   for (const t of tags) invalidateCloudData(t);
 }
 
+/**
+ * Invalide TOUS les hooks useCloudData enregistrés, indépendamment de leur tag.
+ * Cas d'usage : changement d'organisation courante, changement d'utilisateur,
+ * sortie du mode démo — toutes les données affichées doivent être rechargées.
+ *
+ * Préférable à `window.location.reload()` qui perd l'état UI / formulaires.
+ */
+export function invalidateAllCloudData(): void {
+  for (const set of listeners.values()) {
+    for (const fn of set) fn();
+  }
+}
+
 // ── Hook principal ────────────────────────────────────────────────────
 export interface CloudDataOptions {
   /** Tag d'invalidation. Si fourni, le hook se rafraîchit quand
