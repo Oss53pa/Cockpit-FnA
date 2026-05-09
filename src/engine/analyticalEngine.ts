@@ -1,8 +1,9 @@
 // Moteur de comptabilité analytique multi-axes — mapping, affectation, calculs
 //
 // Source de données : Supabase via dataProvider (obligatoire).
-import type { AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, GLEntry } from '../db/schema';
+import type { AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, GLEntry, AnalyticBranch } from '../db/schema';
 import { dataProvider } from '../db/provider';
+import { inferBranch, isCodeCompatibleWithBranch } from './analyticBranch';
 
 // ── CRUD Axes ──────────────────────────────────────────────────────────────
 export async function getAxes(orgId: string): Promise<AnalyticAxis[]> {
@@ -137,28 +138,40 @@ export async function simulateRules(orgId: string, year?: number): Promise<Mappi
   };
 }
 
-/** Applique les règles actives sur toutes les lignes non affectées */
+/** Applique les règles actives sur toutes les lignes non affectées (validation de branche WBS) */
 export async function applyRules(orgId: string, year?: number): Promise<MappingReport> {
   const rules = (await getRules(orgId)).filter((r) => r.active);
   const entries = await loadEntries(orgId, year);
   const existing = await dataProvider.getAnalyticAssignments(orgId);
   const assignedSet = new Set(existing.map((a) => `${a.glEntryId}-${a.axisNumber}`));
 
+  // Codes pour valider la branche
+  const codes = await dataProvider.getAnalyticCodes(orgId);
+  const codesById = new Map<string, AnalyticCode>(codes.map((c) => [c.id, c]));
+
   const newAssignments: AnalyticAssignment[] = [];
   const byRule = new Map<string, { name: string; count: number }>();
   const byMethod: Record<string, number> = {};
 
   for (const e of entries) {
+    const lineAssignments = existing.filter((a) => a.glEntryId === e.id);
+    const lineBranch = inferBranch(e, { assignments: lineAssignments });
     for (const rule of rules) {
       const key = `${e.id!}-${rule.targetAxis}`;
       if (assignedSet.has(key)) continue;
       if (evaluateCondition(e, rule)) {
+        // Validation branche : skip si le code de la règle est typé et incompatible
+        const ruleCode = codesById.get(rule.analyticCodeId);
+        if (ruleCode?.branch && !isCodeCompatibleWithBranch(ruleCode.branch, lineBranch)) {
+          continue; // pas un match valide pour cette ligne, on tente la règle suivante
+        }
         assignedSet.add(key);
         newAssignments.push({
           orgId, glEntryId: e.id!, axisNumber: rule.targetAxis,
           codeId: rule.analyticCodeId,
           method: conditionTypeToMethod(rule.conditionType),
           ruleId: rule.id, assignedAt: Date.now(),
+          branch: lineBranch,
         });
         const cur = byRule.get(rule.id) ?? { name: rule.name, count: 0 };
         cur.count++;
@@ -185,29 +198,61 @@ export async function applyRules(orgId: string, year?: number): Promise<MappingR
   };
 }
 
-/** Affectation manuelle d'une ou plusieurs lignes */
+/** Affectation manuelle d'une ou plusieurs lignes (avec validation de branche WBS) */
 export async function assignManual(
   orgId: string, glEntryIds: number[], axisNumber: number, codeId: string,
-): Promise<number> {
+): Promise<{ assigned: number; rejected: number; rejectedReasons: string[] }> {
   const existing = await dataProvider.getAnalyticAssignments(orgId);
   const assignedSet = new Set(existing.map((a) => `${a.glEntryId}-${a.axisNumber}`));
+
+  // Récupère les codes pour valider la branche
+  const codes = await dataProvider.getAnalyticCodes(orgId);
+  const targetCode = codes.find((c) => c.id === codeId);
+
+  // Récupère les lignes GL pour calculer la branche de chacune
+  const allEntries = await dataProvider.getGLEntries({ orgId });
+  const entriesById = new Map<number, GLEntry>(
+    allEntries.filter((e) => e.id !== undefined).map((e) => [e.id!, e]),
+  );
+
   const toAdd: AnalyticAssignment[] = [];
+  const rejectedReasons: string[] = [];
+  let rejected = 0;
 
   for (const id of glEntryIds) {
+    const entry = entriesById.get(id);
+    if (!entry) continue;
+
+    // Détermine la branche de la ligne (en tenant compte des affectations existantes)
+    const lineAssignments = existing.filter((a) => a.glEntryId === id);
+    const lineBranch = inferBranch(entry, { assignments: lineAssignments });
+
+    // Validation : le code peut-il s'appliquer sur cette branche ?
+    if (targetCode?.branch && !isCodeCompatibleWithBranch(targetCode.branch, lineBranch)) {
+      rejected++;
+      rejectedReasons.push(
+        `Ligne #${id} (${entry.account}, branche=${lineBranch ?? '—'}) : code "${targetCode.code}" réservé à "${targetCode.branch}".`,
+      );
+      continue;
+    }
+
     const key = `${id}-${axisNumber}`;
     if (assignedSet.has(key)) {
       const ex = existing.find((a) => a.glEntryId === id && a.axisNumber === axisNumber);
       if (ex?.id) {
         await dataProvider.updateAnalyticAssignment(ex.id, {
-          codeId, method: 'manual', assignedAt: Date.now(), ruleId: undefined,
+          codeId, method: 'manual', assignedAt: Date.now(), ruleId: undefined, branch: lineBranch,
         });
       }
     } else {
-      toAdd.push({ orgId, glEntryId: id, axisNumber, codeId, method: 'manual', assignedAt: Date.now() });
+      toAdd.push({
+        orgId, glEntryId: id, axisNumber, codeId,
+        method: 'manual', assignedAt: Date.now(), branch: lineBranch,
+      });
     }
   }
   if (toAdd.length > 0) await dataProvider.bulkInsertAnalyticAssignments(toAdd);
-  return glEntryIds.length;
+  return { assigned: glEntryIds.length - rejected, rejected, rejectedReasons };
 }
 
 /** Supprimer toutes les affectations auto (garder les manuelles) */

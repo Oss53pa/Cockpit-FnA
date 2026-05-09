@@ -13,7 +13,9 @@ import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull } from '../lib/format';
-import { AnalyticAxis, AnalyticCode, AnalyticRule } from '../db/schema';
+import { AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticBranch, AnalyticAssignment } from '../db/schema';
+import { BRANCH_LABELS, BRANCH_COLORS, inferBranch } from '../engine/analyticBranch';
+import { dataProvider } from '../db/provider';
 import {
   getAxes, saveAxis, deleteAxis,
   getCodes, saveCode, deleteCode,
@@ -23,11 +25,11 @@ import {
   type AnalyticDashRow, type MappingReport,
 } from '../engine/analyticalEngine';
 
-type Tab = 'dashboard' | 'axes' | 'codes' | 'rules' | 'assign';
+type Tab = 'dashboard' | 'wbs' | 'axes' | 'codes' | 'rules' | 'assign';
 
 const uid = () => crypto.randomUUID();
 
-const VALID_TABS: Tab[] = ['dashboard', 'axes', 'codes', 'rules', 'assign'];
+const VALID_TABS: Tab[] = ['dashboard', 'wbs', 'axes', 'codes', 'rules', 'assign'];
 
 export default function Analytical() {
   const { currentOrgId, currentYear } = useApp();
@@ -43,6 +45,7 @@ export default function Analytical() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
+    { key: 'wbs', label: 'Vue WBS (par projet)' },
     { key: 'axes', label: 'Axes analytiques' },
     { key: 'codes', label: 'Codes' },
     { key: 'rules', label: 'Règles de mapping' },
@@ -64,6 +67,7 @@ export default function Analytical() {
       </div>
 
       {tab === 'dashboard' && <DashboardTab orgId={currentOrgId} year={currentYear} axes={axes} ct={ct} />}
+      {tab === 'wbs' && <WBSTab orgId={currentOrgId} year={currentYear} axes={axes} />}
       {tab === 'axes' && <AxesTab orgId={currentOrgId} axes={axes} onUpdate={bump} />}
       {tab === 'codes' && <CodesTab orgId={currentOrgId} axes={axes} onUpdate={bump} />}
       {tab === 'rules' && <RulesTab orgId={currentOrgId} axes={axes} onUpdate={bump} year={currentYear} />}
@@ -367,6 +371,7 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
                 <th className="text-left px-3 py-2">Code</th>
                 <th className="text-left px-3 py-2">Libellé court</th>
                 <th className="text-left px-3 py-2">Libellé long</th>
+                <th className="text-center px-3 py-2">Branche WBS</th>
                 <th className="text-center px-3 py-2">Statut</th>
                 <th className="text-center px-3 py-2">Actions</th>
               </tr>
@@ -377,6 +382,12 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
                   <td className="px-3 py-2 font-mono font-semibold">{c.code}</td>
                   <td className="px-3 py-2">{c.shortLabel}</td>
                   <td className="px-3 py-2 text-primary-500">{c.longLabel}</td>
+                  <td className="px-3 py-2 text-center">
+                    {c.branch ? (
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      <Badge variant={BRANCH_COLORS[c.branch] as any}>{BRANCH_LABELS[c.branch]}</Badge>
+                    ) : <span className="text-[10px] text-primary-400">Universel</span>}
+                  </td>
                   <td className="px-3 py-2 text-center"><Badge variant={c.active ? 'success' : 'default'}>{c.active ? 'Actif' : 'Inactif'}</Badge></td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex gap-1 justify-center">
@@ -387,7 +398,7 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-8 text-center text-primary-400">Aucun code. Cliquez sur "Nouveau code" pour commencer.</td></tr>
+                <tr><td colSpan={6} className="px-3 py-8 text-center text-primary-400">Aucun code. Cliquez sur "Nouveau code" pour commencer.</td></tr>
               )}
             </tbody>
           </table>
@@ -415,6 +426,27 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
                 <option value="">— Aucun (racine) —</option>
                 {codes.filter((c) => c.id !== editing.id).map((c) => <option key={c.id} value={c.id}>{c.code} — {c.shortLabel}</option>)}
               </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-primary-500 block mb-1">
+                Branche WBS
+                <span className="ml-2 font-normal text-primary-400">(restreint l'affectation)</span>
+              </label>
+              <select
+                className="input"
+                value={editing.branch ?? ''}
+                onChange={(e) => setEditing({ ...editing, branch: (e.target.value || undefined) as AnalyticBranch | undefined })}
+              >
+                <option value="">— Universel (compatible toutes lignes) —</option>
+                <option value="revenue">{BRANCH_LABELS.revenue} — comptes 7x</option>
+                <option value="project_cost">{BRANCH_LABELS.project_cost} — 6x avec projet</option>
+                <option value="overhead">{BRANCH_LABELS.overhead} — 6x sans projet</option>
+              </select>
+              <p className="text-[10px] text-primary-400 mt-1">
+                Ex : un code "Centre de revenu" en branche Revenus ne pourra pas être affecté à
+                une ligne de coût ; un code "Tâche" en Coûts projets ne pourra pas être affecté
+                aux frais généraux.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} /> Actif
@@ -661,7 +693,15 @@ function AssignTab({ orgId, axes, year, onUpdate }: { orgId: string; axes: Analy
 
   const assign = async () => {
     if (selectedIds.size === 0 || !targetCodeId) { toast.warning('Sélection requise', 'Choisissez des lignes et un code analytique'); return; }
-    await assignManual(orgId, [...selectedIds], axisNum, targetCodeId);
+    const result = await assignManual(orgId, [...selectedIds], axisNum, targetCodeId);
+    if (result.rejected > 0) {
+      toast.warning(
+        `${result.assigned} affectées · ${result.rejected} refusées (branche WBS incompatible)`,
+        result.rejectedReasons.slice(0, 2).join(' '),
+      );
+    } else if (result.assigned > 0) {
+      toast.success(`${result.assigned} ligne(s) affectée(s)`);
+    }
     setSelectedIds(new Set());
     setTargetCodeId('');
     reload();
@@ -719,6 +759,226 @@ function AssignTab({ orgId, axes, year, onUpdate }: { orgId: string; axes: Analy
           </table>
         </div>
       </Card>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VUE WBS — consolidation par projet (axe 1) avec sous-totaux par branche
+// ══════════════════════════════════════════════════════════════════════════════
+type WBSRow = {
+  projectCode: string;
+  projectLabel: string;
+  revenue: number;
+  projectCost: number;
+  overhead: number;
+  margeBrute: number;       // revenue - projectCost
+  margeNette: number;       // revenue - projectCost - overhead (alloué si applicable)
+};
+
+function WBSTab({ orgId, year, axes }: { orgId: string; year: number; axes: AnalyticAxis[] }) {
+  const [rows, setRows] = useState<WBSRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [unallocOverhead, setUnallocOverhead] = useState(0);
+
+  useEffect(() => {
+    if (!orgId) return;
+    setLoading(true);
+    void (async () => {
+      try {
+        // 1) Récupère GL + assignments + codes + périodes
+        const [periods, allEntries, assignments, codes] = await Promise.all([
+          dataProvider.getPeriods(orgId),
+          dataProvider.getGLEntries({ orgId }),
+          dataProvider.getAnalyticAssignments(orgId),
+          dataProvider.getAnalyticCodes(orgId),
+        ]);
+
+        const yearPeriodIds = new Set(
+          periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id),
+        );
+        const yearEntries = allEntries.filter((e) => yearPeriodIds.has(e.periodId));
+
+        // 2) Index : entryId → assignations, codeId → code
+        const codeById = new Map<string, AnalyticCode>(codes.map((c) => [c.id, c]));
+        const assignmentsByEntry = new Map<number, AnalyticAssignment[]>();
+        for (const a of assignments) {
+          if (!a.glEntryId) continue;
+          const arr = assignmentsByEntry.get(a.glEntryId) ?? [];
+          arr.push(a);
+          assignmentsByEntry.set(a.glEntryId, arr);
+        }
+
+        // 3) Identifie l'axe 1 (Projet) — convention de l'utilisateur
+        const projectAxis = axes.find((a) => a.number === 1);
+
+        // 4) Pour chaque ligne GL, détermine projet et branche puis cumule
+        const byProject = new Map<string, WBSRow>();
+        let totalUnallocOverhead = 0;
+
+        for (const entry of yearEntries) {
+          const entryAssignments = assignmentsByEntry.get(entry.id ?? -1) ?? [];
+          const branch = inferBranch(entry, { assignments: entryAssignments });
+          if (!branch) continue;
+
+          // Détermine le code projet sur l'axe 1
+          const projectAssignment = projectAxis
+            ? entryAssignments.find((a) => a.axisNumber === 1)
+            : undefined;
+          const projectCode = projectAssignment ? codeById.get(projectAssignment.codeId) : undefined;
+
+          // Montant signé (charges = positif côté débit, produits = positif côté crédit)
+          const amount = branch === 'revenue'
+            ? (entry.credit - entry.debit)
+            : (entry.debit - entry.credit);
+          if (Math.abs(amount) < 0.005) continue;
+
+          // FG sans projet : ne rentre pas dans un projet, on agrège dans unalloc
+          if (branch === 'overhead' && !projectCode) {
+            totalUnallocOverhead += amount;
+            continue;
+          }
+
+          const key = projectCode?.code ?? '__no_project__';
+          const label = projectCode?.shortLabel ?? '— Sans projet —';
+          let row = byProject.get(key);
+          if (!row) {
+            row = {
+              projectCode: key === '__no_project__' ? '—' : key,
+              projectLabel: label,
+              revenue: 0, projectCost: 0, overhead: 0,
+              margeBrute: 0, margeNette: 0,
+            };
+            byProject.set(key, row);
+          }
+          if (branch === 'revenue') row.revenue += amount;
+          else if (branch === 'project_cost') row.projectCost += amount;
+          else if (branch === 'overhead') row.overhead += amount;
+        }
+
+        // Calcul des marges
+        const finalRows = Array.from(byProject.values()).map((r) => ({
+          ...r,
+          margeBrute: r.revenue - r.projectCost,
+          margeNette: r.revenue - r.projectCost - r.overhead,
+        })).sort((a, b) => b.revenue - a.revenue);
+
+        setRows(finalRows);
+        setUnallocOverhead(totalUnallocOverhead);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [orgId, year, axes]);
+
+  const totals = useMemo(() => rows.reduce(
+    (acc, r) => ({
+      revenue: acc.revenue + r.revenue,
+      projectCost: acc.projectCost + r.projectCost,
+      overhead: acc.overhead + r.overhead,
+      margeBrute: acc.margeBrute + r.margeBrute,
+      margeNette: acc.margeNette + r.margeNette,
+    }),
+    { revenue: 0, projectCost: 0, overhead: 0, margeBrute: 0, margeNette: 0 },
+  ), [rows]);
+
+  if (loading) {
+    return <div className="py-12 text-center text-sm text-primary-500">Calcul de la vue WBS…</div>;
+  }
+
+  if (rows.length === 0) {
+    return (
+      <Card padded>
+        <p className="text-sm text-primary-600 dark:text-primary-300">
+          Aucune ligne analytique avec branche WBS détectée pour l'exercice {year}.
+        </p>
+        <p className="text-xs text-primary-400 mt-2">
+          Pour activer la Vue WBS : (1) crée des codes analytiques avec une branche définie
+          (Revenus / Coûts projets / Frais généraux), (2) configure des règles de mapping
+          ou affecte manuellement les lignes via l'onglet Affectation.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <KPI label="Revenus" value={fmtFull(totals.revenue)} />
+        <KPI label="Coûts projets" value={fmtFull(totals.projectCost)} />
+        <KPI label="Marge brute" value={fmtFull(totals.margeBrute)} highlight={totals.margeBrute >= 0} />
+        <KPI label="Frais généraux" value={fmtFull(totals.overhead)} sub={`+ ${fmtFull(unallocOverhead)} non alloués`} />
+        <KPI label="Marge nette" value={fmtFull(totals.margeNette)} highlight={totals.margeNette >= 0} />
+      </div>
+
+      <Card padded={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-primary-100 dark:bg-primary-900">
+              <tr>
+                <th className="text-left px-3 py-2">Projet</th>
+                <th className="text-left px-3 py-2">Libellé</th>
+                <th className="text-right px-3 py-2">Revenus</th>
+                <th className="text-right px-3 py-2">Coûts projets</th>
+                <th className="text-right px-3 py-2">Marge brute</th>
+                <th className="text-right px-3 py-2">FG alloués</th>
+                <th className="text-right px-3 py-2">Marge nette</th>
+                <th className="text-right px-3 py-2">% marge nette</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const pctNet = r.revenue > 0 ? (r.margeNette / r.revenue) * 100 : 0;
+                const negative = r.margeNette < 0;
+                return (
+                  <tr key={r.projectCode} className="border-b border-primary-100 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/50">
+                    <td className="px-3 py-2 font-mono font-semibold">{r.projectCode}</td>
+                    <td className="px-3 py-2">{r.projectLabel}</td>
+                    <td className="px-3 py-2 text-right num">{fmtFull(r.revenue)}</td>
+                    <td className="px-3 py-2 text-right num">{fmtFull(r.projectCost)}</td>
+                    <td className={clsx('px-3 py-2 text-right num font-semibold', r.margeBrute < 0 && 'text-error')}>
+                      {fmtFull(r.margeBrute)}
+                    </td>
+                    <td className="px-3 py-2 text-right num">{fmtFull(r.overhead)}</td>
+                    <td className={clsx('px-3 py-2 text-right num font-bold', negative && 'text-error')}>
+                      {fmtFull(r.margeNette)}
+                    </td>
+                    <td className={clsx('px-3 py-2 text-right num', negative && 'text-error')}>
+                      {pctNet.toFixed(1)} %
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-primary-100 dark:bg-primary-900 font-semibold">
+              <tr>
+                <td className="px-3 py-2" colSpan={2}>Total</td>
+                <td className="px-3 py-2 text-right num">{fmtFull(totals.revenue)}</td>
+                <td className="px-3 py-2 text-right num">{fmtFull(totals.projectCost)}</td>
+                <td className="px-3 py-2 text-right num">{fmtFull(totals.margeBrute)}</td>
+                <td className="px-3 py-2 text-right num">{fmtFull(totals.overhead)}</td>
+                <td className="px-3 py-2 text-right num">{fmtFull(totals.margeNette)}</td>
+                <td className="px-3 py-2 text-right num">
+                  {totals.revenue > 0 ? ((totals.margeNette / totals.revenue) * 100).toFixed(1) : '0.0'} %
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Card>
+
+      {unallocOverhead > 0 && (
+        <Card padded>
+          <p className="text-xs text-warning font-semibold">
+            ⚠ Frais généraux non alloués : {fmtFull(unallocOverhead)}
+          </p>
+          <p className="text-[11px] text-primary-500 mt-1">
+            Ces FG ne sont rattachés à aucun projet (axe 1 vide). Pour les répartir sur les
+            projets, configurez une clé de répartition (CA, heures, direct) — fonctionnalité
+            disponible dans une future version.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

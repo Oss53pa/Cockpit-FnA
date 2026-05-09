@@ -189,6 +189,24 @@ export type ReportTemplate = {
 };
 
 // ── Comptabilité analytique multi-axes ──────────────────────────────────
+//
+// MODÈLE WBS CONDITIONNEL (Option A — branches sémantiques)
+// ──────────────────────────────────────────────────────────
+// L'app supporte maintenant un modèle hybride :
+//   - Axe 1 (commun)        : Code Projet (toujours)
+//   - Axe 2/3 conditionnels selon `branch` :
+//       * 'revenue'        → Centre de revenu / Type de centre
+//       * 'project_cost'   → CC ou Tâche / Code de gestion ou Ressource
+//       * 'overhead'       → Cost Center FG / Code FG
+//
+// Si `branch` est undefined sur un code, il est universel (compatible avec
+// toutes les lignes — comportement legacy avant cette refonte).
+//
+// La branche d'une ligne GL est dérivée par `inferBranch()` (cf.
+// engine/analyticBranch.ts) à partir du compte (7x = revenue, 6x avec
+// projet = project_cost, 6x sans projet = overhead).
+export type AnalyticBranch = 'revenue' | 'project_cost' | 'overhead';
+
 export type AnalyticAxis = {
   id: string;
   orgId: string;
@@ -209,6 +227,13 @@ export type AnalyticCode = {
   parentId?: string;
   active: boolean;
   order: number;
+  /**
+   * Branche WBS à laquelle ce code appartient. Undefined = code universel
+   * (peut être affecté à n'importe quelle ligne — comportement legacy).
+   * Si défini, le code ne peut être affecté qu'à une ligne dont la branche
+   * inferred matche.
+   */
+  branch?: AnalyticBranch;
 };
 
 export type AnalyticRule = {
@@ -233,6 +258,12 @@ export type AnalyticAssignment = {
   method: 'direct' | 'label' | 'account' | 'journal' | 'amount' | 'manual';
   ruleId?: string;
   assignedAt: number;
+  /**
+   * Branche WBS de la ligne GL au moment de l'affectation.
+   * Calculée par `inferBranch()` à partir du compte et du contexte projet.
+   * Stockée pour faciliter l'agrégation dashboard (évite recalcul).
+   */
+  branch?: AnalyticBranch;
 };
 
 export type AnalyticBudget = {
