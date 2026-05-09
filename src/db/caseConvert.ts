@@ -19,6 +19,9 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   codeName: 'code_name', shortLabel: 'short_label', longLabel: 'long_label',
   parentId: 'parent_id', axisId: 'axis_id', previousHash: 'previous_hash',
   userName: 'user_name', isDefault: 'is_default', isActive: 'is_active',
+  // ImportLog.user → fna_imports.user_name (toCamel fait l'inverse, asymétrie historique).
+  // Sans ce mapping, INSERT dans fna_imports échoue car user_name est NOT NULL.
+  user: 'user_name',
 };
 
 export function toSnake(obj: Record<string, any>): Record<string, any> {
