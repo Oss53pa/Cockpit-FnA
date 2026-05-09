@@ -92,6 +92,13 @@ const AnalyticalRevenueCenters = lazyWithRetry(() => import('./pages/analytical/
 const AnalyticalResources      = lazyWithRetry(() => import('./pages/analytical/AnalyticalResources'));
 const AnalyticalOverhead       = lazyWithRetry(() => import('./pages/analytical/AnalyticalOverhead'));
 const AnalyticalFGAllocation   = lazyWithRetry(() => import('./pages/analytical/AnalyticalFGAllocation'));
+// Tables T01-T10 + Catalogue KPIs (Sprint 1+2)
+const AnalyticalJournal        = lazyWithRetry(() => import('./pages/analytical/AnalyticalJournal'));
+const AnalyticalBalance        = lazyWithRetry(() => import('./pages/analytical/AnalyticalBalance'));
+const AnalyticalPivot          = lazyWithRetry(() => import('./pages/analytical/AnalyticalPivot'));
+const AnalyticalAnomalies      = lazyWithRetry(() => import('./pages/analytical/AnalyticalAnomalies'));
+const AnalyticalAuditTrail     = lazyWithRetry(() => import('./pages/analytical/AnalyticalAuditTrail'));
+const AnalyticalKPICatalog     = lazyWithRetry(() => import('./pages/analytical/AnalyticalKPICatalog'));
 
 function PageFallback() {
   return (
@@ -204,6 +211,13 @@ function App() {
         <Route path="/analytical/resources"       element={<ProtectedRoute><AppLayout><AnalyticalResources /></AppLayout></ProtectedRoute>} />
         <Route path="/analytical/overhead"        element={<ProtectedRoute><AppLayout><AnalyticalOverhead /></AppLayout></ProtectedRoute>} />
         <Route path="/analytical/fg-allocation"   element={<ProtectedRoute><AppLayout><AnalyticalFGAllocation /></AppLayout></ProtectedRoute>} />
+        {/* Tables T01-T10 + Catalogue KPIs */}
+        <Route path="/analytical/journal"         element={<ProtectedRoute><AppLayout><AnalyticalJournal /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/balance"         element={<ProtectedRoute><AppLayout><AnalyticalBalance /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/pivot"           element={<ProtectedRoute><AppLayout><AnalyticalPivot /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/anomalies"       element={<ProtectedRoute><AppLayout><AnalyticalAnomalies /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/audit-trail"     element={<ProtectedRoute><AppLayout><AnalyticalAuditTrail /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/kpis"            element={<ProtectedRoute><AppLayout><AnalyticalKPICatalog /></AppLayout></ProtectedRoute>} />
         {/* Import unifié axes + codes analytiques (modèle Données / GL Tiers) */}
         <Route path="/import-analytical"          element={<ProtectedRoute><AppLayout><ImportAnalytical /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/:id" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
