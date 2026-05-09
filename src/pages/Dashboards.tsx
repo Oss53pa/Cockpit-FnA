@@ -52,11 +52,12 @@ const dashboards = [
   { id: 'serv', route: '/dashboard/serv', name: 'Services & Conseil', desc: 'Honoraires, taux facturable, marge projets, staffing', icon: 'Briefcase', cat: 'Sectoriel' },
   { id: 'alerts', route: '/alerts', name: 'Points d\'attention & Alertes', desc: 'Risques détectés, anomalies comptables, seuils dépassés, suivi par sévérité et statut', icon: 'AlertTriangle', cat: 'Pilotage' },
   { id: 'actions', route: '/actions', name: 'Plan d\'action', desc: 'Actions correctives, responsables, échéances, priorités, taux d\'avancement, actions en retard', icon: 'ClipboardCheck', cat: 'Pilotage' },
-  { id: 'ana_dashboard', route: '/analytical?tab=dashboard', name: 'Dashboard analytique', desc: 'KPIs couverture, répartition charges/produits par code, évolution mensuelle, budget vs réalisé', icon: 'PieChart', cat: 'Analytique' },
-  { id: 'ana_axes', route: '/analytical?tab=axes', name: 'Plan analytique (Axes)', desc: 'Configuration des axes analytiques : projet, centre de coût, région, activité (jusqu\'à 5 axes)', icon: 'GitBranch', cat: 'Analytique' },
-  { id: 'ana_codes', route: '/analytical?tab=codes', name: 'Codes analytiques', desc: 'Gestion des codes hiérarchiques par axe : création, recherche, activation', icon: 'FolderKanban', cat: 'Analytique' },
-  { id: 'ana_rules', route: '/analytical?tab=rules', name: 'Règles de mapping', desc: 'Moteur d\'affectation automatique : règles par priorité, simulation, application en masse', icon: 'Wand2', cat: 'Analytique' },
-  { id: 'ana_assign', route: '/analytical?tab=assign', name: 'Affectation manuelle', desc: 'Lignes non affectées : sélection multiple, affectation manuelle en masse par axe', icon: 'ListChecks', cat: 'Analytique' },
+  // ─── Analytique : déplacé hors du catalogue ─────────────────────
+  // Tous les outils analytiques (Dashboard analytique, Plan / Axes,
+  // Codes, Règles de mapping, Affectation manuelle, Vue WBS) restent
+  // dans la page dédiée /analytical pour garder un workflow cohérent
+  // (configuration des axes → codes → règles → affectation → dashboards).
+  // Le menu Sidebar pointe directement vers /analytical.
   // ─── États SYSCOHADA officiels (NOUVEAUX) ─────────────────────
   { id: 'tft_monthly',  route: '/dashboard/tft-monthly',       name: 'TFT mensuel ★',                desc: 'Tableau des Flux de Trésorerie sur 12 mois — exploitation/investissement/financement (SYSCOHADA art. 38)', icon: 'GitBranch',      cat: 'Reporting' },
   { id: 'cap_var',      route: '/dashboard/capital-variation', name: 'Variation capitaux propres ★', desc: 'État SYSCOHADA obligatoire — apports, distributions, affectation résultat, mouvements bruts',                  icon: 'Layers',         cat: 'Reporting' },
@@ -94,7 +95,7 @@ const dashboards = [
 type ViewMode = 'cards' | 'table' | 'kanban';
 const VIEW_KEY = 'dashboards-view-mode';
 
-const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'Audit', 'Direction', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique', 'Custom'] as const;
+const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'Audit', 'Direction', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Custom'] as const;
 type Category = typeof CATEGORIES[number];
 
 export default function Dashboards() {

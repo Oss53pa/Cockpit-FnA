@@ -48,12 +48,12 @@ export default function Analytical() {
   useEffect(() => { getAxes(currentOrgId).then(setAxes); }, [currentOrgId, refresh]);
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'dashboard', label: 'Dashboard analytique' },
     { key: 'wbs', label: 'Vue WBS (par projet)' },
-    { key: 'axes', label: 'Axes analytiques' },
-    { key: 'codes', label: 'Codes' },
+    { key: 'axes', label: 'Plan analytique (Axes)' },
+    { key: 'codes', label: 'Codes analytiques' },
     { key: 'rules', label: 'Règles de mapping' },
-    { key: 'assign', label: 'Affectation' },
+    { key: 'assign', label: 'Affectation manuelle' },
   ];
 
   return (
