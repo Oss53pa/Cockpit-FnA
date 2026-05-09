@@ -10,7 +10,7 @@
  * Pourquoi unifier ? L'admin importe rarement les axes seuls — il importe
  * la totalité du plan analytique en une seule fois (axes puis codes).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight, CheckCircle2, Download, FileSpreadsheet, FileWarning, Layers, Plus,
@@ -34,7 +34,8 @@ import {
   type AnalyticAxisImportRow, type AnalyticCodeImportRow,
   type AnalyticAxisImportReport, type AnalyticCodeImportReport,
 } from '../engine/analyticalEngine';
-import type { ImportLog } from '../db/schema';
+import type { ImportLog, AnalyticAxis, AnalyticCode, AnalyticBranch } from '../db/schema';
+import { BRANCH_LABELS, BRANCH_COLORS } from '../engine/analyticBranch';
 
 type Tab = 'axes' | 'codes';
 
@@ -88,6 +89,13 @@ export default function ImportAnalytical() {
 function AxesPanel({ orgId }: { orgId: string }) {
   const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<AnalyticAxisImportReport | null>(null);
+  const [axes, setAxes] = useState<AnalyticAxis[]>([]);
+  const [refreshAxes, setRefreshAxes] = useState(0);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void dataProvider.getAnalyticAxes(orgId).then(setAxes).catch(() => setAxes([]));
+  }, [orgId, refreshAxes]);
 
   const handleImport = async (file: File) => {
     setImporting(true);
@@ -115,6 +123,7 @@ function AxesPanel({ orgId }: { orgId: string }) {
       });
       setReport(result);
       invalidateCloudData('imports');
+      setRefreshAxes((r) => r + 1);
       if (result.errors.length === 0) {
         toast.success(`Axes importés : ${result.inserted} créés, ${result.updated} mis à jour`);
       } else {
@@ -204,6 +213,53 @@ function AxesPanel({ orgId }: { orgId: string }) {
         </div>
       )}
 
+      {/* Plan analytique courant — table des axes configurés */}
+      <div className="lg:col-span-2">
+        <Card
+          title={`Axes configurés (${axes.length})`}
+          subtitle="Plan analytique courant — modifiable dans /analytical?tab=axes"
+          padded={false}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+                <tr>
+                  <th className="text-left py-2 px-3">N° Axe</th>
+                  <th className="text-left py-2 px-3">Nom</th>
+                  <th className="text-left py-2 px-3">Nom du code</th>
+                  <th className="text-center py-2 px-3">Obligatoire</th>
+                  <th className="text-center py-2 px-3">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+                {axes.length === 0 && (
+                  <tr><td colSpan={5} className="py-6 text-center text-primary-500 text-xs">
+                    Aucun axe configuré. Créez ou importez vos axes ci-dessus.
+                  </td></tr>
+                )}
+                {axes.sort((a, b) => a.number - b.number).map((axis) => (
+                  <tr key={axis.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                    <td className="py-2 px-3 font-mono font-bold">Axe {axis.number}</td>
+                    <td className="py-2 px-3 font-semibold">{axis.name}</td>
+                    <td className="py-2 px-3 text-primary-600 dark:text-primary-400">{axis.codeName}</td>
+                    <td className="py-2 px-3 text-center">
+                      {axis.required
+                        ? <Badge variant="warning">Obligatoire</Badge>
+                        : <span className="text-[10px] text-primary-400">Optionnel</span>}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      {axis.active
+                        ? <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Actif</Badge>
+                        : <Badge>Inactif</Badge>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
       <div className="lg:col-span-2">
         <HistoryTable orgId={orgId} kind="ANALYTIC_AXES" emptyMessage="Aucun import d'axes" />
       </div>
@@ -214,9 +270,55 @@ function AxesPanel({ orgId }: { orgId: string }) {
 // ════════════════════════════════════════════════════════════════════════════
 // PANEL CODES
 // ════════════════════════════════════════════════════════════════════════════
+/**
+ * Matrice WBS — sémantique (axe × branche) demandée par l'utilisateur :
+ *
+ *              | Revenus            | Coûts projets               | Frais généraux             |
+ *   Axe 1      | Code Projet        | Code Projet                 | Code Projet (ou hors)      |
+ *   Axe 2      | Centre de revenu   | Centre de coût / Tâche      | Centre de coût FG          |
+ *   Axe 3      | Type centre revenu | Code ressource projet       | Code gestion FG            |
+ */
+const WBS_MATRIX: Record<'revenue' | 'project_cost' | 'overhead', Record<1 | 2 | 3, string>> = {
+  revenue: {
+    1: 'Code Projet',
+    2: 'Centre de revenu',
+    3: 'Type de centre revenu',
+  },
+  project_cost: {
+    1: 'Code Projet',
+    2: 'Centre de coût / Tâche projet',
+    3: 'Code ressource projet',
+  },
+  overhead: {
+    1: 'Code Projet (ou « hors projet »)',
+    2: 'Centre de coût FG',
+    3: 'Code gestion FG',
+  },
+};
+
 function CodesPanel({ orgId }: { orgId: string }) {
   const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<AnalyticCodeImportReport | null>(null);
+  const [codes, setCodes] = useState<AnalyticCode[]>([]);
+  const [axes, setAxes] = useState<AnalyticAxis[]>([]);
+  const [refreshCodes, setRefreshCodes] = useState(0);
+  const [branchTab, setBranchTab] = useState<AnalyticBranch>('revenue');
+
+  useEffect(() => {
+    if (!orgId) return;
+    void Promise.all([
+      dataProvider.getAnalyticCodes(orgId),
+      dataProvider.getAnalyticAxes(orgId),
+    ]).then(([c, a]) => { setCodes(c); setAxes(a); }).catch(() => { setCodes([]); setAxes([]); });
+  }, [orgId, refreshCodes]);
+
+  const counts = {
+    revenue: codes.filter((c) => c.branch === 'revenue').length,
+    project_cost: codes.filter((c) => c.branch === 'project_cost').length,
+    overhead: codes.filter((c) => c.branch === 'overhead').length,
+    universel: codes.filter((c) => !c.branch).length,
+  };
+  const axisByNumber = new Map(axes.map((a) => [a.number, a]));
 
   const handleImport = async (file: File) => {
     setImporting(true);
@@ -249,6 +351,7 @@ function CodesPanel({ orgId }: { orgId: string }) {
       });
       setReport(result);
       invalidateCloudData('imports');
+      setRefreshCodes((r) => r + 1);
       if (result.errors.length === 0) {
         toast.success(`Codes importés : ${result.inserted} créés, ${result.updated} mis à jour`);
       } else {
@@ -340,6 +443,153 @@ function CodesPanel({ orgId }: { orgId: string }) {
           />
         </div>
       )}
+
+      {/* Matrice WBS — codes classés par branche puis par axe */}
+      <div className="lg:col-span-2 space-y-3">
+        <div>
+          <h3 className="text-base font-bold text-primary-900 dark:text-primary-100 mb-1">
+            Plan analytique courant — vue matrice WBS
+          </h3>
+          <p className="text-xs text-primary-500">
+            Codes classés par branche × axe selon la sémantique conditionnelle WBS Cockpit FnA.
+          </p>
+        </div>
+
+        {/* Onglets par branche */}
+        <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 overflow-x-auto">
+          {([
+            { key: 'revenue' as AnalyticBranch, label: 'Branche Revenus', count: counts.revenue },
+            { key: 'project_cost' as AnalyticBranch, label: 'Branche Coûts Projets', count: counts.project_cost },
+            { key: 'overhead' as AnalyticBranch, label: 'Branche Frais Généraux', count: counts.overhead },
+          ]).map((t) => {
+            const active = branchTab === t.key;
+            const colorClass = t.key === 'revenue' ? 'border-success text-success'
+              : t.key === 'project_cost' ? 'border-accent text-accent'
+              : 'border-warning text-warning';
+            return (
+              <button
+                key={t.key}
+                className={clsx(
+                  'px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition whitespace-nowrap inline-flex items-center gap-2',
+                  active
+                    ? colorClass
+                    : 'border-transparent text-primary-500 hover:text-primary-900',
+                )}
+                onClick={() => setBranchTab(t.key)}
+              >
+                {t.label}
+                <Badge variant={active ? (BRANCH_COLORS[t.key] as 'success' | 'warning' | 'default') : 'default'}>
+                  {t.count}
+                </Badge>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 3 sections — une par axe — pour la branche sélectionnée */}
+        {([1, 2, 3] as const).map((axisNum) => {
+          const axisLabelInBranch = WBS_MATRIX[branchTab][axisNum];
+          const axis = axisByNumber.get(axisNum);
+          const codesInCell = codes
+            .filter((c) => c.branch === branchTab && axis && c.axisId === axis.id)
+            .sort((a, b) => a.code.localeCompare(b.code));
+
+          return (
+            <Card
+              key={axisNum}
+              title={`Axe ${axisNum} — ${axisLabelInBranch}`}
+              subtitle={
+                axis
+                  ? `${codesInCell.length} code(s) · Axe défini : « ${axis.name} »`
+                  : `Axe ${axisNum} non configuré dans le plan`
+              }
+              padded={false}
+            >
+              {!axis ? (
+                <div className="px-4 py-6 text-center text-xs text-primary-400">
+                  L'axe {axisNum} n'existe pas encore. Créez-le dans l'onglet « Axes analytiques ».
+                </div>
+              ) : codesInCell.length === 0 ? (
+                <div className="px-4 py-6 text-center text-xs text-primary-400">
+                  Aucun code « {axisLabelInBranch.toLowerCase()} » dans cette branche.
+                  Importez le modèle Excel ou créez-les manuellement.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+                      <tr>
+                        <th className="text-left py-2 px-3">Code</th>
+                        <th className="text-left py-2 px-3">Libellé court</th>
+                        <th className="text-left py-2 px-3">Libellé long</th>
+                        <th className="text-left py-2 px-3">Code parent</th>
+                        <th className="text-center py-2 px-3">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+                      {codesInCell.map((c) => {
+                        const parent = c.parentId ? codes.find((p) => p.id === c.parentId) : undefined;
+                        return (
+                          <tr key={c.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                            <td className="py-2 px-3 font-mono font-semibold">{c.code}</td>
+                            <td className="py-2 px-3">{c.shortLabel}</td>
+                            <td className="py-2 px-3 text-primary-500">{c.longLabel || '—'}</td>
+                            <td className="py-2 px-3 font-mono text-xs text-primary-500">{parent?.code ?? '—'}</td>
+                            <td className="py-2 px-3 text-center">
+                              {c.active
+                                ? <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Actif</Badge>
+                                : <Badge>Inactif</Badge>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+
+        {/* Codes universels — non typés, ne suivent pas la matrice WBS */}
+        {counts.universel > 0 && (
+          <Card
+            title={`Codes universels (${counts.universel})`}
+            subtitle="Codes sans branche WBS — compatibles avec toutes les lignes (legacy)"
+            padded={false}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+                  <tr>
+                    <th className="text-left py-2 px-3">Axe</th>
+                    <th className="text-left py-2 px-3">Code</th>
+                    <th className="text-left py-2 px-3">Libellé court</th>
+                    <th className="text-center py-2 px-3">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+                  {codes.filter((c) => !c.branch).sort((a, b) => a.code.localeCompare(b.code)).map((c) => {
+                    const ax = axes.find((a) => a.id === c.axisId);
+                    return (
+                      <tr key={c.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                        <td className="py-2 px-3 font-mono">Axe {ax?.number ?? '?'} — {ax?.name ?? ''}</td>
+                        <td className="py-2 px-3 font-mono font-semibold">{c.code}</td>
+                        <td className="py-2 px-3">{c.shortLabel}</td>
+                        <td className="py-2 px-3 text-center">
+                          {c.active
+                            ? <Badge variant="success">Actif</Badge>
+                            : <Badge>Inactif</Badge>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+      </div>
 
       <div className="lg:col-span-2">
         <HistoryTable orgId={orgId} kind="ANALYTIC_CODES" emptyMessage="Aucun import de codes" />
