@@ -86,21 +86,29 @@ export function useAuth() {
       return;
     }
 
-    // Récupère la session active
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const user = session?.user ?? null;
-      if (user) {
-        loadUserOrgs(user.id);
-        syncCurrentUserToStorage(user);
-      }
-      setState(s => ({ ...s, user, session, loading: false }));
-    });
+    // Récupère la session active. CRITIQUE : .catch() obligatoire pour ne pas
+    // figer l'état loading=true si le réseau est KO au démarrage (écran blanc).
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        const user = session?.user ?? null;
+        if (user) {
+          // loadUserOrgs est async — wrap en .catch() pour éviter unhandled rejection
+          loadUserOrgs(user.id).catch((e) => console.warn('[useAuth] loadUserOrgs failed:', e));
+          syncCurrentUserToStorage(user);
+        }
+        setState(s => ({ ...s, user, session, loading: false }));
+      })
+      .catch((e) => {
+        console.error('[useAuth] getSession failed:', e);
+        // Ne reste PAS bloqué en loading — laisse l'app continuer en mode dégradé
+        setState(s => ({ ...s, user: null, session: null, loading: false }));
+      });
 
     // Écoute les changements d'auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null;
       if (user) {
-        loadUserOrgs(user.id);
+        loadUserOrgs(user.id).catch((e) => console.warn('[useAuth] loadUserOrgs failed:', e));
         syncCurrentUserToStorage(user);
       } else if (event === 'SIGNED_OUT') {
         // Nettoie au logout pour eviter ghost user dans sidebar/chat

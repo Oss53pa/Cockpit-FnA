@@ -1,3 +1,5 @@
+import { FROM_EMAIL } from './appConfig';
+
 /**
  * Templates d'emails HTML — branding Cockpit FnA cohérent.
  *
@@ -266,7 +268,7 @@ export function buildMailto(to: string, content: EmailContent): string {
 
 /** Génère un fichier .eml téléchargeable. */
 export function buildEmlBlob(to: string, content: EmailContent): Blob {
-  const eml = `From: noreply@cockpit-fna.app
+  const eml = `From: ${FROM_EMAIL}
 To: ${to}
 Subject: ${content.subject}
 MIME-Version: 1.0

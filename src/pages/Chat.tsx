@@ -27,6 +27,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { toast } from '../components/ui/Toast';
+import { GUEST_USER } from '../lib/appConfig';
 import {
   getOrCreateGeneralChannel, listChannels, sendMessage, markChannelRead,
   getUnreadCount, toggleReaction, deleteMessage, extractMentions, getOrCreateDM, createChannel,
@@ -44,7 +45,7 @@ function getCurrentUser(): AppUser {
   } catch { /* ignore */ }
   // Fallback : 1er user de la liste ou identité par défaut
   const users = loadUsers();
-  return users[0] ?? { id: 'self', name: 'Vous', email: 'me@cockpit.app', role: 'admin' };
+  return users[0] ?? { ...GUEST_USER, role: 'admin' };
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '🚀', '👏', '🔥', '✅', '👀', '🎉'];

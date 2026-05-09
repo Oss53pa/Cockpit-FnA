@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeLocalStorage } from '../lib/safeStorage';
 
 /**
  * Mode d'affichage des montants dans l'app.
@@ -38,20 +39,20 @@ type AppState = {
 };
 
 const DEFAULT_CURRENT_YEAR = (() => {
-  const stored = localStorage.getItem('current-year');
+  const stored = safeLocalStorage.getItem('current-year');
   const n = stored ? parseInt(stored, 10) : NaN;
   if (!isNaN(n) && n > 1990 && n < 2100) return n;
   return new Date().getFullYear();
 })();
 
-const DEFAULT_AMOUNT_MODE: AmountDisplayMode = (localStorage.getItem('amount-mode') as AmountDisplayMode) || 'full';
+const DEFAULT_AMOUNT_MODE: AmountDisplayMode = (safeLocalStorage.getItem('amount-mode') as AmountDisplayMode) || 'full';
 
 export const useApp = create<AppState>((set) => ({
-  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
+  theme: (safeLocalStorage.getItem('theme') as 'light' | 'dark') || 'light',
   toggleTheme: () =>
     set((s) => {
       const next = s.theme === 'light' ? 'dark' : 'light';
-      localStorage.setItem('theme', next);
+      safeLocalStorage.setItem('theme', next);
       document.documentElement.classList.toggle('dark', next === 'dark');
       // Re-applique la palette pour adapter scale + bg en dark/light
       // (theme.ts/applyPalette gere les deux modes selon classList.contains('dark'))
@@ -68,42 +69,42 @@ export const useApp = create<AppState>((set) => ({
   // - Au login : useAuth/OrgContext charge fna_user_orgs et appelle setCurrentOrg
   // - Si user sans org : OnboardingModal force la création de la 1ère société
   // - Mode démo : Demo.tsx appelle setCurrentOrg(`demo-org-${userId}`)
-  currentOrgId: localStorage.getItem('current-org') || '',
+  currentOrgId: safeLocalStorage.getItem('current-org') || '',
   setCurrentOrg: (id) => {
-    localStorage.setItem('current-org', id);
+    safeLocalStorage.setItem('current-org', id);
     set({ currentOrgId: id });
   },
   currentPeriodId: '',
   setCurrentPeriod: (id) => set({ currentPeriodId: id }),
   currentYear: DEFAULT_CURRENT_YEAR,
   setCurrentYear: (y) => {
-    localStorage.setItem('current-year', String(y));
+    safeLocalStorage.setItem('current-year', String(y));
     set({ currentYear: y });
   },
   amountMode: DEFAULT_AMOUNT_MODE,
   setAmountMode: (m) => {
-    localStorage.setItem('amount-mode', m);
+    safeLocalStorage.setItem('amount-mode', m);
     set({ amountMode: m });
     // Notifier tous les composants abonnés via useAmountMode (lib/format.ts)
     // pour qu'ils ré-évaluent fmtK / fmtMoney instantanément.
     import('../lib/format').then((mod) => mod.notifyAmountModeChanged()).catch(() => {});
   },
-  currentImport: (localStorage.getItem('current-import') as ImportSelection) || 'latest',
+  currentImport: (safeLocalStorage.getItem('current-import') as ImportSelection) || 'latest',
   setCurrentImport: (s) => {
-    localStorage.setItem('current-import', s);
+    safeLocalStorage.setItem('current-import', s);
     set({ currentImport: s });
   },
-  fromMonth: parseInt(localStorage.getItem('period-from') || '1', 10) || 1,
-  toMonth: parseInt(localStorage.getItem('period-to') || '12', 10) || 12,
+  fromMonth: parseInt(safeLocalStorage.getItem('period-from') || '1', 10) || 1,
+  toMonth: parseInt(safeLocalStorage.getItem('period-to') || '12', 10) || 12,
   setPeriodRange: (from, to) => {
     const f = Math.max(1, Math.min(12, from));
     const t = Math.max(f, Math.min(12, to));
-    localStorage.setItem('period-from', String(f));
-    localStorage.setItem('period-to', String(t));
+    safeLocalStorage.setItem('period-from', String(f));
+    safeLocalStorage.setItem('period-to', String(t));
     set({ fromMonth: f, toMonth: t });
   },
 }));
 
-if (localStorage.getItem('theme') === 'dark') {
+if (safeLocalStorage.getItem('theme') === 'dark') {
   document.documentElement.classList.add('dark');
 }

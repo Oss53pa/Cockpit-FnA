@@ -20,6 +20,7 @@ import {
   verifyChainIntegrity, audit, type AuditEntry, type AuditAction, type AuditEntity,
 } from '../engine/auditLog';
 import { toast } from '../components/ui/Toast';
+import { SYSTEM_USER_EMAIL } from '../lib/appConfig';
 
 const ACTION_LABELS: Record<string, string> = {
   create: 'Création', update: 'Modification', delete: 'Suppression',
@@ -74,8 +75,8 @@ export default function AuditTrail() {
   // Genere des entrees demo si journal vide (uniquement la 1ere fois pour montrer le format)
   useEffect(() => {
     if (entries.length === 0 && currentOrgId) {
-      void audit.login(currentOrgId, 'system@cockpit-fna.app');
-      setTimeout(() => setRefreshKey((k) => k + 1), 100);
+      // Race condition fix : await la création avant de refresh
+      void audit.login(currentOrgId, SYSTEM_USER_EMAIL).then(() => setRefreshKey((k) => k + 1));
     }
   }, []); // eslint-disable-line
 

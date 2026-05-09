@@ -10,6 +10,17 @@ import { findSyscoAccount, classOf, SYSCOHADA_COA } from '../syscohada/coa';
 import { hashEntry, type HashableEntry } from '../lib/auditHash';
 import { assertPeriodOpen, PeriodLockedError } from '../lib/periodLock';
 
+/**
+ * Debug helper — log uniquement en développement (strip en prod).
+ * Vite remplace `import.meta.env.DEV` par `false` au build prod, ce qui
+ * permet au tree-shaker d'éliminer ces appels du bundle.
+ */
+// eslint-disable-next-line no-console
+const debug = (...args: unknown[]): void => {
+  // eslint-disable-next-line no-console
+  if (import.meta.env.DEV) console.log(...args);
+};
+
 // ─── IMPORT BULLETPROOF AVEC EXCELJS ────────────────────────────────────
 // Lit n'importe quel fichier Excel généré par ExcelJS sans dépendre de la
 // détection de feuille. Stratégie : scanne TOUTES les feuilles, trouve la
@@ -107,8 +118,8 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
   const debugCands = cands.map((c) => ({
     sheet: c.sheetName, score: c.score, headerRow: c.headerRow, rows: c.rowsCount, preferred: c.preferredScore > 0,
   }));
-  console.log('🔵 [readExcelBulletproof v3] Toutes les feuilles :', allSheets);
-  console.log('🔵 [readExcelBulletproof v3] Feuilles candidates :', debugCands);
+  debug('🔵 [readExcelBulletproof v3] Toutes les feuilles :', allSheets);
+  debug('🔵 [readExcelBulletproof v3] Feuilles candidates :', debugCands);
 
   if (cands.length === 0) {
     console.error('🔵 Aucune feuille reconnue. Toutes les feuilles :', allSheets);
@@ -122,7 +133,7 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
     (a.order - b.order)
   );
   const best = cands[0];
-  console.log('🔵 Feuille SÉLECTIONNÉE :', best.sheetName, '(headerRow:', best.headerRow, ')');
+  debug('🔵 Feuille SÉLECTIONNÉE :', best.sheetName, '(headerRow:', best.headerRow, ')');
 
   // Construire les objets
   const headerArr: string[] = (best.matrix[best.headerRow] || []).map((h: any, i: number) => {
@@ -141,24 +152,24 @@ async function readExcelBulletproof(file: File): Promise<{ headers: string[]; ro
     rows.push(obj);
   }
 
-  console.log('🔵 Headers extraits :', headerArr);
-  console.log('🔵 Lignes data :', rows.length, '— premières :', rows.slice(0, 3));
+  debug('🔵 Headers extraits :', headerArr);
+  debug('🔵 Lignes data :', rows.length, '— premières :', rows.slice(0, 3));
   return { headers: headerArr, rows, sheetName: best.sheetName, debug: { allSheets, candidates: debugCands, selectedSheet: best.sheetName } };
 }
 
 // Wrappers simples pour PC et Budget
 export async function importCOAv2(file: File, orgId: string): Promise<{ imported: number; updated: number; errors: string[]; sheetName: string }> {
-  console.log('🟢 [importCOAv2] Start, file:', file.name);
-  const { headers, rows, sheetName, debug } = await readExcelBulletproof(file);
+  debug('🟢 [importCOAv2] Start, file:', file.name);
+  const { headers, rows, sheetName, debug: dbg } = await readExcelBulletproof(file);
   if (rows.length === 0) {
     // Diagnostic explicite : toutes feuilles + candidates + raisons
     const lines: string[] = [];
-    if (debug.candidates.length === 0) {
+    if (dbg.candidates.length === 0) {
       lines.push(`Aucune feuille reconnue dans le classeur.`);
-      lines.push(`Feuilles présentes : ${debug.allSheets.join(' · ') || '(aucune)'}.`);
+      lines.push(`Feuilles présentes : ${dbg.allSheets.join(' · ') || '(aucune)'}.`);
       lines.push(`Causes possibles : feuille blacklistée (Notes/Aide/...), en-têtes < 2 mots-clés reconnus, ou cellules fusionnées.`);
     } else {
-      const top = debug.candidates[0];
+      const top = dbg.candidates[0];
       lines.push(`Feuille sélectionnée : "${top.sheet}" (ligne d'en-tête ${top.headerRow + 1}, ${top.rows} lignes data).`);
       lines.push(`Mais aucune ligne valide trouvée — les en-têtes ne contiennent peut-être pas Code/Libellé.`);
     }
@@ -227,7 +238,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   if (!colHasNumericCodes(colCode)) {
     const guessed = guessCodeColByContent();
     if (guessed) {
-      console.log(`🟢 [importCOAv2] colCode "${colCode}" vide en data, fallback contenu: "${guessed}"`);
+      debug(`🟢 [importCOAv2] colCode "${colCode}" vide en data, fallback contenu: "${guessed}"`);
       colCode = guessed;
     }
   }
@@ -241,7 +252,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     if (textCount < 5) {
       const guessed = guessLabelColByContent(colCode);
       if (guessed) {
-        console.log(`🟢 [importCOAv2] colLabel "${colLabel}" vide en data, fallback contenu: "${guessed}"`);
+        debug(`🟢 [importCOAv2] colLabel "${colLabel}" vide en data, fallback contenu: "${guessed}"`);
         colLabel = guessed;
       }
     }
@@ -256,7 +267,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
   const typeCols = headers.filter((h) => /^type(\s*\d+)?$/i.test(h.trim()));
   const colSysco = headers.find((h) => /sysco/i.test(h));
 
-  console.log('🟢 [importCOAv2] Colonnes finales:', { colCode, colLabel, colClass, typeCols, colSysco });
+  debug('🟢 [importCOAv2] Colonnes finales:', { colCode, colLabel, colClass, typeCols, colSysco });
 
   if (!colCode) return { imported: 0, updated: 0, errors: [`Colonne "Code" introuvable (ni par nom, ni par contenu). Headers : ${headers.join(', ')}`], sheetName };
   if (!colLabel) return { imported: 0, updated: 0, errors: [`Colonne "Libellé" introuvable (ni par nom, ni par contenu). Headers : ${headers.join(', ')}`], sheetName };
@@ -311,7 +322,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
     toImport.push({ orgId, code, label, class: cls || code[0], type, syscoCode });
   }
 
-  console.log('🟢 [importCOAv2] Comptes à importer:', toImport.length, '— skip:', { skipCodeAbsent, skipCodeNonNumerique, skipLabelAbsent });
+  debug('🟢 [importCOAv2] Comptes à importer:', toImport.length, '— skip:', { skipCodeAbsent, skipCodeNonNumerique, skipLabelAbsent });
 
   // Si 0 import : ajouter un diagnostic au debut des erreurs
   if (toImport.length === 0) {
@@ -351,7 +362,7 @@ export async function importCOAv2(file: File, orgId: string): Promise<{ imported
 export async function importBudgetV2(
   file: File, orgId: string, year: number, version: string,
 ): Promise<{ imported: number; lines: number; errors: string[]; sheetName: string }> {
-  console.log('🟡 [importBudgetV2] Start, file:', file.name, 'year:', year, 'version:', version);
+  debug('🟡 [importBudgetV2] Start, file:', file.name, 'year:', year, 'version:', version);
   const { headers, rows, sheetName } = await readExcelBulletproof(file);
   if (rows.length === 0) {
     return { imported: 0, lines: 0, errors: ['Aucune donnée trouvée dans le fichier'], sheetName };
@@ -362,7 +373,7 @@ export async function importBudgetV2(
   const monthCols = monthPatterns.map((p) => headers.find((h) => p.test(h.trim())));
   const colAnnual = headers.find((h) => /annuel|total/i.test(h));
 
-  console.log('🟡 [importBudgetV2] Colonnes:', { colAccount, monthCols, colAnnual });
+  debug('🟡 [importBudgetV2] Colonnes:', { colAccount, monthCols, colAnnual });
 
   if (!colAccount) return { imported: 0, lines: 0, errors: [`Colonne "Compte" introuvable. Headers : ${headers.join(', ')}`], sheetName };
 
@@ -396,7 +407,7 @@ export async function importBudgetV2(
     for (let m = 0; m < 12; m++) cur[m] += monthly[m];
   }
 
-  console.log('🟡 [importBudgetV2] Comptes trouvés:', perAccount.size);
+  debug('🟡 [importBudgetV2] Comptes trouvés:', perAccount.size);
 
   // Construire les lignes à insérer
   const toInsert: any[] = [];
@@ -553,9 +564,9 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
       best = { sheetName: fallbackName, headerRow: 0, score: 0, rowsCount: maxRows, sheetScore: 0, order: 0 };
     }
 
-    console.log('🚀 [parseFile v2.0 BUILD] Feuilles disponibles :', wb.SheetNames);
-    console.log('🚀 [parseFile v2.0 BUILD] Candidats analysés :', candidates);
-    console.log('🚀 [parseFile v2.0 BUILD] Feuille SÉLECTIONNÉE :', best.sheetName, '(headerRow:', best.headerRow, ', score:', best.score, ')');
+    debug('🚀 [parseFile v2.0 BUILD] Feuilles disponibles :', wb.SheetNames);
+    debug('🚀 [parseFile v2.0 BUILD] Candidats analysés :', candidates);
+    debug('🚀 [parseFile v2.0 BUILD] Feuille SÉLECTIONNÉE :', best.sheetName, '(headerRow:', best.headerRow, ', score:', best.score, ')');
 
     const ws = wb.Sheets[best.sheetName];
     // Si le header est en ligne 1 (cas standard), on utilise sheet_to_json direct.
@@ -1030,10 +1041,10 @@ export async function importCOA(
   }
 
   // DIAGNOSTIC : afficher en console ce que le parser voit
-  console.log('[importCOA] Headers détectés :', headers);
-  console.log('[importCOA] Colonnes mappées :', { code: colCode, label: colLabel, class: colClass, type: colType, sysco: colSysco });
-  console.log('[importCOA] Premières lignes :', rows.slice(0, 3));
-  console.log('[importCOA] Total lignes brutes :', rows.length);
+  debug('[importCOA] Headers détectés :', headers);
+  debug('[importCOA] Colonnes mappées :', { code: colCode, label: colLabel, class: colClass, type: colType, sysco: colSysco });
+  debug('[importCOA] Premières lignes :', rows.slice(0, 3));
+  debug('[importCOA] Total lignes brutes :', rows.length);
 
   rows.forEach((r, idx) => {
     const code = String(r[colCode!] ?? '').trim();
@@ -1048,7 +1059,7 @@ export async function importCOA(
     toImport.push({ orgId, code, label, class: cls, type, syscoCode });
   });
 
-  console.log('[importCOA] Comptes à importer :', toImport.length);
+  debug('[importCOA] Comptes à importer :', toImport.length);
   if (toImport.length === 0 && rows.length > 0) {
     console.warn('[importCOA] AUCUN compte importé alors que', rows.length, 'lignes lues. Erreurs :', errors);
     alert(`⚠ Aucun compte importé.\nLignes lues : ${rows.length}\nColonne Code : ${colCode}\nColonne Libellé : ${colLabel}\n\nOuvrez la console (F12) pour voir le détail.`);
@@ -1130,12 +1141,12 @@ export async function importBudget(
   const annualCol = mapping.annual;
 
   // DIAGNOSTIC console
-  console.log('[importBudget] Headers détectés :', headers);
-  console.log('[importBudget] Colonne compte :', mapping.account);
-  console.log('[importBudget] Colonnes mensuelles :', monthCols);
-  console.log('[importBudget] Colonne annuelle :', annualCol);
-  console.log('[importBudget] Premières lignes :', rows.slice(0, 3));
-  console.log('[importBudget] Total lignes brutes :', rows.length);
+  debug('[importBudget] Headers détectés :', headers);
+  debug('[importBudget] Colonne compte :', mapping.account);
+  debug('[importBudget] Colonnes mensuelles :', monthCols);
+  debug('[importBudget] Colonne annuelle :', annualCol);
+  debug('[importBudget] Premières lignes :', rows.slice(0, 3));
+  debug('[importBudget] Total lignes brutes :', rows.length);
 
   if (!hasMonthly && !annualCol) {
     const msg = `Impossible de localiser les 12 colonnes mensuelles ni une colonne "Montant annuel".\nHeaders trouvés : ${headers.join(', ')}`;
