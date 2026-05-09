@@ -2,9 +2,9 @@ import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
-  FileText, Wallet, Settings, Sparkles, Bell, FolderTree, Target, BookOpen,
+  FileText, Wallet, Settings, Sparkles, FolderTree, Target, BookOpen,
   X, ChevronsLeft, ChevronsRight, ChevronRight, PieChart, ClipboardList, Search, Users, FileEdit,
-  HelpCircle, MessageCircle, Stethoscope,
+  HelpCircle, MessageCircle,
 } from 'lucide-react';
 import { useCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
@@ -16,10 +16,10 @@ const sections = [
     label: 'Pilotage',
     items: [
       { to: '/home', icon: Home, label: 'Accueil' },
+      // La Synthèse contient désormais 3 onglets internes :
+      // Vue d'ensemble + Santé entreprise + Alertes (URL ?tab=vue|sante|alertes).
       { to: '/dashboard/home', icon: LayoutDashboard, label: 'Synthèse' },
-      { to: '/diagnostic', icon: Stethoscope, label: 'Santé entreprise' },
       { to: '/dashboards', icon: BarChart3, label: 'Catalogue' },
-      { to: '/alerts', icon: Bell, label: 'Alertes' },
       { to: '/actions', icon: Target, label: "Plan d'action" },
     ],
   },
