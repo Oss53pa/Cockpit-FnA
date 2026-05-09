@@ -278,10 +278,12 @@ export type AnalyticAxisImportReport = {
  * Import en bulk des axes analytiques.
  * - Valide number (1-5) unique.
  * - Idempotent : un axe (orgId + number) déjà existant est mis à jour.
+ * - Trace : log dans fna_imports avec kind='ANALYTIC_AXES' (modèle GL Tiers).
  */
 export async function importAnalyticAxes(
   orgId: string,
   rows: AnalyticAxisImportRow[],
+  meta: { fileName?: string; user?: string; source?: string } = {},
 ): Promise<AnalyticAxisImportReport> {
   const report: AnalyticAxisImportReport = {
     total: rows.length, inserted: 0, updated: 0, rejected: 0, errors: [],
@@ -329,6 +331,25 @@ export async function importAnalyticAxes(
   for (const axis of toUpsert) {
     await dataProvider.upsertAnalyticAxis(axis);
   }
+
+  // Log dans l'historique des imports (visible dans /import-analytical)
+  try {
+    await dataProvider.addImport({
+      orgId,
+      date: Date.now(),
+      user: meta.user ?? 'Utilisateur',
+      fileName: meta.fileName ?? 'axes-analytiques.xlsx',
+      source: meta.source ?? 'Excel',
+      kind: 'ANALYTIC_AXES',
+      count: report.inserted + report.updated,
+      rejected: report.rejected,
+      status: report.rejected === 0 ? 'success' : (report.inserted + report.updated > 0 ? 'partial' : 'error'),
+      report: JSON.stringify(report),
+    });
+  } catch (e) {
+    console.warn('[importAnalyticAxes] Log import échoué (non bloquant):', e);
+  }
+
   return report;
 }
 
@@ -364,6 +385,7 @@ export type AnalyticCodeImportReport = {
 export async function importAnalyticCodes(
   orgId: string,
   rows: AnalyticCodeImportRow[],
+  meta: { fileName?: string; user?: string; source?: string } = {},
 ): Promise<AnalyticCodeImportReport> {
   const report: AnalyticCodeImportReport = {
     total: rows.length, inserted: 0, updated: 0, rejected: 0, errors: [],
@@ -439,6 +461,24 @@ export async function importAnalyticCodes(
 
   if (toUpsert.length > 0) {
     await dataProvider.bulkUpsertAnalyticCodes(toUpsert);
+  }
+
+  // Log dans l'historique des imports (visible dans /import-analytical)
+  try {
+    await dataProvider.addImport({
+      orgId,
+      date: Date.now(),
+      user: meta.user ?? 'Utilisateur',
+      fileName: meta.fileName ?? 'codes-analytiques.xlsx',
+      source: meta.source ?? 'Excel',
+      kind: 'ANALYTIC_CODES',
+      count: report.inserted + report.updated,
+      rejected: report.rejected,
+      status: report.rejected === 0 ? 'success' : (report.inserted + report.updated > 0 ? 'partial' : 'error'),
+      report: JSON.stringify(report),
+    });
+  } catch (e) {
+    console.warn('[importAnalyticCodes] Log import échoué (non bloquant):', e);
   }
 
   return report;

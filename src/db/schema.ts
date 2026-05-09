@@ -78,7 +78,7 @@ export type ImportLog = {
   fileName: string;
   fileHash?: string;
   source: string;         // SAGE / PERFECTO / ...
-  kind: 'GL' | 'BUDGET' | 'COA' | 'BALANCE' | 'TIERS' | 'IMMO';
+  kind: 'GL' | 'BUDGET' | 'COA' | 'BALANCE' | 'TIERS' | 'IMMO' | 'ANALYTIC_AXES' | 'ANALYTIC_CODES';
   // Métadonnées optionnelles selon le type d'import
   year?: number;         // BUDGET : année de l'exercice
   version?: string;      // BUDGET : nom de la version

@@ -13,13 +13,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowRight, Download, FileSpreadsheet, Layers, Plus, Upload, Wand2, Trash2, FolderTree,
+  ArrowRight, CheckCircle2, Download, FileSpreadsheet, FileWarning, Layers, Plus,
+  Upload, Wand2, Trash2, FolderTree, XCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
+import { useImportsHistory } from '../hooks/useFinancials';
+import { invalidateCloudData } from '../hooks/useCloudData';
+import { dataProvider } from '../db/provider';
 import {
   downloadAnalyticAxesTemplate, downloadAnalyticCodesTemplate,
 } from '../engine/templates';
@@ -29,6 +34,7 @@ import {
   type AnalyticAxisImportRow, type AnalyticCodeImportRow,
   type AnalyticAxisImportReport, type AnalyticCodeImportReport,
 } from '../engine/analyticalEngine';
+import type { ImportLog } from '../db/schema';
 
 type Tab = 'axes' | 'codes';
 
@@ -104,8 +110,11 @@ function AxesPanel({ orgId }: { orgId: string }) {
         const active = activeRaw === '' ? true : !['0', 'false', 'non'].includes(activeRaw.toLowerCase());
         return { number, name, codeName, required, active };
       }).filter((r) => r.name);
-      const result = await importAnalyticAxes(orgId, mapped);
+      const result = await importAnalyticAxes(orgId, mapped, {
+        fileName: file.name, source: file.name.endsWith('.csv') ? 'CSV' : 'Excel',
+      });
       setReport(result);
+      invalidateCloudData('imports');
       if (result.errors.length === 0) {
         toast.success(`Axes importés : ${result.inserted} créés, ${result.updated} mis à jour`);
       } else {
@@ -194,6 +203,10 @@ function AxesPanel({ orgId }: { orgId: string }) {
           />
         </div>
       )}
+
+      <div className="lg:col-span-2">
+        <HistoryTable orgId={orgId} kind="ANALYTIC_AXES" emptyMessage="Aucun import d'axes" />
+      </div>
     </div>
   );
 }
@@ -231,8 +244,11 @@ function CodesPanel({ orgId }: { orgId: string }) {
         const active = activeRaw === '' ? true : !['0', 'false', 'non'].includes(activeRaw.toLowerCase());
         return { axe, code, shortLabel, longLabel, parent: parent || undefined, branch, active };
       }).filter((r) => r.code);
-      const result = await importAnalyticCodes(orgId, mapped);
+      const result = await importAnalyticCodes(orgId, mapped, {
+        fileName: file.name, source: file.name.endsWith('.csv') ? 'CSV' : 'Excel',
+      });
       setReport(result);
+      invalidateCloudData('imports');
       if (result.errors.length === 0) {
         toast.success(`Codes importés : ${result.inserted} créés, ${result.updated} mis à jour`);
       } else {
@@ -324,7 +340,86 @@ function CodesPanel({ orgId }: { orgId: string }) {
           />
         </div>
       )}
+
+      <div className="lg:col-span-2">
+        <HistoryTable orgId={orgId} kind="ANALYTIC_CODES" emptyMessage="Aucun import de codes" />
+      </div>
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// HISTORIQUE des imports (sur le modèle GL Tiers)
+// ════════════════════════════════════════════════════════════════════════════
+function HistoryTable({
+  orgId, kind, emptyMessage,
+}: {
+  orgId: string;
+  kind: 'ANALYTIC_AXES' | 'ANALYTIC_CODES';
+  emptyMessage: string;
+}) {
+  const history = useImportsHistory(orgId, kind);
+
+  const deleteImport = async (imp: ImportLog) => {
+    if (!imp.id) return;
+    if (!confirm(`Supprimer cet import historique ?\n\nNote : seul le journal d'import est supprimé.\nLes axes/codes déjà créés restent en place.`)) return;
+    try {
+      await dataProvider.deleteImport(imp.id);
+      invalidateCloudData('imports');
+      toast.success('Import supprimé du journal');
+    } catch (e) {
+      toast.error('Suppression impossible', (e as Error).message);
+    }
+  };
+
+  return (
+    <Card title="Historique des imports" subtitle="Traçabilité complète — modèle Grand Livre Tiers" padded={false}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+            <tr>
+              <th className="text-left py-2 px-3">Date</th>
+              <th className="text-left py-2 px-3">Utilisateur</th>
+              <th className="text-left py-2 px-3">Fichier</th>
+              <th className="text-left py-2 px-3">Source</th>
+              <th className="text-right py-2 px-3">Lignes</th>
+              <th className="text-right py-2 px-3">Rejetées</th>
+              <th className="text-left py-2 px-3">Statut</th>
+              <th className="text-center py-2 px-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+            {history.length === 0 && (
+              <tr><td colSpan={8} className="py-6 text-center text-primary-500 text-xs">{emptyMessage}</td></tr>
+            )}
+            {history.map((i) => (
+              <tr key={i.id} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                <td className="py-2 px-3 num text-xs">{new Date(i.date).toLocaleString('fr-FR')}</td>
+                <td className="py-2 px-3">{i.user}</td>
+                <td className="py-2 px-3 font-mono text-xs">{i.fileName}</td>
+                <td className="py-2 px-3"><Badge>{i.source}</Badge></td>
+                <td className="py-2 px-3 text-right num">{i.count.toLocaleString('fr-FR')}</td>
+                <td className="py-2 px-3 text-right num">{i.rejected}</td>
+                <td className="py-2 px-3">
+                  {i.status === 'success' && <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> Succès</Badge>}
+                  {i.status === 'partial' && <Badge variant="warning"><FileWarning className="w-3 h-3" /> Partiel</Badge>}
+                  {i.status === 'error' && <Badge variant="error"><XCircle className="w-3 h-3" /> Échec</Badge>}
+                </td>
+                <td className="py-2 px-3 text-center">
+                  <button
+                    className="btn-ghost !p-1.5 text-primary-500 hover:text-error hover:bg-error/10"
+                    onClick={() => deleteImport(i)}
+                    title="Supprimer cet import du journal (les données restent)"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
