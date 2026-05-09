@@ -83,6 +83,13 @@ const SectorBenchmark = lazyWithRetry(() => import('./pages/SectorBenchmark'));
 const Proph3tIntelligence = lazyWithRetry(() => import('./pages/Proph3tIntelligence'));
 const CREditor = lazyWithRetry(() => import('./pages/CREditor'));
 const CompanyDiagnostic = lazyWithRetry(() => import('./pages/CompanyDiagnostic'));
+// Dashboards analytiques dédiés (D03 / D04 / D05 / D06 / D09 / D10)
+const AnalyticalCoverage       = lazyWithRetry(() => import('./pages/analytical/AnalyticalCoverage'));
+const AnalyticalCostCenters    = lazyWithRetry(() => import('./pages/analytical/AnalyticalCostCenters'));
+const AnalyticalRevenueCenters = lazyWithRetry(() => import('./pages/analytical/AnalyticalRevenueCenters'));
+const AnalyticalResources      = lazyWithRetry(() => import('./pages/analytical/AnalyticalResources'));
+const AnalyticalOverhead       = lazyWithRetry(() => import('./pages/analytical/AnalyticalOverhead'));
+const AnalyticalFGAllocation   = lazyWithRetry(() => import('./pages/analytical/AnalyticalFGAllocation'));
 
 function PageFallback() {
   return (
@@ -186,6 +193,13 @@ function App() {
         <Route path="/dashboards" element={<ProtectedRoute><AppLayout><Dashboards /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/home" element={<ProtectedRoute><AppLayout><DashboardHome /></AppLayout></ProtectedRoute>} />
         <Route path="/diagnostic" element={<ProtectedRoute><AppLayout><CompanyDiagnostic /></AppLayout></ProtectedRoute>} />
+        {/* Dashboards analytiques dédiés (catalogue D03/D04/D05/D06/D09/D10) */}
+        <Route path="/analytical/coverage"        element={<ProtectedRoute><AppLayout><AnalyticalCoverage /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/cost-centers"    element={<ProtectedRoute><AppLayout><AnalyticalCostCenters /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/revenue-centers" element={<ProtectedRoute><AppLayout><AnalyticalRevenueCenters /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/resources"       element={<ProtectedRoute><AppLayout><AnalyticalResources /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/overhead"        element={<ProtectedRoute><AppLayout><AnalyticalOverhead /></AppLayout></ProtectedRoute>} />
+        <Route path="/analytical/fg-allocation"   element={<ProtectedRoute><AppLayout><AnalyticalFGAllocation /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/:id" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute><AppLayout><Alerts /></AppLayout></ProtectedRoute>} />
         <Route path="/actions" element={<ProtectedRoute><AppLayout><Actions /></AppLayout></ProtectedRoute>} />

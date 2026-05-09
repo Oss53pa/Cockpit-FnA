@@ -52,12 +52,20 @@ const dashboards = [
   { id: 'serv', route: '/dashboard/serv', name: 'Services & Conseil', desc: 'Honoraires, taux facturable, marge projets, staffing', icon: 'Briefcase', cat: 'Sectoriel' },
   { id: 'alerts', route: '/alerts', name: 'Points d\'attention & Alertes', desc: 'Risques détectés, anomalies comptables, seuils dépassés, suivi par sévérité et statut', icon: 'AlertTriangle', cat: 'Pilotage' },
   { id: 'actions', route: '/actions', name: 'Plan d\'action', desc: 'Actions correctives, responsables, échéances, priorités, taux d\'avancement, actions en retard', icon: 'ClipboardCheck', cat: 'Pilotage' },
-  // ─── Analytique : déplacé hors du catalogue ─────────────────────
-  // Tous les outils analytiques (Dashboard analytique, Plan / Axes,
-  // Codes, Règles de mapping, Affectation manuelle, Vue WBS) restent
-  // dans la page dédiée /analytical pour garder un workflow cohérent
-  // (configuration des axes → codes → règles → affectation → dashboards).
-  // Le menu Sidebar pointe directement vers /analytical.
+  // ─── ANALYTIQUE — 10 dashboards (workflow complet projet/centre/ressource) ─
+  // Les outils de configuration (axes, codes, règles, affectation) restent
+  // dans /analytical (workflow séquentiel). Ces 10 entrées sont des
+  // DASHBOARDS de pilotage, exposés au catalogue pour découvrabilité.
+  { id: 'ana_d01', route: '/analytical?tab=overview',          name: 'D01 — Vue d\'Ensemble Analytique',  desc: 'Direction · Synthèse globale tous axes : score maturité, KPIs, top/flop projets, recommandations',                                                  icon: 'PieChart',     cat: 'Analytique' },
+  { id: 'ana_d02', route: '/analytical?tab=wbs',               name: 'D02 — Pilotage Projets',            desc: 'Chef projet · Marge brute %, sparklines, bullet chart Budget vs Réalisé, top 5 projets en alerte, vue par projet',                                    icon: 'Target',       cat: 'Analytique' },
+  { id: 'ana_d03', route: '/analytical/cost-centers',          name: 'D03 — Centres de Coût',             desc: 'Contrôleur de gestion · Tableau hiérarchique, comparatif FG vs Projet, évolution mensuelle, écarts budget',                                            icon: 'Layers',       cat: 'Analytique' },
+  { id: 'ana_d04', route: '/analytical/revenue-centers',       name: 'D04 — Centres de Revenu',           desc: 'Direction commerciale · Répartition CA par centre/type, évolution mensuelle, saisonnalité, mix produit',                                              icon: 'TrendingUp',   cat: 'Analytique' },
+  { id: 'ana_d05', route: '/analytical/resources',             name: 'D05 — Ressources',                  desc: 'Chef projet/RH · Heatmap Ressource × Projet, top 20 ressources, coût moyen, taux d\'utilisation, évolution mensuelle',                              icon: 'Users',        cat: 'Analytique' },
+  { id: 'ana_d06', route: '/analytical/overhead',              name: 'D06 — Frais Généraux',              desc: 'DAF · FG isolés des coûts projets : par centre / code de gestion, ratio FG/CA, comparatif N vs N-1, top 10 postes',                                  icon: 'Wallet',       cat: 'Analytique' },
+  { id: 'ana_d07', route: '/analytical?tab=wbs',               name: 'D07 — Marge & Rentabilité',         desc: 'Direction · Pyramide marge CA → marge brute → marge nette, waterfall SIG par projet, top 5 / flop 5, break-even',                                    icon: 'GitMerge',     cat: 'Analytique' },
+  { id: 'ana_d08', route: '/analytical?tab=dashboard',         name: 'D08 — Budget vs Réalisé',           desc: 'Contrôleur de gestion · Suivi écarts par axe, barres groupées, alertes seuils, forecast fin d\'année, drill-down compte',                              icon: 'BarChart3',    cat: 'Analytique' },
+  { id: 'ana_d09', route: '/analytical/coverage',              name: 'D09 — Couverture Analytique',       desc: 'Comptable/Auditeur · Qualité de la ventilation : taux global, par journal/compte, écritures non ventilées, anomalies cohérence',                          icon: 'ShieldCheck',  cat: 'Analytique' },
+  { id: 'ana_d10', route: '/analytical/fg-allocation',         name: 'D10 — Refacturation FG',            desc: 'Contrôleur/DAF · Refacturations FG → Projets par clé de répartition, coût direct vs coût complet, simulation impact clés',                              icon: 'GitBranch',    cat: 'Analytique' },
   // ─── États SYSCOHADA officiels (NOUVEAUX) ─────────────────────
   { id: 'tft_monthly',  route: '/dashboard/tft-monthly',       name: 'TFT mensuel ★',                desc: 'Tableau des Flux de Trésorerie sur 12 mois — exploitation/investissement/financement (SYSCOHADA art. 38)', icon: 'GitBranch',      cat: 'Reporting' },
   { id: 'cap_var',      route: '/dashboard/capital-variation', name: 'Variation capitaux propres ★', desc: 'État SYSCOHADA obligatoire — apports, distributions, affectation résultat, mouvements bruts',                  icon: 'Layers',         cat: 'Reporting' },
@@ -95,7 +103,7 @@ const dashboards = [
 type ViewMode = 'cards' | 'table' | 'kanban';
 const VIEW_KEY = 'dashboards-view-mode';
 
-const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'Audit', 'Direction', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Custom'] as const;
+const CATEGORIES = ['Tous', 'Standard', 'Reporting', 'Audit', 'Direction', 'CR — Dashboards', 'CR — Tables', 'Sectoriel', 'Pilotage', 'Analytique', 'Custom'] as const;
 type Category = typeof CATEGORIES[number];
 
 export default function Dashboards() {
