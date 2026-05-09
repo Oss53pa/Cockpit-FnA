@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Line, ComposedChart } from 'recharts';
-import { Layers, Play, Plus, Settings, Trash2, Wand2, Zap } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, BarChart2, CheckCircle2, FileText, Gauge, Layers, ListChecks, Play, Plus, Printer, Settings, Target, TrendingDown, TrendingUp, Trash2, Wand2, Wallet, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -29,17 +29,17 @@ import { downloadAnalyticCodesTemplate } from '../engine/templates';
 import { parseFile } from '../engine/importer';
 import { Download, Upload } from 'lucide-react';
 
-type Tab = 'dashboard' | 'wbs' | 'axes' | 'codes' | 'rules' | 'assign';
+type Tab = 'overview' | 'dashboard' | 'wbs' | 'axes' | 'codes' | 'rules' | 'assign' | 'report';
 
 const uid = () => crypto.randomUUID();
 
-const VALID_TABS: Tab[] = ['dashboard', 'wbs', 'axes', 'codes', 'rules', 'assign'];
+const VALID_TABS: Tab[] = ['overview', 'dashboard', 'wbs', 'axes', 'codes', 'rules', 'assign', 'report'];
 
 export default function Analytical() {
   const { currentOrgId, currentYear } = useApp();
   const ct = useChartTheme();
   const [searchParams] = useSearchParams();
-  const initialTab = VALID_TABS.includes(searchParams.get('tab') as Tab) ? (searchParams.get('tab') as Tab) : 'dashboard';
+  const initialTab = VALID_TABS.includes(searchParams.get('tab') as Tab) ? (searchParams.get('tab') as Tab) : 'overview';
   const [tab, setTab] = useState<Tab>(initialTab);
   const [axes, setAxes] = useState<AnalyticAxis[]>([]);
   const [refresh, setRefresh] = useState(0);
@@ -48,12 +48,14 @@ export default function Analytical() {
   useEffect(() => { getAxes(currentOrgId).then(setAxes); }, [currentOrgId, refresh]);
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
     { key: 'dashboard', label: 'Dashboard analytique' },
     { key: 'wbs', label: 'Vue WBS (par projet)' },
     { key: 'axes', label: 'Plan analytique (Axes)' },
     { key: 'codes', label: 'Codes analytiques' },
     { key: 'rules', label: 'Règles de mapping' },
     { key: 'assign', label: 'Affectation manuelle' },
+    { key: 'report', label: 'Rapport analytique' },
   ];
 
   return (
@@ -70,12 +72,14 @@ export default function Analytical() {
         ))}
       </div>
 
+      {tab === 'overview' && <OverviewTab orgId={currentOrgId} year={currentYear} axes={axes} ct={ct} setTab={setTab} />}
       {tab === 'dashboard' && <DashboardTab orgId={currentOrgId} year={currentYear} axes={axes} ct={ct} />}
       {tab === 'wbs' && <WBSTab orgId={currentOrgId} year={currentYear} axes={axes} ct={ct} />}
       {tab === 'axes' && <AxesTab orgId={currentOrgId} axes={axes} onUpdate={bump} />}
       {tab === 'codes' && <CodesTab orgId={currentOrgId} axes={axes} onUpdate={bump} />}
       {tab === 'rules' && <RulesTab orgId={currentOrgId} axes={axes} onUpdate={bump} year={currentYear} />}
       {tab === 'assign' && <AssignTab orgId={currentOrgId} axes={axes} year={currentYear} onUpdate={bump} ct={ct} />}
+      {tab === 'report' && <ReportTab orgId={currentOrgId} year={currentYear} axes={axes} />}
     </div>
   );
 }
@@ -1182,6 +1186,696 @@ function WBSTab({ orgId, year, axes, ct }: { orgId: string; year: number; axes: 
           </p>
         </Card>
       )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OVERVIEW — synthèse exécutive du module analytique
+// ══════════════════════════════════════════════════════════════════════════════
+type OverviewStats = {
+  loading: boolean;
+  // Configuration
+  axesCount: number;
+  axesActive: number;
+  codesCount: number;
+  codesActive: number;
+  codesWithBranch: number;
+  rulesCount: number;
+  rulesActive: number;
+  // Couverture
+  totalLines: number;
+  assignedLines: number;
+  coverageRate: number;
+  byAxisCoverage: { axis: number; name: string; rate: number }[];
+  // WBS totals
+  revenue: number;
+  projectCost: number;
+  overhead: number;
+  margeBrute: number;
+  margeNette: number;
+  topProjects: { code: string; label: string; margeNette: number }[];
+  worstProjects: { code: string; label: string; margeNette: number }[];
+};
+
+function OverviewTab({
+  orgId, year, axes, ct, setTab,
+}: {
+  orgId: string; year: number; axes: AnalyticAxis[];
+  ct: ReturnType<typeof useChartTheme>;
+  setTab: (t: Tab) => void;
+}) {
+  const [stats, setStats] = useState<OverviewStats>({
+    loading: true,
+    axesCount: 0, axesActive: 0, codesCount: 0, codesActive: 0, codesWithBranch: 0,
+    rulesCount: 0, rulesActive: 0,
+    totalLines: 0, assignedLines: 0, coverageRate: 0, byAxisCoverage: [],
+    revenue: 0, projectCost: 0, overhead: 0, margeBrute: 0, margeNette: 0,
+    topProjects: [], worstProjects: [],
+  });
+
+  useEffect(() => {
+    if (!orgId) return;
+    void (async () => {
+      try {
+        const [codes, rules, coverage, periods, allEntries, assignments] = await Promise.all([
+          getCodes(orgId),
+          getRules(orgId),
+          getCoverageStats(orgId, year),
+          dataProvider.getPeriods(orgId),
+          dataProvider.getGLEntries({ orgId }),
+          dataProvider.getAnalyticAssignments(orgId),
+        ]);
+
+        const yearPeriodIds = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
+        const yearEntries = allEntries.filter((e) => yearPeriodIds.has(e.periodId));
+
+        // WBS totals
+        const codeById = new Map<string, AnalyticCode>(codes.map((c) => [c.id, c]));
+        const assignmentsByEntry = new Map<number, AnalyticAssignment[]>();
+        for (const a of assignments) {
+          if (!a.glEntryId) continue;
+          const arr = assignmentsByEntry.get(a.glEntryId) ?? [];
+          arr.push(a);
+          assignmentsByEntry.set(a.glEntryId, arr);
+        }
+
+        let revenue = 0, projectCost = 0, overhead = 0;
+        const byProject = new Map<string, { code: string; label: string; revenue: number; cost: number }>();
+
+        for (const entry of yearEntries) {
+          const ass = assignmentsByEntry.get(entry.id ?? -1) ?? [];
+          const branch = inferBranch(entry, { assignments: ass });
+          if (!branch) continue;
+          const amount = branch === 'revenue'
+            ? (entry.credit - entry.debit)
+            : (entry.debit - entry.credit);
+          if (Math.abs(amount) < 0.005) continue;
+
+          if (branch === 'revenue') revenue += amount;
+          else if (branch === 'project_cost') projectCost += amount;
+          else overhead += amount;
+
+          // Per-project tracking
+          const projAss = ass.find((a) => a.axisNumber === 1);
+          const projCode = projAss ? codeById.get(projAss.codeId) : undefined;
+          if (projCode) {
+            const key = projCode.code;
+            let row = byProject.get(key);
+            if (!row) {
+              row = { code: projCode.code, label: projCode.shortLabel, revenue: 0, cost: 0 };
+              byProject.set(key, row);
+            }
+            if (branch === 'revenue') row.revenue += amount;
+            else row.cost += amount; // project_cost ou overhead alloué
+          }
+        }
+
+        const projectArr = Array.from(byProject.values()).map((r) => ({
+          code: r.code, label: r.label, margeNette: r.revenue - r.cost,
+        }));
+        const topProjects = [...projectArr].filter((p) => p.margeNette > 0).sort((a, b) => b.margeNette - a.margeNette).slice(0, 3);
+        const worstProjects = [...projectArr].filter((p) => p.margeNette < 0).sort((a, b) => a.margeNette - b.margeNette).slice(0, 3);
+
+        setStats({
+          loading: false,
+          axesCount: axes.length,
+          axesActive: axes.filter((a) => a.active).length,
+          codesCount: codes.length,
+          codesActive: codes.filter((c) => c.active).length,
+          codesWithBranch: codes.filter((c) => !!c.branch).length,
+          rulesCount: rules.length,
+          rulesActive: rules.filter((r) => r.active).length,
+          totalLines: coverage.total,
+          assignedLines: coverage.assigned,
+          coverageRate: coverage.rate,
+          byAxisCoverage: coverage.byAxis,
+          revenue, projectCost, overhead,
+          margeBrute: revenue - projectCost,
+          margeNette: revenue - projectCost - overhead,
+          topProjects, worstProjects,
+        });
+      } catch {
+        setStats((s) => ({ ...s, loading: false }));
+      }
+    })();
+  }, [orgId, year, axes]);
+
+  if (stats.loading) {
+    return <div className="py-12 text-center text-sm text-primary-500">Chargement de la synthèse…</div>;
+  }
+
+  // Health score : pondération couverture + complétude config
+  const configScore = Math.min(100, Math.round(
+    (stats.axesActive >= 1 ? 25 : 0) +
+    (stats.codesActive >= 5 ? 25 : (stats.codesActive / 5) * 25) +
+    (stats.rulesActive >= 1 ? 25 : 0) +
+    (stats.coverageRate >= 80 ? 25 : (stats.coverageRate / 80) * 25),
+  ));
+  const configStatus: 'good' | 'warn' | 'risk' = configScore >= 75 ? 'good' : configScore >= 45 ? 'warn' : 'risk';
+  const configColor = configStatus === 'good' ? 'text-success' : configStatus === 'warn' ? 'text-warning' : 'text-error';
+
+  // Recommandations
+  const recos: { icon: typeof CheckCircle2; severity: 'info' | 'warn' | 'error'; text: string; tab?: Tab }[] = [];
+  if (stats.axesActive === 0) recos.push({ icon: AlertCircle, severity: 'error', text: 'Aucun axe analytique actif. Configurez au moins un axe (ex. Projet) pour commencer.', tab: 'axes' });
+  if (stats.codesActive === 0) recos.push({ icon: AlertCircle, severity: 'error', text: 'Aucun code analytique. Importez ou créez des codes pour pouvoir affecter les écritures.', tab: 'codes' });
+  if (stats.rulesActive === 0 && stats.codesActive > 0) recos.push({ icon: AlertCircle, severity: 'warn', text: 'Aucune règle de mapping active. L\'affectation reste 100% manuelle — considérez automatiser.', tab: 'rules' });
+  if (stats.coverageRate < 50 && stats.totalLines > 0) recos.push({ icon: TrendingDown, severity: 'warn', text: `Couverture seulement ${stats.coverageRate}%. Lancez les règles ou affectez les lignes manquantes.`, tab: 'assign' });
+  if (stats.codesWithBranch === 0 && stats.codesActive > 0) recos.push({ icon: AlertCircle, severity: 'info', text: 'Aucun code n\'utilise les branches WBS (Revenus / Coûts projets / FG). Activez la sémantique conditionnelle.', tab: 'codes' });
+  if (stats.worstProjects.length > 0) {
+    const w = stats.worstProjects[0];
+    recos.push({ icon: TrendingDown, severity: 'warn', text: `Projet ${w.code} (${w.label}) en perte : ${fmtFull(w.margeNette)}. À analyser en priorité.`, tab: 'wbs' });
+  }
+  if (recos.length === 0) {
+    recos.push({ icon: CheckCircle2, severity: 'info', text: 'Configuration analytique saine. Continuez à enrichir les codes pour affiner les analyses.' });
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header avec score + verdict */}
+      <Card padded>
+        <div className="flex flex-col sm:flex-row gap-6 items-center">
+          <div className="relative w-28 h-28 shrink-0">
+            <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+              <circle cx="60" cy="60" r="50" stroke="currentColor" strokeWidth="8" className="text-primary-200 dark:text-primary-800" fill="none" />
+              <circle
+                cx="60" cy="60" r="50"
+                stroke="currentColor" strokeWidth="8" fill="none"
+                strokeDasharray={`${(configScore / 100) * 314} 314`}
+                className={configColor}
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className={`text-3xl font-bold num ${configColor}`}>{configScore}</span>
+              <span className="text-[10px] uppercase tracking-wider text-primary-500">/ 100</span>
+            </div>
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <Gauge className={`w-4 h-4 ${configColor}`} />
+              <p className={`text-xs font-bold uppercase tracking-wider ${configColor}`}>
+                {configStatus === 'good' ? 'Configuration saine' : configStatus === 'warn' ? 'Configuration à enrichir' : 'Configuration incomplète'}
+              </p>
+            </div>
+            <h3 className="text-lg font-bold text-primary-900 dark:text-primary-100 mb-2">
+              Score de maturité analytique
+            </h3>
+            <p className="text-sm text-primary-600 dark:text-primary-400">
+              Pondération : couverture {stats.coverageRate}% · {stats.axesActive} axe(s) actif(s) ·
+              {' '}{stats.codesActive} code(s) actif(s) · {stats.rulesActive} règle(s) actives.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* KPIs configuration & couverture */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <KPI label="Axes actifs" value={`${stats.axesActive}/${stats.axesCount}`} sub="jusqu'à 5 axes" />
+        <KPI label="Codes actifs" value={`${stats.codesActive}/${stats.codesCount}`} sub={`${stats.codesWithBranch} typés WBS`} />
+        <KPI label="Règles" value={`${stats.rulesActive}/${stats.rulesCount}`} sub="mapping automatique" />
+        <KPI label="Couverture" value={`${stats.coverageRate} %`} sub={`${stats.assignedLines}/${stats.totalLines} lignes`} highlight={stats.coverageRate >= 70} />
+        <KPI label="Revenus" value={fmtFull(stats.revenue)} />
+        <KPI label="Marge brute" value={fmtFull(stats.margeBrute)} highlight={stats.margeBrute >= 0} />
+        <KPI label="Marge nette" value={fmtFull(stats.margeNette)} highlight={stats.margeNette >= 0} />
+      </div>
+
+      {/* Couverture par axe */}
+      {stats.byAxisCoverage.length > 1 && (
+        <ChartCard title="Couverture par axe">
+          <ResponsiveContainer width="100%" height={Math.max(140, stats.byAxisCoverage.length * 36)}>
+            <BarChart data={stats.byAxisCoverage} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10 }} />
+              <Tooltip formatter={(v) => `${v} %`} />
+              <Bar dataKey="rate" name="Couverture" fill={ct.at(2)} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      )}
+
+      {/* Top / Flop projets */}
+      {(stats.topProjects.length > 0 || stats.worstProjects.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {stats.topProjects.length > 0 && (
+            <Card title="Top 3 projets profitables" padded={false}>
+              <ul className="divide-y divide-primary-100 dark:divide-primary-800">
+                {stats.topProjects.map((p) => (
+                  <li key={p.code} className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <div>
+                        <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">{p.code}</p>
+                        <p className="text-[11px] text-primary-500">{p.label}</p>
+                      </div>
+                    </div>
+                    <p className="num text-sm font-bold text-success">{fmtFull(p.margeNette)}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          {stats.worstProjects.length > 0 && (
+            <Card title="Top 3 projets en perte" padded={false}>
+              <ul className="divide-y divide-primary-100 dark:divide-primary-800">
+                {stats.worstProjects.map((p) => (
+                  <li key={p.code} className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <TrendingDown className="w-4 h-4 text-error" />
+                      <div>
+                        <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">{p.code}</p>
+                        <p className="text-[11px] text-primary-500">{p.label}</p>
+                      </div>
+                    </div>
+                    <p className="num text-sm font-bold text-error">{fmtFull(p.margeNette)}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Recommandations / actions */}
+      <Card title="Recommandations & actions" padded>
+        <ul className="space-y-2">
+          {recos.map((r, i) => {
+            const Icon = r.icon;
+            const color = r.severity === 'error' ? 'text-error' : r.severity === 'warn' ? 'text-warning' : 'text-primary-500';
+            return (
+              <li key={i} className="flex items-start gap-3 p-3 rounded-lg bg-primary-50 dark:bg-primary-900/40">
+                <Icon className={`w-4 h-4 ${color} shrink-0 mt-0.5`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-primary-800 dark:text-primary-200">{r.text}</p>
+                </div>
+                {r.tab && (
+                  <button
+                    className="text-xs text-accent hover:underline whitespace-nowrap inline-flex items-center gap-1"
+                    onClick={() => setTab(r.tab!)}
+                  >
+                    Aller <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+
+      {/* Quick links vers les autres tabs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <QuickLink icon={BarChart2} label="Dashboard analytique" desc="KPIs & charts par axe" onClick={() => setTab('dashboard')} />
+        <QuickLink icon={Target} label="Vue WBS" desc="Marge par projet" onClick={() => setTab('wbs')} />
+        <QuickLink icon={Wand2} label="Règles de mapping" desc="Affectation auto" onClick={() => setTab('rules')} />
+        <QuickLink icon={ListChecks} label="Affectation manuelle" desc="Lignes non affectées" onClick={() => setTab('assign')} />
+      </div>
+    </div>
+  );
+}
+
+function QuickLink({ icon: Icon, label, desc, onClick }: { icon: typeof CheckCircle2; label: string; desc: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="rounded-xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-primary-950 p-4 hover:border-accent hover:bg-accent/5 transition group text-left"
+    >
+      <Icon className="w-5 h-5 text-accent mb-2" />
+      <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">{label}</p>
+      <p className="text-xs text-primary-500 mt-0.5">{desc}</p>
+      <ArrowRight className="w-3 h-3 text-primary-400 mt-2 group-hover:text-accent transition" />
+    </button>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RAPPORT ANALYTIQUE — synthèse imprimable + export Excel
+// ══════════════════════════════════════════════════════════════════════════════
+type ReportData = {
+  loading: boolean;
+  generatedAt: Date;
+  // Synthèse
+  totalLines: number;
+  assignedLines: number;
+  coverageRate: number;
+  // P&L global
+  revenue: number;
+  projectCost: number;
+  overhead: number;
+  margeBrute: number;
+  margeNette: number;
+  resultPct: number;
+  // Per-project P&L
+  projects: { code: string; label: string; revenue: number; projectCost: number; overhead: number; margeBrute: number; margeNette: number; pctMarge: number }[];
+  // Top codes par axe
+  byAxis: { axisNumber: number; axisName: string; topCodes: AnalyticDashRow[] }[];
+  // Anomalies
+  anomalies: string[];
+};
+
+function ReportTab({ orgId, year, axes }: { orgId: string; year: number; axes: AnalyticAxis[] }) {
+  const org = useApp((s) => s.currentOrgId);
+  const [data, setData] = useState<ReportData>({
+    loading: true,
+    generatedAt: new Date(),
+    totalLines: 0, assignedLines: 0, coverageRate: 0,
+    revenue: 0, projectCost: 0, overhead: 0, margeBrute: 0, margeNette: 0, resultPct: 0,
+    projects: [], byAxis: [], anomalies: [],
+  });
+
+  useEffect(() => {
+    if (!orgId) return;
+    void (async () => {
+      try {
+        const [coverage, periods, allEntries, assignments, codes] = await Promise.all([
+          getCoverageStats(orgId, year),
+          dataProvider.getPeriods(orgId),
+          dataProvider.getGLEntries({ orgId }),
+          dataProvider.getAnalyticAssignments(orgId),
+          dataProvider.getAnalyticCodes(orgId),
+        ]);
+
+        const yearPeriodIds = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
+        const yearEntries = allEntries.filter((e) => yearPeriodIds.has(e.periodId));
+
+        // Per-project + global
+        const codeById = new Map<string, AnalyticCode>(codes.map((c) => [c.id, c]));
+        const assignmentsByEntry = new Map<number, AnalyticAssignment[]>();
+        for (const a of assignments) {
+          if (!a.glEntryId) continue;
+          const arr = assignmentsByEntry.get(a.glEntryId) ?? [];
+          arr.push(a);
+          assignmentsByEntry.set(a.glEntryId, arr);
+        }
+
+        const byProject = new Map<string, { code: string; label: string; revenue: number; projectCost: number; overhead: number }>();
+        let totalRevenue = 0, totalProjectCost = 0, totalOverhead = 0;
+        let unallocatedOverhead = 0;
+        let entriesWithoutBranch = 0;
+
+        for (const entry of yearEntries) {
+          const ass = assignmentsByEntry.get(entry.id ?? -1) ?? [];
+          const branch = inferBranch(entry, { assignments: ass });
+          if (!branch) { entriesWithoutBranch++; continue; }
+          const amount = branch === 'revenue'
+            ? (entry.credit - entry.debit)
+            : (entry.debit - entry.credit);
+          if (Math.abs(amount) < 0.005) continue;
+
+          if (branch === 'revenue') totalRevenue += amount;
+          else if (branch === 'project_cost') totalProjectCost += amount;
+          else totalOverhead += amount;
+
+          const projAss = ass.find((a) => a.axisNumber === 1);
+          const projCode = projAss ? codeById.get(projAss.codeId) : undefined;
+          if (branch === 'overhead' && !projCode) {
+            unallocatedOverhead += amount;
+            continue;
+          }
+          const key = projCode?.code ?? '__no_project__';
+          const label = projCode?.shortLabel ?? '— Sans projet —';
+          let row = byProject.get(key);
+          if (!row) {
+            row = { code: key === '__no_project__' ? '—' : key, label, revenue: 0, projectCost: 0, overhead: 0 };
+            byProject.set(key, row);
+          }
+          if (branch === 'revenue') row.revenue += amount;
+          else if (branch === 'project_cost') row.projectCost += amount;
+          else row.overhead += amount;
+        }
+
+        const projects = Array.from(byProject.values()).map((r) => {
+          const margeBrute = r.revenue - r.projectCost;
+          const margeNette = r.revenue - r.projectCost - r.overhead;
+          return {
+            ...r, margeBrute, margeNette,
+            pctMarge: r.revenue > 0 ? (margeNette / r.revenue) * 100 : 0,
+          };
+        }).sort((a, b) => b.revenue - a.revenue);
+
+        // Top codes par axe (top 5 par axe)
+        const byAxis = await Promise.all(
+          axes.filter((a) => a.active).map(async (a) => {
+            const rows = await computeAnalyticDashboard(orgId, year, a.number);
+            return {
+              axisNumber: a.number,
+              axisName: a.name,
+              topCodes: rows.filter((r) => r.codeId !== '__unassigned__').slice(0, 5),
+            };
+          }),
+        );
+
+        // Anomalies
+        const anomalies: string[] = [];
+        if (coverage.rate < 80 && coverage.total > 0) {
+          anomalies.push(`Couverture analytique de ${coverage.rate}% — ${coverage.total - coverage.assigned} ligne(s) non affectée(s).`);
+        }
+        if (unallocatedOverhead > 0) {
+          anomalies.push(`Frais généraux non alloués à un projet : ${fmtFull(unallocatedOverhead)}. Configurez une clé de répartition.`);
+        }
+        if (entriesWithoutBranch > 0) {
+          anomalies.push(`${entriesWithoutBranch} écriture(s) hors classes 6/7 (capitaux, immo, tiers, trésorerie) — non analytiques au sens WBS.`);
+        }
+        const totalRevenue2 = totalRevenue;
+        if (totalRevenue2 === 0 && totalProjectCost > 0) {
+          anomalies.push('Coûts projets enregistrés mais aucun revenu — vérifier la saisie ou la branche des codes.');
+        }
+        if (anomalies.length === 0) {
+          anomalies.push('Aucune anomalie majeure détectée.');
+        }
+
+        setData({
+          loading: false,
+          generatedAt: new Date(),
+          totalLines: coverage.total,
+          assignedLines: coverage.assigned,
+          coverageRate: coverage.rate,
+          revenue: totalRevenue, projectCost: totalProjectCost, overhead: totalOverhead,
+          margeBrute: totalRevenue - totalProjectCost,
+          margeNette: totalRevenue - totalProjectCost - totalOverhead,
+          resultPct: totalRevenue > 0 ? ((totalRevenue - totalProjectCost - totalOverhead) / totalRevenue) * 100 : 0,
+          projects, byAxis, anomalies,
+        });
+      } catch {
+        setData((d) => ({ ...d, loading: false }));
+      }
+    })();
+  }, [orgId, year, axes]);
+
+  const exportExcel = async () => {
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const { saveAs } = await import('file-saver');
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Cockpit FnA';
+      wb.created = new Date();
+
+      const wsSyn = wb.addWorksheet('Synthèse');
+      wsSyn.addRow(['RAPPORT ANALYTIQUE']).font = { bold: true, size: 16 };
+      wsSyn.addRow([`Société : ${org}`]);
+      wsSyn.addRow([`Exercice : ${year}`]);
+      wsSyn.addRow([`Généré le : ${data.generatedAt.toLocaleString('fr-FR')}`]);
+      wsSyn.addRow([]);
+      wsSyn.addRow(['INDICATEURS']).font = { bold: true, size: 13 };
+      wsSyn.addRow(['Couverture analytique', `${data.coverageRate} %`, `${data.assignedLines} / ${data.totalLines} lignes`]);
+      wsSyn.addRow(['Revenus', data.revenue]);
+      wsSyn.addRow(['Coûts projets', data.projectCost]);
+      wsSyn.addRow(['Marge brute', data.margeBrute]);
+      wsSyn.addRow(['Frais généraux', data.overhead]);
+      wsSyn.addRow(['Marge nette', data.margeNette]);
+      wsSyn.addRow(['% marge nette', `${data.resultPct.toFixed(1)} %`]);
+      wsSyn.getColumn(1).width = 30;
+      wsSyn.getColumn(2).width = 22;
+      wsSyn.getColumn(3).width = 30;
+
+      const wsProj = wb.addWorksheet('P&L par projet');
+      wsProj.addRow(['Projet', 'Libellé', 'Revenus', 'Coûts projets', 'Marge brute', 'FG alloués', 'Marge nette', '% marge nette']);
+      data.projects.forEach((p) => wsProj.addRow([p.code, p.label, p.revenue, p.projectCost, p.margeBrute, p.overhead, p.margeNette, Number(p.pctMarge.toFixed(2))]));
+      wsProj.getRow(1).font = { bold: true };
+      wsProj.columns = [
+        { width: 12 }, { width: 30 }, { width: 16 }, { width: 16 },
+        { width: 16 }, { width: 14 }, { width: 16 }, { width: 12 },
+      ];
+
+      data.byAxis.forEach((axis) => {
+        const ws = wb.addWorksheet(`Axe ${axis.axisNumber} ${axis.axisName}`.substring(0, 31));
+        ws.addRow(['Code', 'Libellé', 'Charges', 'Produits', 'Résultat', 'Budget', 'Écart']);
+        axis.topCodes.forEach((c) => ws.addRow([c.code, c.label, c.charges, c.produits, c.resultat, c.budget, c.ecart]));
+        ws.getRow(1).font = { bold: true };
+        ws.columns = [{ width: 14 }, { width: 30 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }];
+      });
+
+      const wsAnom = wb.addWorksheet('Anomalies');
+      wsAnom.addRow(['#', 'Anomalie / observation']).font = { bold: true };
+      data.anomalies.forEach((a, i) => wsAnom.addRow([i + 1, a]));
+      wsAnom.columns = [{ width: 6 }, { width: 100 }];
+
+      const buf = await wb.xlsx.writeBuffer();
+      saveAs(new Blob([buf]), `Rapport_Analytique_${year}.xlsx`);
+      toast.success('Rapport exporté en Excel');
+    } catch (e) {
+      toast.error('Échec export', (e as Error).message);
+    }
+  };
+
+  if (data.loading) {
+    return <div className="py-12 text-center text-sm text-primary-500">Génération du rapport…</div>;
+  }
+
+  return (
+    <div className="space-y-6 print:space-y-3">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between print:hidden">
+        <div>
+          <h2 className="text-base font-bold text-primary-900 dark:text-primary-100 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-accent" />
+            Rapport analytique · Exercice {year}
+          </h2>
+          <p className="text-xs text-primary-500 mt-0.5">
+            Généré le {data.generatedAt.toLocaleString('fr-FR')}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="btn-outline text-sm"
+            onClick={() => window.print()}
+            title="Imprimer / PDF"
+          >
+            <Printer className="w-4 h-4" /> Imprimer
+          </button>
+          <button
+            className="btn-primary text-sm"
+            onClick={exportExcel}
+            title="Exporter Excel"
+          >
+            <Download className="w-4 h-4" /> Exporter Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Header imprimable */}
+      <div className="hidden print:block border-b pb-2 mb-2">
+        <h1 className="text-xl font-bold">RAPPORT ANALYTIQUE — Exercice {year}</h1>
+        <p className="text-xs text-gray-600">Généré le {data.generatedAt.toLocaleString('fr-FR')}</p>
+      </div>
+
+      {/* Section 1 : Synthèse exécutive */}
+      <Card title="1. Synthèse exécutive" padded>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <KPI label="Couverture" value={`${data.coverageRate} %`} sub={`${data.assignedLines} / ${data.totalLines} lignes`} />
+          <KPI label="Revenus" value={fmtFull(data.revenue)} />
+          <KPI label="Coûts projets" value={fmtFull(data.projectCost)} />
+          <KPI label="Marge brute" value={fmtFull(data.margeBrute)} highlight={data.margeBrute >= 0} />
+          <KPI label="Frais généraux" value={fmtFull(data.overhead)} />
+          <KPI label="Marge nette" value={fmtFull(data.margeNette)} sub={`${data.resultPct.toFixed(1)} % du CA`} highlight={data.margeNette >= 0} />
+        </div>
+      </Card>
+
+      {/* Section 2 : P&L par projet */}
+      {data.projects.length > 0 && (
+        <Card title="2. Compte de résultat par projet (WBS)" padded={false}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-primary-100 dark:bg-primary-900">
+                <tr>
+                  <th className="text-left px-3 py-2">Projet</th>
+                  <th className="text-left px-3 py-2">Libellé</th>
+                  <th className="text-right px-3 py-2">Revenus</th>
+                  <th className="text-right px-3 py-2">Coûts projets</th>
+                  <th className="text-right px-3 py-2">Marge brute</th>
+                  <th className="text-right px-3 py-2">FG alloués</th>
+                  <th className="text-right px-3 py-2">Marge nette</th>
+                  <th className="text-right px-3 py-2">% marge</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.projects.map((p) => {
+                  const negative = p.margeNette < 0;
+                  return (
+                    <tr key={p.code} className="border-b border-primary-100 dark:border-primary-800">
+                      <td className="px-3 py-2 font-mono font-semibold">{p.code}</td>
+                      <td className="px-3 py-2">{p.label}</td>
+                      <td className="px-3 py-2 text-right num">{fmtFull(p.revenue)}</td>
+                      <td className="px-3 py-2 text-right num">{fmtFull(p.projectCost)}</td>
+                      <td className={clsx('px-3 py-2 text-right num font-semibold', p.margeBrute < 0 && 'text-error')}>
+                        {fmtFull(p.margeBrute)}
+                      </td>
+                      <td className="px-3 py-2 text-right num">{fmtFull(p.overhead)}</td>
+                      <td className={clsx('px-3 py-2 text-right num font-bold', negative && 'text-error')}>
+                        {fmtFull(p.margeNette)}
+                      </td>
+                      <td className={clsx('px-3 py-2 text-right num', negative && 'text-error')}>
+                        {p.pctMarge.toFixed(1)} %
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Section 3 : Top codes par axe */}
+      {data.byAxis.length > 0 && (
+        <Card title="3. Top 5 par axe analytique" padded>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {data.byAxis.map((axis) => (
+              <div key={axis.axisNumber}>
+                <h4 className="text-sm font-bold text-primary-800 dark:text-primary-200 mb-2">
+                  Axe {axis.axisNumber} — {axis.axisName}
+                </h4>
+                {axis.topCodes.length === 0 ? (
+                  <p className="text-xs text-primary-400 italic">Aucune affectation sur cet axe.</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-primary-500 border-b border-primary-200 dark:border-primary-700">
+                        <th className="text-left py-1.5">Code</th>
+                        <th className="text-left py-1.5">Libellé</th>
+                        <th className="text-right py-1.5">Résultat</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {axis.topCodes.map((c) => (
+                        <tr key={c.codeId} className="border-b border-primary-100 dark:border-primary-800">
+                          <td className="py-1.5 font-mono">{c.code}</td>
+                          <td className="py-1.5">{c.label}</td>
+                          <td className={clsx('py-1.5 text-right num font-semibold', c.resultat < 0 && 'text-error')}>
+                            {fmtFull(c.resultat)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Section 4 : Anomalies & recommandations */}
+      <Card title="4. Anomalies & observations" padded>
+        <ul className="space-y-2">
+          {data.anomalies.map((a, i) => {
+            const isOk = a.toLowerCase().includes('aucune anomalie');
+            const Icon = isOk ? CheckCircle2 : AlertCircle;
+            const color = isOk ? 'text-success' : 'text-warning';
+            return (
+              <li key={i} className="flex items-start gap-3">
+                <Icon className={`w-4 h-4 ${color} shrink-0 mt-0.5`} />
+                <span className="text-sm text-primary-800 dark:text-primary-200">{a}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+
+      {/* Footer imprimable */}
+      <div className="hidden print:block text-[10px] text-gray-500 border-t pt-2 mt-4">
+        Cockpit FnA · Rapport analytique généré le {data.generatedAt.toLocaleString('fr-FR')} · SYSCOHADA révisé 2017
+      </div>
     </div>
   );
 }
