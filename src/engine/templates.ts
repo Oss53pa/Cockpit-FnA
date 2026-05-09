@@ -387,6 +387,59 @@ export async function downloadCOATemplate(orgName?: string) {
   saveAs(new Blob([buf]), `Modele_PlanComptable_${orgName ? orgName.replace(/\s+/g, '_') + '_' : ''}.xlsx`);
 }
 
+// ─── TEMPLATE AXES ANALYTIQUES ─────────────────────────────────────
+export async function downloadAnalyticAxesTemplate(orgName?: string) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Cockpit FnA';
+  wb.created = new Date();
+
+  // Feuille 1 : INSTRUCTIONS
+  const wsInfo = wb.addWorksheet('Instructions');
+  wsInfo.addRow(['MODÈLE D\'IMPORT — AXES ANALYTIQUES']).font = { bold: true, size: 16 };
+  wsInfo.addRow([`Société : ${orgName ?? 'À renseigner'}`]);
+  wsInfo.addRow([]);
+  wsInfo.addRow(['CONSIGNES DE REMPLISSAGE']).font = { bold: true, size: 13 };
+  [
+    '1. Une ligne = un axe analytique (jusqu\'à 5 axes par société).',
+    '2. Numéro : entier 1 à 5 (Axe 1 conventionnellement = Projet).',
+    '3. Nom : libellé court de l\'axe (ex : "Projet", "Centre de coût", "Ressource").',
+    '4. Nom du code : libellé du champ "code" (ex : "Code projet", "Code CC").',
+    '5. Obligatoire : 1 si l\'affectation sur cet axe est requise, 0 sinon.',
+    '6. Actif : 1 = actif, 0 = inactif.',
+    '7. Importer ensuite les codes analytiques (modèle séparé) qui référencent ces axes.',
+    '8. Convention WBS Cockpit FnA : Axe 1 = Projet (commun), Axe 2 = Centre, Axe 3 = Ressource/Type.',
+  ].forEach((c) => wsInfo.addRow([c]));
+  wsInfo.getColumn(1).width = 110;
+
+  // Feuille 2 : AXES
+  const ws = wb.addWorksheet('Axes analytiques');
+  const headers = ['Numéro', 'Nom', 'Nom du code', 'Obligatoire', 'Actif'];
+  ws.addRow(headers);
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell((c) => { c.fill = HEADER_FILL; c.font = HEADER_FONT; c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+  headerRow.height = 22;
+
+  // Convention WBS — 3 axes types
+  const samples = [
+    [1, 'Projet',          'Code projet',         1, 1],
+    [2, 'Centre',           'Code centre',         0, 1],
+    [3, 'Ressource / Type', 'Code ressource',      0, 1],
+    [4, 'Région',           'Code région',         0, 0],
+    [5, 'Activité',         'Code activité',       0, 0],
+  ];
+  samples.forEach((row, i) => {
+    const r = ws.addRow(row);
+    if (i % 2 === 0) r.eachCell((c) => { c.fill = ALT_FILL; });
+  });
+
+  ws.columns = [{ width: 10 }, { width: 26 }, { width: 22 }, { width: 14 }, { width: 10 }];
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
+
+  const buf = await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf]), `Modele_AxesAnalytiques_${orgName ? orgName.replace(/\s+/g, '_') + '_' : ''}.xlsx`);
+}
+
 // ─── TEMPLATE CODES ANALYTIQUES (WBS) ──────────────────────────────
 export async function downloadAnalyticCodesTemplate(orgName?: string) {
   const wb = new ExcelJS.Workbook();

@@ -5,7 +5,11 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import { ResponsivePie } from '@nivo/pie';
-import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload } from 'lucide-react';
+import { Download, Sparkles, TrendingUp, Wallet, Activity, BadgeDollarSign, ArrowDownToLine, ArrowUpFromLine, Upload, PieChart, ArrowRight, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useCloudData } from '../hooks/useCloudData';
+import { dataProvider } from '../db/provider';
+import { inferBranch } from '../engine/analyticBranch';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { SyncStatusPanel } from '../components/ui/SyncStatusPanel';
@@ -340,10 +344,175 @@ export default function DashboardHome() {
         </div>
       </>}
 
+      <AnalyticalSummary orgId={currentOrgId} year={currentYear} />
+
       <div className="mt-5 pt-3 border-t border-primary-200 dark:border-primary-800 flex justify-between items-center text-[11px] text-primary-400">
         <span>Dernière synchronisation : {new Date().toLocaleString('fr-FR')}</span>
         <span>Cockpit FnA v0.2 — SYSCOHADA révisé 2017</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * AnalyticalSummary — bloc inséré dans la Vue d'ensemble si l'utilisateur
+ * utilise la comptabilité analytique (axes ou assignments existent).
+ *
+ * Affiche : couverture, top projet (marge nette), nb projets actifs,
+ * et un lien rapide vers la Vue WBS / Diagnostic Couverture.
+ */
+function AnalyticalSummary({ orgId, year }: { orgId: string; year: number }) {
+  const { data } = useCloudData<{
+    used: boolean;
+    coverageRate: number;
+    activeAxes: number;
+    activeRules: number;
+    topProject: { code: string; label: string; margin: number } | null;
+    projectCount: number;
+    eligibleEntries: number;
+  }>(
+    async () => {
+      if (!orgId) return { used: false, coverageRate: 0, activeAxes: 0, activeRules: 0, topProject: null, projectCount: 0, eligibleEntries: 0 };
+      const [axes, assignments, rules, codes, periods, allEntries] = await Promise.all([
+        dataProvider.getAnalyticAxes(orgId),
+        dataProvider.getAnalyticAssignments(orgId),
+        dataProvider.getAnalyticRules(orgId),
+        dataProvider.getAnalyticCodes(orgId),
+        dataProvider.getPeriods(orgId),
+        dataProvider.getGLEntries({ orgId }),
+      ]);
+      const activeAxes = axes.filter((a) => a.active).length;
+      const used = activeAxes > 0 || assignments.length > 0;
+      if (!used) return { used: false, coverageRate: 0, activeAxes: 0, activeRules: 0, topProject: null, projectCount: 0, eligibleEntries: 0 };
+
+      const yearPeriodIds = new Set(periods.filter((p) => p.year === year && p.month >= 1).map((p) => p.id));
+      const yearEntries = allEntries.filter((e) => yearPeriodIds.has(e.periodId));
+      const eligible = yearEntries.filter((e) => e.account.startsWith('6') || e.account.startsWith('7'));
+
+      const codeById = new Map(codes.map((c) => [c.id, c]));
+      const assByEntry = new Map<number, typeof assignments>();
+      for (const a of assignments) {
+        if (!a.glEntryId) continue;
+        const arr = assByEntry.get(a.glEntryId) ?? [];
+        arr.push(a);
+        assByEntry.set(a.glEntryId, arr);
+      }
+
+      const eligibleCount = eligible.length;
+      const assignedSet = new Set<number>();
+      for (const e of eligible) {
+        if (e.id !== undefined && assByEntry.has(e.id)) assignedSet.add(e.id);
+      }
+      const coverageRate = eligibleCount > 0 ? Math.round((assignedSet.size / eligibleCount) * 100) : 0;
+
+      // Calcul top projet (marge nette = revenus - coûts - FG par projet)
+      const byProject = new Map<string, { code: string; label: string; revenue: number; cost: number }>();
+      for (const e of yearEntries) {
+        const ass = assByEntry.get(e.id ?? -1) ?? [];
+        const branch = inferBranch(e, { assignments: ass });
+        if (!branch) continue;
+        const amount = branch === 'revenue' ? (e.credit - e.debit) : (e.debit - e.credit);
+        if (Math.abs(amount) < 0.005) continue;
+        const projAss = ass.find((a) => a.axisNumber === 1);
+        const projCode = projAss ? codeById.get(projAss.codeId) : undefined;
+        if (!projCode) continue;
+        const key = projCode.code;
+        let row = byProject.get(key);
+        if (!row) {
+          row = { code: projCode.code, label: projCode.shortLabel, revenue: 0, cost: 0 };
+          byProject.set(key, row);
+        }
+        if (branch === 'revenue') row.revenue += amount;
+        else row.cost += amount;
+      }
+      const projects = Array.from(byProject.values()).map((p) => ({ ...p, margin: p.revenue - p.cost }));
+      const topProject = projects.sort((a, b) => b.margin - a.margin)[0] ?? null;
+
+      return {
+        used: true,
+        coverageRate,
+        activeAxes,
+        activeRules: rules.filter((r) => r.active).length,
+        topProject: topProject ? { code: topProject.code, label: topProject.label, margin: topProject.margin } : null,
+        projectCount: projects.length,
+        eligibleEntries: eligibleCount,
+      };
+    },
+    [orgId, year],
+    {
+      initial: { used: false, coverageRate: 0, activeAxes: 0, activeRules: 0, topProject: null, projectCount: 0, eligibleEntries: 0 },
+      tag: ['analyticAxes', 'analyticAssignments', 'gl'],
+    },
+  );
+
+  if (!data.used) return null;
+
+  const lowCoverage = data.coverageRate < 70;
+
+  return (
+    <div className="rounded-2xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-primary-950 p-5 mt-5 animate-fade-in-up">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center">
+            <PieChart className="w-4 h-4 text-accent" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-primary-900 dark:text-primary-100">Comptabilité analytique</h3>
+            <p className="text-[11px] text-primary-500">Pilotage par projet / centre / ressource</p>
+          </div>
+        </div>
+        <Link to="/analytical" className="text-xs text-accent hover:underline inline-flex items-center gap-1">
+          Ouvrir le module <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-lg bg-primary-50 dark:bg-primary-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-wider text-primary-500">Couverture</p>
+          <p className={`num text-xl font-bold mt-0.5 ${lowCoverage ? 'text-warning' : 'text-success'}`}>
+            {data.coverageRate} %
+          </p>
+          <p className="text-[10px] text-primary-400">{data.eligibleEntries.toLocaleString('fr-FR')} lignes éligibles</p>
+        </div>
+        <div className="rounded-lg bg-primary-50 dark:bg-primary-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-wider text-primary-500">Axes / Règles</p>
+          <p className="num text-xl font-bold mt-0.5">{data.activeAxes} / {data.activeRules}</p>
+          <p className="text-[10px] text-primary-400">configurés actifs</p>
+        </div>
+        <div className="rounded-lg bg-primary-50 dark:bg-primary-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-wider text-primary-500">Projets actifs</p>
+          <p className="num text-xl font-bold mt-0.5">{data.projectCount}</p>
+          <p className="text-[10px] text-primary-400">avec mouvement {year}</p>
+        </div>
+        {data.topProject ? (
+          <div className="rounded-lg bg-success/10 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-success">Top projet</p>
+            <p className="text-sm font-bold text-primary-900 dark:text-primary-100 mt-0.5 truncate">{data.topProject.code}</p>
+            <p className={`num text-xs mt-0.5 ${data.topProject.margin >= 0 ? 'text-success' : 'text-error'}`}>
+              {fmtFull(data.topProject.margin)}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-warning/10 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-warning">Pas de projet</p>
+            <p className="text-xs mt-1 text-primary-700 dark:text-primary-300">
+              Aucune affectation sur l'axe 1 (Projet).
+            </p>
+          </div>
+        )}
+      </div>
+
+      {lowCoverage && (
+        <div className="flex items-start gap-2 mt-3 p-2.5 rounded-lg bg-warning/10 border-l-2 border-warning">
+          <AlertCircle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+          <p className="text-xs text-primary-700 dark:text-primary-300">
+            La couverture analytique est faible ({data.coverageRate} %).{' '}
+            <Link to="/analytical/coverage" className="text-accent underline hover:opacity-80">
+              Voir les écritures non ventilées →
+            </Link>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

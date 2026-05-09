@@ -16,14 +16,14 @@ import { Link } from 'react-router-dom';
 import {
   Stethoscope, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   Activity, Wallet, Users, BarChart3, ArrowRight, Heart, AlertCircle,
-  ShieldCheck, Target,
+  ShieldCheck, Target, PieChart,
 } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { useApp } from '../store/app';
 import { useBalance, useStatements, useRatios, useMonthlyCA } from '../hooks/useFinancials';
 import { useCloudData } from '../hooks/useCloudData';
 import { dataProvider } from '../db/provider';
-import type { AttentionPoint } from '../db/schema';
+import type { AttentionPoint, AnalyticAxis, AnalyticAssignment, AnalyticRule } from '../db/schema';
 import { fmtMoney } from '../lib/format';
 import { isDemoActive, DEMO_ATTENTION_POINTS } from '../engine/demoFixtures';
 
@@ -55,6 +55,23 @@ export default function CompanyDiagnostic() {
   const attentionPoints = isDemoActive(currentOrgId) && attentionPointsRaw.length === 0
     ? DEMO_ATTENTION_POINTS
     : attentionPointsRaw;
+
+  // Charge l'analytique (axes, assignations, règles) pour la dimension "Analytique"
+  const { data: analyticData } = useCloudData<{ axes: AnalyticAxis[]; assignments: AnalyticAssignment[]; rules: AnalyticRule[]; eligibleEntries: number }>(
+    async () => {
+      if (!currentOrgId) return { axes: [], assignments: [], rules: [], eligibleEntries: 0 };
+      const [axes, assignments, rules, entries] = await Promise.all([
+        dataProvider.getAnalyticAxes(currentOrgId),
+        dataProvider.getAnalyticAssignments(currentOrgId),
+        dataProvider.getAnalyticRules(currentOrgId),
+        dataProvider.getGLEntries({ orgId: currentOrgId }),
+      ]);
+      const eligibleEntries = entries.filter((e) => e.account.startsWith('6') || e.account.startsWith('7')).length;
+      return { axes, assignments, rules, eligibleEntries };
+    },
+    [currentOrgId],
+    { initial: { axes: [], assignments: [], rules: [], eligibleEntries: 0 }, tag: ['analyticAxes', 'analyticAssignments'] },
+  );
 
   // Anomalies GL — calculées synchroniquement depuis la balance
   const anomalies = useMemo(() => {
@@ -158,45 +175,80 @@ export default function CompanyDiagnostic() {
     const openCritical = (attentionPoints || []).filter((a) => a.status !== 'resolved' && (a.severity === 'critical' || a.severity === 'high')).length;
     const vigScore = openCritical === 0 ? 90 : openCritical <= 2 ? 65 : openCritical <= 4 ? 45 : 25;
 
-    return [
+    // 7) Comptabilité analytique (uniquement si l'utilisateur l'utilise)
+    // Detection : axes actifs > 0 OU assignments > 0
+    const activeAxes = (analyticData.axes || []).filter((a) => a.active).length;
+    const assignedCount = (analyticData.assignments || []).length;
+    const activeRules = (analyticData.rules || []).filter((r) => r.active).length;
+    const usesAnalytic = activeAxes > 0 || assignedCount > 0;
+    const eligible = analyticData.eligibleEntries || 0;
+    // Couverture : nb d'écritures uniques avec au moins 1 affectation / nb éligibles (6/7)
+    const uniqueAssigned = new Set((analyticData.assignments || []).map((a) => a.glEntryId)).size;
+    const coverageRate = eligible > 0 ? Math.min(100, Math.round((uniqueAssigned / eligible) * 100)) : 0;
+    // Score analytique : 50% couverture + 30% complétude config + 20% automatisation
+    const coverageScore = coverageRate;
+    const configScore = (activeAxes >= 1 ? 50 : 0) + (analyticData.axes?.length ? 50 : 0) * Math.min(1, ((analyticData.assignments?.length ?? 0) / Math.max(1, eligible / 4)));
+    const ruleScore = activeRules >= 1 ? 100 : 0;
+    const analyticScore = usesAnalytic
+      ? Math.round(coverageScore * 0.5 + Math.min(100, configScore) * 0.3 + ruleScore * 0.2)
+      : 0;
+
+    const baseDimensions = [
       {
         key: 'rentabilite', label: 'Rentabilité', icon: TrendingUp,
         score: rentaScore, weight: 0.25,
-        status: rentaScore >= 70 ? 'good' : rentaScore >= 45 ? 'warn' : 'risk',
+        status: rentaScore >= 70 ? 'good' as const : rentaScore >= 45 ? 'warn' as const : 'risk' as const,
         insight: `Marge nette ${margeNette.toFixed(1)} % — ${margeNette >= 4 ? 'saine' : 'à améliorer'}.`,
       },
       {
         key: 'tresorerie', label: 'Trésorerie', icon: Wallet,
         score: tresoScore, weight: 0.20,
-        status: tresoScore >= 70 ? 'good' : tresoScore >= 45 ? 'warn' : 'risk',
+        status: tresoScore >= 70 ? 'good' as const : tresoScore >= 45 ? 'warn' as const : 'risk' as const,
         insight: `${moisCouverts.toFixed(1)} mois de charges couverts.`,
       },
       {
         key: 'ebe', label: 'Performance opérationnelle', icon: Activity,
         score: ebeScore, weight: 0.20,
-        status: ebeScore >= 70 ? 'good' : ebeScore >= 45 ? 'warn' : 'risk',
+        status: ebeScore >= 70 ? 'good' as const : ebeScore >= 45 ? 'warn' as const : 'risk' as const,
         insight: `Taux d'EBE ${tauxEBE.toFixed(1)} % — ${tauxEBE >= 6 ? 'compétitif' : 'sous le seuil sectoriel'}.`,
       },
       {
         key: 'structure', label: 'Structure financière', icon: ShieldCheck,
         score: autoScore, weight: 0.15,
-        status: autoScore >= 70 ? 'good' : autoScore >= 45 ? 'warn' : 'risk',
+        status: autoScore >= 70 ? 'good' as const : autoScore >= 45 ? 'warn' as const : 'risk' as const,
         insight: `Autonomie financière ${autoVal.toFixed(1)} %.`,
       },
       {
         key: 'qualite', label: 'Qualité comptable', icon: CheckCircle2,
         score: anomScore, weight: 0.10,
-        status: anomScore >= 70 ? 'good' : anomScore >= 45 ? 'warn' : 'risk',
+        status: anomScore >= 70 ? 'good' as const : anomScore >= 45 ? 'warn' as const : 'risk' as const,
         insight: `${anomalies.length} anomalie(s) détectée(s) dans le GL.`,
       },
       {
         key: 'vigilance', label: 'Vigilance & risques', icon: AlertTriangle,
         score: vigScore, weight: 0.10,
-        status: vigScore >= 70 ? 'good' : vigScore >= 45 ? 'warn' : 'risk',
+        status: vigScore >= 70 ? 'good' as const : vigScore >= 45 ? 'warn' as const : 'risk' as const,
         insight: `${openCritical} alerte(s) critique/haute en cours.`,
       },
     ];
-  }, [balance, sig, ratios, anomalies, attentionPoints]);
+
+    if (!usesAnalytic) return baseDimensions;
+
+    // Renormalise les poids pour intégrer la dimension analytique (10%)
+    const ANA_WEIGHT = 0.10;
+    const SCALE = 1 - ANA_WEIGHT;
+    const scaled = baseDimensions.map((d) => ({ ...d, weight: +(d.weight * SCALE).toFixed(3) }));
+
+    return [
+      ...scaled,
+      {
+        key: 'analytique', label: 'Comptabilité analytique', icon: PieChart,
+        score: analyticScore, weight: ANA_WEIGHT,
+        status: analyticScore >= 70 ? 'good' as const : analyticScore >= 45 ? 'warn' as const : 'risk' as const,
+        insight: `Couverture ${coverageRate} % · ${activeAxes} axe(s) · ${activeRules} règle(s) active(s).`,
+      },
+    ];
+  }, [balance, sig, ratios, anomalies, attentionPoints, analyticData]);
 
   const globalScore = useMemo(() => {
     if (dimensions.length === 0) return 0;

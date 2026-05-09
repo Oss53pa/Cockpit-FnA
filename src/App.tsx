@@ -84,6 +84,7 @@ const Proph3tIntelligence = lazyWithRetry(() => import('./pages/Proph3tIntellige
 const CREditor = lazyWithRetry(() => import('./pages/CREditor'));
 const CompanyDiagnostic = lazyWithRetry(() => import('./pages/CompanyDiagnostic'));
 const SyntheseHub      = lazyWithRetry(() => import('./pages/SyntheseHub'));
+const ImportAnalytical = lazyWithRetry(() => import('./pages/ImportAnalytical'));
 // Dashboards analytiques dédiés (D03 / D04 / D05 / D06 / D09 / D10)
 const AnalyticalCoverage       = lazyWithRetry(() => import('./pages/analytical/AnalyticalCoverage'));
 const AnalyticalCostCenters    = lazyWithRetry(() => import('./pages/analytical/AnalyticalCostCenters'));
@@ -203,6 +204,8 @@ function App() {
         <Route path="/analytical/resources"       element={<ProtectedRoute><AppLayout><AnalyticalResources /></AppLayout></ProtectedRoute>} />
         <Route path="/analytical/overhead"        element={<ProtectedRoute><AppLayout><AnalyticalOverhead /></AppLayout></ProtectedRoute>} />
         <Route path="/analytical/fg-allocation"   element={<ProtectedRoute><AppLayout><AnalyticalFGAllocation /></AppLayout></ProtectedRoute>} />
+        {/* Import unifié axes + codes analytiques (modèle Données / GL Tiers) */}
+        <Route path="/import-analytical"          element={<ProtectedRoute><AppLayout><ImportAnalytical /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/:id" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
         <Route path="/alerts" element={<Navigate to="/dashboard/home?tab=alertes" replace />} />
         <Route path="/actions" element={<ProtectedRoute><AppLayout><Actions /></AppLayout></ProtectedRoute>} />

@@ -257,6 +257,81 @@ export async function assignManual(
   return { assigned: glEntryIds.length - rejected, rejected, rejectedReasons };
 }
 
+// ── Import axes analytiques (CSV/Excel) ─────────────────────────────────────
+export type AnalyticAxisImportRow = {
+  number: number;          // 1 à 5
+  name: string;            // ex: "Projet"
+  codeName?: string;       // ex: "Code projet"
+  required?: boolean;
+  active?: boolean;
+};
+
+export type AnalyticAxisImportReport = {
+  total: number;
+  inserted: number;
+  updated: number;
+  rejected: number;
+  errors: { row: number; reason: string }[];
+};
+
+/**
+ * Import en bulk des axes analytiques.
+ * - Valide number (1-5) unique.
+ * - Idempotent : un axe (orgId + number) déjà existant est mis à jour.
+ */
+export async function importAnalyticAxes(
+  orgId: string,
+  rows: AnalyticAxisImportRow[],
+): Promise<AnalyticAxisImportReport> {
+  const report: AnalyticAxisImportReport = {
+    total: rows.length, inserted: 0, updated: 0, rejected: 0, errors: [],
+  };
+
+  const existing = await dataProvider.getAnalyticAxes(orgId);
+  const existingByNumber = new Map<number, AnalyticAxis>(existing.map((a) => [a.number, a]));
+  const seenNumbers = new Set<number>();
+  const toUpsert: AnalyticAxis[] = [];
+
+  rows.forEach((row, idx) => {
+    const lineNum = idx + 2;
+    if (!Number.isInteger(row.number) || row.number < 1 || row.number > 5) {
+      report.rejected++;
+      report.errors.push({ row: lineNum, reason: `Numéro d'axe invalide (${row.number}) — doit être 1 à 5` });
+      return;
+    }
+    if (seenNumbers.has(row.number)) {
+      report.rejected++;
+      report.errors.push({ row: lineNum, reason: `Numéro d'axe ${row.number} en double dans le fichier` });
+      return;
+    }
+    seenNumbers.add(row.number);
+    if (!row.name || !row.name.trim()) {
+      report.rejected++;
+      report.errors.push({ row: lineNum, reason: 'Nom d\'axe vide' });
+      return;
+    }
+
+    const ex = existingByNumber.get(row.number);
+    toUpsert.push({
+      id: ex?.id ?? `axis-${orgId}-${row.number}`,
+      orgId,
+      number: row.number,
+      name: row.name.trim(),
+      codeName: row.codeName?.trim() || `Code axe ${row.number}`,
+      required: row.required ?? false,
+      active: row.active ?? true,
+    });
+    if (ex) report.updated++;
+    else report.inserted++;
+  });
+
+  // Persistence sequentielle (peu d'axes, max 5 — pas besoin de bulk).
+  for (const axis of toUpsert) {
+    await dataProvider.upsertAnalyticAxis(axis);
+  }
+  return report;
+}
+
 // ── Import codes analytiques (CSV/Excel) ────────────────────────────────────
 export type AnalyticCodeImportRow = {
   axe: number;

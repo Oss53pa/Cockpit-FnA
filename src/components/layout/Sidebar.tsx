@@ -30,6 +30,7 @@ const sections = [
       { to: '/budget', icon: Wallet, label: 'Budget' },
       { to: '/grand-livre', icon: BookOpen, label: 'Grand Livre' },
       { to: '/import-tiers', icon: Users, label: 'GL Tiers' },
+      { to: '/import-analytical', icon: PieChart, label: 'Plan analytique' },
     ],
   },
   {
