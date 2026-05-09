@@ -226,7 +226,7 @@ export default function CompanyDiagnostic() {
 
   if (!currentOrgId) {
     return (
-      <div className="max-w-5xl mx-auto">
+      <div className="w-full">
         <PageHeader title="Santé de l'entreprise" subtitle="Diagnostic global basé sur le Grand Livre" icon={<Stethoscope className="w-5 h-5" />} />
         <div className="rounded-2xl border border-primary-200 dark:border-primary-800 p-8 text-center">
           <p className="text-primary-600 dark:text-primary-400 text-sm">
@@ -239,7 +239,7 @@ export default function CompanyDiagnostic() {
 
   if (!balance || balance.length === 0) {
     return (
-      <div className="max-w-5xl mx-auto">
+      <div className="w-full">
         <PageHeader title="Santé de l'entreprise" subtitle="Diagnostic global basé sur le Grand Livre" icon={<Stethoscope className="w-5 h-5" />} />
         <div className="rounded-2xl border border-primary-200 dark:border-primary-800 p-8 text-center">
           <AlertCircle className="w-10 h-10 mx-auto mb-3 text-warning" />
@@ -258,7 +258,7 @@ export default function CompanyDiagnostic() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Santé de l'entreprise"
         subtitle={`Diagnostic global · Exercice ${currentYear} · ${balance.length} comptes analysés`}
