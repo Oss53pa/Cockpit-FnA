@@ -387,6 +387,89 @@ export async function downloadCOATemplate(orgName?: string) {
   saveAs(new Blob([buf]), `Modele_PlanComptable_${orgName ? orgName.replace(/\s+/g, '_') + '_' : ''}.xlsx`);
 }
 
+// ─── TEMPLATE CODES ANALYTIQUES (WBS) ──────────────────────────────
+export async function downloadAnalyticCodesTemplate(orgName?: string) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Cockpit FnA';
+  wb.created = new Date();
+
+  // Feuille 1 : INSTRUCTIONS
+  const wsInfo = wb.addWorksheet('Instructions');
+  wsInfo.addRow(['MODÈLE D\'IMPORT — CODES ANALYTIQUES (WBS)']).font = { bold: true, size: 16 };
+  wsInfo.addRow([`Société : ${orgName ?? 'À renseigner'}`]);
+  wsInfo.addRow([]);
+  wsInfo.addRow(['CONSIGNES DE REMPLISSAGE']).font = { bold: true, size: 13 };
+  [
+    '1. Une ligne = un code analytique à créer dans le plan analytique.',
+    '2. Axe : numéro de l\'axe (1=Projet, 2=Centre, 3=Type/Code…). L\'axe doit exister dans Cockpit FnA → Analytique → Axes.',
+    '3. Code : identifiant unique du code (ex : IB005, P0402, CC-FG-001).',
+    '4. Libellé court : 30 chars max — utilisé dans les dashboards.',
+    '5. Libellé long : description complète (optionnel).',
+    '6. Code parent : code parent pour la hiérarchie (optionnel).',
+    '7. Branche WBS (optionnel) : restreint l\'affectation aux lignes correspondantes.',
+    '   - revenue       : Revenus (comptes 7x). Ex : Centre de revenu, Type de revenu.',
+    '   - project_cost  : Coûts projets (6x avec projet). Ex : CC/Tâche, Ressource.',
+    '   - overhead      : Frais généraux (6x sans projet). Ex : Cost Center FG.',
+    '   - vide          : Code universel (compatible toutes lignes).',
+    '8. Actif : 1=actif, 0=inactif (par défaut : actif).',
+    '9. Importer ensuite via Cockpit FnA → Analytique → Codes → Importer.',
+  ].forEach((c) => wsInfo.addRow([c]));
+  wsInfo.getColumn(1).width = 110;
+
+  // Feuille 2 : CODES ANALYTIQUES
+  const ws = wb.addWorksheet('Codes analytiques');
+  const headers = ['Axe', 'Code', 'Libellé court', 'Libellé long', 'Code parent', 'Branche WBS', 'Actif'];
+  ws.addRow(headers);
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell((c) => { c.fill = HEADER_FILL; c.font = HEADER_FONT; c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+  headerRow.height = 22;
+
+  // Exemples WBS (Option A) — illustrent les 3 branches + axe 1 commun
+  const samples = [
+    [1, 'IB005',     'Arcades 5',           'Résidence Arcades 5 — Lot Gorée', '',       '',              1],
+    [1, 'P0402',     'Plateau 4-2',         'Plateau bureau 4ème étage',       '',       '',              1],
+    [2, 'REV-LOC',   'Revenu Location',     'Revenus issus de la location',    '',       'revenue',       1],
+    [2, 'REV-VTE',   'Revenu Vente',        'Revenus issus de la vente',       '',       'revenue',       1],
+    [3, 'TYPE-LT',   'Long Terme',          '',                                'REV-LOC', 'revenue',       1],
+    [2, 'CC-MO',     'CC Main d\'œuvre',    'Centre de coût main d\'œuvre',    '',       'project_cost',  1],
+    [2, 'CC-MAT',    'CC Matériaux',        'Centre de coût matériaux',        '',       'project_cost',  1],
+    [3, 'RES-CHEF',  'Chef de chantier',    '',                                'CC-MO',  'project_cost',  1],
+    [2, 'FG-DG',     'FG Direction',        'Frais généraux Direction',        '',       'overhead',      1],
+    [2, 'FG-COMM',   'FG Commercial',       'Frais commerciaux',               '',       'overhead',      1],
+    [3, 'FG-DG-PERS', 'Personnel DG',       '',                                'FG-DG',  'overhead',      1],
+  ];
+  samples.forEach((row, i) => {
+    const r = ws.addRow(row);
+    if (i % 2 === 0) r.eachCell((c) => { c.fill = ALT_FILL; });
+  });
+
+  ws.columns = [
+    { width: 8 }, { width: 14 }, { width: 30 }, { width: 40 },
+    { width: 14 }, { width: 16 }, { width: 8 },
+  ];
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
+
+  // 500 lignes vides pré-formatées
+  for (let i = 0; i < 500; i++) ws.addRow([]);
+
+  // Feuille 3 : RÉFÉRENTIEL BRANCHES
+  const wsBranch = wb.addWorksheet('Branches WBS');
+  wsBranch.addRow(['Branche', 'Description', 'Comptes concernés']).eachCell((c) => {
+    c.fill = HEADER_FILL; c.font = HEADER_FONT; c.alignment = { horizontal: 'center' };
+  });
+  [
+    ['revenue',      'Revenus (produits)',    'Comptes commençant par 7'],
+    ['project_cost', 'Coûts projets',         'Comptes 6x avec projet (axe 1) renseigné'],
+    ['overhead',     'Frais généraux',        'Comptes 6x sans projet'],
+    ['(vide)',       'Code universel',        'Compatible toutes lignes (legacy)'],
+  ].forEach((row) => wsBranch.addRow(row));
+  wsBranch.columns = [{ width: 16 }, { width: 30 }, { width: 50 }];
+
+  const buf = await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf]), `Modele_CodesAnalytiques_${orgName ? orgName.replace(/\s+/g, '_') + '_' : ''}.xlsx`);
+}
+
 // ─── TEMPLATE BUDGET ──────────────────────────────────────────────
 export async function downloadBudgetTemplate(orgName?: string, year?: number, version: string = 'V1_initial') {
   const yyyy = year ?? new Date().getFullYear();

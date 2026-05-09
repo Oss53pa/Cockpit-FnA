@@ -5,6 +5,8 @@ import type { AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, GLEn
 import { dataProvider } from '../db/provider';
 import { inferBranch, isCodeCompatibleWithBranch } from './analyticBranch';
 
+const uid = () => crypto.randomUUID();
+
 // ── CRUD Axes ──────────────────────────────────────────────────────────────
 export async function getAxes(orgId: string): Promise<AnalyticAxis[]> {
   const axes = await dataProvider.getAnalyticAxes(orgId);
@@ -253,6 +255,118 @@ export async function assignManual(
   }
   if (toAdd.length > 0) await dataProvider.bulkInsertAnalyticAssignments(toAdd);
   return { assigned: glEntryIds.length - rejected, rejected, rejectedReasons };
+}
+
+// ── Import codes analytiques (CSV/Excel) ────────────────────────────────────
+export type AnalyticCodeImportRow = {
+  axe: number;
+  code: string;
+  shortLabel: string;
+  longLabel?: string;
+  parent?: string;
+  branch?: AnalyticBranch;
+  active?: boolean;
+};
+
+export type AnalyticCodeImportReport = {
+  total: number;
+  inserted: number;
+  updated: number;
+  rejected: number;
+  errors: { row: number; reason: string }[];
+};
+
+/**
+ * Importe en bulk des codes analytiques.
+ *
+ * - Mappe les rows brutes (depuis Excel/CSV) vers AnalyticCode.
+ * - Résout l'axe via le numéro (1-5) en cherchant l'axisId correspondant.
+ * - Résout le code parent en deuxième passe (après que tous les codes existent).
+ * - Validation : axe inconnu, code vide, branche invalide → rejet.
+ *
+ * Idempotent : un code (axisId + code) déjà existant est mis à jour, pas dupliqué.
+ */
+export async function importAnalyticCodes(
+  orgId: string,
+  rows: AnalyticCodeImportRow[],
+): Promise<AnalyticCodeImportReport> {
+  const report: AnalyticCodeImportReport = {
+    total: rows.length, inserted: 0, updated: 0, rejected: 0, errors: [],
+  };
+
+  const axes = await dataProvider.getAnalyticAxes(orgId);
+  const axisByNumber = new Map<number, AnalyticAxis>(axes.map((a) => [a.number, a]));
+
+  const existing = await dataProvider.getAnalyticCodes(orgId);
+  const existingByAxisAndCode = new Map<string, AnalyticCode>();
+  for (const c of existing) {
+    existingByAxisAndCode.set(`${c.axisId}|${c.code.toUpperCase()}`, c);
+  }
+
+  // Passe 1 : insère / met à jour les codes (sans parentId)
+  // Aligne `rowsAccepted[i]` avec `toUpsert[i]` pour la résolution parent en passe 2.
+  const toUpsert: AnalyticCode[] = [];
+  const rowsAccepted: AnalyticCodeImportRow[] = [];
+  const codeRefByCode = new Map<string, string>(); // code (UPPER) → id
+  for (const c of existing) codeRefByCode.set(c.code.toUpperCase(), c.id);
+
+  rows.forEach((row, idx) => {
+    const lineNum = idx + 2; // +2 car header = ligne 1
+    if (!row.code || !row.code.trim()) {
+      report.rejected++;
+      report.errors.push({ row: lineNum, reason: 'Code vide' });
+      return;
+    }
+    const axis = axisByNumber.get(row.axe);
+    if (!axis) {
+      report.rejected++;
+      report.errors.push({ row: lineNum, reason: `Axe ${row.axe} inconnu — créez l'axe avant l'import` });
+      return;
+    }
+    if (row.branch && !['revenue', 'project_cost', 'overhead'].includes(row.branch)) {
+      report.rejected++;
+      report.errors.push({ row: lineNum, reason: `Branche invalide "${row.branch}"` });
+      return;
+    }
+
+    const codeUpper = row.code.toUpperCase().trim();
+    const existingCode = existingByAxisAndCode.get(`${axis.id}|${codeUpper}`);
+
+    const newCode: AnalyticCode = {
+      id: existingCode?.id ?? uid(),
+      orgId,
+      axisId: axis.id,
+      code: row.code.trim(),
+      shortLabel: row.shortLabel?.trim() || row.code.trim(),
+      longLabel: row.longLabel?.trim() ?? '',
+      parentId: undefined,
+      active: row.active ?? true,
+      order: existingCode?.order ?? toUpsert.length,
+      branch: row.branch,
+    };
+    toUpsert.push(newCode);
+    rowsAccepted.push(row);
+    codeRefByCode.set(codeUpper, newCode.id);
+    if (existingCode) report.updated++;
+    else report.inserted++;
+  });
+
+  // Passe 2 : résout les parentId
+  for (let i = 0; i < toUpsert.length; i++) {
+    const row = rowsAccepted[i];
+    if (row.parent && row.parent.trim()) {
+      const parentId = codeRefByCode.get(row.parent.toUpperCase().trim());
+      if (parentId && parentId !== toUpsert[i].id) {
+        toUpsert[i].parentId = parentId;
+      }
+    }
+  }
+
+  if (toUpsert.length > 0) {
+    await dataProvider.bulkUpsertAnalyticCodes(toUpsert);
+  }
+
+  return report;
 }
 
 /** Supprimer toutes les affectations auto (garder les manuelles) */

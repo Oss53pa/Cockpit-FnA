@@ -22,8 +22,12 @@ import {
   getRules, saveRule, deleteRule,
   simulateRules, applyRules, assignManual, clearAutoAssignments,
   computeAnalyticDashboard, computeAnalyticMonthly, getUnmappedLines, getCoverageStats,
+  importAnalyticCodes, type AnalyticCodeImportRow,
   type AnalyticDashRow, type MappingReport,
 } from '../engine/analyticalEngine';
+import { downloadAnalyticCodesTemplate } from '../engine/templates';
+import { parseFile } from '../engine/importer';
+import { Download, Upload } from 'lucide-react';
 
 type Tab = 'dashboard' | 'wbs' | 'axes' | 'codes' | 'rules' | 'assign';
 
@@ -67,7 +71,7 @@ export default function Analytical() {
       </div>
 
       {tab === 'dashboard' && <DashboardTab orgId={currentOrgId} year={currentYear} axes={axes} ct={ct} />}
-      {tab === 'wbs' && <WBSTab orgId={currentOrgId} year={currentYear} axes={axes} />}
+      {tab === 'wbs' && <WBSTab orgId={currentOrgId} year={currentYear} axes={axes} ct={ct} />}
       {tab === 'axes' && <AxesTab orgId={currentOrgId} axes={axes} onUpdate={bump} />}
       {tab === 'codes' && <CodesTab orgId={currentOrgId} axes={axes} onUpdate={bump} />}
       {tab === 'rules' && <RulesTab orgId={currentOrgId} axes={axes} onUpdate={bump} year={currentYear} />}
@@ -319,6 +323,8 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
   const [codes, setCodes] = useState<AnalyticCode[]>([]);
   const [editing, setEditing] = useState<AnalyticCode | null>(null);
   const [search, setSearch] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importReport, setImportReport] = useState<{ total: number; inserted: number; updated: number; rejected: number; errors: { row: number; reason: string }[] } | null>(null);
 
   useEffect(() => { if (axes.length > 0 && !axisId) setAxisId(axes[0].id); }, [axes, axisId]);
   useEffect(() => { if (axisId) getCodes(orgId, axisId).then(setCodes); }, [orgId, axisId]);
@@ -351,6 +357,53 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
     onUpdate();
   };
 
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    setImportReport(null);
+    try {
+      const { rows: rawRows } = await parseFile(file);
+      // Mapping flexible des en-têtes (FR/EN, Excel/CSV)
+      const mapped: AnalyticCodeImportRow[] = rawRows.map((r: Record<string, unknown>) => {
+        const get = (...keys: string[]) => {
+          for (const k of keys) {
+            const v = r[k];
+            if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+          }
+          return '';
+        };
+        const axe = parseInt(get('Axe', 'axe', 'Axis', 'axis_number') || '1', 10) || 1;
+        const code = get('Code', 'code');
+        const shortLabel = get('Libellé court', 'Libelle court', 'short_label', 'shortLabel', 'Libellé', 'Label');
+        const longLabel = get('Libellé long', 'Libelle long', 'long_label', 'longLabel', 'Description');
+        const parent = get('Code parent', 'parent', 'parent_code', 'parentCode');
+        const branchRaw = get('Branche WBS', 'Branche', 'branch', 'WBS');
+        const activeRaw = get('Actif', 'active', 'Active');
+        const branch = branchRaw && ['revenue', 'project_cost', 'overhead'].includes(branchRaw)
+          ? branchRaw as 'revenue' | 'project_cost' | 'overhead'
+          : undefined;
+        const active = activeRaw === '' ? true : !['0', 'false', 'non', 'no'].includes(activeRaw.toLowerCase());
+        return { axe, code, shortLabel, longLabel, parent: parent || undefined, branch, active };
+      }).filter((r) => r.code);
+      const report = await importAnalyticCodes(orgId, mapped);
+      setImportReport(report);
+      // Rafraîchir si l'axe en cours est concerné
+      if (axisId) getCodes(orgId, axisId).then(setCodes);
+      onUpdate();
+      if (report.errors.length === 0) {
+        toast.success(`Import réussi : ${report.inserted} créés, ${report.updated} mis à jour`);
+      } else {
+        toast.warning(
+          `Import partiel : ${report.inserted + report.updated} OK, ${report.rejected} rejetés`,
+          'Voir le détail dans le rapport ci-dessous',
+        );
+      }
+    } catch (e) {
+      toast.error('Échec de l\'import', (e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -359,9 +412,65 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
         </select>
         <input className="input !w-64" placeholder="Rechercher un code…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="ml-auto flex gap-2">
+          <button
+            className="btn-outline text-sm"
+            onClick={() => downloadAnalyticCodesTemplate()}
+            title="Télécharger le modèle Excel pour l'import"
+          >
+            <Download className="w-4 h-4" /> Modèle
+          </button>
+          <label className="btn-outline text-sm cursor-pointer" title="Importer un fichier Excel/CSV">
+            <Upload className="w-4 h-4" />
+            {importing ? 'Import…' : 'Importer'}
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              disabled={importing}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImport(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
           <button className="btn-primary text-sm" onClick={create}><Plus className="w-4 h-4" /> Nouveau code</button>
         </div>
       </div>
+
+      {importReport && (
+        <Card padded>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-primary-900 dark:text-primary-100">
+                Rapport d'import
+              </p>
+              <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
+                {importReport.total} ligne(s) traitée(s) · {importReport.inserted} créé(s) ·{' '}
+                {importReport.updated} mis à jour · {importReport.rejected} rejeté(s)
+              </p>
+              {importReport.errors.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-xs text-error cursor-pointer hover:underline">
+                    Voir les {importReport.errors.length} erreur(s)
+                  </summary>
+                  <ul className="text-[11px] text-primary-600 dark:text-primary-400 mt-2 space-y-1 max-h-32 overflow-y-auto">
+                    {importReport.errors.slice(0, 50).map((e, i) => (
+                      <li key={i}>Ligne {e.row} : {e.reason}</li>
+                    ))}
+                    {importReport.errors.length > 50 && (
+                      <li className="italic">… et {importReport.errors.length - 50} autres</li>
+                    )}
+                  </ul>
+                </details>
+              )}
+            </div>
+            <button className="btn-ghost !p-1" onClick={() => setImportReport(null)} title="Fermer">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </Card>
+      )}
 
       <Card padded={false}>
         <div className="overflow-x-auto">
@@ -776,7 +885,7 @@ type WBSRow = {
   margeNette: number;       // revenue - projectCost - overhead (alloué si applicable)
 };
 
-function WBSTab({ orgId, year, axes }: { orgId: string; year: number; axes: AnalyticAxis[] }) {
+function WBSTab({ orgId, year, axes, ct }: { orgId: string; year: number; axes: AnalyticAxis[]; ct: ReturnType<typeof useChartTheme> }) {
   const [rows, setRows] = useState<WBSRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [unallocOverhead, setUnallocOverhead] = useState(0);
@@ -901,6 +1010,25 @@ function WBSTab({ orgId, year, axes }: { orgId: string; year: number; axes: Anal
     );
   }
 
+  // Top / Flop projets par marge nette
+  const top5Profitable = [...rows].filter((r) => r.margeNette > 0).sort((a, b) => b.margeNette - a.margeNette).slice(0, 5);
+  const top5Loss = [...rows].filter((r) => r.margeNette < 0).sort((a, b) => a.margeNette - b.margeNette).slice(0, 5);
+
+  // Pie : répartition revenus par projet
+  const revenuePieData = rows
+    .filter((r) => r.revenue > 0 && r.projectCode !== '—')
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+    .map((r, i) => ({ name: r.projectCode, value: r.revenue, color: ct.at(i) }));
+
+  // Bar comparatif Revenus vs Coûts par projet (top 10)
+  const compareBarData = rows.slice(0, 10).map((r) => ({
+    code: r.projectCode,
+    Revenus: r.revenue,
+    Coûts: r.projectCost + r.overhead,
+    Marge: r.margeNette,
+  }));
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -909,6 +1037,81 @@ function WBSTab({ orgId, year, axes }: { orgId: string; year: number; axes: Anal
         <KPI label="Marge brute" value={fmtFull(totals.margeBrute)} highlight={totals.margeBrute >= 0} />
         <KPI label="Frais généraux" value={fmtFull(totals.overhead)} sub={`+ ${fmtFull(unallocOverhead)} non alloués`} />
         <KPI label="Marge nette" value={fmtFull(totals.margeNette)} highlight={totals.margeNette >= 0} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard title="Top 5 projets profitables">
+          {top5Profitable.length === 0 ? (
+            <div className="py-12 text-center text-xs text-primary-400">Aucun projet profitable</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={top5Profitable} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
+                <XAxis type="number" tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
+                <YAxis type="category" dataKey="projectCode" width={80} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v) => fmtFull(Number(v))} />
+                <Bar dataKey="margeNette" name="Marge nette" fill={ct.at(2)} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Top 5 projets déficitaires">
+          {top5Loss.length === 0 ? (
+            <div className="py-12 text-center text-xs text-primary-400">Aucun projet déficitaire</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={top5Loss} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
+                <XAxis type="number" tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
+                <YAxis type="category" dataKey="projectCode" width={80} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v) => fmtFull(Number(v))} />
+                <Bar dataKey="margeNette" name="Marge nette" fill="#ef4444" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard title="Répartition des revenus par projet (Top 8)">
+          {revenuePieData.length === 0 ? (
+            <div className="py-12 text-center text-xs text-primary-400">Aucun revenu sur projet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={revenuePieData} dataKey="value" nameKey="name"
+                  cx="50%" cy="50%" outerRadius={90}
+                  label={(e) => `${e.name} (${Math.round((e.value / totals.revenue) * 100)}%)`}
+                  labelLine={{ stroke: ct.grid }}
+                >
+                  {revenuePieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip formatter={(v) => fmtFull(Number(v))} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Comparatif Revenus / Coûts par projet (Top 10)">
+          {compareBarData.length === 0 ? (
+            <div className="py-12 text-center text-xs text-primary-400">Aucune donnée</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={compareBarData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
+                <XAxis dataKey="code" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={60} />
+                <YAxis tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v) => fmtFull(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Bar dataKey="Revenus" fill={ct.at(4)} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Coûts" fill={ct.at(0)} radius={[3, 3, 0, 0]} />
+                <Line type="monotone" dataKey="Marge" stroke={ct.at(2)} strokeWidth={2} dot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
       </div>
 
       <Card padded={false}>

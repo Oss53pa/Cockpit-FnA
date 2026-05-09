@@ -36,9 +36,9 @@ const sections = [
     label: 'Restitution',
     items: [
       { to: '/states', icon: FileSpreadsheet, label: 'États financiers' },
+      { to: '/analytical', icon: PieChart, label: 'Analytique' },
       { to: '/ratios', icon: Calculator, label: 'Ratios' },
       { to: '/reports', icon: FileText, label: 'Reporting' },
-      { to: '/analytical', icon: PieChart, label: 'Analytique' },
       { to: '/cr-editor', icon: FileEdit, label: 'Personnaliser CR' },
       { to: '/ai', icon: Sparkles, label: 'Proph3t' },
     ],
