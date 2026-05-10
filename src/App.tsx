@@ -26,6 +26,7 @@ const ForgotPassword = lazyWithRetry(() => import('./pages/auth/ForgotPassword')
 const ResetPassword  = lazyWithRetry(() => import('./pages/auth/ResetPassword'));
 const AuthCallback   = lazyWithRetry(() => import('./pages/auth/Callback'));
 const AcceptInvite   = lazyWithRetry(() => import('./pages/auth/AcceptInvite'));
+const AtlasSSO       = lazyWithRetry(() => import('./pages/auth/AtlasSSO'));
 
 const Landing        = lazyWithRetry(() => import('./pages/Landing'));
 const Demo           = lazyWithRetry(() => import('./pages/Demo'));
@@ -191,6 +192,8 @@ function App() {
         <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
         <Route path="/auth/callback" element={<Suspense fallback={<PageFallback />}><AuthCallback /></Suspense>} />
         <Route path="/auth/accept-invite" element={<Suspense fallback={<PageFallback />}><AcceptInvite /></Suspense>} />
+        {/* SSO depuis Atlas Studio (token JWT signe par app-token) */}
+        <Route path="/auth" element={<Suspense fallback={<PageFallback />}><AtlasSSO /></Suspense>} />
 
         {/* Landing publique */}
         <Route path="/" element={<Suspense fallback={<PageFallback />}><Landing /></Suspense>} />
