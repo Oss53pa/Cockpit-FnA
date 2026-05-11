@@ -69,7 +69,17 @@ export class SupabaseProvider implements DataProvider {
     return data ? toCamel(data) as Organization : undefined;
   }
   async upsertOrganization(org: Organization) {
-    check(await supabase.from('fna_organizations').upsert(toSnake(org)));
+    const row = toSnake(org);
+    // fna_organizations.created_at est TIMESTAMPTZ (pas bigint) — Postgres refuse
+    // un bigint en milliseconds. On convertit Date.now() en ISO string.
+    if (typeof row.created_at === 'number') {
+      row.created_at = new Date(row.created_at).toISOString();
+    }
+    // Le champ `role` provient du JOIN fna_user_orgs dans getOrganizations,
+    // il n'appartient pas à fna_organizations — strip avant upsert sinon
+    // PostgREST rejette "column 'role' does not exist".
+    if ('role' in row) delete row.role;
+    check(await supabase.from('fna_organizations').upsert(row));
   }
   async deleteOrganization(id: string) {
     check(await supabase.from('fna_organizations').delete().eq('id', id));
