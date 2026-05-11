@@ -5,6 +5,8 @@ import { Badge } from '../components/ui/Badge';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
 import { useOrgPermissions } from '../hooks/useOrgPermissions';
 import { detectColumns, importGL, migrateGLPeriods, resyncAccountLabels, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
@@ -66,6 +68,11 @@ export default function Imports() {
       });
       setReport(res);
       setStep('result');
+      invalidateCloudData('gl');
+      invalidateCloudData('imports');
+      invalidateCloudData('accounts');
+      invalidateCloudData('fiscalYears');
+      invalidateCloudData('periods');
     } catch (e: any) {
       toast.error("Erreur d'import", e.message);
     } finally {
@@ -77,12 +84,15 @@ export default function Imports() {
 
   const deleteImport = async (imp: typeof history[number]) => {
     if (!confirm(`Supprimer l'import "${imp.fileName}" et ses ${imp.count} écritures ?`)) return;
-    await db.transaction('rw', [db.gl, db.imports], async () => {
-      const impId = String(imp.id);
-      const toDelete = await db.gl.filter((e) => e.importId === impId).primaryKeys();
-      await db.gl.bulkDelete(toDelete);
-      await db.imports.delete(imp.id!);
-    });
+    try {
+      await dataProvider.deleteGLByImport(Number(imp.id));
+      await dataProvider.deleteImport(Number(imp.id));
+      invalidateCloudData('gl');
+      invalidateCloudData('imports');
+      toast.success('Import supprimé', `${imp.count} écritures supprimées`);
+    } catch (e: any) {
+      toast.error('Suppression impossible', e.message);
+    }
   };
 
   return (
@@ -117,9 +127,10 @@ export default function Imports() {
           <button className="btn-outline" onClick={async () => {
             const code = prompt('Diagnostic — entrez le préfixe de compte à inspecter (ex: 706, 706100) :', '706');
             if (!code) return;
-            const periods = await db.periods.where('orgId').equals(currentOrgId).toArray();
-            const periodById = new Map(periods.map((p) => [p.id, p]));
-            const entries = (await db.gl.where('orgId').equals(currentOrgId).toArray())
+            const allPeriods = await dataProvider.getPeriods(currentOrgId);
+            const periodById = new Map(allPeriods.map((p) => [p.id, p]));
+            const allEntries = await dataProvider.getGLEntries({ orgId: currentOrgId });
+            const entries = allEntries
               .filter((e) => e.account.startsWith(code) && new Date(e.date).getFullYear() === currentYear);
             const byMonth = new Map<string, { count: number; debit: number; credit: number; periodMonth: number | undefined; sample: string }>();
             for (const e of entries) {

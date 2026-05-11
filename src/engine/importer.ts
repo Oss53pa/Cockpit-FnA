@@ -758,6 +758,12 @@ export async function importGL(
   let totalDebit = 0;
   let totalCredit = 0;
 
+  // Charger le plan comptable de l'entreprise (fna_accounts) pour identifier
+  // les comptes connus AVANT de vérifier le référentiel SYSCOHADA statique.
+  // Cela évite les faux "comptes inconnus" quand l'entreprise a son propre COA.
+  const orgAccounts = await dataProvider.getAccounts(opts.orgId);
+  const orgAccountSet = new Set(orgAccounts.map((a) => a.code));
+
   rows.forEach((r, idx) => {
     const account = String(r[mapping.account] ?? '').trim();
     if (!account) {
@@ -775,8 +781,10 @@ export async function importGL(
       errors.push({ row: idx + 2, reason: 'Débit et crédit à 0' });
       return;
     }
+    // Priorité : plan comptable entreprise → référentiel SYSCOHADA statique
+    const knownInOrg = orgAccountSet.has(account);
     const sysco = findSyscoAccount(account);
-    if (!sysco) unknownAccounts.add(account);
+    if (!knownInOrg && !sysco) unknownAccounts.add(account);
 
     entries.push({
       orgId: opts.orgId,

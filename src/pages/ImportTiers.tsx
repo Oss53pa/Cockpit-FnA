@@ -6,6 +6,8 @@ import { toast } from '../components/ui/Toast';
 import { PageHeader } from '../components/layout/PageHeader';
 import { useApp } from '../store/app';
 import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
+import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
 import { detectTiersColumns, importGLTiers, migrateGLPeriods, resyncAccountLabels, parseFile, TiersMapping, TiersImportReport } from '../engine/importer';
 import { downloadTiersTemplate } from '../engine/templates';
@@ -93,13 +95,15 @@ export default function ImportTiers() {
 
   const deleteImport = async (imp: typeof history[number]) => {
     if (!confirm(`Supprimer l'import tiers "${imp.fileName}" et ses écritures créées en standalone ?`)) return;
-    await db.transaction('rw', [db.gl, db.imports], async () => {
-      const impId = String(imp.id);
-      const toDelete = await db.gl.filter((e) => e.importId === impId).primaryKeys();
-      if (toDelete.length > 0) await db.gl.bulkDelete(toDelete);
-      await db.imports.delete(imp.id!);
-    });
-    toast.success('Import supprimé');
+    try {
+      await dataProvider.deleteGLByImport(Number(imp.id));
+      await dataProvider.deleteImport(Number(imp.id));
+      invalidateCloudData('gl');
+      invalidateCloudData('imports');
+      toast.success('Import supprimé');
+    } catch (e: any) {
+      toast.error('Suppression impossible', e.message);
+    }
   };
 
   // Diagnostic tiers : inspecter les écritures d'un code tiers
