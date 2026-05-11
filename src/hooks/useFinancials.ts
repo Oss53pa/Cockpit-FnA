@@ -369,7 +369,7 @@ export function useBudgetActual(version?: string): BudgetActualRow[] {
     { initial: [] as BudgetActualRow[], tag: ['gl', 'budgets'] },
   );
   if (isDemoActive(currentOrgId) && (!data || data.length === 0)) {
-    return DEMO_BUDGET_ACTUAL as unknown as BudgetActualRow[];
+    return DEMO_BUDGET_ACTUAL as BudgetActualRow[];
   }
   return data;
 }

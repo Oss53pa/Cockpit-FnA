@@ -531,7 +531,7 @@ export const DEMO_ACCOUNTS: Account[] = DEMO_BALANCE.map((b) => ({
 
 // Budget vs Réalisé synthétique
 export const DEMO_BUDGET_ACTUAL = [
-  { account: '70', label: 'Ventes', budget: 290_000_000, actual: CA_DEMO, variance: CA_DEMO - 290_000_000, variancePct: ((CA_DEMO - 290_000_000) / 290_000_000) * 100 },
-  { account: '60', label: 'Achats', budget: 60_000_000, actual: ACHATS_CONSO, variance: ACHATS_CONSO - 60_000_000, variancePct: ((ACHATS_CONSO - 60_000_000) / 60_000_000) * 100 },
-  { account: '66', label: 'Charges personnel', budget: 120_000_000, actual: 122_400_000, variance: 2_400_000, variancePct: 2.0 },
+  { code: '70', label: 'Ventes', budget: 290_000_000, realise: CA_DEMO, ecart: CA_DEMO - 290_000_000, ecartPct: ((CA_DEMO - 290_000_000) / 290_000_000) * 100, status: 'favorable' as const, isCharge: false },
+  { code: '60', label: 'Achats', budget: 60_000_000, realise: ACHATS_CONSO, ecart: ACHATS_CONSO - 60_000_000, ecartPct: ((ACHATS_CONSO - 60_000_000) / 60_000_000) * 100, status: 'defavorable' as const, isCharge: true },
+  { code: '66', label: 'Charges personnel', budget: 120_000_000, realise: 122_400_000, ecart: 2_400_000, ecartPct: 2.0, status: 'defavorable' as const, isCharge: true },
 ];
