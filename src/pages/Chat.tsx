@@ -23,6 +23,7 @@ import clsx from 'clsx';
 import { dataProvider } from '../db/provider';
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { useApp } from '../store/app';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -64,12 +65,26 @@ export default function Chat() {
   const orgUsers = useMemo(() => loadUsers(), []);
 
   // ── Init channel #général ──
+  // Guard : attendre que la session auth soit prête avant toute écriture Supabase
+  // (sinon le POST part en anon → 401 "permission denied for table fna_channels")
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   useEffect(() => {
     if (!currentOrgId) return;
+    let cancelled = false;
     (async () => {
       try {
+        // Attend la session auth (évite l'écriture en anon)
+        if (isSupabaseConfigured) {
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) {
+            // Pas encore de session → on retente après un court délai
+            await new Promise((r) => setTimeout(r, 1500));
+            const { data: retry } = await supabase.auth.getSession();
+            if (!retry.session || cancelled) return;
+          }
+        }
+        if (cancelled) return;
         await getOrCreateGeneralChannel(currentOrgId, me.id);
         invalidateCloudData('chat');
         setDbReady(true);
@@ -78,6 +93,7 @@ export default function Chat() {
         setDbError(e?.message ?? 'Erreur base de données');
       }
     })();
+    return () => { cancelled = true; };
   }, [currentOrgId, me.id]);
 
   const { data: channels = [] } = useCloudData(

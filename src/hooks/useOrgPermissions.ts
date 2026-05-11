@@ -25,6 +25,7 @@
 import { useMemo } from 'react';
 import { useApp } from '../store/app';
 import { useOrganizations } from './useFinancials';
+import { useAuth } from './useAuth';
 
 export type OrgRole = 'admin' | 'editor' | 'viewer';
 
@@ -52,6 +53,11 @@ const ROLE_LABELS: Record<OrgRole, string> = {
 export function useOrgPermissions(): OrgPermissions {
   const currentOrgId = useApp((s) => s.currentOrgId);
   const orgs = useOrganizations();
+  // Fallback : useAuth charge le rôle directement depuis fna_user_orgs au login.
+  // Si getOrganizations() échoue ou n'a pas encore retourné le rôle (race condition
+  // après SSO), on utilise ce rôle comme filet de sécurité plutôt que de
+  // fallback immédiatement sur 'viewer' (qui met l'app en lecture seule à tort).
+  const { role: authRole } = useAuth();
 
   return useMemo(() => {
     // Mode démo : toujours admin (parcours guidé sans frottement)
@@ -69,18 +75,16 @@ export function useOrgPermissions(): OrgPermissions {
     const org = orgs.find((o) => o.id === currentOrgId);
     const role = org?.role;
 
-    // Pas de rôle déterminé : on présume viewer par sécurité (fail-safe).
-    // Couvre le cas où getOrganizations a fallback sur le SELECT direct
-    // (sans JOIN fna_user_orgs) — l'écriture sera de toute façon refusée par RLS.
-    const effectiveRole: OrgRole = role ?? 'viewer';
+    // Priorité : rôle de l'org (JOIN fna_user_orgs) → rôle auth (loadUserOrgs) → viewer
+    const effectiveRole: OrgRole = role ?? (authRole as OrgRole) ?? 'viewer';
 
     return {
-      role,
+      role: role ?? (authRole as OrgRole) ?? undefined,
       canRead: true,
       canEdit: effectiveRole === 'admin' || effectiveRole === 'editor',
       canAdmin: effectiveRole === 'admin',
       isReadOnly: effectiveRole === 'viewer',
       roleLabel: ROLE_LABELS[effectiveRole],
     };
-  }, [currentOrgId, orgs]);
+  }, [currentOrgId, orgs, authRole]);
 }

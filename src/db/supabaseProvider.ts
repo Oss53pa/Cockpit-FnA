@@ -52,9 +52,17 @@ export class SupabaseProvider implements DataProvider {
       .eq('user_id', userId);
 
     if (error) {
-      console.warn('[SupabaseProvider] fna_user_orgs query failed, fallback:', error.message);
-      const { data: fallback } = await supabase.from('fna_organizations').select('*');
-      return (fallback ?? []).map((r: any) => toCamel(r)) as Organization[];
+      console.warn('[SupabaseProvider] fna_user_orgs JOIN failed, trying separate queries:', error.message);
+      // Fallback : requêtes séparées pour conserver le rôle
+      const [{ data: orgsData }, { data: rolesData }] = await Promise.all([
+        supabase.from('fna_organizations').select('*'),
+        supabase.from('fna_user_orgs').select('org_id, role').eq('user_id', userId),
+      ]);
+      const roleMap = new Map((rolesData ?? []).map((r: any) => [r.org_id, r.role]));
+      return (orgsData ?? []).map((r: any) => ({
+        ...(toCamel(r) as Organization),
+        role: (roleMap.get(r.id) ?? undefined) as 'admin' | 'editor' | 'viewer' | undefined,
+      }));
     }
 
     return (data ?? [])
