@@ -81,8 +81,8 @@ export default function ImportTiers() {
       });
       setReport(res);
       setStep('result');
-      if (res.enriched > 0 || res.created > 0) {
-        toast.success('Import tiers terminé', `${res.enriched} enrichies · ${res.created} créées`);
+      if (res.enriched > 0 || res.unmatched > 0) {
+        toast.success('Import tiers terminé', `${res.enriched} enrichies · ${res.unmatched} non rapprochées`);
       }
     } catch (e: any) {
       toast.error("Erreur d'import", e.message);
@@ -416,13 +416,17 @@ export default function ImportTiers() {
 
         {step === 'result' && report && (
           <Card title="Résultat de l'import tiers">
-            {/* Alerte mode standalone */}
-            {report.created > 0 && report.enriched === 0 && (
+            {/* Alerte : beaucoup de lignes non rapprochées (compte les
+                lignes tiers qui n'ont trouvé aucune écriture GL à enrichir).
+                Le GL Tiers ne crée pas d'écritures, il enrichit uniquement. */}
+            {report.unmatched > 0 && report.enriched === 0 && (
               <div className="mb-6 p-3 rounded-lg bg-warning/10 border-l-4 border-warning">
-                <p className="text-sm font-semibold">Mode standalone : {report.created} écritures créées</p>
+                <p className="text-sm font-semibold">{report.unmatched} ligne(s) non rapprochée(s)</p>
                 <p className="text-xs text-primary-600 dark:text-primary-300 mt-1">
-                  Aucune écriture GL n'a pu être rapprochée. Les écritures tiers ont été créées directement.
-                  Vérifiez que le GL général a bien été importé pour la même période.
+                  Aucune écriture GL existante n'a pu être enrichie avec ces lignes tiers.
+                  Vérifiez que le Grand Livre est bien importé pour la même période et que les
+                  montants/dates correspondent. Le GL Tiers ne crée jamais d'écritures — il
+                  complète celles du GL avec le code tiers détaillé.
                 </p>
               </div>
             )}
@@ -430,7 +434,7 @@ export default function ImportTiers() {
               <div className="mb-6 p-3 rounded-lg bg-success/10 border-l-4 border-success">
                 <p className="text-sm">
                   ✓ {report.enriched.toLocaleString('fr-FR')} écritures GL enrichies avec le code tiers
-                  {report.created > 0 && ` · ${report.created} créées en standalone`}
+                  {report.unmatched > 0 && ` · ${report.unmatched} non rapprochées`}
                 </p>
               </div>
             )}
@@ -438,7 +442,7 @@ export default function ImportTiers() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
               <StatCard label="Lignes lues" value={report.totalRows} />
               <StatCard label="GL enrichies" value={report.enriched} good={report.enriched > 0} />
-              <StatCard label="Créées (standalone)" value={report.created} />
+              <StatCard label="Non rapprochées" value={report.unmatched} bad={report.unmatched > 0} />
               <StatCard label="Ignorées" value={report.skipped} />
               <StatCard label="Erreurs" value={report.errors.length} bad={report.errors.length > 0} />
             </div>

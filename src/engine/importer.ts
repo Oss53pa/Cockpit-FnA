@@ -1373,7 +1373,7 @@ export type TiersMapping = {
 export type TiersImportReport = {
   totalRows: number;
   enriched: number;         // écritures GL existantes enrichies avec le code tiers
-  created: number;          // écritures créées (mode standalone)
+  unmatched: number;        // lignes tiers sans correspondance GL — non importées
   skipped: number;          // lignes ignorées (déjà un tiers, ou montant 0)
   errors: { row: number; reason: string }[];
   coherenceCheck: {
@@ -1415,7 +1415,7 @@ export async function importGLTiers(
   const { rows } = await parseFile(file);
   const errors: TiersImportReport['errors'] = [];
   let enriched = 0;
-  let created = 0;
+  let unmatched = 0;
   let skipped = 0;
 
   // 1) Parser les lignes tiers
@@ -1476,13 +1476,13 @@ export async function importGLTiers(
   }
 
   // 3) Rapprocher et enrichir
+  // PRINCIPE COMPTABLE : le GL Tiers ne CRÉE jamais d'écritures dans le GL.
+  // Il vient uniquement enrichir les écritures existantes (qui sont déjà
+  // agrégées sur les comptes parents/collectifs) avec le code tiers détaillé.
+  // Les lignes sans correspondance GL sont comptées comme "unmatched" et
+  // signalées dans le rapport — mais jamais insérées en base.
   const toUpdate: GLEntry[] = [];
-  const toCreate: Omit<GLEntry, 'id'>[] = [];
   const matched = new Set<number>(); // IDs GL déjà rapprochés (évite doublons)
-
-  // Résolution des périodes pour les créations éventuelles
-  const existingPeriods = await dataProvider.getPeriods(opts.orgId);
-  const periodByKey = new Map(existingPeriods.map((p) => [`${p.year}-${p.month}`, p.id]));
 
   for (const tl of tiersLines) {
     // (a) tentative exact account
@@ -1521,49 +1521,38 @@ export async function importGLTiers(
         enriched++;
       }
     } else {
-      // Pas de match GL → créer l'écriture (mode standalone)
-      const y = parseInt(tl.date.substring(0, 4));
-      const m = parseInt(tl.date.substring(5, 7));
-      const periodId = periodByKey.get(`${y}-${m}`) ?? '';
-      toCreate.push({
-        orgId: opts.orgId,
-        periodId,
-        date: tl.date,
-        journal: tl.journal || 'AUX',
-        piece: tl.piece || '',
-        account: tl.account,
-        label: tl.label || tl.labelTiers,
-        debit: tl.debit,
-        credit: tl.credit,
-        tiers: tl.codeTiers,
-      });
-      created++;
+      // Pas de match GL → NE PAS CRÉER. Le GL Tiers ne fait qu'enrichir.
+      // Créer une écriture sur un compte parent (401, 411) dupliquerait
+      // l'agrégation déjà présente dans le GL. Sur un sous-compte (4011xx),
+      // créer sans contrepartie déséquilibre le GL. Dans les deux cas,
+      // c'est au comptable d'analyser pourquoi cette ligne tiers n'a pas
+      // de pendant dans le GL (date décalée, montant arrondi, écriture
+      // oubliée à l'import GL…).
+      unmatched++;
     }
   }
 
-  // 4) Écrire en base — séquentiel, pas de transaction globale
-  const importId = await dataProvider.addImport({
+  // 4) Écrire en base — uniquement les enrichissements, jamais de création.
+  // Le GL Tiers ne crée pas d'écritures : il complète celles du GL avec le
+  // code tiers détaillé.
+  await dataProvider.addImport({
     orgId: opts.orgId,
     date: Date.now(),
     user: opts.user,
     fileName: file.name,
     source: opts.source,
     kind: 'TIERS',
-    count: enriched + created,
-    rejected: errors.length,
-    status: errors.length === 0 ? 'success' : (enriched + created > 0 ? 'partial' : 'error'),
-    report: JSON.stringify({ errors: errors.slice(0, 50) }),
+    count: enriched,
+    rejected: errors.length + unmatched,
+    status: errors.length === 0 && unmatched === 0
+      ? 'success'
+      : (enriched > 0 ? 'partial' : 'error'),
+    report: JSON.stringify({ errors: errors.slice(0, 50), unmatched }),
   });
 
   // Mettre à jour les écritures enrichies (upsert par id)
   if (toUpdate.length > 0) {
     await dataProvider.bulkUpsertGL(toUpdate);
-  }
-
-  // Créer les nouvelles écritures (mode standalone)
-  if (toCreate.length > 0) {
-    const tagged = toCreate.map((e) => ({ ...e, importId: String(importId) }));
-    await dataProvider.bulkInsertGL(tagged as GLEntry[]);
   }
 
   // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif.
@@ -1600,7 +1589,7 @@ export async function importGLTiers(
   return {
     totalRows: rows.length,
     enriched,
-    created,
+    unmatched,
     skipped,
     errors,
     coherenceCheck,
