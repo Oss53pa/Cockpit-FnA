@@ -184,15 +184,35 @@ export class SupabaseProvider implements DataProvider {
   }
 
   // GL Entries
+  //
+  // Pagination obligatoire : Supabase plafonne les SELECT à 1000 lignes par
+  // défaut (PostgREST default_limit). Sans .range(), un org avec 8000+ écritures
+  // ne renvoyait que les 1000 premières (triées par insertion) — typiquement
+  // les comptes de classe 4 (tiers, gros volume) — laissant les classes 6/7
+  // (charges/produits) invisibles → dashboards Bilan/CR/SIG à 0 alors que la
+  // donnée existait bien en base.
   async getGLEntries(filter: GLFilter): Promise<GLEntry[]> {
-    let q = supabase.from('fna_gl_entries').select('*').eq('org_id', filter.orgId);
-    if (filter.periodId) q = q.eq('period_id', filter.periodId);
-    if (filter.importId) q = q.eq('import_id', filter.importId);
-    if (filter.account) q = q.eq('account', filter.account);
-    if (filter.fromDate) q = q.gte('date', filter.fromDate);
-    if (filter.toDate) q = q.lte('date', filter.toDate);
-    const { data } = await q;
-    return (data ?? []).map((r: any) => toCamel(r)) as GLEntry[];
+    const buildQuery = () => {
+      let q = supabase.from('fna_gl_entries').select('*').eq('org_id', filter.orgId);
+      if (filter.periodId) q = q.eq('period_id', filter.periodId);
+      if (filter.importId) q = q.eq('import_id', filter.importId);
+      if (filter.account) q = q.eq('account', filter.account);
+      if (filter.fromDate) q = q.gte('date', filter.fromDate);
+      if (filter.toDate) q = q.lte('date', filter.toDate);
+      return q;
+    };
+    const PAGE = 1000;
+    const all: any[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+      if (error) throw new Error(`getGLEntries: ${error.message}`);
+      if (!data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all.map((r: any) => toCamel(r)) as GLEntry[];
   }
   async bulkInsertGL(entries: GLEntry[]) {
     const rows = entries.map(e => toSnake(e));
