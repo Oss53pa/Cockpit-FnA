@@ -144,8 +144,15 @@ export default function DashboardHome() {
     <div>
       <PageHeader
         eyebrow="Synthèse de gestion"
-        title={org?.name ? `Bonjour · ${org.name}` : 'Synthèse de gestion'}
-        subtitle={`Vue d'ensemble temps réel — bilan, compte de résultat, ratios SYSCOHADA et trésorerie. Données rafraîchies en direct.`}
+        title={(() => {
+          try {
+            const u = JSON.parse(sessionStorage.getItem('cockpit-current-user') || '{}');
+            const firstName = (u.name || '').split(' ')[0];
+            if (firstName) return `Bonjour ${firstName}`;
+          } catch { /* ignore */ }
+          return 'Synthèse de gestion';
+        })()}
+        subtitle={`${org?.name ? `${org.name} — ` : ''}Vue d'ensemble temps réel — bilan, compte de résultat, ratios SYSCOHADA et trésorerie.`}
         hero
         action={
           <div className="flex gap-2">
