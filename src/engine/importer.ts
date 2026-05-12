@@ -1451,14 +1451,28 @@ export async function importGLTiers(
   // 2) Charger les écritures GL existantes pour rapprochement
   const glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
 
-  // Index pour rapprochement rapide : clé = date|account|debit|credit
-  // (journal et pièce sont optionnels car pas toujours présents dans le tiers)
-  const glIndex = new Map<string, GLEntry[]>();
+  // Index pour rapprochement rapide.
+  // PROBLEME SYSCOHADA : les fichiers tiers utilisent souvent les comptes
+  // collectifs PARENT (401 fournisseurs, 411 clients — 3 chiffres) alors que
+  // le GL contient les sous-comptes DETAILLES (401001, 408100, 411100 —
+  // 6 chiffres). Le rapprochement exact `e.account === tl.account` echouait
+  // donc systematiquement → toutes les lignes en standalone.
+  // Solution : 2 index. (a) exact account pour les cas standards ;
+  // (b) racine SYSCOHADA (2 premiers chiffres = classe : 40 fournisseurs,
+  // 41 clients, 42 personnel, 44 etat) comme fallback quand le compte tiers
+  // est un parent.
+  const glIndexExact = new Map<string, GLEntry[]>();
+  const glIndexByRoot = new Map<string, GLEntry[]>();
   for (const e of glEntries) {
-    const key = `${e.date}|${e.account}|${e.debit}|${e.credit}`;
-    const arr = glIndex.get(key) ?? [];
+    const keyExact = `${e.date}|${e.account}|${e.debit}|${e.credit}`;
+    let arr = glIndexExact.get(keyExact) ?? [];
     arr.push(e);
-    glIndex.set(key, arr);
+    glIndexExact.set(keyExact, arr);
+    const root = e.account.substring(0, 2);
+    const keyRoot = `${root}|${e.date}|${e.debit}|${e.credit}`;
+    arr = glIndexByRoot.get(keyRoot) ?? [];
+    arr.push(e);
+    glIndexByRoot.set(keyRoot, arr);
   }
 
   // 3) Rapprocher et enrichir
@@ -1471,8 +1485,18 @@ export async function importGLTiers(
   const periodByKey = new Map(existingPeriods.map((p) => [`${p.year}-${p.month}`, p.id]));
 
   for (const tl of tiersLines) {
-    const key = `${tl.date}|${tl.account}|${tl.debit}|${tl.credit}`;
-    const candidates = glIndex.get(key) ?? [];
+    // (a) tentative exact account
+    const keyExact = `${tl.date}|${tl.account}|${tl.debit}|${tl.credit}`;
+    let candidates = glIndexExact.get(keyExact) ?? [];
+
+    // (b) fallback : matching par racine SYSCOHADA (classe : 2 premiers
+    // chiffres) si compte tiers est un parent (3 chiffres ou pas trouve en
+    // exact). Permet a "401" du fichier tiers de matcher "401001" ou "408100"
+    // dans le GL — tous deux sont classe 40 (fournisseurs).
+    if (candidates.length === 0 && tl.account.length >= 2) {
+      const root = tl.account.substring(0, 2);
+      candidates = glIndexByRoot.get(`${root}|${tl.date}|${tl.debit}|${tl.credit}`) ?? [];
+    }
 
     // Chercher un candidat non déjà rapproché, avec journal/pièce si disponibles
     let best: GLEntry | undefined;
@@ -1542,11 +1566,20 @@ export async function importGLTiers(
     await dataProvider.bulkInsertGL(tagged as GLEntry[]);
   }
 
-  // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif
+  // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif.
+  // Aggrégation par racine SYSCOHADA (2 premiers chiffres = classe comptable :
+  // 40 fournisseurs, 41 clients, 42 personnel, 44 état). Comparer "401" du
+  // fichier tiers à la SOMME de tous les sous-comptes (401xxx, 408xxx) du
+  // GL — sinon un GL utilisant 408100 (FNP) vs un tiers déclaré sur 401
+  // donnerait toujours un faux écart.
   const coherenceCheck: TiersImportReport['coherenceCheck'] = [];
   for (const [account, soldeTiers] of tiersBalanceByAccount) {
+    const root = account.substring(0, 2);
+    // Si le compte tiers est déjà détaillé (≥ 3 chiffres avec sous-comptes
+    // dans le GL), on garde la logique startsWith. Sinon on agrège par classe.
+    const useClassRoot = account.length <= 3;
     const soldeGL = glEntries
-      .filter((e) => e.account === account || e.account.startsWith(account))
+      .filter((e) => useClassRoot ? e.account.startsWith(root) : (e.account === account || e.account.startsWith(account)))
       .reduce((s, e) => s + e.debit - e.credit, 0);
     const ecart = Math.round((soldeGL - soldeTiers) * 100) / 100;
     coherenceCheck.push({
