@@ -10,9 +10,12 @@ export type AmountDisplayMode = 'full' | 'short';
 
 /**
  * Mode de sélection de l'import GL à utiliser pour les calculs.
- * - 'latest' : (défaut) n'utilise QUE le dernier import du GL — évite le
- *   double-comptage quand plusieurs imports existent pour la même période.
- * - 'all'    : cumule tous les imports (comportement legacy).
+ * - 'all'    : (défaut) cumule tous les imports — aligné sur la page Grand
+ *   Livre. Evite l'asymétrie où les dashboards ne voyaient que le dernier
+ *   import GL tandis que la page GL affichait tout. Si l'utilisateur ré-importe
+ *   un même GL corrigé, c'est à lui de supprimer l'ancien import via l'UI.
+ * - 'latest' : n'utilise QUE le dernier import du GL — utile quand on
+ *   ré-importe successivement la même période sans purger l'ancien.
  * - une string : l'id d'un ImportLog spécifique (pour consulter une version
  *   historique).
  */
@@ -89,7 +92,21 @@ export const useApp = create<AppState>((set) => ({
     // pour qu'ils ré-évaluent fmtK / fmtMoney instantanément.
     import('../lib/format').then((mod) => mod.notifyAmountModeChanged()).catch(() => {});
   },
-  currentImport: (safeLocalStorage.getItem('current-import') as ImportSelection) || 'latest',
+  // Migration : l'ancien défaut était 'latest' (ne lisait que le dernier import
+  // GL), ce qui rendait les dashboards vides pour les users avec plusieurs
+  // imports (le dernier étant souvent partiel). On migre tous ceux qui n'ont
+  // pas explicitement choisi vers 'all' (cumul, aligné sur la page Grand Livre).
+  currentImport: ((): ImportSelection => {
+    const stored = safeLocalStorage.getItem('current-import');
+    // Migration one-shot : si la valeur stockée est 'latest' (ancien défaut),
+    // on bascule sur 'all'. L'utilisateur peut toujours revenir à 'latest'
+    // via le sélecteur du Header.
+    if (stored === 'latest') {
+      safeLocalStorage.setItem('current-import', 'all');
+      return 'all';
+    }
+    return (stored as ImportSelection) || 'all';
+  })(),
   setCurrentImport: (s) => {
     safeLocalStorage.setItem('current-import', s);
     set({ currentImport: s });
