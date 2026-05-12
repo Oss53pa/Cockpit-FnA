@@ -1,12 +1,17 @@
 /**
  * AcceptInvite — Page de définition du mot de passe pour un nouvel utilisateur invité.
  *
- * Flow :
- * 1. Admin invite un user via Settings → cockpit-invite-user envoie un magic link
- * 2. User clique sur le lien dans son email → redirige ici avec un token Supabase
- * 3. Supabase établit la session automatiquement (event SIGNED_IN)
+ * Flow (v3 anti-prefetch) :
+ * 1. Admin invite un user via Settings → cockpit-invite-user genere un hashed_token
+ * 2. Email recu : URL ${appUrl}/auth/accept-invite?token_hash=XXX&type=invite|recovery
+ * 3. User clique → arrive ici → JS appelle supabase.auth.verifyOtp({ token_hash, type })
+ *    → cree la session (event SIGNED_IN). Les scanners email (SafeLinks, Proofpoint)
+ *    ne peuvent pas consommer le token car la verification requiert l'execution JS.
  * 4. User saisit son mot de passe → updateUser({ password })
- * 5. Redirige vers /home avec session active
+ * 5. Redirige vers /home avec session active.
+ *
+ * Compatibilite : si l'URL contient l'ancien format (#access_token=... apres
+ * redirect /auth/v1/verify), on retombe sur l'auto-detection Supabase.
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -30,31 +35,57 @@ export default function AcceptInvite() {
       setError('Supabase non configuré');
       return;
     }
-    // Le hash contient access_token / refresh_token après le redirect Supabase
-    // L'event SIGNED_IN est dispatché automatiquement
+
+    const applySession = (session: { user?: { email?: string | null; user_metadata?: Record<string, unknown> } } | null) => {
+      if (!session?.user) return;
+      setUserEmail(session.user.email ?? null);
+      setUserName(
+        (session.user.user_metadata?.full_name as string | undefined)
+        ?? (session.user.user_metadata?.name as string | undefined)
+        ?? null,
+      );
+      setSessionReady(true);
+    };
+
+    // Listener pour le flow legacy (hash #access_token=...) et le verifyOtp ci-dessous
     const sub = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        setUserEmail(session.user.email ?? null);
-        setUserName(
-          (session.user.user_metadata?.full_name as string | undefined)
-          ?? (session.user.user_metadata?.name as string | undefined)
-          ?? null,
-        );
-        setSessionReady(true);
-      }
+      if (event === 'SIGNED_IN') applySession(session as any);
     });
-    // Tente de récupérer la session immédiatement (si déjà établie)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUserEmail(session.user.email ?? null);
-        setUserName(
-          (session.user.user_metadata?.full_name as string | undefined)
-          ?? (session.user.user_metadata?.name as string | undefined)
-          ?? null,
-        );
-        setSessionReady(true);
-      }
-    });
+
+    // Flow v3 : token_hash dans query string (anti-prefetch)
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get('token_hash');
+    const type = params.get('type') as 'invite' | 'recovery' | 'magiclink' | 'email' | 'email_change' | null;
+
+    if (tokenHash && type) {
+      (async () => {
+        try {
+          const { data, error: verifyErr } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as any,
+          });
+          if (verifyErr) {
+            setError(verifyErr.message || 'Lien invalide ou déjà utilisé.');
+            return;
+          }
+          if (data.session) {
+            applySession(data.session as any);
+            // Nettoie l'URL pour ne pas garder le token visible
+            window.history.replaceState({}, '', window.location.pathname);
+          } else {
+            setError('Session non créée après vérification du lien.');
+          }
+        } catch (e: any) {
+          setError(e?.message || 'Erreur lors de la vérification du lien.');
+        }
+      })();
+    } else {
+      // Fallback legacy : Supabase auto-détecte le hash #access_token=... via detectSessionInUrl
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) applySession(session as any);
+      });
+    }
+
     return () => { sub.data.subscription.unsubscribe(); };
   }, []);
 
