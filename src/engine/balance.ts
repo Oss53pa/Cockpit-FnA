@@ -33,7 +33,7 @@ export async function computeAuxBalance(opts: {
   const auxEntries = entries.filter((e) =>
     ids.has(e.periodId) &&
     e.account.startsWith(prefix) &&
-    (!importId || importId === 'all' || e.importId === importId),
+    (!importId || importId === 'all' || String(e.importId) === String(importId)),
   );
 
   // Détection du niveau de détail RÉEL disponible :
@@ -168,7 +168,7 @@ export async function computeBalance(opts: BalanceOpts): Promise<BalanceRow[]> {
   const periodIds = new Set(periods.map((p) => p.id));
   const all = await dataProvider.getGLEntries({ orgId });
   const entries: GLEntry[] = all.filter((e) =>
-    periodIds.has(e.periodId) && (!importId || importId === 'all' || e.importId === importId),
+    periodIds.has(e.periodId) && (!importId || importId === 'all' || String(e.importId) === String(importId)),
   );
 
   // Aggrégation par compte

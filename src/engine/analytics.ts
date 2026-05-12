@@ -215,7 +215,7 @@ export async function agedBalance(
 
   for (const e of entries) {
     if (!matchAccount(e.account)) continue;
-    if (importId && importId !== 'all' && e.importId !== importId) continue;
+    if (importId && importId !== 'all' && String(e.importId) !== String(importId)) continue;
     if (e.date > cutoff) continue; // ignore le futur par rapport à la date d'analyse
     // Exclure les écritures sans tiers sur comptes parents (centralisations)
     if (hasTiersAged && !e.tiers && parentAgedAccounts.has(e.account)) continue;

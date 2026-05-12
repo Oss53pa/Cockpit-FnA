@@ -377,7 +377,7 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
   const rows: GLRow[] = useMemo(() => {
     const filtered = entries
       .filter((e) => periodIds.has(e.periodId))
-      .filter((e) => importId === 'all' || e.importId === importId)
+      .filter((e) => importId === 'all' || String(e.importId) === String(importId))
       .filter((e) => journal === 'all' || e.journal === journal)
       .filter((e) => !accountPrefix || e.account.startsWith(accountPrefix))
       .filter((e) => {
@@ -465,7 +465,7 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
         dataProvider.getGLEntries({ orgId }),
       ]);
       const periodIds = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
-      const filtered = all.filter((e) => periodIds.has(e.periodId) && (!importId || importId === 'all' || e.importId === importId));
+      const filtered = all.filter((e) => periodIds.has(e.periodId) && (!importId || importId === 'all' || String(e.importId) === String(importId)));
       setDiagEntries(filtered);
     })();
   }, [orgId, year, importId]);
