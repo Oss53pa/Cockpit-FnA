@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Mail, Lock, User, Sparkles, ExternalLink } from 'lucide-react';
+import { UserPlus, Mail, Lock, User, Building2, Sparkles, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 const ATLAS_STUDIO_URL = 'https://atlas-studio.org';
@@ -18,6 +18,7 @@ export default function Signup() {
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
+  const [orgName, setOrgName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
@@ -49,6 +50,7 @@ export default function Signup() {
     try {
       await signUp(email.trim().toLowerCase(), password, {
         full_name: fullName.trim(),
+        org_name: orgName.trim() || undefined,
       });
       // Si Supabase a email confirmation activé, on n'a pas de session immédiate
       // → on affiche le message. Sinon, le useAuth listener redirige automatiquement.
@@ -124,6 +126,24 @@ export default function Signup() {
                     />
                   </div>
                   {errors.name && <p className="text-xs text-error mt-1">{errors.name}</p>}
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1 block">
+                    Nom de l'entreprise
+                  </label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
+                    <input
+                      type="text"
+                      value={orgName}
+                      onChange={e => setOrgName(e.target.value)}
+                      className="input pl-10"
+                      placeholder="Ex : EMERGENCE PLAZA SA"
+                      autoComplete="organization"
+                    />
+                  </div>
+                  <p className="text-[10px] text-primary-400 mt-1">Laissez vide pour créer un espace personnel</p>
                 </div>
 
                 <div>

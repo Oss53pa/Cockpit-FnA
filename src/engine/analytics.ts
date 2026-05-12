@@ -190,10 +190,35 @@ export async function agedBalance(
   type Mvt = { date: string; amount: number; isInvoice: boolean; account: string; label: string };
   const perTiers = new Map<string, { mvts: Mvt[]; openingNet: number }>();
 
+  // Détection des comptes parents (collectifs) : un compte est « parent » s'il
+  // est préfixe strict d'un autre compte du même jeu. Les écritures sur ces
+  // comptes sont des centralisations qui dupliquent les lignes tiers → exclure.
+  const distinctAgedAccounts = new Set<string>();
+  let hasTiersAged = false;
+  for (const e of entries) {
+    if (!matchAccount(e.account)) continue;
+    distinctAgedAccounts.add(e.account);
+    if (e.tiers) hasTiersAged = true;
+  }
+  const parentAgedAccounts = new Set<string>();
+  if (hasTiersAged) {
+    const codes = Array.from(distinctAgedAccounts);
+    for (const code of codes) {
+      for (const other of codes) {
+        if (other !== code && other.startsWith(code)) {
+          parentAgedAccounts.add(code);
+          break;
+        }
+      }
+    }
+  }
+
   for (const e of entries) {
     if (!matchAccount(e.account)) continue;
     if (importId && importId !== 'all' && e.importId !== importId) continue;
     if (e.date > cutoff) continue; // ignore le futur par rapport à la date d'analyse
+    // Exclure les écritures sans tiers sur comptes parents (centralisations)
+    if (hasTiersAged && !e.tiers && parentAgedAccounts.has(e.account)) continue;
     const tier = e.tiers || e.account;
     const label = accountLabels.get(e.account) ?? e.label ?? '—';
     const cur = perTiers.get(tier) ?? { mvts: [] as Mvt[], openingNet: 0 };

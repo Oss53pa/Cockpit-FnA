@@ -97,6 +97,15 @@ export default function Imports() {
 
   return (
     <div className="space-y-6">
+      {/* Rappel de l'org cible — évite les imports dans la mauvaise société */}
+      {org && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 text-xs">
+          <span className="text-accent font-bold">▶</span>
+          <span>Les données importées iront dans <strong className="text-accent">{org.name}</strong>.</span>
+          <span className="text-primary-500">Vérifiez que c'est la bonne société avant d'importer.</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-xs text-primary-500 italic">
           Importez le <strong>Grand Livre</strong> ; toutes les balances (générale, auxiliaire, âgée) sont calculées automatiquement.

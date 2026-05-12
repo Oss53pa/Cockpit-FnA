@@ -261,6 +261,15 @@ export default function ImportTiers() {
       />
 
       <div className="space-y-6">
+        {/* Rappel de l'org cible */}
+        {org && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 text-xs">
+            <span className="text-accent font-bold">▶</span>
+            <span>Les données importées iront dans <strong className="text-accent">{org.name}</strong>.</span>
+            <span className="text-primary-500">Vérifiez que c'est la bonne société avant d'importer.</span>
+          </div>
+        )}
+
         {/* Alerte si pas de GL importé */}
         {!hasGL && (
           <div className="p-4 rounded-lg bg-warning/10 border-l-4 border-warning">

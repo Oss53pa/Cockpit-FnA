@@ -51,6 +51,21 @@ export async function computeAuxBalance(opts: {
   }
   const hasMultipleAuxAccounts = distinctAccounts.size > 1;
 
+  // Détection des comptes parents (collectifs) : un compte est « parent » s'il
+  // est préfixe strict d'un autre compte du même jeu. Ex : 411 est parent si
+  // 411001 existe. Les écritures sur ces comptes parents sont des centralisations
+  // qui dupliquent les lignes individuelles des tiers → à exclure.
+  const parentAccounts = new Set<string>();
+  const allCodes = Array.from(distinctAccounts);
+  for (const code of allCodes) {
+    for (const other of allCodes) {
+      if (other !== code && other.startsWith(code)) {
+        parentAccounts.add(code);
+        break;
+      }
+    }
+  }
+
   const map = new Map<string, AuxBalanceRow>();
   for (const e of auxEntries) {
     let key: string;
@@ -58,16 +73,18 @@ export async function computeAuxBalance(opts: {
     let tier: string;
 
     if (hasTiers) {
-      // BUG FIX : si l'org dispose de codes tiers, on N'AGRÈGE QUE par tiers.
-      // Les écritures sans code tiers (typiquement OD techniques sur le compte
-      // parent 401 / 411) sont regroupées dans un bucket unique « Sans tiers »
-      // — pas en lignes séparées par compte parent (qui faisaient doublon avec
-      // les lignes individuelles des tiers).
+      // Si l'org dispose de codes tiers, on agrège UNIQUEMENT par tiers.
+      // Les écritures sans code tiers sur un compte parent (collectif 411/401)
+      // sont des centralisations qui dupliquent les lignes tiers → on les exclut.
       if (e.tiers) {
         key = `T:${e.tiers}`;
         label = e.label?.trim() || accountLabels.get(e.account) || '—';
         tier = e.tiers;
+      } else if (parentAccounts.has(e.account)) {
+        continue; // centralisation sur compte collectif → skip
       } else {
+        // Écriture sans tiers sur un compte auxiliaire non-parent (ex: OD sur
+        // 411500 sans code tiers) — on la garde dans un bucket résiduel.
         key = `__SANS_TIERS__:${e.account}`;
         label = `Sans tiers (${e.account})`;
         tier = `— ${e.account}`;

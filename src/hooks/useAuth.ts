@@ -224,8 +224,8 @@ export function useAuth() {
   ) => {
     const fullName = typeof fullNameOrOrg === 'string' ? fullNameOrOrg : fullNameOrOrg.full_name;
     const orgName = typeof fullNameOrOrg === 'string'
-      ? fullNameOrOrg
-      : (fullNameOrOrg.org_name || `${fullNameOrOrg.full_name} — Espace`);
+      ? `Espace de ${fullNameOrOrg}`
+      : (fullNameOrOrg.org_name || `Espace de ${fullNameOrOrg.full_name}`);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
