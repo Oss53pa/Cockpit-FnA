@@ -1411,7 +1411,9 @@ function TabUsers() {
     }
   };
 
-  /** Re-envoyer l'invitation à un utilisateur déjà créé localement (ex: créé avant le fix) */
+  /** Re-envoyer l'invitation à un utilisateur — supporte le cas "user existe deja"
+   *  via forceRecovery=true qui genere un lien de redefinition de mot de passe.
+   *  En cas d'echec Resend, le magicLink est expose au admin pour copier-coller manuel. */
   const resendInvite = async (u: AppUser) => {
     const { supabase, isSupabaseConfigured } = await import('../lib/supabase');
     if (!isSupabaseConfigured) {
@@ -1428,13 +1430,49 @@ function TabUsers() {
         orgsLabel, appUrl,
       });
       const { data, error } = await (supabase as any).functions.invoke('cockpit-invite-user', {
-        body: { email: u.email, name: u.name, role: u.role, orgIds: u.orgIds, appUrl, subject: content.subject, html: content.htmlBody },
+        body: {
+          email: u.email, name: u.name, role: u.role, orgIds: u.orgIds,
+          appUrl, subject: content.subject, html: content.htmlBody,
+          forceRecovery: true, // renvoi = user existe deja → recovery direct
+        },
       });
-      if (error) throw new Error(error?.context?.error ?? error?.message);
-      if (data?.success === false) throw new Error(`${data.error}${data.hint ? ' — ' + data.hint : ''}`);
-      toast.success('Invitation renvoyée', `${u.name} recevra le lien.`);
+      if (error) throw new Error(error?.context?.error ?? error?.message ?? 'Erreur reseau Edge Function');
+      if (data?.success === false) {
+        // Detail complet : error + hint + supabaseError + resendStatus
+        const parts: string[] = [data.error ?? 'Echec'];
+        if (data.hint) parts.push(data.hint);
+        if (data.supabaseError) {
+          const se = data.supabaseError;
+          parts.push(`Supabase: ${se.message ?? '?'}${se.code ? ` (${se.code})` : ''}${se.status ? ` [${se.status}]` : ''}`);
+        }
+        if (data.resendStatus) parts.push(`Resend HTTP ${data.resendStatus}`);
+        if (data.details && typeof data.details === 'string') parts.push(data.details);
+        // eslint-disable-next-line no-console
+        console.error('[resendInvite] Echec:', data);
+
+        // Si on a un magicLink malgre l'echec d'envoi, le proposer en fallback
+        if (data.magicLink) {
+          const ok = window.confirm(
+            `Echec d'envoi automatique de l'email :\n\n${parts.join(' — ')}\n\nVoulez-vous copier le lien d'invitation dans le presse-papier pour l'envoyer manuellement a ${u.email} ?`,
+          );
+          if (ok) {
+            try {
+              await navigator.clipboard.writeText(data.magicLink);
+              toast.success('Lien copié', 'Collez-le dans un message pour l\'utilisateur.');
+            } catch {
+              window.prompt('Copiez ce lien et envoyez-le à l\'utilisateur :', data.magicLink);
+            }
+            return;
+          }
+        }
+        throw new Error(parts.join(' — '));
+      }
+      const msg = data?.linkType === 'recovery'
+        ? `${u.name} recevra un nouveau lien (redefinition de mot de passe).`
+        : `${u.name} recevra le lien d'activation.`;
+      toast.success('Invitation renvoyée', msg);
     } catch (e: any) {
-      toast.error('Échec', e?.message ?? 'Erreur');
+      toast.error('Échec du renvoi', e?.message ?? 'Erreur inconnue');
     }
   };
 

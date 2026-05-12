@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
   let body: any;
   try { body = await req.json(); } catch { return json(200, { success: false, error: 'Body JSON invalide' }); }
 
-  const { email, name, role, orgIds, appUrl, html: htmlTemplate, subject } = body ?? {};
+  const { email, name, role, orgIds, appUrl, html: htmlTemplate, subject, forceRecovery } = body ?? {};
   if (!email || !appUrl || !htmlTemplate) {
     return json(200, { success: false, error: 'Champs requis : email, appUrl, html', received: { email: !!email, appUrl: !!appUrl, html: !!htmlTemplate } });
   }
@@ -68,63 +68,95 @@ Deno.serve(async (req: Request) => {
   const redirectTo = `${appUrl.replace(/\/$/, '')}/auth/accept-invite`;
 
   // ETAPE 1 : Genere lien Supabase Auth
+  // forceRecovery=true → utilise direct type='recovery' (renvoi d'invitation pour
+  // user existant). Sinon, on tente 'invite' d'abord puis fallback 'recovery'.
   let magicLink: string | undefined;
   let userId: string | null = null;
-  let linkType = 'invite';
+  let linkType: 'invite' | 'recovery' = forceRecovery ? 'recovery' : 'invite';
+
+  async function tryRecovery() {
+    console.info('[invite] generateLink recovery');
+    const { data: rdata, error: rerror } = await (supabase as any).auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo },
+    });
+    if (rerror) {
+      return { ok: false as const, error: rerror };
+    }
+    return {
+      ok: true as const,
+      link: buildSafeLink(redirectTo, rdata?.properties),
+      userId: rdata.user?.id ?? null,
+      properties: rdata?.properties,
+    };
+  }
 
   try {
-    const { data, error } = await (supabase as any).auth.admin.generateLink({
-      type: 'invite',
-      email,
-      options: {
-        data: {
-          full_name: name,
-          role,
-          org_ids: orgIds,
-          invited_at: new Date().toISOString(),
-          invited_by_app: 'cockpit-fna',
-        },
-        redirectTo,
-      },
-    });
-
-    if (error) {
-      console.warn('[invite] generateLink invite error:', JSON.stringify(error));
-      const msg = (error.message ?? '').toString().toLowerCase();
-      const code = (error.code ?? '').toString();
-      const status = error.status;
-      const isAlreadyExists = msg.includes('already') || msg.includes('exists') || msg.includes('registered')
-        || code === 'email_exists' || code === 'user_already_exists' || status === 422 || status === 409;
-
-      if (isAlreadyExists) {
-        console.info('[invite] User existe deja, fallback recovery');
-        const { data: rdata, error: rerror } = await (supabase as any).auth.admin.generateLink({
-          type: 'recovery',
-          email,
-          options: { redirectTo },
-        });
-        if (rerror) {
-          return json(200, {
-            success: false,
-            error: 'Le user existe deja mais le lien de recovery a echoue',
-            supabaseError: { message: rerror.message, code: rerror.code, status: rerror.status },
-            hint: 'Demandez au user de cliquer sur "Mot de passe oublie" sur la page de login.',
-          });
-        }
-        magicLink = buildSafeLink(redirectTo, rdata?.properties);
-        userId = rdata.user?.id ?? null;
-        linkType = 'recovery';
-      } else {
+    if (forceRecovery) {
+      // Renvoi explicite : on saute l'etape 'invite' (qui echouerait avec
+      // "user already registered" puisque le user existe deja).
+      const r = await tryRecovery();
+      if (!r.ok) {
         return json(200, {
           success: false,
-          error: 'Generation du lien d\'invitation echouee',
-          supabaseError: { message: error.message, code: error.code, status: error.status },
-          hint: identifyHint(error),
+          error: 'Generation du lien de renvoi echouee',
+          supabaseError: { message: r.error.message, code: r.error.code, status: r.error.status },
+          hint: identifyHint(r.error),
         });
       }
+      magicLink = r.link;
+      userId = r.userId;
+      linkType = 'recovery';
     } else {
-      magicLink = buildSafeLink(redirectTo, data?.properties);
-      userId = data.user?.id ?? null;
+      const { data, error } = await (supabase as any).auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: {
+          data: {
+            full_name: name,
+            role,
+            org_ids: orgIds,
+            invited_at: new Date().toISOString(),
+            invited_by_app: 'cockpit-fna',
+          },
+          redirectTo,
+        },
+      });
+
+      if (error) {
+        console.warn('[invite] generateLink invite error:', JSON.stringify(error));
+        const msg = (error.message ?? '').toString().toLowerCase();
+        const code = (error.code ?? '').toString();
+        const status = error.status;
+        const isAlreadyExists = msg.includes('already') || msg.includes('exists') || msg.includes('registered')
+          || code === 'email_exists' || code === 'user_already_exists' || status === 422 || status === 409;
+
+        if (isAlreadyExists) {
+          const r = await tryRecovery();
+          if (!r.ok) {
+            return json(200, {
+              success: false,
+              error: 'Le user existe deja mais le lien de recovery a echoue',
+              supabaseError: { message: r.error.message, code: r.error.code, status: r.error.status },
+              hint: 'Demandez au user de cliquer sur "Mot de passe oublie" sur la page de login.',
+            });
+          }
+          magicLink = r.link;
+          userId = r.userId;
+          linkType = 'recovery';
+        } else {
+          return json(200, {
+            success: false,
+            error: 'Generation du lien d\'invitation echouee',
+            supabaseError: { message: error.message, code: error.code, status: error.status },
+            hint: identifyHint(error),
+          });
+        }
+      } else {
+        magicLink = buildSafeLink(redirectTo, data?.properties);
+        userId = data.user?.id ?? null;
+      }
     }
   } catch (e: any) {
     return json(200, {
