@@ -7,7 +7,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage, TiersUnmatched,
+  Activity, Channel, ChatMessage, TiersUnmatched, GLAuditLogEntry,
 } from './schema';
 import { supabase as supabaseTyped } from '../lib/supabase';
 
@@ -283,6 +283,47 @@ export class SupabaseProvider implements DataProvider {
   }
   async deleteTiersUnmatchedByImport(importId: number) {
     check(await supabase.from('fna_tiers_unmatched').delete().eq('import_id', importId));
+  }
+
+  // GL Audit log
+  async getGLAuditLog(orgId: string, opts?: { glEntryId?: number; limit?: number }) {
+    let q = supabase.from('fna_gl_audit_log').select('*').eq('org_id', orgId).order('id', { ascending: false });
+    if (opts?.glEntryId !== undefined) q = q.eq('gl_entry_id', opts.glEntryId);
+    if (opts?.limit !== undefined) q = q.limit(opts.limit);
+    const { data, error } = await q;
+    if (error) {
+      // Migration 019 pas appliquée → silencieusement vide
+      return [];
+    }
+    return (data ?? []).map((r: any) => toCamel(r)) as GLAuditLogEntry[];
+  }
+  async getLastGLAuditHash(orgId: string): Promise<string> {
+    try {
+      const { data, error } = await supabase.rpc('fna_get_last_audit_hash', { p_org_id: orgId });
+      if (error) return '';
+      return (data as any) ?? '';
+    } catch {
+      return '';
+    }
+  }
+  async bulkInsertGLAuditLog(rows: Omit<GLAuditLogEntry, 'id'>[]) {
+    if (rows.length === 0) return;
+    const snakes = rows.map((r) => toSnake(r));
+    // changed_at est stocké en timestamptz : convertir le ms → ISO
+    for (const r of snakes) {
+      if (typeof r.changed_at === 'number') {
+        r.changed_at = new Date(r.changed_at).toISOString();
+      }
+    }
+    try {
+      for (let i = 0; i < snakes.length; i += 500) {
+        check(await supabase.from('fna_gl_audit_log').insert(snakes.slice(i, i + 500)));
+      }
+    } catch (e) {
+      // Migration 019 pas appliquée → non bloquant
+      // eslint-disable-next-line no-console
+      console.warn('[bulkInsertGLAuditLog] échec (migration 019 ?):', e);
+    }
   }
 
   // Import GL Tiers atomique via RPC fna_import_tiers (migration 017).

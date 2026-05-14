@@ -9,7 +9,7 @@ import { db, type TiersUnmatched, type GLEntry } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
-import { detectTiersColumns, importGLTiers, migrateGLPeriods, resyncAccountLabels, parseFile, TiersMapping, TiersImportReport } from '../engine/importer';
+import { detectTiersColumns, importGLTiers, importGLTiersBatch, migrateGLPeriods, resyncAccountLabels, parseFile, TiersMapping, TiersImportReport } from '../engine/importer';
 import { downloadTiersTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 import { Shield } from 'lucide-react';
@@ -44,6 +44,10 @@ export default function ImportTiers() {
   const glHistory = useImportsHistory(currentOrgId, 'GL');
   const [step, setStep] = useState<'idle' | 'mapping' | 'result'>('idle');
   const [file, setFile] = useState<File | null>(null);
+  // Fichiers additionnels pour import multi-fichiers (1er reste dans `file` pour
+  // détecter le mapping ; les autres seront traités avec le même mapping).
+  const [extraFiles, setExtraFiles] = useState<File[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Partial<TiersMapping>>({});
   const [source, setSource] = useState('CSV générique');
@@ -91,11 +95,16 @@ export default function ImportTiers() {
     }
   };
 
-  const onFile = async (f: File) => {
-    setFile(f);
+  // Accepte 1 ou plusieurs fichiers. Le 1er est utilisé pour le mapping
+  // (détection des colonnes) ; les autres seront traités avec le même mapping.
+  const onFiles = async (fs: File[]) => {
+    if (fs.length === 0) return;
+    const [first, ...rest] = fs;
+    setFile(first);
+    setExtraFiles(rest);
     setLoading(true);
     try {
-      const { headers } = await parseFile(f);
+      const { headers } = await parseFile(first);
       setHeaders(headers);
       setMapping(detectTiersColumns(headers));
       setStep('mapping');
@@ -113,23 +122,32 @@ export default function ImportTiers() {
       if (!mapping[k]) { toast.warning('Colonne manquante', `Le champ "${tiersFieldLabels[k]}" n'a pas été mappé`); return; }
     }
     setLoading(true);
+    setBatchProgress(null);
     try {
-      const res = await importGLTiers(file, mapping as TiersMapping, {
-        orgId: currentOrgId, user: 'Utilisateur local', source,
-      });
+      const allFiles = [file, ...extraFiles];
+      const res = await importGLTiersBatch(
+        allFiles,
+        mapping as TiersMapping,
+        { orgId: currentOrgId, user: 'Utilisateur local', source },
+        allFiles.length > 1
+          ? (current, total, name) => setBatchProgress({ current, total, name })
+          : undefined,
+      );
       setReport(res);
       setStep('result');
       if (res.enriched > 0 || res.unmatched > 0) {
-        toast.success('Import tiers terminé', `${res.enriched} enrichies · ${res.unmatched} non rapprochées`);
+        const filesPart = allFiles.length > 1 ? ` (${allFiles.length} fichiers)` : '';
+        toast.success(`Import tiers terminé${filesPart}`, `${res.enriched} enrichies · ${res.unmatched} non rapprochées`);
       }
     } catch (e: any) {
       toast.error("Erreur d'import", e.message);
     } finally {
       setLoading(false);
+      setBatchProgress(null);
     }
   };
 
-  const reset = () => { setStep('idle'); setFile(null); setHeaders([]); setMapping({}); setReport(null); };
+  const reset = () => { setStep('idle'); setFile(null); setExtraFiles([]); setHeaders([]); setMapping({}); setReport(null); setBatchProgress(null); };
 
   const deleteImport = async (imp: typeof history[number]) => {
     if (!confirm(`Supprimer l'import tiers "${imp.fileName}" et ses écritures créées en standalone ?`)) return;
@@ -396,13 +414,16 @@ export default function ImportTiers() {
 
         {step === 'idle' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card title="Déposer le fichier tiers" subtitle="Grand livre auxiliaire — CSV, TXT, XLSX, XLS" className="lg:col-span-2">
+            <Card title="Déposer le(s) fichier(s) tiers" subtitle="Grand livre auxiliaire — 1 ou plusieurs fichiers (clients, fournisseurs, personnel…)" className="lg:col-span-2">
               <label className="border-2 border-dashed border-primary-300 dark:border-primary-700 rounded-xl p-10 text-center block hover:border-primary-400 dark:hover:border-primary-600 transition cursor-pointer">
                 <Users className="w-10 h-10 mx-auto text-primary-400 mb-3" />
-                <p className="text-sm font-medium">Déposez ou cliquez pour choisir un fichier</p>
-                <p className="text-xs text-primary-500 mt-1">Formats acceptés : CSV · TXT · XLSX · XLS</p>
-                <input type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden"
-                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+                <p className="text-sm font-medium">Déposez ou cliquez pour choisir un ou plusieurs fichiers</p>
+                <p className="text-xs text-primary-500 mt-1">Formats : CSV · TXT · XLSX · XLS — sélection multiple possible (même structure de colonnes)</p>
+                <input type="file" accept=".csv,.txt,.xlsx,.xls" multiple className="hidden"
+                  onChange={(e) => {
+                    const fs = e.target.files ? Array.from(e.target.files) : [];
+                    if (fs.length > 0) void onFiles(fs);
+                  }} />
               </label>
               <div className="mt-4 flex flex-wrap gap-2">
                 {sources.map((s) => (
@@ -427,7 +448,28 @@ export default function ImportTiers() {
         )}
 
         {step === 'mapping' && (
-          <Card title="Mapping des colonnes" subtitle={`Fichier : ${file?.name} — ${headers.length} colonnes détectées`}>
+          <Card
+            title="Mapping des colonnes"
+            subtitle={
+              extraFiles.length > 0
+                ? `${1 + extraFiles.length} fichiers · mapping détecté depuis "${file?.name}"`
+                : `Fichier : ${file?.name} — ${headers.length} colonnes détectées`
+            }
+          >
+            {extraFiles.length > 0 && (
+              <div className="mb-4 p-3 rounded-lg bg-accent/5 border-l-4 border-accent text-xs">
+                <p className="font-semibold mb-1">Import multi-fichiers ({1 + extraFiles.length} fichiers)</p>
+                <p className="text-primary-600 dark:text-primary-300 mb-2">
+                  Le mapping détecté sur le 1er fichier sera appliqué à tous. Si les structures diffèrent, lancez plutôt des imports séparés.
+                </p>
+                <ul className="space-y-0.5">
+                  <li className="font-mono text-[11px]"><span className="text-accent">●</span> {file?.name} <span className="text-primary-400">(modèle de mapping)</span></li>
+                  {extraFiles.map((f, i) => (
+                    <li key={i} className="font-mono text-[11px]"><span className="text-primary-400">○</span> {f.name}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <Select label="Source ERP" value={source} onChange={setSource}
                 options={sources.map((s) => ({ v: s, l: s }))} />
@@ -449,10 +491,18 @@ export default function ImportTiers() {
                   required={['date', 'account', 'codeTiers', 'labelTiers', 'debit', 'credit'].includes(field)} />
               ))}
             </div>
+            {batchProgress && (
+              <div className="mt-4 p-3 rounded-lg bg-primary-100 dark:bg-primary-900/40 text-xs">
+                <p>Fichier {batchProgress.current}/{batchProgress.total} — <span className="font-mono">{batchProgress.name}</span></p>
+                <div className="w-full bg-primary-200 dark:bg-primary-800 rounded-full h-1.5 mt-2 overflow-hidden">
+                  <div className="bg-accent h-1.5 transition-all" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }} />
+                </div>
+              </div>
+            )}
             <div className="flex gap-2 mt-6 pt-4 border-t border-primary-200 dark:border-primary-800">
               <button className="btn-outline" onClick={reset}>Annuler</button>
               <button className="btn-primary" onClick={runImport} disabled={loading}>
-                {loading ? 'Import en cours…' : 'Lancer l\'import tiers'}
+                {loading ? 'Import en cours…' : (extraFiles.length > 0 ? `Lancer l'import (${1 + extraFiles.length} fichiers)` : 'Lancer l\'import tiers')}
               </button>
             </div>
           </Card>
@@ -736,6 +786,9 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
   const [candidates, setCandidates] = useState<GLEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // État drag-and-drop : id de la ligne GL survolée pour feedback visuel
+  const [hoverDropId, setHoverDropId] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   // Filtres pour la recherche large (no_candidate)
   const defaultFromDate = unmatched.date.substring(0, 7) + '-01'; // début du mois
@@ -792,10 +845,13 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
     }
     setSaving(true);
     try {
+      const oldTiers = glEntry.tiers;
+      const oldLabel = glEntry.label;
+      const newLabel = glEntry.label || unmatched.label || unmatched.labelTiers || '';
       // 1) Enrichir l'écriture GL
       await dataProvider.updateGLEntry(glEntry.id, {
         tiers: unmatched.codeTiers,
-        label: glEntry.label || unmatched.label || unmatched.labelTiers,
+        label: newLabel,
       });
       // 2) Marquer l'unmatched comme résolu
       if (unmatched.id !== undefined) {
@@ -805,6 +861,31 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
           resolution: 'matched',
         });
       }
+      // 3) Audit log de la modification manuelle
+      const { logGLChanges } = await import('../lib/glAuditLog');
+      const changes = [
+        {
+          glEntryId: glEntry.id,
+          field: 'tiers' as const,
+          oldValue: oldTiers,
+          newValue: unmatched.codeTiers,
+          reason: 'manual_match' as const,
+          sourceKind: 'MANUAL' as const,
+          sourceId: unmatched.id,
+        },
+      ];
+      if (newLabel !== oldLabel) {
+        changes.push({
+          glEntryId: glEntry.id,
+          field: 'label' as const,
+          oldValue: oldLabel,
+          newValue: newLabel,
+          reason: 'manual_match' as const,
+          sourceKind: 'MANUAL' as const,
+          sourceId: unmatched.id,
+        } as any);
+      }
+      await logGLChanges(orgId, changes);
       toast.success('Rattachement effectué', `${unmatched.codeTiers} → écriture #${glEntry.id}`);
       await onMatched();
     } catch (e: any) {
@@ -830,9 +911,23 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
           </button>
         </div>
 
-        {/* Ligne tiers source */}
-        <div className="p-4 bg-warning/5 border-b border-primary-200 dark:border-primary-800">
-          <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Ligne tiers source</p>
+        {/* Ligne tiers source (draggable) */}
+        <div
+          draggable
+          onDragStart={(e) => {
+            // Le payload est minimal — toute l'info utile est dans `unmatched` (state)
+            e.dataTransfer.setData('text/plain', `tiers:${unmatched.id ?? ''}`);
+            e.dataTransfer.effectAllowed = 'link';
+            setDragging(true);
+          }}
+          onDragEnd={() => { setDragging(false); setHoverDropId(null); }}
+          className={`p-4 bg-warning/5 border-b border-primary-200 dark:border-primary-800 cursor-grab active:cursor-grabbing transition ${dragging ? 'opacity-60 ring-2 ring-accent' : ''}`}
+          title="Glissez cette ligne sur une écriture GL ci-dessous pour la rattacher"
+        >
+          <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2 flex items-center gap-2">
+            Ligne tiers source
+            <span className="text-accent text-[10px] font-normal normal-case">▸ glisser-déposer ou cliquer "Rattacher"</span>
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-xs">
             <Field label="Date" value={unmatched.date} mono />
             <Field label="Compte" value={unmatched.account} mono />
@@ -900,32 +995,50 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
                 </tr>
               </thead>
               <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
-                {candidates.map((c) => (
-                  <tr key={c.id} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
-                    <td className="py-1.5 px-2 num font-mono">{c.id}</td>
-                    <td className="py-1.5 px-2 num">{c.date}</td>
-                    <td className="py-1.5 px-2 font-mono">{c.account}</td>
-                    <td className="py-1.5 px-2 font-mono">{c.journal}</td>
-                    <td className="py-1.5 px-2 font-mono">{c.piece}</td>
-                    <td className="py-1.5 px-2 truncate max-w-[200px]">{c.label}</td>
-                    <td className="py-1.5 px-2 text-right num">{c.debit > 0 ? fmtFull(c.debit) : '—'}</td>
-                    <td className="py-1.5 px-2 text-right num">{c.credit > 0 ? fmtFull(c.credit) : '—'}</td>
-                    <td className="py-1.5 px-2 font-mono">
-                      {c.tiers
-                        ? <Badge variant={c.tiers === unmatched.codeTiers ? 'success' : 'warning'}>{c.tiers}</Badge>
-                        : <span className="text-primary-400">—</span>}
-                    </td>
-                    <td className="py-1.5 px-2 text-center">
-                      <button
-                        className="btn-primary !py-1 !px-2 text-[10px]"
-                        onClick={() => confirmMatch(c)}
-                        disabled={saving}
-                      >
-                        <Link2 className="w-3 h-3" /> Rattacher
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {candidates.map((c) => {
+                  const isHovered = hoverDropId === c.id;
+                  return (
+                    <tr
+                      key={c.id}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'link';
+                        if (c.id !== undefined) setHoverDropId(c.id);
+                      }}
+                      onDragLeave={() => setHoverDropId((cur) => (cur === c.id ? null : cur))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setHoverDropId(null);
+                        setDragging(false);
+                        void confirmMatch(c);
+                      }}
+                      className={`transition ${isHovered ? 'bg-accent/15 ring-2 ring-accent ring-inset' : 'hover:bg-primary-50 dark:hover:bg-primary-900/50'}`}
+                    >
+                      <td className="py-1.5 px-2 num font-mono">{c.id}</td>
+                      <td className="py-1.5 px-2 num">{c.date}</td>
+                      <td className="py-1.5 px-2 font-mono">{c.account}</td>
+                      <td className="py-1.5 px-2 font-mono">{c.journal}</td>
+                      <td className="py-1.5 px-2 font-mono">{c.piece}</td>
+                      <td className="py-1.5 px-2 truncate max-w-[200px]">{c.label}</td>
+                      <td className="py-1.5 px-2 text-right num">{c.debit > 0 ? fmtFull(c.debit) : '—'}</td>
+                      <td className="py-1.5 px-2 text-right num">{c.credit > 0 ? fmtFull(c.credit) : '—'}</td>
+                      <td className="py-1.5 px-2 font-mono">
+                        {c.tiers
+                          ? <Badge variant={c.tiers === unmatched.codeTiers ? 'success' : 'warning'}>{c.tiers}</Badge>
+                          : <span className="text-primary-400">—</span>}
+                      </td>
+                      <td className="py-1.5 px-2 text-center">
+                        <button
+                          className="btn-primary !py-1 !px-2 text-[10px]"
+                          onClick={() => confirmMatch(c)}
+                          disabled={saving}
+                        >
+                          <Link2 className="w-3 h-3" /> Rattacher
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

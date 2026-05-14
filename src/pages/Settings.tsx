@@ -29,6 +29,7 @@ type Tab = 'apparence' | 'societes' | 'exercices' | 'ratios' | 'donnees' | 'user
 
 const SECTORS = ['Industrie', 'Commerce', 'BTP', 'Services', 'Agriculture', 'Santé', 'Banque', 'Microfinance', 'Éducation', 'Hôtellerie', 'Mines', 'Immobilier', 'Transport', 'Télécoms'];
 const CURRENCIES = ['XOF', 'XAF', 'EUR', 'USD', 'GHS', 'NGN'];
+const COA_SYSTEMS = ['SYSCOHADA', 'PCG_FR', 'IFRS', 'US_GAAP'];
 
 export default function Settings() {
   return (
@@ -224,7 +225,7 @@ function TabSocietes() {
   const { currentOrgId, setCurrentOrg } = useApp();
   const [openNew, setOpenNew] = useState(false);
   const [editingOrg, setEditingOrg] = useState<any | null>(null);
-  const [form, setForm] = useState({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
+  const [form, setForm] = useState({ name: '', sector: 'Industrie', currency: 'XOF', coaSystem: 'SYSCOHADA', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
   const [saving, setSaving] = useState(false);
 
   const openEdit = (org: any) => {
@@ -233,6 +234,7 @@ function TabSocietes() {
       name: org.name || '',
       sector: org.sector || 'Industrie',
       currency: org.currency || 'XOF',
+      coaSystem: org.coaSystem || 'SYSCOHADA',
       rccm: org.rccm || '',
       ifu: org.ifu || '',
       address: org.address || '',
@@ -251,6 +253,7 @@ function TabSocietes() {
         name: form.name.trim(),
         sector: form.sector,
         currency: form.currency,
+        coaSystem: form.coaSystem as any,
         rccm: form.rccm || undefined,
         ifu: form.ifu || undefined,
         address: form.address || undefined,
@@ -270,6 +273,7 @@ function TabSocietes() {
       const id = 'org-' + Date.now();
       await dataProvider.upsertOrganization({
         id, name: form.name.trim(), sector: form.sector, currency: form.currency,
+        coaSystem: form.coaSystem as any,
         rccm: form.rccm || undefined, ifu: form.ifu || undefined, createdAt: Date.now(),
       });
       // BUG FIX URGENT : associer immédiatement le user créateur à cette org
@@ -300,7 +304,7 @@ function TabSocietes() {
       invalidateCloudData('fiscalYears');
       invalidateCloudData('periods');
       setOpenNew(false);
-      setForm({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
+      setForm({ name: '', sector: 'Industrie', currency: 'XOF', coaSystem: 'SYSCOHADA', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
       setCurrentOrg(id);
     } finally { setSaving(false); }
   };
@@ -422,6 +426,18 @@ function TabSocietes() {
             <SelectField label="Secteur" value={form.sector} options={SECTORS} onChange={(v) => setForm({ ...form, sector: v })} />
             <SelectField label="Devise" value={form.currency} options={CURRENCIES} onChange={(v) => setForm({ ...form, currency: v })} />
           </div>
+          <div className="grid grid-cols-1 gap-3">
+            <SelectField
+              label="Plan comptable"
+              value={form.coaSystem}
+              options={COA_SYSTEMS}
+              onChange={(v) => setForm({ ...form, coaSystem: v })}
+            />
+            <p className="text-[10px] text-primary-500 -mt-2">
+              SYSCOHADA (Afrique Ouest, défaut) · PCG_FR (Plan comptable français) · IFRS / US_GAAP (référentiels internationaux).
+              Détermine la logique de rapprochement tiers et d'agrégation par classe.
+            </p>
+          </div>
           <div>
             <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2 mt-2">Fiscalité</p>
             <div className="grid grid-cols-2 gap-3">
@@ -452,6 +468,12 @@ function TabSocietes() {
             <SelectField label="Secteur" value={form.sector} options={SECTORS} onChange={(v) => setForm({ ...form, sector: v })} />
             <SelectField label="Devise" value={form.currency} options={CURRENCIES} onChange={(v) => setForm({ ...form, currency: v })} />
           </div>
+          <SelectField
+            label="Plan comptable"
+            value={form.coaSystem}
+            options={COA_SYSTEMS}
+            onChange={(v) => setForm({ ...form, coaSystem: v })}
+          />
           <div className="grid grid-cols-2 gap-3">
             <Field label="RCCM" value={form.rccm} onChange={(v) => setForm({ ...form, rccm: v })} placeholder="CI-ABJ-YYYY-B-XXXX" />
             <Field label="IFU / NIF" value={form.ifu} onChange={(v) => setForm({ ...form, ifu: v })} placeholder="Numéro fiscal" />

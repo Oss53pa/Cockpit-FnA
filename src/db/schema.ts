@@ -2,12 +2,24 @@ import Dexie, { Table } from 'dexie';
 
 export type AccountingSystem = 'Normal' | 'Allégé' | 'SMT';
 
+/**
+ * Système de plan comptable applicable à l'org. Détermine comment classifier
+ * les comptes (racine de classe, comptes parents, etc.) — utilisé par le
+ * rapprochement tiers, la balance, les KPI. Cf. src/engine/accountingSystems.ts.
+ */
+export type CoaSystem = 'SYSCOHADA' | 'PCG_FR' | 'IFRS' | 'US_GAAP';
+
 export type Organization = {
   id: string;
   name: string;
   currency: string;
   sector: string;
   accountingSystem?: AccountingSystem; // Normal (défaut) / Allégé (PME) / SMT (TPE)
+  /**
+   * Plan comptable de l'org. Défaut : SYSCOHADA (Afrique de l'Ouest).
+   * Détermine la logique de classification des comptes (classRoot, isParent).
+   */
+  coaSystem?: CoaSystem;
   rccm?: string;
   ifu?: string;
   address?: string;
@@ -104,6 +116,27 @@ export type AccountMapping = {
   orgId: string;
   sourceCode: string;      // code dans le fichier source
   targetCode: string;      // compte SYSCOHADA cible
+};
+
+/**
+ * Audit log : trace immuable de chaque modification a posteriori sur une
+ * écriture GL (post-insertion). Chaîné SHA-256 par org pour détecter toute
+ * insertion/suppression a posteriori dans le log lui-même.
+ */
+export type GLAuditLogEntry = {
+  id?: number;
+  orgId: string;
+  glEntryId: number;
+  changedAt: number;        // timestamp ms
+  changedBy?: string;
+  field: 'tiers' | 'label' | 'analyticalAxis' | 'analyticalSection' | 'lettrage';
+  oldValue?: string;
+  newValue?: string;
+  reason: 'tiers_import' | 'manual_match' | 'manual_edit' | 'unlettrage';
+  sourceKind?: 'TIERS' | 'MANUAL' | 'GL';
+  sourceId?: number;
+  auditHash: string;
+  previousAuditHash: string;
 };
 
 /**

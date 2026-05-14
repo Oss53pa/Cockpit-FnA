@@ -11,6 +11,7 @@ import { hashEntry, type HashableEntry } from '../lib/auditHash';
 import { assertPeriodOpen, PeriodLockedError } from '../lib/periodLock';
 import { getClassifier } from './accountingSystems';
 import { hungarianMaximize } from './hungarian';
+import { logGLChanges, type AuditChange } from '../lib/glAuditLog';
 
 /**
  * Debug helper — log uniquement en développement (strip en prod).
@@ -1452,11 +1453,11 @@ export async function importGLTiers(
 
   // 2) Charger le GL et préparer le classifier
   const glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
-  // Plan comptable : récupère la classification adaptée à l'org. Aujourd'hui
-  // toujours SYSCOHADA (l'org.accountingSystem n'a pas encore de variantes
-  // multi-plans), mais l'abstraction permet de basculer sans toucher au matcher.
+  // Plan comptable : récupère la classification adaptée à l'org. Le champ
+  // org.coaSystem (migration 018) est configurable via Paramètres → Sociétés.
+  // Défaut SYSCOHADA si non défini (rétro-compat).
   const org = await dataProvider.getOrganization(opts.orgId);
-  const classifier = getClassifier((org as any)?.coaSystem);
+  const classifier = getClassifier(org?.coaSystem);
 
   // Index "large" : clé par date + montants arrondis (tolérance d'arrondi).
   // Toutes les écritures GL qui ont les mêmes date+débit+crédit (à 1 unité près)
@@ -1508,6 +1509,7 @@ export async function importGLTiers(
   };
 
   const toUpdate: GLEntry[] = [];
+  const auditChanges: AuditChange[] = [];
   const unmatchedRows: Array<Omit<import('../db/schema').TiersUnmatched, 'id' | 'importId'>> = [];
   const matchedGL = new Set<number>();
 
@@ -1552,8 +1554,30 @@ export async function importGLTiers(
     if (c.tiers === tl.codeTiers) {
       skipped++; // idempotent : même tier déjà assigné
     } else {
+      // Audit trail : tracer la modification AVANT de muter
+      const oldTiers = c.tiers;
+      const oldLabel = c.label;
+      const newLabel = (!c.label || c.label === '—') ? (tl.label || tl.labelTiers) : c.label;
+      auditChanges.push({
+        glEntryId: Number(c.id),
+        field: 'tiers',
+        oldValue: oldTiers,
+        newValue: tl.codeTiers,
+        reason: 'tiers_import',
+        sourceKind: 'TIERS',
+      });
+      if (newLabel !== oldLabel) {
+        auditChanges.push({
+          glEntryId: Number(c.id),
+          field: 'label',
+          oldValue: oldLabel,
+          newValue: newLabel,
+          reason: 'tiers_import',
+          sourceKind: 'TIERS',
+        });
+      }
       c.tiers = tl.codeTiers;
-      if (!c.label || c.label === '—') c.label = tl.label || tl.labelTiers;
+      c.label = newLabel;
       toUpdate.push(c);
       matchedGL.add(c.id!);
       enriched++;
@@ -1714,6 +1738,14 @@ export async function importGLTiers(
     }
   }
 
+  // Audit log : tracer chaque enrichissement (tiers ajouté, libellé éventuellement
+  // mis à jour). Le log est chaîné SHA-256 par org et immuable (RLS append-only).
+  // Non bloquant : si la migration 019 n'est pas appliquée, on continue.
+  if (auditChanges.length > 0) {
+    const withSource = auditChanges.map((a) => ({ ...a, sourceId: Number(importId) }));
+    await logGLChanges(opts.orgId, withSource);
+  }
+
   // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif.
   // Aggrégation par racine SYSCOHADA (2 premiers chiffres = classe comptable :
   // 40 fournisseurs, 41 clients, 42 personnel, 44 état). Comparer "401" du
@@ -1753,4 +1785,78 @@ export async function importGLTiers(
     errors,
     coherenceCheck,
   };
+}
+
+/**
+ * Import en lot de PLUSIEURS fichiers GL Tiers, agrégés en un seul rapport.
+ *
+ * Cas d'usage : l'entreprise a un fichier tiers par catégorie (clients.csv,
+ * fournisseurs.csv, personnel.csv...). Plutôt que de faire 3 imports séparés
+ * (3 logs, 3 contrôles de cohérence indépendants), on agrège tout :
+ *
+ * - Lignes lues = somme des lignes de tous les fichiers
+ * - Enriched / Unmatched / Skipped = sommes cumulées
+ * - Erreurs préfixées par le nom du fichier source pour traçabilité
+ * - Cohérence : agrégation par compte collectif sur tous les fichiers combinés
+ *
+ * Chaque fichier conserve son propre ImportLog ; le rapport retourné est la
+ * vue consolidée pour l'UI.
+ */
+export async function importGLTiersBatch(
+  files: File[],
+  mapping: TiersMapping,
+  opts: { orgId: string; user: string; source: string },
+  onFileProgress?: (current: number, total: number, fileName: string) => void,
+): Promise<TiersImportReport> {
+  if (files.length === 0) {
+    return { totalRows: 0, enriched: 0, unmatched: 0, skipped: 0, errors: [], coherenceCheck: [] };
+  }
+  // Mode mono-fichier : passe direct
+  if (files.length === 1) {
+    onFileProgress?.(1, 1, files[0].name);
+    return importGLTiers(files[0], mapping, opts);
+  }
+
+  // Agrégation multi-fichiers
+  const combined: TiersImportReport = {
+    totalRows: 0,
+    enriched: 0,
+    unmatched: 0,
+    skipped: 0,
+    errors: [],
+    coherenceCheck: [],
+  };
+  // Map: account → { soldeGL, soldeTiers (cumulé), files } — pour réagréger après
+  const coherenceByAccount = new Map<string, { soldeGL: number; soldeTiers: number }>();
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    onFileProgress?.(i + 1, files.length, f.name);
+    const r = await importGLTiers(f, mapping, opts);
+    combined.totalRows += r.totalRows;
+    combined.enriched += r.enriched;
+    combined.unmatched += r.unmatched;
+    combined.skipped += r.skipped;
+    // Erreurs préfixées par le nom du fichier pour permettre la traçabilité
+    combined.errors.push(...r.errors.map((e) => ({ ...e, reason: `[${f.name}] ${e.reason}` })));
+    // Cumul cohérence par compte
+    for (const c of r.coherenceCheck) {
+      const cur = coherenceByAccount.get(c.account) ?? { soldeGL: c.soldeGL, soldeTiers: 0 };
+      // soldeGL est identique pour tous les fichiers (même GL en base) → on garde la 1re valeur
+      cur.soldeTiers += c.soldeTiers;
+      coherenceByAccount.set(c.account, cur);
+    }
+  }
+
+  for (const [account, agg] of coherenceByAccount) {
+    const ecart = Math.round((agg.soldeGL - agg.soldeTiers) * 100) / 100;
+    combined.coherenceCheck.push({
+      account,
+      soldeGL: Math.round(agg.soldeGL * 100) / 100,
+      soldeTiers: Math.round(agg.soldeTiers * 100) / 100,
+      ecart,
+      ok: Math.abs(ecart) < 1,
+    });
+  }
+  return combined;
 }

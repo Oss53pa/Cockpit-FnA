@@ -46,7 +46,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage, TiersUnmatched,
+  Activity, Channel, ChatMessage, TiersUnmatched, GLAuditLogEntry,
 } from './schema';
 
 export interface GLFilter {
@@ -110,6 +110,13 @@ export interface DataProvider {
   deleteTiersUnmatched(id: number): Promise<void>;
   /** Supprime toutes les lignes unmatched liées à un import (cascade quand on supprime l'import). */
   deleteTiersUnmatchedByImport(importId: number): Promise<void>;
+  // GL Audit log — modifications a posteriori (post-insertion) sur les écritures GL.
+  // Chaîne SHA-256 par org, immuable (pas de UPDATE/DELETE policies en DB).
+  getGLAuditLog?(orgId: string, opts?: { glEntryId?: number; limit?: number }): Promise<GLAuditLogEntry[]>;
+  /** Retourne le dernier audit_hash d'une org (pour chaîner les nouveaux logs). */
+  getLastGLAuditHash?(orgId: string): Promise<string>;
+  bulkInsertGLAuditLog?(rows: Omit<GLAuditLogEntry, 'id'>[]): Promise<void>;
+
   /**
    * Import GL Tiers atomique via RPC Postgres (transaction unique).
    * Encapsule : addImport + bulkUpsertGL (enrichissements) + bulkInsertTiersUnmatched.

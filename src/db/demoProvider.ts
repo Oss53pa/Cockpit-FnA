@@ -243,6 +243,20 @@ export class DemoProvider implements DataProvider {
   deleteTiersUnmatched(id: number) { return this.inner.deleteTiersUnmatched(id); }
   deleteTiersUnmatchedByImport(importId: number) { return this.inner.deleteTiersUnmatchedByImport(importId); }
 
+  // ── GL Audit log ──
+  async getGLAuditLog(orgId: string, opts?: { glEntryId?: number; limit?: number }) {
+    if (isDemo(orgId)) return [];
+    return this.inner.getGLAuditLog?.(orgId, opts) ?? [];
+  }
+  async getLastGLAuditHash(orgId: string) {
+    if (isDemo(orgId)) return '';
+    return this.inner.getLastGLAuditHash?.(orgId) ?? '';
+  }
+  async bulkInsertGLAuditLog(rows: any[]) {
+    if (rows[0] && isDemo(rows[0].orgId)) return;
+    return this.inner.bulkInsertGLAuditLog?.(rows);
+  }
+
   // ── Budgets ──
   async getBudgets(orgId: string, year: number, version: string) {
     if (isDemo(orgId)) return demoBudgets(orgId).filter((b) => b.year === year && b.version === version);
