@@ -285,6 +285,60 @@ export class SupabaseProvider implements DataProvider {
     check(await supabase.from('fna_tiers_unmatched').delete().eq('import_id', importId));
   }
 
+  // Import GL Tiers atomique via RPC fna_import_tiers (migration 017).
+  // Si la RPC n'est pas déployée (réponse 404 ou function not found), retourne
+  // null pour signaler à l'appelant qu'il doit fallback sur les 3 appels séparés.
+  async importTiersAtomic(payload: {
+    orgId: string;
+    user: string;
+    fileName: string;
+    source: string;
+    count: number;
+    rejected: number;
+    status: 'success' | 'partial' | 'error';
+    report: string;
+    enriched: Array<{ id: number; tiers: string; label?: string }>;
+    unmatched: Array<Omit<TiersUnmatched, 'id' | 'importId' | 'orgId'>>;
+  }): Promise<{ importId: number } | null> {
+    try {
+      // Conversion camelCase → snake_case pour les unmatched (la RPC attend
+      // les clés en snake_case, comme les colonnes Postgres).
+      const unmatchedSnake = payload.unmatched.map((u) => toSnake(u));
+      const { data, error } = await supabase.rpc('fna_import_tiers', {
+        p_org_id:    payload.orgId,
+        p_user:      payload.user,
+        p_file_name: payload.fileName,
+        p_source:    payload.source,
+        p_count:     payload.count,
+        p_rejected:  payload.rejected,
+        p_status:    payload.status,
+        p_report:    payload.report,
+        p_enriched:  payload.enriched,
+        p_unmatched: unmatchedSnake,
+      });
+      if (error) {
+        // 42883 = "function does not exist" → migration pas appliquée
+        // PGRST202 = "Could not find the function" → idem côté PostgREST
+        const code = (error as any).code;
+        if (code === '42883' || code === 'PGRST202' || (error.message || '').includes('does not exist')) {
+          // eslint-disable-next-line no-console
+          console.warn('[importTiersAtomic] RPC non déployée — fallback sur séquentiel.');
+          return null;
+        }
+        throw new Error(`importTiersAtomic: ${error.message}`);
+      }
+      if (!data || typeof (data as any).import_id !== 'number') {
+        return null;
+      }
+      return { importId: (data as any).import_id };
+    } catch (e: any) {
+      // Tout autre échec : ne pas casser l'import — fallback séquentiel
+      // eslint-disable-next-line no-console
+      console.warn('[importTiersAtomic] échec, fallback séquentiel:', e?.message ?? e);
+      return null;
+    }
+  }
+
   // Budgets
   async getBudgets(orgId: string, year: number, version: string) {
     const { data } = await supabase.from('fna_budgets').select('*')

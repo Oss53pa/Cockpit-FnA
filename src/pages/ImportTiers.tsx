@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, XCircle, Users, Search, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Download, FileWarning, Link2, RefreshCw, Trash2, XCircle, Users, Search, AlertTriangle, X } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { toast } from '../components/ui/Toast';
 import { PageHeader } from '../components/layout/PageHeader';
 import { useApp } from '../store/app';
-import { db, type TiersUnmatched } from '../db/schema';
+import { db, type TiersUnmatched, type GLEntry } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
@@ -55,6 +55,7 @@ export default function ImportTiers() {
 
   // Lignes non rapprochées en attente de revue manuelle
   const [unmatchedRows, setUnmatchedRows] = useState<TiersUnmatched[]>([]);
+  const [matchModalRow, setMatchModalRow] = useState<TiersUnmatched | null>(null);
   const loadUnmatched = useCallback(async () => {
     if (!currentOrgId) return;
     try {
@@ -592,6 +593,13 @@ export default function ImportTiers() {
                       <td className="py-1.5 px-2 text-center">
                         <div className="flex justify-center gap-1">
                           <button
+                            className="btn-ghost !p-1 text-accent hover:text-accent-dark"
+                            onClick={() => setMatchModalRow(r)}
+                            title="Rattacher à une écriture GL manuellement"
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             className="btn-ghost !p-1 text-primary-500 hover:text-primary-700"
                             onClick={() => r.id !== undefined && dismissUnmatched(r.id)}
                             title="Ignorer (marquer comme traitée sans action)"
@@ -663,6 +671,16 @@ export default function ImportTiers() {
           </div>
         </Card>
       </div>
+
+      {/* Modal de rattachement manuel */}
+      {matchModalRow && (
+        <MatchModal
+          orgId={currentOrgId}
+          unmatched={matchModalRow}
+          onClose={() => setMatchModalRow(null)}
+          onMatched={async () => { setMatchModalRow(null); await loadUnmatched(); invalidateCloudData('gl'); }}
+        />
+      )}
     </div>
   );
 }
@@ -690,6 +708,238 @@ function StatCard({ label, value, good, bad }: { label: string; value: number; g
       <p className={`num text-2xl font-bold ${good ? 'text-success' : bad ? 'text-error' : ''}`}>
         {value.toLocaleString('fr-FR')}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Modal "Rattacher cette ligne" — permet à l'utilisateur d'arbitrer
+ * manuellement une ligne unmatched en sélectionnant une écriture GL précise.
+ *
+ * Comportement :
+ *   - Si la ligne a `candidateIds` (cas ambiguous), on charge directement ces
+ *     écritures et l'utilisateur choisit parmi elles.
+ *   - Sinon (no_candidate / tiers_conflict), l'utilisateur peut filtrer par
+ *     date, compte, fourchette de montants pour trouver l'écriture cible.
+ *
+ * Action :
+ *   1. UPDATE fna_gl_entries SET tiers=... WHERE id=selected
+ *   2. UPDATE fna_tiers_unmatched SET resolved_at=now(), resolved_to=selected,
+ *      resolution='matched'
+ */
+function MatchModal({ orgId, unmatched, onClose, onMatched }: {
+  orgId: string;
+  unmatched: TiersUnmatched;
+  onClose: () => void;
+  onMatched: () => void | Promise<void>;
+}) {
+  const [candidates, setCandidates] = useState<GLEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Filtres pour la recherche large (no_candidate)
+  const defaultFromDate = unmatched.date.substring(0, 7) + '-01'; // début du mois
+  const defaultToDate = unmatched.date.substring(0, 7) + '-31';
+  const [fromDate, setFromDate] = useState(defaultFromDate);
+  const [toDate, setToDate] = useState(defaultToDate);
+  const [accountPrefix, setAccountPrefix] = useState(unmatched.account.substring(0, 2));
+  const [amountTolerance, setAmountTolerance] = useState(0);
+
+  const loadCandidates = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Cas ambiguous : charger les candidats pré-identifiés
+      if (unmatched.reason === 'ambiguous' && unmatched.candidateIds && unmatched.candidateIds.length > 0) {
+        // Pas d'API getGLEntriesByIds → on charge tout puis filtre client-side.
+        // Pour des datasets très gros, à optimiser via une RPC ou un filter `in`.
+        const all = await dataProvider.getGLEntries({ orgId });
+        const ids = new Set(unmatched.candidateIds);
+        setCandidates(all.filter((e) => e.id !== undefined && ids.has(e.id)));
+        return;
+      }
+      // Cas no_candidate / tiers_conflict : recherche large
+      const all = await dataProvider.getGLEntries({ orgId, fromDate, toDate });
+      const filtered = all.filter((e) => {
+        if (accountPrefix && !e.account.startsWith(accountPrefix)) return false;
+        if (amountTolerance >= 0) {
+          const dbDiff = Math.abs(e.debit - unmatched.debit);
+          const crDiff = Math.abs(e.credit - unmatched.credit);
+          if (dbDiff > amountTolerance) return false;
+          if (crDiff > amountTolerance) return false;
+        }
+        return true;
+      });
+      // Limite à 50 résultats triés par proximité de montant
+      const sorted = filtered.sort((a, b) => {
+        const da = Math.abs(a.debit - unmatched.debit) + Math.abs(a.credit - unmatched.credit);
+        const db = Math.abs(b.debit - unmatched.debit) + Math.abs(b.credit - unmatched.credit);
+        return da - db;
+      }).slice(0, 50);
+      setCandidates(sorted);
+    } catch (e: any) {
+      toast.error('Recherche impossible', e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId, unmatched, fromDate, toDate, accountPrefix, amountTolerance]);
+
+  useEffect(() => { void loadCandidates(); }, [loadCandidates]);
+
+  const confirmMatch = async (glEntry: GLEntry) => {
+    if (glEntry.id === undefined) return;
+    if (glEntry.tiers && glEntry.tiers !== unmatched.codeTiers) {
+      if (!confirm(`Cette écriture GL est déjà associée au tiers "${glEntry.tiers}". La remplacer par "${unmatched.codeTiers}" ?`)) return;
+    }
+    setSaving(true);
+    try {
+      // 1) Enrichir l'écriture GL
+      await dataProvider.updateGLEntry(glEntry.id, {
+        tiers: unmatched.codeTiers,
+        label: glEntry.label || unmatched.label || unmatched.labelTiers,
+      });
+      // 2) Marquer l'unmatched comme résolu
+      if (unmatched.id !== undefined) {
+        await dataProvider.updateTiersUnmatched(unmatched.id, {
+          resolvedAt: Date.now(),
+          resolvedTo: glEntry.id,
+          resolution: 'matched',
+        });
+      }
+      toast.success('Rattachement effectué', `${unmatched.codeTiers} → écriture #${glEntry.id}`);
+      await onMatched();
+    } catch (e: any) {
+      toast.error('Échec du rattachement', e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-primary-950 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-primary-200 dark:border-primary-800">
+          <div>
+            <h3 className="text-base font-semibold">Rattacher manuellement la ligne tiers</h3>
+            <p className="text-xs text-primary-500 mt-1">
+              Le code tiers <strong className="text-accent">{unmatched.codeTiers}</strong> sera ajouté à l'écriture GL que vous choisissez ci-dessous.
+            </p>
+          </div>
+          <button onClick={onClose} className="btn-ghost !p-1.5">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Ligne tiers source */}
+        <div className="p-4 bg-warning/5 border-b border-primary-200 dark:border-primary-800">
+          <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Ligne tiers source</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-xs">
+            <Field label="Date" value={unmatched.date} mono />
+            <Field label="Compte" value={unmatched.account} mono />
+            <Field label="Code tiers" value={unmatched.codeTiers} mono accent />
+            <Field label="Libellé" value={unmatched.labelTiers || unmatched.label || '—'} />
+            <Field label="Débit" value={unmatched.debit > 0 ? fmtFull(unmatched.debit) : '—'} num />
+            <Field label="Crédit" value={unmatched.credit > 0 ? fmtFull(unmatched.credit) : '—'} num />
+            {unmatched.journal && <Field label="Journal" value={unmatched.journal} mono />}
+            {unmatched.piece && <Field label="Pièce" value={unmatched.piece} mono />}
+            <Field label="Motif" value={unmatched.reason} />
+          </div>
+        </div>
+
+        {/* Filtres (uniquement si pas ambiguous) */}
+        {unmatched.reason !== 'ambiguous' && (
+          <div className="p-4 border-b border-primary-200 dark:border-primary-800">
+            <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-2">Filtres de recherche GL</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="text-[10px] text-primary-500 block mb-1">Du</label>
+                <input type="date" className="input !py-1.5 text-xs" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] text-primary-500 block mb-1">Au</label>
+                <input type="date" className="input !py-1.5 text-xs" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] text-primary-500 block mb-1">Compte (préfixe)</label>
+                <input type="text" className="input !py-1.5 text-xs font-mono" value={accountPrefix} onChange={(e) => setAccountPrefix(e.target.value)} placeholder="41, 411, 411100…" />
+              </div>
+              <div>
+                <label className="text-[10px] text-primary-500 block mb-1">Tolérance montant (±)</label>
+                <input type="number" className="input !py-1.5 text-xs num" value={amountTolerance} onChange={(e) => setAmountTolerance(Number(e.target.value))} min={0} />
+              </div>
+            </div>
+            <button className="btn-outline mt-3 text-xs" onClick={loadCandidates} disabled={loading}>
+              <Search className="w-3.5 h-3.5" /> {loading ? 'Recherche…' : 'Rechercher'}
+            </button>
+          </div>
+        )}
+
+        {/* Candidats */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <p className="text-sm text-primary-500 text-center py-8">Chargement…</p>
+          ) : candidates.length === 0 ? (
+            <p className="text-sm text-primary-500 text-center py-8">
+              Aucune écriture GL ne correspond aux critères.
+              {unmatched.reason !== 'ambiguous' && ' Élargissez la date, le préfixe de compte ou la tolérance de montant.'}
+            </p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+                <tr>
+                  <th className="text-left py-2 px-2">ID</th>
+                  <th className="text-left py-2 px-2">Date</th>
+                  <th className="text-left py-2 px-2">Compte</th>
+                  <th className="text-left py-2 px-2">Journal</th>
+                  <th className="text-left py-2 px-2">Pièce</th>
+                  <th className="text-left py-2 px-2">Libellé</th>
+                  <th className="text-right py-2 px-2">Débit</th>
+                  <th className="text-right py-2 px-2">Crédit</th>
+                  <th className="text-left py-2 px-2">Tiers actuel</th>
+                  <th className="text-center py-2 px-2">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                {candidates.map((c) => (
+                  <tr key={c.id} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
+                    <td className="py-1.5 px-2 num font-mono">{c.id}</td>
+                    <td className="py-1.5 px-2 num">{c.date}</td>
+                    <td className="py-1.5 px-2 font-mono">{c.account}</td>
+                    <td className="py-1.5 px-2 font-mono">{c.journal}</td>
+                    <td className="py-1.5 px-2 font-mono">{c.piece}</td>
+                    <td className="py-1.5 px-2 truncate max-w-[200px]">{c.label}</td>
+                    <td className="py-1.5 px-2 text-right num">{c.debit > 0 ? fmtFull(c.debit) : '—'}</td>
+                    <td className="py-1.5 px-2 text-right num">{c.credit > 0 ? fmtFull(c.credit) : '—'}</td>
+                    <td className="py-1.5 px-2 font-mono">
+                      {c.tiers
+                        ? <Badge variant={c.tiers === unmatched.codeTiers ? 'success' : 'warning'}>{c.tiers}</Badge>
+                        : <span className="text-primary-400">—</span>}
+                    </td>
+                    <td className="py-1.5 px-2 text-center">
+                      <button
+                        className="btn-primary !py-1 !px-2 text-[10px]"
+                        onClick={() => confirmMatch(c)}
+                        disabled={saving}
+                      >
+                        <Link2 className="w-3 h-3" /> Rattacher
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, mono, num, accent }: { label: string; value: string; mono?: boolean; num?: boolean; accent?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase text-primary-500 font-medium">{label}</p>
+      <p className={`text-xs ${mono || num ? 'font-mono' : ''} ${num ? 'num text-right' : ''} ${accent ? 'text-accent font-semibold' : ''}`}>{value}</p>
     </div>
   );
 }

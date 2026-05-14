@@ -110,6 +110,26 @@ export interface DataProvider {
   deleteTiersUnmatched(id: number): Promise<void>;
   /** Supprime toutes les lignes unmatched liées à un import (cascade quand on supprime l'import). */
   deleteTiersUnmatchedByImport(importId: number): Promise<void>;
+  /**
+   * Import GL Tiers atomique via RPC Postgres (transaction unique).
+   * Encapsule : addImport + bulkUpsertGL (enrichissements) + bulkInsertTiersUnmatched.
+   *
+   * Retourne `{ importId }` en cas de succès, ou `null` si le provider ne
+   * supporte pas l'opération atomique (ex: Demo, Electron, RPC non déployée).
+   * L'appelant doit alors fallback sur les 3 appels séquentiels classiques.
+   */
+  importTiersAtomic?(payload: {
+    orgId: string;
+    user: string;
+    fileName: string;
+    source: string;
+    count: number;
+    rejected: number;
+    status: 'success' | 'partial' | 'error';
+    report: string;
+    enriched: Array<{ id: number; tiers: string; label?: string }>;
+    unmatched: Array<Omit<TiersUnmatched, 'id' | 'importId' | 'orgId'>>;
+  }): Promise<{ importId: number } | null>;
 
   // Budgets
   getBudgets(orgId: string, year: number, version: string): Promise<BudgetLine[]>;

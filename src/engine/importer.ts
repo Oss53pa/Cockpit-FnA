@@ -9,6 +9,8 @@ import { dataProvider } from '../db/provider';
 import { findSyscoAccount, classOf, SYSCOHADA_COA } from '../syscohada/coa';
 import { hashEntry, type HashableEntry } from '../lib/auditHash';
 import { assertPeriodOpen, PeriodLockedError } from '../lib/periodLock';
+import { getClassifier } from './accountingSystems';
+import { hungarianMaximize } from './hungarian';
 
 /**
  * Debug helper — log uniquement en développement (strip en prod).
@@ -1448,17 +1450,18 @@ export async function importGLTiers(
     tiersBalanceByAccount.set(account, (tiersBalanceByAccount.get(account) ?? 0) + debit - credit);
   });
 
-  // 2) Charger les écritures GL existantes pour rapprochement
+  // 2) Charger le GL et préparer le classifier
   const glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
+  // Plan comptable : récupère la classification adaptée à l'org. Aujourd'hui
+  // toujours SYSCOHADA (l'org.accountingSystem n'a pas encore de variantes
+  // multi-plans), mais l'abstraction permet de basculer sans toucher au matcher.
+  const org = await dataProvider.getOrganization(opts.orgId);
+  const classifier = getClassifier((org as any)?.coaSystem);
 
   // Index "large" : clé par date + montants arrondis (tolérance d'arrondi).
-  // On agrège toutes les écritures GL qui ont les mêmes date+débit+crédit
-  // (à 1 unité près). Le compte n'est PAS dans la clé : on laisse l'étape
-  // de scoring décider quel candidat est le meilleur match.
-  //
-  // Pourquoi ? Le fichier tiers et le GL peuvent diverger sur le compte
-  // (tiers utilise 401 collectif, GL utilise 401001/408100 détaillés) mais
-  // doivent être cohérents sur la date+montant. Date+montant = clé robuste.
+  // Toutes les écritures GL qui ont les mêmes date+débit+crédit (à 1 unité près)
+  // sont regroupées. Le compte n'est PAS dans la clé : c'est le scoring qui
+  // décide quel candidat est le meilleur match.
   const glIndex = new Map<string, GLEntry[]>();
   for (const e of glEntries) {
     const key = `${e.date}|${Math.round(e.debit)}|${Math.round(e.credit)}`;
@@ -1467,33 +1470,32 @@ export async function importGLTiers(
     glIndex.set(key, arr);
   }
 
-  // 3) Rapprocher et enrichir — ALGORITHME SCORÉ
+  // 3) Rapprocher et enrichir — ALGORITHME SCORÉ + HUNGARIAN
   //
-  // PRINCIPE COMPTABLE : le GL Tiers ne CRÉE jamais d'écritures dans le GL.
-  // Il enrichit les écritures existantes (déjà agrégées sur comptes parents)
-  // avec le code tiers détaillé. Les lignes sans correspondance robuste sont
-  // persistées dans fna_tiers_unmatched pour révision manuelle — JAMAIS
-  // créées en standalone (qui dupliquait les comptes parents).
+  // PRINCIPE COMPTABLE : le GL Tiers ne CRÉE jamais d'écritures GL. Il enrichit
+  // les écritures existantes avec le code tiers. Les lignes sans correspondance
+  // robuste sont persistées dans fna_tiers_unmatched pour révision.
   //
-  // SCORING (min 50 pour être considéré valide) :
-  //   - Compte exact           : +100
-  //   - Compte startsWith       : +70  (tiers='411' vs GL='411100')
-  //   - Même classe SYSCOHADA   : +40  (tiers='401' vs GL='408100')
+  // SCORING (min 50 pour valider) :
+  //   - Compte exact            : +100
+  //   - Compte startsWith       : +70  (tier='411' vs GL='411100')
+  //   - Même classe (classifier): +40  (tier='401' vs GL='408100' en SYSCOHADA)
   //   - Classe différente       : rejet
   //   - Journal match           : +20
-  //   - Journal mismatch        : -30  (signal fort de mauvais match)
+  //   - Journal mismatch        : -30
   //   - Pièce match             : +50  (identifiant fort)
   //   - Pièce mismatch          : -40
   //
-  // En cas d'égalité de score top, on persiste avec raison='ambiguous'
-  // et la liste des candidate_ids pour arbitrage manuel.
+  // ASSIGNMENT : Hungarian par groupe (date, debit, credit). Le greedy
+  // "first-match-wins" est sous-optimal quand plusieurs lignes tiers ont
+  // des candidats qui se chevauchent. Hungarian maximise le score TOTAL.
   const MIN_SCORE = 50;
   const scoreCandidate = (tl: TiersLine, c: GLEntry): number => {
     let s = 0;
     if (c.account === tl.account) s += 100;
     else if (c.account.startsWith(tl.account)) s += 70;
-    else if (c.account.substring(0, 2) === tl.account.substring(0, 2)) s += 40;
-    else return -1; // classe différente → rejet
+    else if (classifier.classRoot(c.account) === classifier.classRoot(tl.account)) s += 40;
+    else return -1;
     if (tl.journal && c.journal) {
       if (tl.journal.toUpperCase() === c.journal.toUpperCase()) s += 20;
       else s -= 30;
@@ -1507,121 +1509,208 @@ export async function importGLTiers(
 
   const toUpdate: GLEntry[] = [];
   const unmatchedRows: Array<Omit<import('../db/schema').TiersUnmatched, 'id' | 'importId'>> = [];
-  const matchedGL = new Set<number>(); // IDs GL déjà rapprochés dans cet import
+  const matchedGL = new Set<number>();
 
+  // Regrouper les lignes tiers par même clé (date, debit, credit) pour appliquer
+  // Hungarian sur chaque groupe. Hors groupe (lignes uniques), équivalent au greedy.
+  const groupsByKey = new Map<string, { idx: number; tl: TiersLine }[]>();
   for (let i = 0; i < tiersLines.length; i++) {
     const tl = tiersLines[i];
-    const rowIndex = i + 2; // ligne fichier (1-indexed + header)
     const key = `${tl.date}|${Math.round(tl.debit)}|${Math.round(tl.credit)}`;
+    const arr = groupsByKey.get(key) ?? [];
+    arr.push({ idx: i, tl });
+    groupsByKey.set(key, arr);
+  }
+
+  // Process chaque groupe
+  const recordUnmatched = (
+    idx: number,
+    tl: TiersLine,
+    reason: 'no_candidate' | 'tiers_conflict' | 'ambiguous',
+    candidateIds?: number[],
+  ) => {
+    unmatchedRows.push({
+      orgId: opts.orgId,
+      rowIndex: idx + 2,
+      date: tl.date,
+      account: tl.account,
+      codeTiers: tl.codeTiers,
+      labelTiers: tl.labelTiers,
+      debit: tl.debit,
+      credit: tl.credit,
+      journal: tl.journal || undefined,
+      piece: tl.piece || undefined,
+      label: tl.label || undefined,
+      reason,
+      candidateIds: candidateIds && candidateIds.length > 0 ? candidateIds : undefined,
+      createdAt: Date.now(),
+    });
+    unmatched++;
+  };
+
+  const assignMatch = (tl: TiersLine, c: GLEntry) => {
+    if (c.tiers === tl.codeTiers) {
+      skipped++; // idempotent : même tier déjà assigné
+    } else {
+      c.tiers = tl.codeTiers;
+      if (!c.label || c.label === '—') c.label = tl.label || tl.labelTiers;
+      toUpdate.push(c);
+      matchedGL.add(c.id!);
+      enriched++;
+    }
+  };
+
+  for (const [key, group] of groupsByKey) {
     const candidates = glIndex.get(key) ?? [];
 
-    // Détection conflit tiers (candidat avec tiers déjà assigné, différent)
-    const hasConflict = candidates.some((c) =>
-      c.tiers && c.tiers !== tl.codeTiers && !matchedGL.has(c.id!)
-    );
-
-    // Scoring
-    let bestScore = MIN_SCORE - 1;
-    let topCandidates: GLEntry[] = [];
-    for (const c of candidates) {
-      if (matchedGL.has(c.id!)) continue;
-      if (c.tiers && c.tiers !== tl.codeTiers) continue; // skip si tiers déjà ≠
-      const sc = scoreCandidate(tl, c);
-      if (sc < MIN_SCORE) continue;
-      if (sc > bestScore) {
-        bestScore = sc;
-        topCandidates = [c];
-      } else if (sc === bestScore) {
-        topCandidates.push(c);
+    if (group.length === 1) {
+      // Cas mono-ligne : équivalent au greedy, on prend le meilleur scoreur
+      const { idx, tl } = group[0];
+      const hasConflict = candidates.some((c) =>
+        c.tiers && c.tiers !== tl.codeTiers && !matchedGL.has(c.id!)
+      );
+      let bestScore = MIN_SCORE - 1;
+      let topCandidates: GLEntry[] = [];
+      for (const c of candidates) {
+        if (matchedGL.has(c.id!)) continue;
+        if (c.tiers && c.tiers !== tl.codeTiers) continue;
+        const sc = scoreCandidate(tl, c);
+        if (sc < MIN_SCORE) continue;
+        if (sc > bestScore) { bestScore = sc; topCandidates = [c]; }
+        else if (sc === bestScore) topCandidates.push(c);
       }
-    }
-
-    if (topCandidates.length === 1) {
-      // Match unique de meilleur score → enrichissement
-      const best = topCandidates[0];
-      if (best.tiers === tl.codeTiers) {
-        skipped++; // déjà enrichi avec le même code (re-import idempotent)
+      if (topCandidates.length === 1) {
+        assignMatch(tl, topCandidates[0]);
+      } else if (topCandidates.length > 1) {
+        recordUnmatched(idx, tl, 'ambiguous', topCandidates.map((c) => c.id!).filter(Boolean));
       } else {
-        best.tiers = tl.codeTiers;
-        if (!best.label || best.label === '—') best.label = tl.label || tl.labelTiers;
-        toUpdate.push(best);
-        matchedGL.add(best.id!);
-        enriched++;
+        recordUnmatched(idx, tl, hasConflict ? 'tiers_conflict' : 'no_candidate');
       }
-    } else if (topCandidates.length > 1) {
-      // Plusieurs candidats équivalents → ambiguous, à arbitrer
-      unmatchedRows.push({
-        orgId: opts.orgId,
-        rowIndex,
-        date: tl.date,
-        account: tl.account,
-        codeTiers: tl.codeTiers,
-        labelTiers: tl.labelTiers,
-        debit: tl.debit,
-        credit: tl.credit,
-        journal: tl.journal || undefined,
-        piece: tl.piece || undefined,
-        label: tl.label || undefined,
-        reason: 'ambiguous',
-        candidateIds: topCandidates.map((c) => c.id!).filter((id) => typeof id === 'number'),
-        createdAt: Date.now(),
-      });
-      unmatched++;
-    } else {
-      // Aucun candidat avec score suffisant → no_candidate ou tiers_conflict
-      unmatchedRows.push({
-        orgId: opts.orgId,
-        rowIndex,
-        date: tl.date,
-        account: tl.account,
-        codeTiers: tl.codeTiers,
-        labelTiers: tl.labelTiers,
-        debit: tl.debit,
-        credit: tl.credit,
-        journal: tl.journal || undefined,
-        piece: tl.piece || undefined,
-        label: tl.label || undefined,
-        reason: hasConflict ? 'tiers_conflict' : 'no_candidate',
-        createdAt: Date.now(),
-      });
-      unmatched++;
+      continue;
+    }
+
+    // Cas multi-lignes : assignment optimal via Hungarian
+    // Filtre les candidats valides (pas déjà matchés, pas en conflit avec aucune ligne)
+    const validCandidates = candidates.filter((c) => !matchedGL.has(c.id!));
+    if (validCandidates.length === 0) {
+      // Toutes les lignes du groupe sont no_candidate
+      for (const { idx, tl } of group) recordUnmatched(idx, tl, 'no_candidate');
+      continue;
+    }
+
+    // Matrice de scores
+    const N = group.length;
+    const M = validCandidates.length;
+    const scores: number[][] = [];
+    for (let i = 0; i < N; i++) {
+      const row: number[] = [];
+      const tl = group[i].tl;
+      for (let j = 0; j < M; j++) {
+        const c = validCandidates[j];
+        // Conflit tiers : score interdit
+        if (c.tiers && c.tiers !== tl.codeTiers) {
+          row.push(Number.NEGATIVE_INFINITY);
+          continue;
+        }
+        const sc = scoreCandidate(tl, c);
+        if (sc < MIN_SCORE) row.push(Number.NEGATIVE_INFINITY);
+        else row.push(sc);
+      }
+      scores.push(row);
+    }
+
+    const assignments = hungarianMaximize(scores);
+
+    // Traiter les résultats
+    for (let i = 0; i < N; i++) {
+      const { idx, tl } = group[i];
+      const j = assignments[i];
+      if (j === -1 || j === undefined) {
+        // Pas d'assignment optimal possible
+        const hasConflict = candidates.some((c) =>
+          c.tiers && c.tiers !== tl.codeTiers && !matchedGL.has(c.id!)
+        );
+        recordUnmatched(idx, tl, hasConflict ? 'tiers_conflict' : 'no_candidate');
+      } else {
+        const c = validCandidates[j];
+        // Vérifier que le score était >= MIN (Hungarian peut assigner même si interdit
+        // si pas d'autre choix — on protège)
+        if (scores[i][j] < MIN_SCORE || !isFinite(scores[i][j])) {
+          recordUnmatched(idx, tl, 'no_candidate');
+        } else {
+          assignMatch(tl, c);
+        }
+      }
     }
   }
 
-  // 4) Écrire en base — uniquement les enrichissements (jamais de création GL).
-  // Persiste également les lignes non rapprochées pour revue manuelle.
-  const importId = await dataProvider.addImport({
-    orgId: opts.orgId,
-    date: Date.now(),
-    user: opts.user,
-    fileName: file.name,
-    source: opts.source,
-    kind: 'TIERS',
-    count: enriched,
-    rejected: errors.length + unmatched,
-    status: errors.length === 0 && unmatched === 0
-      ? 'success'
-      : (enriched > 0 ? 'partial' : 'error'),
-    report: JSON.stringify({ errors: errors.slice(0, 50), unmatched }),
-  });
+  // 4) Écrire en base — atomique via RPC si disponible, sinon séquentiel.
+  //
+  // Mode atomique (RPC fna_import_tiers, migration 017) :
+  //   - 1 seule transaction Postgres : INSERT import + UPDATE GL + INSERT unmatched
+  //   - Rollback automatique en cas d'erreur sur n'importe quelle étape
+  //   - Aucun état partiel possible
+  //
+  // Mode fallback (3 appels séquentiels) :
+  //   - Si la RPC n'est pas déployée, en mode démo, ou en mode Electron
+  //   - Risque d'état partiel si crash entre les étapes (mais cohérent au prochain run)
+  const importStatus: 'success' | 'partial' | 'error' = errors.length === 0 && unmatched === 0
+    ? 'success'
+    : (enriched > 0 ? 'partial' : 'error');
+  const reportJson = JSON.stringify({ errors: errors.slice(0, 50), unmatched });
 
-  // Mettre à jour les écritures enrichies (upsert par id)
-  if (toUpdate.length > 0) {
-    await dataProvider.bulkUpsertGL(toUpdate);
-  }
+  // Prépare le payload enrichi pour la RPC (id + tiers + label)
+  const enrichedPayload = toUpdate.map((e) => ({
+    id: Number(e.id),
+    tiers: e.tiers || '',
+    label: e.label || '',
+  }));
 
-  // Persister les lignes non rapprochées avec l'importId (pour traçabilité +
-  // suppression en cascade si l'utilisateur supprime cet import).
-  if (unmatchedRows.length > 0) {
-    const withImport = unmatchedRows.map((r) => ({ ...r, importId: Number(importId) }));
-    try {
-      await dataProvider.bulkInsertTiersUnmatched(withImport);
-    } catch (e) {
-      // Non bloquant : si la persistance échoue (ex: migration 016 pas appliquée),
-      // on log mais on n'invalide pas l'import. Le compteur unmatched reste exact
-      // dans le report.
-      // eslint-disable-next-line no-console
-      console.warn('[import-tiers] persistance unmatched échouée (non bloquant):', e);
+  let importId: number;
+  const atomic = dataProvider.importTiersAtomic
+    ? await dataProvider.importTiersAtomic({
+        orgId: opts.orgId,
+        user: opts.user,
+        fileName: file.name,
+        source: opts.source,
+        count: enriched,
+        rejected: errors.length + unmatched,
+        status: importStatus,
+        report: reportJson,
+        enriched: enrichedPayload,
+        unmatched: unmatchedRows,
+      })
+    : null;
+
+  if (atomic) {
+    importId = atomic.importId;
+  } else {
+    // Fallback séquentiel (Demo, Electron, ou RPC pas déployée)
+    importId = await dataProvider.addImport({
+      orgId: opts.orgId,
+      date: Date.now(),
+      user: opts.user,
+      fileName: file.name,
+      source: opts.source,
+      kind: 'TIERS',
+      count: enriched,
+      rejected: errors.length + unmatched,
+      status: importStatus,
+      report: reportJson,
+    });
+    if (toUpdate.length > 0) {
+      await dataProvider.bulkUpsertGL(toUpdate);
+    }
+    if (unmatchedRows.length > 0) {
+      const withImport = unmatchedRows.map((r) => ({ ...r, importId: Number(importId) }));
+      try {
+        await dataProvider.bulkInsertTiersUnmatched(withImport);
+      } catch (e) {
+        // Non bloquant : table fna_tiers_unmatched peut ne pas exister (migration 016
+        // non appliquée). Le compteur unmatched reste exact dans le report.
+        // eslint-disable-next-line no-console
+        console.warn('[import-tiers] persistance unmatched échouée (non bloquant):', e);
+      }
     }
   }
 
@@ -1633,10 +1722,10 @@ export async function importGLTiers(
   // donnerait toujours un faux écart.
   const coherenceCheck: TiersImportReport['coherenceCheck'] = [];
   for (const [account, soldeTiers] of tiersBalanceByAccount) {
-    const root = account.substring(0, 2);
-    // Si le compte tiers est déjà détaillé (≥ 3 chiffres avec sous-comptes
-    // dans le GL), on garde la logique startsWith. Sinon on agrège par classe.
-    const useClassRoot = account.length <= 3;
+    // Pour les comptes parents (selon le classifier), aggréger par racine de
+    // classe. Pour les détails, garder le comportement startsWith.
+    const useClassRoot = classifier.isParentAccount(account);
+    const root = classifier.classRoot(account);
     const soldeGL = glEntries
       .filter((e) => useClassRoot ? e.account.startsWith(root) : (e.account === account || e.account.startsWith(account)))
       .reduce((s, e) => s + e.debit - e.credit, 0);
