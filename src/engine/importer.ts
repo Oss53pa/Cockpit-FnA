@@ -1451,91 +1451,146 @@ export async function importGLTiers(
   // 2) Charger les écritures GL existantes pour rapprochement
   const glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
 
-  // Index pour rapprochement rapide.
-  // PROBLEME SYSCOHADA : les fichiers tiers utilisent souvent les comptes
-  // collectifs PARENT (401 fournisseurs, 411 clients — 3 chiffres) alors que
-  // le GL contient les sous-comptes DETAILLES (401001, 408100, 411100 —
-  // 6 chiffres). Le rapprochement exact `e.account === tl.account` echouait
-  // donc systematiquement → toutes les lignes en standalone.
-  // Solution : 2 index. (a) exact account pour les cas standards ;
-  // (b) racine SYSCOHADA (2 premiers chiffres = classe : 40 fournisseurs,
-  // 41 clients, 42 personnel, 44 etat) comme fallback quand le compte tiers
-  // est un parent.
-  const glIndexExact = new Map<string, GLEntry[]>();
-  const glIndexByRoot = new Map<string, GLEntry[]>();
+  // Index "large" : clé par date + montants arrondis (tolérance d'arrondi).
+  // On agrège toutes les écritures GL qui ont les mêmes date+débit+crédit
+  // (à 1 unité près). Le compte n'est PAS dans la clé : on laisse l'étape
+  // de scoring décider quel candidat est le meilleur match.
+  //
+  // Pourquoi ? Le fichier tiers et le GL peuvent diverger sur le compte
+  // (tiers utilise 401 collectif, GL utilise 401001/408100 détaillés) mais
+  // doivent être cohérents sur la date+montant. Date+montant = clé robuste.
+  const glIndex = new Map<string, GLEntry[]>();
   for (const e of glEntries) {
-    const keyExact = `${e.date}|${e.account}|${e.debit}|${e.credit}`;
-    let arr = glIndexExact.get(keyExact) ?? [];
+    const key = `${e.date}|${Math.round(e.debit)}|${Math.round(e.credit)}`;
+    const arr = glIndex.get(key) ?? [];
     arr.push(e);
-    glIndexExact.set(keyExact, arr);
-    const root = e.account.substring(0, 2);
-    const keyRoot = `${root}|${e.date}|${e.debit}|${e.credit}`;
-    arr = glIndexByRoot.get(keyRoot) ?? [];
-    arr.push(e);
-    glIndexByRoot.set(keyRoot, arr);
+    glIndex.set(key, arr);
   }
 
-  // 3) Rapprocher et enrichir
+  // 3) Rapprocher et enrichir — ALGORITHME SCORÉ
+  //
   // PRINCIPE COMPTABLE : le GL Tiers ne CRÉE jamais d'écritures dans le GL.
-  // Il vient uniquement enrichir les écritures existantes (qui sont déjà
-  // agrégées sur les comptes parents/collectifs) avec le code tiers détaillé.
-  // Les lignes sans correspondance GL sont comptées comme "unmatched" et
-  // signalées dans le rapport — mais jamais insérées en base.
+  // Il enrichit les écritures existantes (déjà agrégées sur comptes parents)
+  // avec le code tiers détaillé. Les lignes sans correspondance robuste sont
+  // persistées dans fna_tiers_unmatched pour révision manuelle — JAMAIS
+  // créées en standalone (qui dupliquait les comptes parents).
+  //
+  // SCORING (min 50 pour être considéré valide) :
+  //   - Compte exact           : +100
+  //   - Compte startsWith       : +70  (tiers='411' vs GL='411100')
+  //   - Même classe SYSCOHADA   : +40  (tiers='401' vs GL='408100')
+  //   - Classe différente       : rejet
+  //   - Journal match           : +20
+  //   - Journal mismatch        : -30  (signal fort de mauvais match)
+  //   - Pièce match             : +50  (identifiant fort)
+  //   - Pièce mismatch          : -40
+  //
+  // En cas d'égalité de score top, on persiste avec raison='ambiguous'
+  // et la liste des candidate_ids pour arbitrage manuel.
+  const MIN_SCORE = 50;
+  const scoreCandidate = (tl: TiersLine, c: GLEntry): number => {
+    let s = 0;
+    if (c.account === tl.account) s += 100;
+    else if (c.account.startsWith(tl.account)) s += 70;
+    else if (c.account.substring(0, 2) === tl.account.substring(0, 2)) s += 40;
+    else return -1; // classe différente → rejet
+    if (tl.journal && c.journal) {
+      if (tl.journal.toUpperCase() === c.journal.toUpperCase()) s += 20;
+      else s -= 30;
+    }
+    if (tl.piece && c.piece) {
+      if (tl.piece === c.piece) s += 50;
+      else s -= 40;
+    }
+    return s;
+  };
+
   const toUpdate: GLEntry[] = [];
-  const matched = new Set<number>(); // IDs GL déjà rapprochés (évite doublons)
+  const unmatchedRows: Array<Omit<import('../db/schema').TiersUnmatched, 'id' | 'importId'>> = [];
+  const matchedGL = new Set<number>(); // IDs GL déjà rapprochés dans cet import
 
-  for (const tl of tiersLines) {
-    // (a) tentative exact account
-    const keyExact = `${tl.date}|${tl.account}|${tl.debit}|${tl.credit}`;
-    let candidates = glIndexExact.get(keyExact) ?? [];
+  for (let i = 0; i < tiersLines.length; i++) {
+    const tl = tiersLines[i];
+    const rowIndex = i + 2; // ligne fichier (1-indexed + header)
+    const key = `${tl.date}|${Math.round(tl.debit)}|${Math.round(tl.credit)}`;
+    const candidates = glIndex.get(key) ?? [];
 
-    // (b) fallback : matching par racine SYSCOHADA (classe : 2 premiers
-    // chiffres) si compte tiers est un parent (3 chiffres ou pas trouve en
-    // exact). Permet a "401" du fichier tiers de matcher "401001" ou "408100"
-    // dans le GL — tous deux sont classe 40 (fournisseurs).
-    if (candidates.length === 0 && tl.account.length >= 2) {
-      const root = tl.account.substring(0, 2);
-      candidates = glIndexByRoot.get(`${root}|${tl.date}|${tl.debit}|${tl.credit}`) ?? [];
-    }
+    // Détection conflit tiers (candidat avec tiers déjà assigné, différent)
+    const hasConflict = candidates.some((c) =>
+      c.tiers && c.tiers !== tl.codeTiers && !matchedGL.has(c.id!)
+    );
 
-    // Chercher un candidat non déjà rapproché, avec journal/pièce si disponibles
-    let best: GLEntry | undefined;
+    // Scoring
+    let bestScore = MIN_SCORE - 1;
+    let topCandidates: GLEntry[] = [];
     for (const c of candidates) {
-      if (matched.has(c.id!)) continue;
-      if (c.tiers && c.tiers !== tl.codeTiers) continue; // déjà un autre tiers
-      // Si journal/pièce fournis dans le tiers, vérifier cohérence
-      if (tl.journal && c.journal && tl.journal.toUpperCase() !== c.journal.toUpperCase()) continue;
-      if (tl.piece && c.piece && tl.piece !== c.piece) continue;
-      best = c;
-      break;
+      if (matchedGL.has(c.id!)) continue;
+      if (c.tiers && c.tiers !== tl.codeTiers) continue; // skip si tiers déjà ≠
+      const sc = scoreCandidate(tl, c);
+      if (sc < MIN_SCORE) continue;
+      if (sc > bestScore) {
+        bestScore = sc;
+        topCandidates = [c];
+      } else if (sc === bestScore) {
+        topCandidates.push(c);
+      }
     }
 
-    if (best) {
-      if (best.tiers) {
-        skipped++; // déjà enrichi
+    if (topCandidates.length === 1) {
+      // Match unique de meilleur score → enrichissement
+      const best = topCandidates[0];
+      if (best.tiers === tl.codeTiers) {
+        skipped++; // déjà enrichi avec le même code (re-import idempotent)
       } else {
         best.tiers = tl.codeTiers;
         if (!best.label || best.label === '—') best.label = tl.label || tl.labelTiers;
         toUpdate.push(best);
-        matched.add(best.id!);
+        matchedGL.add(best.id!);
         enriched++;
       }
+    } else if (topCandidates.length > 1) {
+      // Plusieurs candidats équivalents → ambiguous, à arbitrer
+      unmatchedRows.push({
+        orgId: opts.orgId,
+        rowIndex,
+        date: tl.date,
+        account: tl.account,
+        codeTiers: tl.codeTiers,
+        labelTiers: tl.labelTiers,
+        debit: tl.debit,
+        credit: tl.credit,
+        journal: tl.journal || undefined,
+        piece: tl.piece || undefined,
+        label: tl.label || undefined,
+        reason: 'ambiguous',
+        candidateIds: topCandidates.map((c) => c.id!).filter((id) => typeof id === 'number'),
+        createdAt: Date.now(),
+      });
+      unmatched++;
     } else {
-      // Pas de match GL → NE PAS CRÉER. Le GL Tiers ne fait qu'enrichir.
-      // Créer une écriture sur un compte parent (401, 411) dupliquerait
-      // l'agrégation déjà présente dans le GL. Sur un sous-compte (4011xx),
-      // créer sans contrepartie déséquilibre le GL. Dans les deux cas,
-      // c'est au comptable d'analyser pourquoi cette ligne tiers n'a pas
-      // de pendant dans le GL (date décalée, montant arrondi, écriture
-      // oubliée à l'import GL…).
+      // Aucun candidat avec score suffisant → no_candidate ou tiers_conflict
+      unmatchedRows.push({
+        orgId: opts.orgId,
+        rowIndex,
+        date: tl.date,
+        account: tl.account,
+        codeTiers: tl.codeTiers,
+        labelTiers: tl.labelTiers,
+        debit: tl.debit,
+        credit: tl.credit,
+        journal: tl.journal || undefined,
+        piece: tl.piece || undefined,
+        label: tl.label || undefined,
+        reason: hasConflict ? 'tiers_conflict' : 'no_candidate',
+        createdAt: Date.now(),
+      });
       unmatched++;
     }
   }
 
-  // 4) Écrire en base — uniquement les enrichissements, jamais de création.
-  // Le GL Tiers ne crée pas d'écritures : il complète celles du GL avec le
-  // code tiers détaillé.
-  await dataProvider.addImport({
+  // 4) Écrire en base — uniquement les enrichissements (jamais de création GL).
+  // Persiste également les lignes non rapprochées pour revue manuelle.
+  const importId = await dataProvider.addImport({
     orgId: opts.orgId,
     date: Date.now(),
     user: opts.user,
@@ -1553,6 +1608,21 @@ export async function importGLTiers(
   // Mettre à jour les écritures enrichies (upsert par id)
   if (toUpdate.length > 0) {
     await dataProvider.bulkUpsertGL(toUpdate);
+  }
+
+  // Persister les lignes non rapprochées avec l'importId (pour traçabilité +
+  // suppression en cascade si l'utilisateur supprime cet import).
+  if (unmatchedRows.length > 0) {
+    const withImport = unmatchedRows.map((r) => ({ ...r, importId: Number(importId) }));
+    try {
+      await dataProvider.bulkInsertTiersUnmatched(withImport);
+    } catch (e) {
+      // Non bloquant : si la persistance échoue (ex: migration 016 pas appliquée),
+      // on log mais on n'invalide pas l'import. Le compteur unmatched reste exact
+      // dans le report.
+      // eslint-disable-next-line no-console
+      console.warn('[import-tiers] persistance unmatched échouée (non bloquant):', e);
+    }
   }
 
   // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif.

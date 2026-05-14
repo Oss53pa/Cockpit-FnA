@@ -106,6 +106,39 @@ export type AccountMapping = {
   targetCode: string;      // compte SYSCOHADA cible
 };
 
+/**
+ * Ligne de GL Tiers qui n'a pas pu être rapprochée d'une écriture GL
+ * existante lors de l'import. Persistée pour révision manuelle.
+ *
+ * Le GL Tiers ne crée jamais d'écritures dans fna_gl_entries — il enrichit
+ * uniquement avec le code tiers. Les lignes orphelines atterrissent ici
+ * avec leur contexte complet + un motif (no_candidate, tiers_conflict,
+ * ambiguous) pour que le comptable puisse les arbitrer.
+ */
+export type TiersUnmatched = {
+  id?: number;
+  orgId: string;
+  importId?: number;
+  rowIndex: number;          // n° de ligne dans le fichier source
+  date: string;              // YYYY-MM-DD
+  account: string;
+  codeTiers: string;
+  labelTiers?: string;
+  debit: number;
+  credit: number;
+  journal?: string;
+  piece?: string;
+  label?: string;
+  reason: 'no_candidate' | 'tiers_conflict' | 'ambiguous';
+  candidateIds?: number[];   // si reason === 'ambiguous'
+  // Résolution manuelle (null = en attente)
+  resolvedAt?: number;       // timestamp ms
+  resolvedBy?: string;       // auth.uid() ou user identifier
+  resolvedTo?: number;       // id de l'écriture GL liée si matched
+  resolution?: 'matched' | 'dismissed' | 'manual_create';
+  createdAt: number;
+};
+
 export type ReportDoc = {
   id?: number;
   orgId: string;
@@ -360,6 +393,7 @@ class CockpitDB extends Dexie {
   activities!: Table<Activity, number>;
   channels!: Table<Channel, string>;
   chatMessages!: Table<ChatMessage, number>;
+  tiersUnmatched!: Table<TiersUnmatched, number>;
 
   constructor() {
     super('CockpitFA');
@@ -401,6 +435,10 @@ class CockpitDB extends Dexie {
     this.version(7).stores({
       channels: 'id, orgId, kind, name, [orgId+kind], [orgId+name]',
       chatMessages: '++id, orgId, channelId, userId, createdAt, [channelId+createdAt], [orgId+channelId], replyTo',
+    });
+    // v8 : lignes GL Tiers non rapprochées (révision manuelle)
+    this.version(8).stores({
+      tiersUnmatched: '++id, orgId, importId, resolvedAt, reason, [orgId+resolvedAt], [orgId+importId]',
     });
   }
 }

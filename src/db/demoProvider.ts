@@ -17,7 +17,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage,
+  Activity, Channel, ChatMessage, TiersUnmatched,
 } from './schema';
 import {
   isDemoActive, DEMO_ORG, DEMO_BALANCE, DEMO_PERIODS, DEMO_IMPORTS,
@@ -227,6 +227,21 @@ export class DemoProvider implements DataProvider {
     return this.inner.addImport(log);
   }
   deleteImport(id: number) { return this.inner.deleteImport(id); }
+
+  // ── Tiers unmatched ──
+  async getTiersUnmatched(orgId: string, opts?: { onlyPending?: boolean; importId?: number }) {
+    if (isDemo(orgId)) return [];
+    return this.inner.getTiersUnmatched(orgId, opts);
+  }
+  bulkInsertTiersUnmatched(rows: Omit<TiersUnmatched, 'id'>[]) {
+    if (rows[0] && isDemo(rows[0].orgId)) return Promise.resolve();
+    return this.inner.bulkInsertTiersUnmatched(rows);
+  }
+  updateTiersUnmatched(id: number, changes: Partial<TiersUnmatched>) {
+    return this.inner.updateTiersUnmatched(id, changes);
+  }
+  deleteTiersUnmatched(id: number) { return this.inner.deleteTiersUnmatched(id); }
+  deleteTiersUnmatchedByImport(importId: number) { return this.inner.deleteTiersUnmatchedByImport(importId); }
 
   // ── Budgets ──
   async getBudgets(orgId: string, year: number, version: string) {

@@ -7,7 +7,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage,
+  Activity, Channel, ChatMessage, TiersUnmatched,
 } from './schema';
 import { supabase as supabaseTyped } from '../lib/supabase';
 
@@ -96,6 +96,7 @@ export class SupabaseProvider implements DataProvider {
     // Ordre : enfants d'abord pour respecter les FK (au cas où Supabase n'ait pas
     // ON DELETE CASCADE configuré sur toutes les FK fna_*).
     const tables = [
+      'fna_tiers_unmatched',
       'fna_gl_entries', 'fna_imports', 'fna_budgets', 'fna_account_mappings',
       'fna_accounts', 'fna_periods', 'fna_fiscal_years',
       'fna_attention_points', 'fna_action_plans', 'fna_reports',
@@ -247,6 +248,41 @@ export class SupabaseProvider implements DataProvider {
   }
   async deleteImport(id: number) {
     check(await supabase.from('fna_imports').delete().eq('id', id));
+  }
+
+  // Tiers unmatched
+  async getTiersUnmatched(orgId: string, opts?: { onlyPending?: boolean; importId?: number }) {
+    let q = supabase.from('fna_tiers_unmatched').select('*').eq('org_id', orgId).order('created_at', { ascending: false });
+    if (opts?.onlyPending) q = q.is('resolved_at', null);
+    if (opts?.importId !== undefined) q = q.eq('import_id', opts.importId);
+    const PAGE = 1000;
+    const all: any[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await q.range(offset, offset + PAGE - 1);
+      if (error) throw new Error(`getTiersUnmatched: ${error.message}`);
+      if (!data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all.map((r: any) => toCamel(r)) as TiersUnmatched[];
+  }
+  async bulkInsertTiersUnmatched(rows: Omit<TiersUnmatched, 'id'>[]) {
+    if (rows.length === 0) return;
+    const snakes = rows.map((r) => toSnake(r));
+    for (let i = 0; i < snakes.length; i += 500) {
+      check(await supabase.from('fna_tiers_unmatched').insert(snakes.slice(i, i + 500)));
+    }
+  }
+  async updateTiersUnmatched(id: number, changes: Partial<TiersUnmatched>) {
+    check(await supabase.from('fna_tiers_unmatched').update(toSnake(changes)).eq('id', id));
+  }
+  async deleteTiersUnmatched(id: number) {
+    check(await supabase.from('fna_tiers_unmatched').delete().eq('id', id));
+  }
+  async deleteTiersUnmatchedByImport(importId: number) {
+    check(await supabase.from('fna_tiers_unmatched').delete().eq('import_id', importId));
   }
 
   // Budgets

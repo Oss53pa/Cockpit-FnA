@@ -175,6 +175,25 @@ export class ElectronProvider implements DataProvider {
     await api().db.deleteRows('imports', { id });
   }
 
+  // Tiers unmatched — non implémenté en Electron pour l'instant (chemin Supabase prioritaire).
+  // Les stubs renvoient des valeurs vides pour éviter de casser l'interface DataProvider.
+  // À implémenter le jour où le mode Electron a une table tiers_unmatched en SQLite local.
+  async getTiersUnmatched(_orgId: string, _opts?: { onlyPending?: boolean; importId?: number }) {
+    return [];
+  }
+  async bulkInsertTiersUnmatched(_rows: any[]) {
+    /* noop en Electron — voir TODO ci-dessus */
+  }
+  async updateTiersUnmatched(_id: number, _changes: any) {
+    /* noop */
+  }
+  async deleteTiersUnmatched(_id: number) {
+    /* noop */
+  }
+  async deleteTiersUnmatchedByImport(_importId: number) {
+    /* noop */
+  }
+
   // Budgets
   async getBudgets(orgId: string, year: number, version: string) {
     const rows = await api().db.query(

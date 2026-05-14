@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, XCircle, Users, Search } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, XCircle, Users, Search, AlertTriangle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { toast } from '../components/ui/Toast';
 import { PageHeader } from '../components/layout/PageHeader';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { db, type TiersUnmatched } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
@@ -53,6 +53,43 @@ export default function ImportTiers() {
   const hasGL = glHistory.length > 0;
   const [tiersTab, setTiersTab] = useState<'all' | 'clients' | 'fournisseurs' | 'personnel' | 'etat' | 'autres'>('all');
 
+  // Lignes non rapprochées en attente de revue manuelle
+  const [unmatchedRows, setUnmatchedRows] = useState<TiersUnmatched[]>([]);
+  const loadUnmatched = useCallback(async () => {
+    if (!currentOrgId) return;
+    try {
+      const rows = await dataProvider.getTiersUnmatched(currentOrgId, { onlyPending: true });
+      setUnmatchedRows(rows);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[ImportTiers] getTiersUnmatched failed:', e);
+    }
+  }, [currentOrgId]);
+  useEffect(() => { void loadUnmatched(); }, [loadUnmatched, report]);
+
+  const dismissUnmatched = async (id: number) => {
+    try {
+      await dataProvider.updateTiersUnmatched(id, {
+        resolvedAt: Date.now(),
+        resolution: 'dismissed',
+      });
+      await loadUnmatched();
+      toast.success('Ligne ignorée');
+    } catch (e: any) {
+      toast.error('Erreur', e.message);
+    }
+  };
+
+  const deleteUnmatched = async (id: number) => {
+    if (!confirm('Supprimer définitivement cette ligne non rapprochée ?')) return;
+    try {
+      await dataProvider.deleteTiersUnmatched(id);
+      await loadUnmatched();
+    } catch (e: any) {
+      toast.error('Erreur', e.message);
+    }
+  };
+
   const onFile = async (f: File) => {
     setFile(f);
     setLoading(true);
@@ -96,10 +133,16 @@ export default function ImportTiers() {
   const deleteImport = async (imp: typeof history[number]) => {
     if (!confirm(`Supprimer l'import tiers "${imp.fileName}" et ses écritures créées en standalone ?`)) return;
     try {
+      // 1) Supprimer les écritures GL standalone créées par cet import
+      //    (cas des anciens imports avant le fix "no_standalone").
       await dataProvider.deleteGLByImport(Number(imp.id));
+      // 2) Supprimer les lignes non rapprochées persistées
+      await dataProvider.deleteTiersUnmatchedByImport(Number(imp.id));
+      // 3) Supprimer l'import lui-même
       await dataProvider.deleteImport(Number(imp.id));
       invalidateCloudData('gl');
       invalidateCloudData('imports');
+      await loadUnmatched();
       toast.success('Import supprimé');
     } catch (e: any) {
       toast.error('Suppression impossible', e.message);
@@ -494,6 +537,84 @@ export default function ImportTiers() {
             )}
 
             <button className="btn-primary" onClick={reset}>Nouvel import</button>
+          </Card>
+        )}
+
+        {/* Lignes non rapprochées — révision manuelle */}
+        {unmatchedRows.length > 0 && (
+          <Card
+            title={`Lignes non rapprochées (${unmatchedRows.length})`}
+            subtitle="Le GL Tiers n'a pas pu enrichir le Grand Livre pour ces lignes — à arbitrer manuellement"
+          >
+            <div className="mb-3 p-3 rounded-lg bg-warning/10 border-l-4 border-warning text-xs">
+              <p className="font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                Pourquoi une ligne arrive ici ?
+              </p>
+              <ul className="mt-1 ml-5 list-disc text-primary-600 dark:text-primary-300">
+                <li><strong>no_candidate</strong> : aucune écriture GL ne correspond (date / montant / classe). Vérifier que le GL est bien importé pour la même période.</li>
+                <li><strong>ambiguous</strong> : plusieurs écritures GL matchent au même score. Arbitrage humain nécessaire.</li>
+                <li><strong>tiers_conflict</strong> : l'écriture GL a déjà un autre code tiers assigné.</li>
+              </ul>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800 sticky top-0 bg-white dark:bg-primary-950">
+                  <tr>
+                    <th className="text-left py-2 px-2">Ligne</th>
+                    <th className="text-left py-2 px-2">Date</th>
+                    <th className="text-left py-2 px-2">Compte</th>
+                    <th className="text-left py-2 px-2">Tiers</th>
+                    <th className="text-left py-2 px-2">Libellé</th>
+                    <th className="text-right py-2 px-2">Débit</th>
+                    <th className="text-right py-2 px-2">Crédit</th>
+                    <th className="text-left py-2 px-2">Pièce</th>
+                    <th className="text-left py-2 px-2">Motif</th>
+                    <th className="text-center py-2 px-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                  {unmatchedRows.slice(0, 200).map((r) => (
+                    <tr key={r.id} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
+                      <td className="py-1.5 px-2 num">{r.rowIndex}</td>
+                      <td className="py-1.5 px-2 num">{r.date}</td>
+                      <td className="py-1.5 px-2 font-mono">{r.account}</td>
+                      <td className="py-1.5 px-2 font-mono">{r.codeTiers}</td>
+                      <td className="py-1.5 px-2 truncate max-w-[200px]">{r.labelTiers || r.label || '—'}</td>
+                      <td className="py-1.5 px-2 text-right num">{r.debit > 0 ? fmtFull(r.debit) : '—'}</td>
+                      <td className="py-1.5 px-2 text-right num">{r.credit > 0 ? fmtFull(r.credit) : '—'}</td>
+                      <td className="py-1.5 px-2 font-mono">{r.piece || '—'}</td>
+                      <td className="py-1.5 px-2">
+                        {r.reason === 'no_candidate' && <Badge variant="error">no_candidate</Badge>}
+                        {r.reason === 'ambiguous' && <Badge variant="warning">ambiguous ({r.candidateIds?.length ?? 0})</Badge>}
+                        {r.reason === 'tiers_conflict' && <Badge variant="warning">tiers_conflict</Badge>}
+                      </td>
+                      <td className="py-1.5 px-2 text-center">
+                        <div className="flex justify-center gap-1">
+                          <button
+                            className="btn-ghost !p-1 text-primary-500 hover:text-primary-700"
+                            onClick={() => r.id !== undefined && dismissUnmatched(r.id)}
+                            title="Ignorer (marquer comme traitée sans action)"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            className="btn-ghost !p-1 text-primary-500 hover:text-error"
+                            onClick={() => r.id !== undefined && deleteUnmatched(r.id)}
+                            title="Supprimer définitivement"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {unmatchedRows.length > 200 && (
+                <p className="text-xs text-primary-500 mt-2 text-center">… et {unmatchedRows.length - 200} autres lignes (filtres à venir).</p>
+              )}
+            </div>
           </Card>
         )}
 

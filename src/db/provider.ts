@@ -46,7 +46,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage,
+  Activity, Channel, ChatMessage, TiersUnmatched,
 } from './schema';
 
 export interface GLFilter {
@@ -102,6 +102,14 @@ export interface DataProvider {
   getImports(orgId: string): Promise<ImportLog[]>;
   addImport(log: Omit<ImportLog, 'id'>): Promise<number>;
   deleteImport(id: number): Promise<void>;
+
+  // Tiers unmatched — lignes GL Tiers non rapprochées (révision manuelle)
+  getTiersUnmatched(orgId: string, opts?: { onlyPending?: boolean; importId?: number }): Promise<TiersUnmatched[]>;
+  bulkInsertTiersUnmatched(rows: Omit<TiersUnmatched, 'id'>[]): Promise<void>;
+  updateTiersUnmatched(id: number, changes: Partial<TiersUnmatched>): Promise<void>;
+  deleteTiersUnmatched(id: number): Promise<void>;
+  /** Supprime toutes les lignes unmatched liées à un import (cascade quand on supprime l'import). */
+  deleteTiersUnmatchedByImport(importId: number): Promise<void>;
 
   // Budgets
   getBudgets(orgId: string, year: number, version: string): Promise<BudgetLine[]>;
