@@ -116,6 +116,25 @@ export interface DataProvider {
   /** Retourne le dernier audit_hash d'une org (pour chaîner les nouveaux logs). */
   getLastGLAuditHash?(orgId: string): Promise<string>;
   bulkInsertGLAuditLog?(rows: Omit<GLAuditLogEntry, 'id'>[]): Promise<void>;
+  /**
+   * RPC atomique : append le batch d'audit log avec chaîne SHA-256 calculée
+   * server-side et lock `SELECT FOR UPDATE` pour sérialiser les writes
+   * concurrents (résout race condition de la voie client).
+   * @returns nombre de rows insérés, ou `null` si la RPC n'est pas déployée
+   *   (l'appelant doit alors fallback sur `bulkInsertGLAuditLog`).
+   */
+  appendGLAuditLogAtomic?(
+    orgId: string,
+    changes: Array<{
+      glEntryId: number;
+      field: string;
+      oldValue?: string;
+      newValue?: string;
+      reason: string;
+      sourceKind?: string;
+      sourceId?: number;
+    }>,
+  ): Promise<number | null>;
 
   /**
    * Import GL Tiers atomique via RPC Postgres (transaction unique).

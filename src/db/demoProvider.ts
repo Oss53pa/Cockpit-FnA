@@ -256,6 +256,11 @@ export class DemoProvider implements DataProvider {
     if (rows[0] && isDemo(rows[0].orgId)) return;
     return this.inner.bulkInsertGLAuditLog?.(rows);
   }
+  async appendGLAuditLogAtomic(orgId: string, changes: any[]) {
+    if (isDemo(orgId)) return changes.length;
+    // Si l'inner ne supporte pas (Electron) → retourner null pour fallback
+    return this.inner.appendGLAuditLogAtomic?.(orgId, changes) ?? null;
+  }
 
   // ── Budgets ──
   async getBudgets(orgId: string, year: number, version: string) {

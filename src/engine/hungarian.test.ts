@@ -55,6 +55,30 @@ describe('hungarianMaximize', () => {
     expect(hungarianMaximize(scores)).toEqual([2]);
   });
 
+  it('ligne entièrement -Infinity : exclue du problème, autres lignes optimisées', () => {
+    // Ligne 0 = aucun candidat valide → assignment -1
+    // Lignes 1 et 2 doivent toujours obtenir l'optimum 100+90 = 190
+    const scores = [
+      [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY],
+      [100, 50],
+      [70, 90],
+    ];
+    const r = hungarianMaximize(scores);
+    expect(r[0]).toBe(-1);
+    // Vérifier que les lignes 1 et 2 ont des assignments distincts et optimaux
+    expect(r[1]).not.toBe(-1);
+    expect(r[2]).not.toBe(-1);
+    expect(r[1]).not.toBe(r[2]);
+    const total = r.reduce((s, j, i) => (j === -1 ? s : s + scores[i][j]), 0);
+    expect(total).toBe(190);
+  });
+
+  it('toutes les lignes interdites → tous -1, pas de crash', () => {
+    const inf = Number.NEGATIVE_INFINITY;
+    const r = hungarianMaximize([[inf, inf], [inf, inf]]);
+    expect(r).toEqual([-1, -1]);
+  });
+
   it('matrice 3x3 réaliste — vérifie assignment optimal', () => {
     // Cas Cockpit FnA : 3 lignes tiers, 3 GL candidats du même jour/montant.
     // Tiers 1 = client A — préfère GL X (score 100) ou Y (90)

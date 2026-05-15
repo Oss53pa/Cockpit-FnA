@@ -33,10 +33,32 @@ export function hungarianMaximize(scores: number[][]): number[] {
   const m = scores[0]?.length ?? 0;
   if (m === 0) return Array(n).fill(-1);
 
-  // Carréifier : padding lignes ou colonnes avec coût "neutre" élevé.
+  // PRÉ-FILTRAGE : si une ligne n'a AUCUN candidat valide (tout -Infinity),
+  // l'inclure dans la matrice empoisonne les potentiels Kuhn-Munkres
+  // (Infinity-Infinity = NaN). On retire ces lignes du problème, on résout
+  // sur le sous-problème, puis on réintroduit -1 pour les lignes exclues.
+  const validRowIdx: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const hasValid = scores[i].some((s) => isFinite(s) && s > -1e9);
+    if (hasValid) validRowIdx.push(i);
+  }
+  if (validRowIdx.length === 0) return Array(n).fill(-1);
+  if (validRowIdx.length < n) {
+    // Récursion sur le sous-problème avec lignes valides uniquement
+    const subScores = validRowIdx.map((i) => scores[i]);
+    const subAssign = hungarianMaximize(subScores);
+    const full = new Array(n).fill(-1);
+    for (let k = 0; k < validRowIdx.length; k++) {
+      full[validRowIdx[k]] = subAssign[k];
+    }
+    return full;
+  }
+
+  // Toutes les lignes ont au moins un candidat valide : appliquer Kuhn-Munkres
+  // sur la matrice carréifiée. Cellules interdites = +Infinity (toléré ici
+  // car au moins un autre candidat existe par ligne).
   const size = Math.max(n, m);
-  const FINITE_MIN = -1e9; // assez bas pour ne jamais être choisi mais pas Infinity
-  // Coût = -score. Cellules interdites = +Infinity (jamais sélectionnées).
+  const FINITE_MIN = -1e9;
   const cost: number[][] = [];
   let maxScore = 0;
   for (let i = 0; i < size; i++) {

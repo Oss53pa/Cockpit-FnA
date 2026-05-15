@@ -43,12 +43,16 @@ async function sha256(input: string): Promise<string> {
 /**
  * Logge un batch de modifications GL avec chaîne SHA-256.
  *
- * Récupère le dernier `audit_hash` de l'org, calcule la chaîne pour chaque
- * nouveau row, et insère le batch via dataProvider.
+ * Stratégie :
+ *   1. Tente la RPC atomique `fna_append_audit_log` (migration 020) — résout
+ *      la race condition concurrente (FOR UPDATE) et garantit cohérence
+ *      timestamp ms/timestamptz car le serveur calcule la chaîne.
+ *   2. Fallback client-side si la RPC n'est pas disponible (migration non
+ *      appliquée, Demo, Electron) : récupère prev_hash, calcule en JS, insert.
+ *      Cette voie a une race condition connue en multi-utilisateurs concurrents.
  *
- * Non bloquant : si la migration 019 n'est pas appliquée (ou si la table
- * n'existe pas), on log un warning et on continue. L'absence d'audit log
- * ne doit pas faire échouer l'opération métier.
+ * Non bloquant : si tout échoue, on log un warning et on continue. L'absence
+ * d'audit log ne doit pas faire échouer l'opération métier.
  *
  * @param orgId Organization
  * @param changes Liste des modifications à logger
@@ -59,8 +63,19 @@ export async function logGLChanges(
   changes: AuditChange[],
 ): Promise<number> {
   if (changes.length === 0) return 0;
+  // 1) Voie privilégiée : RPC atomique (race-safe)
+  if (dataProvider.appendGLAuditLogAtomic) {
+    try {
+      const n = await dataProvider.appendGLAuditLogAtomic(orgId, changes);
+      if (n !== null) return n;
+      // n=null = RPC non déployée → tomber vers la voie 2
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[glAuditLog] RPC échec, fallback client-side:', e);
+    }
+  }
+  // 2) Fallback client-side (race condition possible en multi-users)
   try {
-    // Récupère le dernier audit_hash de l'org (chaîne par org)
     let prevHash = '';
     try {
       prevHash = await dataProvider.getLastGLAuditHash?.(orgId) ?? '';
@@ -70,31 +85,21 @@ export async function logGLChanges(
     const now = Date.now();
     const rows: GLAuditLogRow[] = [];
     for (const ch of changes) {
+      // Format canonique ALIGNÉ avec celui de la RPC (cf. migration 020)
+      // pour permettre la vérification croisée client ↔ serveur. Note :
+      // côté client on utilise epoch ms, côté serveur c'est epoch s (cast
+      // ::bigint depuis EXTRACT(EPOCH)). Voir migration 020 commentaires.
       const canonical = [
-        prevHash,
-        orgId,
-        ch.glEntryId,
-        now,
-        ch.field,
-        ch.oldValue ?? '',
-        ch.newValue ?? '',
-        ch.reason,
-        ch.sourceKind ?? '',
-        ch.sourceId ?? 0,
+        prevHash, orgId, ch.glEntryId, now,
+        ch.field, ch.oldValue ?? '', ch.newValue ?? '',
+        ch.reason, ch.sourceKind ?? '', ch.sourceId ?? 0,
       ].join('||');
       const h = await sha256(canonical);
       rows.push({
-        orgId,
-        glEntryId: ch.glEntryId,
-        changedAt: now,
-        field: ch.field,
-        oldValue: ch.oldValue,
-        newValue: ch.newValue,
-        reason: ch.reason,
-        sourceKind: ch.sourceKind,
-        sourceId: ch.sourceId,
-        auditHash: h,
-        previousAuditHash: prevHash,
+        orgId, glEntryId: ch.glEntryId, changedAt: now,
+        field: ch.field, oldValue: ch.oldValue, newValue: ch.newValue,
+        reason: ch.reason, sourceKind: ch.sourceKind, sourceId: ch.sourceId,
+        auditHash: h, previousAuditHash: prevHash,
       });
       prevHash = h;
     }

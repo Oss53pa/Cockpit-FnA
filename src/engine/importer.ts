@@ -1410,10 +1410,24 @@ export function detectTiersColumns(headers: string[]): Partial<TiersMapping> {
   return mapping;
 }
 
+/**
+ * Cache optionnel transmis entre fichiers d'un même batch pour éviter de
+ * recharger N fois le GL complet depuis Supabase. Le cache est muté en place
+ * après chaque enrichissement (set tiers + label sur les entries matched)
+ * pour que le fichier suivant voie l'état à jour.
+ */
+type ImportTiersCache = {
+  glEntries: GLEntry[];
+  // Plan comptable de l'org (déduit du coaSystem, mis en cache pour
+  // éviter un getOrganization par fichier)
+  classifier: ReturnType<typeof getClassifier>;
+};
+
 export async function importGLTiers(
   file: File,
   mapping: TiersMapping,
   opts: { orgId: string; user: string; source: string },
+  cache?: ImportTiersCache,
 ): Promise<TiersImportReport> {
   const { rows } = await parseFile(file);
   const errors: TiersImportReport['errors'] = [];
@@ -1451,13 +1465,19 @@ export async function importGLTiers(
     tiersBalanceByAccount.set(account, (tiersBalanceByAccount.get(account) ?? 0) + debit - credit);
   });
 
-  // 2) Charger le GL et préparer le classifier
-  const glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
-  // Plan comptable : récupère la classification adaptée à l'org. Le champ
-  // org.coaSystem (migration 018) est configurable via Paramètres → Sociétés.
-  // Défaut SYSCOHADA si non défini (rétro-compat).
-  const org = await dataProvider.getOrganization(opts.orgId);
-  const classifier = getClassifier(org?.coaSystem);
+  // 2) Charger le GL et préparer le classifier. Si un cache est fourni
+  // (import batch multi-fichiers), on le réutilise pour éviter un re-fetch
+  // paginé qui peut prendre 1-5s sur gros volumes.
+  let glEntries: GLEntry[];
+  let classifier: ReturnType<typeof getClassifier>;
+  if (cache) {
+    glEntries = cache.glEntries;
+    classifier = cache.classifier;
+  } else {
+    glEntries = await dataProvider.getGLEntries({ orgId: opts.orgId });
+    const org = await dataProvider.getOrganization(opts.orgId);
+    classifier = getClassifier(org?.coaSystem);
+  }
 
   // Index "large" : clé par date + montants arrondis (tolérance d'arrondi).
   // Toutes les écritures GL qui ont les mêmes date+débit+crédit (à 1 unité près)
@@ -1811,13 +1831,32 @@ export async function importGLTiersBatch(
   if (files.length === 0) {
     return { totalRows: 0, enriched: 0, unmatched: 0, skipped: 0, errors: [], coherenceCheck: [] };
   }
-  // Mode mono-fichier : passe direct
+  // Mode mono-fichier : passe direct (sans overhead de cache)
   if (files.length === 1) {
     onFileProgress?.(1, 1, files[0].name);
     return importGLTiers(files[0], mapping, opts);
   }
 
-  // Agrégation multi-fichiers
+  // Multi-fichiers : on charge le GL UNE SEULE FOIS au début + on le mute en
+  // place après chaque enrichissement de fichier. Les fichiers suivants voient
+  // ainsi l'état à jour (les écritures déjà enrichies sont reconnaissables par
+  // leur `tiers` non null).
+  const initialGL = await dataProvider.getGLEntries({ orgId: opts.orgId });
+  const org = await dataProvider.getOrganization(opts.orgId);
+  const cache: ImportTiersCache = {
+    glEntries: initialGL,
+    classifier: getClassifier(org?.coaSystem),
+  };
+  // Index par id pour appliquer les mutations dans le cache en O(1)
+  const glById = new Map<number, GLEntry>();
+  for (const e of initialGL) {
+    if (e.id !== undefined) glById.set(e.id, e);
+  }
+  // Snapshot du soldeGL initial par classe (pour le check de cohérence
+  // agrégé : on veut comparer le solde GL AVANT le 1er import au cumul des
+  // soldes tiers sur N fichiers, pas un solde qui mute en cours de route)
+  const initialSoldeGLByAccount = new Map<string, number>();
+
   const combined: TiersImportReport = {
     totalRows: 0,
     enriched: 0,
@@ -1826,34 +1865,38 @@ export async function importGLTiersBatch(
     errors: [],
     coherenceCheck: [],
   };
-  // Map: account → { soldeGL, soldeTiers (cumulé), files } — pour réagréger après
-  const coherenceByAccount = new Map<string, { soldeGL: number; soldeTiers: number }>();
+  // Cumul des soldes tiers par compte sur tous les fichiers
+  const totalSoldeTiersByAccount = new Map<string, number>();
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     onFileProgress?.(i + 1, files.length, f.name);
-    const r = await importGLTiers(f, mapping, opts);
+    const r = await importGLTiers(f, mapping, opts, cache);
     combined.totalRows += r.totalRows;
     combined.enriched += r.enriched;
     combined.unmatched += r.unmatched;
     combined.skipped += r.skipped;
-    // Erreurs préfixées par le nom du fichier pour permettre la traçabilité
     combined.errors.push(...r.errors.map((e) => ({ ...e, reason: `[${f.name}] ${e.reason}` })));
-    // Cumul cohérence par compte
+    // Capture le soldeGL initial à la 1re passe (avant mutation), accumule
+    // les soldeTiers à chaque passe
     for (const c of r.coherenceCheck) {
-      const cur = coherenceByAccount.get(c.account) ?? { soldeGL: c.soldeGL, soldeTiers: 0 };
-      // soldeGL est identique pour tous les fichiers (même GL en base) → on garde la 1re valeur
-      cur.soldeTiers += c.soldeTiers;
-      coherenceByAccount.set(c.account, cur);
+      if (!initialSoldeGLByAccount.has(c.account)) {
+        initialSoldeGLByAccount.set(c.account, c.soldeGL);
+      }
+      totalSoldeTiersByAccount.set(
+        c.account,
+        (totalSoldeTiersByAccount.get(c.account) ?? 0) + c.soldeTiers,
+      );
     }
   }
 
-  for (const [account, agg] of coherenceByAccount) {
-    const ecart = Math.round((agg.soldeGL - agg.soldeTiers) * 100) / 100;
+  for (const [account, soldeTiers] of totalSoldeTiersByAccount) {
+    const soldeGL = initialSoldeGLByAccount.get(account) ?? 0;
+    const ecart = Math.round((soldeGL - soldeTiers) * 100) / 100;
     combined.coherenceCheck.push({
       account,
-      soldeGL: Math.round(agg.soldeGL * 100) / 100,
-      soldeTiers: Math.round(agg.soldeTiers * 100) / 100,
+      soldeGL: Math.round(soldeGL * 100) / 100,
+      soldeTiers: Math.round(soldeTiers * 100) / 100,
       ecart,
       ok: Math.abs(ecart) < 1,
     });

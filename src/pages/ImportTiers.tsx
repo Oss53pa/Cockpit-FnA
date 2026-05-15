@@ -285,6 +285,7 @@ export default function ImportTiers() {
                 const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
                 const tiersEntries = entries.filter((e) => !!e.tiers);
                 if (tiersEntries.length === 0) { toast.info('Aucune écriture tiers', 'Importez d\'abord un GL Tiers'); return; }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- verifyChain accepte HashableEntry[], GLEntry est compatible mais le TS lib n'expose pas la conversion
                 const result = await verifyChain(tiersEntries as any);
                 if (result.valid) {
                   toast.success('Intégrité vérifiée', `${tiersEntries.length} écritures tiers — chaîne SHA-256 intacte`);
@@ -301,6 +302,7 @@ export default function ImportTiers() {
               try {
                 const { auditGL } = await import('../engine/glAudit');
                 const result = await auditGL(currentOrgId, currentYear);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AuditFinding non exporté par glAudit.ts
                 const tiersFindings = result.findings.filter((f: any) =>
                   f.category === 'clients_crediteurs' || f.category === 'fournisseurs_debiteurs' ||
                   f.accounts?.some((a: string) => a.startsWith('41') || a.startsWith('40'))
@@ -790,9 +792,29 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
   const [hoverDropId, setHoverDropId] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  // Filtres pour la recherche large (no_candidate)
-  const defaultFromDate = unmatched.date.substring(0, 7) + '-01'; // début du mois
-  const defaultToDate = unmatched.date.substring(0, 7) + '-31';
+  // Cleanup global : si l'utilisateur drag puis sort du viewport (Alt+Tab, scroll
+  // hors page), `onDragEnd` ne se déclenche pas. Un listener au document garantit
+  // que `dragging` se reset → pas de ring accent fantôme.
+  useEffect(() => {
+    if (!dragging) return;
+    const resetDrag = () => { setDragging(false); setHoverDropId(null); };
+    document.addEventListener('dragend', resetDrag);
+    document.addEventListener('drop', resetDrag);
+    return () => {
+      document.removeEventListener('dragend', resetDrag);
+      document.removeEventListener('drop', resetDrag);
+    };
+  }, [dragging]);
+
+  // Filtres pour la recherche large (no_candidate).
+  // endOfMonth correct : pour février, juin, novembre… '-31' donne une date
+  // invalide qui fait planter Postgres. On calcule le vrai dernier jour.
+  const _dateParts = unmatched.date.split('-');
+  const _year = parseInt(_dateParts[0], 10);
+  const _month = parseInt(_dateParts[1], 10); // 1..12
+  const _lastDay = new Date(_year, _month, 0).getDate(); // jour 0 du mois suivant = dernier jour du mois
+  const defaultFromDate = `${_dateParts[0]}-${_dateParts[1]}-01`;
+  const defaultToDate = `${_dateParts[0]}-${_dateParts[1]}-${String(_lastDay).padStart(2, '0')}`;
   const [fromDate, setFromDate] = useState(defaultFromDate);
   const [toDate, setToDate] = useState(defaultToDate);
   const [accountPrefix, setAccountPrefix] = useState(unmatched.account.substring(0, 2));
@@ -836,7 +858,14 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
     }
   }, [orgId, unmatched, fromDate, toDate, accountPrefix, amountTolerance]);
 
-  useEffect(() => { void loadCandidates(); }, [loadCandidates]);
+  // Debounce 300ms : éviter de re-fetcher le GL paginé à chaque frappe dans
+  // les inputs de filtre (date, compte, tolérance montant). Pour un GL de 8000+
+  // entries, chaque round-trip = ~1s. Sans debounce, taper "1000" en tolérance
+  // = 4 fetchs successifs.
+  useEffect(() => {
+    const handle = setTimeout(() => { void loadCandidates(); }, 300);
+    return () => clearTimeout(handle);
+  }, [loadCandidates]);
 
   const confirmMatch = async (glEntry: GLEntry) => {
     if (glEntry.id === undefined) return;
@@ -844,15 +873,21 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
       if (!confirm(`Cette écriture GL est déjà associée au tiers "${glEntry.tiers}". La remplacer par "${unmatched.codeTiers}" ?`)) return;
     }
     setSaving(true);
+    // Best-effort atomicité (en attendant une RPC dédiée fna_manual_match_tiers) :
+    // si l'étape 2 échoue après l'étape 1, on revert le GL pour ne pas laisser
+    // un état partiel "écriture enrichie + unmatched toujours pending" qui
+    // entraînerait un double-trigger d'audit log au prochain essai.
+    const oldTiers = glEntry.tiers;
+    const oldLabel = glEntry.label;
+    let glUpdated = false;
     try {
-      const oldTiers = glEntry.tiers;
-      const oldLabel = glEntry.label;
       const newLabel = glEntry.label || unmatched.label || unmatched.labelTiers || '';
       // 1) Enrichir l'écriture GL
       await dataProvider.updateGLEntry(glEntry.id, {
         tiers: unmatched.codeTiers,
         label: newLabel,
       });
+      glUpdated = true;
       // 2) Marquer l'unmatched comme résolu
       if (unmatched.id !== undefined) {
         await dataProvider.updateTiersUnmatched(unmatched.id, {
@@ -863,32 +898,43 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
       }
       // 3) Audit log de la modification manuelle
       const { logGLChanges } = await import('../lib/glAuditLog');
-      const changes = [
+      type Change = Parameters<typeof logGLChanges>[1][number];
+      const changes: Change[] = [
         {
           glEntryId: glEntry.id,
-          field: 'tiers' as const,
+          field: 'tiers',
           oldValue: oldTiers,
           newValue: unmatched.codeTiers,
-          reason: 'manual_match' as const,
-          sourceKind: 'MANUAL' as const,
+          reason: 'manual_match',
+          sourceKind: 'MANUAL',
           sourceId: unmatched.id,
         },
       ];
       if (newLabel !== oldLabel) {
         changes.push({
           glEntryId: glEntry.id,
-          field: 'label' as const,
+          field: 'label',
           oldValue: oldLabel,
           newValue: newLabel,
-          reason: 'manual_match' as const,
-          sourceKind: 'MANUAL' as const,
+          reason: 'manual_match',
+          sourceKind: 'MANUAL',
           sourceId: unmatched.id,
-        } as any);
+        });
       }
       await logGLChanges(orgId, changes);
       toast.success('Rattachement effectué', `${unmatched.codeTiers} → écriture #${glEntry.id}`);
       await onMatched();
     } catch (e: any) {
+      // Compensation : si le GL a été enrichi mais la suite a échoué, on revert
+      // pour éviter l'état partiel.
+      if (glUpdated && glEntry.id !== undefined) {
+        try {
+          await dataProvider.updateGLEntry(glEntry.id, { tiers: oldTiers, label: oldLabel });
+        } catch (rollbackErr) {
+          // eslint-disable-next-line no-console
+          console.error('[confirmMatch] rollback GL échoué — état partiel possible :', rollbackErr);
+        }
+      }
       toast.error('Échec du rattachement', e.message);
     } finally {
       setSaving(false);

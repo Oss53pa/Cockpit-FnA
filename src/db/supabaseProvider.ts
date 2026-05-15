@@ -24,6 +24,26 @@ function check<T>(result: { data: T | null; error: any }): T {
   return result.data as T;
 }
 
+/**
+ * Convertit les champs timestamp numériques (epoch ms) en ISO string avant
+ * envoi vers Postgres. Nécessaire car nos types TS portent ces champs en
+ * `number` (cohérence avec Date.now()) mais les colonnes DB sont `timestamptz`.
+ * Sans cette conversion, Postgres caste silencieusement l'entier en
+ * "1970+epochSeconds" → dates absurdes côté DB.
+ *
+ * Liste blanche : `changed_at`, `resolved_at`, `created_at`. Les autres champs
+ * numériques (debit, credit, count…) restent intacts.
+ */
+const TIMESTAMP_FIELDS = new Set(['changed_at', 'resolved_at', 'created_at']);
+function normalizeTsFields<T extends Record<string, any>>(row: T): T {
+  for (const k of Object.keys(row)) {
+    if (TIMESTAMP_FIELDS.has(k) && typeof row[k] === 'number') {
+      (row as any)[k] = new Date(row[k]).toISOString();
+    }
+  }
+  return row;
+}
+
 // ── Provider ─────────────────────────────────────────────────────────
 export class SupabaseProvider implements DataProvider {
   // Organizations
@@ -270,13 +290,16 @@ export class SupabaseProvider implements DataProvider {
   }
   async bulkInsertTiersUnmatched(rows: Omit<TiersUnmatched, 'id'>[]) {
     if (rows.length === 0) return;
-    const snakes = rows.map((r) => toSnake(r));
+    const snakes = rows.map((r) => normalizeTsFields(toSnake(r)));
     for (let i = 0; i < snakes.length; i += 500) {
       check(await supabase.from('fna_tiers_unmatched').insert(snakes.slice(i, i + 500)));
     }
   }
   async updateTiersUnmatched(id: number, changes: Partial<TiersUnmatched>) {
-    check(await supabase.from('fna_tiers_unmatched').update(toSnake(changes)).eq('id', id));
+    // Convertit les timestamps numériques (epoch ms) en ISO avant l'UPDATE :
+    // les colonnes Postgres sont en timestamptz, un cast direct depuis bigint
+    // donnerait des dates absurdes (1970+epochSeconds).
+    check(await supabase.from('fna_tiers_unmatched').update(normalizeTsFields(toSnake(changes))).eq('id', id));
   }
   async deleteTiersUnmatched(id: number) {
     check(await supabase.from('fna_tiers_unmatched').delete().eq('id', id));
@@ -306,15 +329,54 @@ export class SupabaseProvider implements DataProvider {
       return '';
     }
   }
+  async appendGLAuditLogAtomic(
+    orgId: string,
+    changes: Array<{
+      glEntryId: number;
+      field: string;
+      oldValue?: string;
+      newValue?: string;
+      reason: string;
+      sourceKind?: string;
+      sourceId?: number;
+    }>,
+  ): Promise<number | null> {
+    if (changes.length === 0) return 0;
+    try {
+      // Le payload doit être en snake_case : la RPC lit directement les clés
+      // depuis le JSON (jsonb_array_elements + ->>'field').
+      const payload = changes.map((c) => ({
+        gl_entry_id: c.glEntryId,
+        field: c.field,
+        old_value: c.oldValue ?? '',
+        new_value: c.newValue ?? '',
+        reason: c.reason,
+        source_kind: c.sourceKind ?? '',
+        source_id: c.sourceId ?? '',
+      }));
+      const { data, error } = await supabase.rpc('fna_append_audit_log', {
+        p_org_id: orgId,
+        p_changes: payload,
+      });
+      if (error) {
+        const code = (error as any).code;
+        const msg = error.message || '';
+        if (code === '42883' || code === 'PGRST202' || msg.includes('does not exist')) {
+          // Migration 020 pas appliquée → caller fait fallback
+          return null;
+        }
+        throw new Error(`appendGLAuditLogAtomic: ${msg}`);
+      }
+      return typeof data === 'number' ? data : changes.length;
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.warn('[appendGLAuditLogAtomic] échec, retour null pour fallback:', e?.message ?? e);
+      return null;
+    }
+  }
   async bulkInsertGLAuditLog(rows: Omit<GLAuditLogEntry, 'id'>[]) {
     if (rows.length === 0) return;
-    const snakes = rows.map((r) => toSnake(r));
-    // changed_at est stocké en timestamptz : convertir le ms → ISO
-    for (const r of snakes) {
-      if (typeof r.changed_at === 'number') {
-        r.changed_at = new Date(r.changed_at).toISOString();
-      }
-    }
+    const snakes = rows.map((r) => normalizeTsFields(toSnake(r)));
     try {
       for (let i = 0; i < snakes.length; i += 500) {
         check(await supabase.from('fna_gl_audit_log').insert(snakes.slice(i, i + 500)));
