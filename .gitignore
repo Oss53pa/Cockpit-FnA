@@ -26,3 +26,8 @@ dist-ssr
 .claude/
 
 .commit-msg.tmp
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

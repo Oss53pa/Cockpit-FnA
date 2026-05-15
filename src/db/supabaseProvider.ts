@@ -44,6 +44,42 @@ function normalizeTsFields<T extends Record<string, any>>(row: T): T {
   return row;
 }
 
+/**
+ * Pagination universelle pour les SELECT Supabase.
+ *
+ * Supabase/PostgREST plafonne tout SELECT à 1000 lignes par défaut
+ * (`default_limit`). Sans `.range()` explicite, un org avec 8000+ écritures
+ * ne renvoie que les 1000 premières — silencieusement. Ce helper rejoue la
+ * requête par batches de 1000 jusqu'à ce que la réponse soit < PAGE.
+ *
+ * Usage :
+ *   const rows = await paginatedSelect(() =>
+ *     supabase.from('fna_xxx').select('*').eq('org_id', orgId)
+ *   );
+ *
+ * @param buildQuery Fabrique une nouvelle PostgrestFilterBuilder à chaque appel
+ *   (closure sur les filtres). Indispensable car chaque .range() consomme la
+ *   requête côté supabase-js.
+ * @param label Nom de méthode pour les messages d'erreur (debugging)
+ */
+async function paginatedSelect<T = any>(
+  buildQuery: () => any,
+  label = 'paginatedSelect',
+): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+    if (error) throw new Error(`${label}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
 // ── Provider ─────────────────────────────────────────────────────────
 export class SupabaseProvider implements DataProvider {
   // Organizations
@@ -180,8 +216,12 @@ export class SupabaseProvider implements DataProvider {
 
   // Accounts
   async getAccounts(orgId: string) {
-    const { data } = await supabase.from('fna_accounts').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as Account[];
+    // Pagination : un plan SYSCOHADA complet + comptes auxiliaires peut dépasser 1000
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_accounts').select('*').eq('org_id', orgId),
+      'getAccounts',
+    );
+    return rows.map((r: any) => toCamel(r)) as Account[];
   }
   async getAccount(orgId: string, code: string) {
     const { data } = await supabase.from('fna_accounts').select('*')
@@ -213,7 +253,7 @@ export class SupabaseProvider implements DataProvider {
   // (charges/produits) invisibles → dashboards Bilan/CR/SIG à 0 alors que la
   // donnée existait bien en base.
   async getGLEntries(filter: GLFilter): Promise<GLEntry[]> {
-    const buildQuery = () => {
+    const rows = await paginatedSelect<any>(() => {
       let q = supabase.from('fna_gl_entries').select('*').eq('org_id', filter.orgId);
       if (filter.periodId) q = q.eq('period_id', filter.periodId);
       if (filter.importId) q = q.eq('import_id', filter.importId);
@@ -221,19 +261,8 @@ export class SupabaseProvider implements DataProvider {
       if (filter.fromDate) q = q.gte('date', filter.fromDate);
       if (filter.toDate) q = q.lte('date', filter.toDate);
       return q;
-    };
-    const PAGE = 1000;
-    const all: any[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
-      if (error) throw new Error(`getGLEntries: ${error.message}`);
-      if (!data || data.length === 0) break;
-      all.push(...data);
-      if (data.length < PAGE) break;
-      offset += PAGE;
-    }
-    return all.map((r: any) => toCamel(r)) as GLEntry[];
+    }, 'getGLEntries');
+    return rows.map((r: any) => toCamel(r)) as GLEntry[];
   }
   async bulkInsertGL(entries: GLEntry[]) {
     const rows = entries.map(e => toSnake(e));
@@ -272,21 +301,13 @@ export class SupabaseProvider implements DataProvider {
 
   // Tiers unmatched
   async getTiersUnmatched(orgId: string, opts?: { onlyPending?: boolean; importId?: number }) {
-    let q = supabase.from('fna_tiers_unmatched').select('*').eq('org_id', orgId).order('created_at', { ascending: false });
-    if (opts?.onlyPending) q = q.is('resolved_at', null);
-    if (opts?.importId !== undefined) q = q.eq('import_id', opts.importId);
-    const PAGE = 1000;
-    const all: any[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await q.range(offset, offset + PAGE - 1);
-      if (error) throw new Error(`getTiersUnmatched: ${error.message}`);
-      if (!data || data.length === 0) break;
-      all.push(...data);
-      if (data.length < PAGE) break;
-      offset += PAGE;
-    }
-    return all.map((r: any) => toCamel(r)) as TiersUnmatched[];
+    const rows = await paginatedSelect<any>(() => {
+      let q = supabase.from('fna_tiers_unmatched').select('*').eq('org_id', orgId).order('created_at', { ascending: false });
+      if (opts?.onlyPending) q = q.is('resolved_at', null);
+      if (opts?.importId !== undefined) q = q.eq('import_id', opts.importId);
+      return q;
+    }, 'getTiersUnmatched');
+    return rows.map((r: any) => toCamel(r)) as TiersUnmatched[];
   }
   async bulkInsertTiersUnmatched(rows: Omit<TiersUnmatched, 'id'>[]) {
     if (rows.length === 0) return;
@@ -310,15 +331,26 @@ export class SupabaseProvider implements DataProvider {
 
   // GL Audit log
   async getGLAuditLog(orgId: string, opts?: { glEntryId?: number; limit?: number }) {
-    let q = supabase.from('fna_gl_audit_log').select('*').eq('org_id', orgId).order('id', { ascending: false });
-    if (opts?.glEntryId !== undefined) q = q.eq('gl_entry_id', opts.glEntryId);
-    if (opts?.limit !== undefined) q = q.limit(opts.limit);
-    const { data, error } = await q;
-    if (error) {
+    // Si `limit` explicite, single query (pas de pagination — l'appelant veut N rows).
+    // Sinon : pagination (audit log grossit indéfiniment, peut dépasser 1000).
+    if (opts?.limit !== undefined) {
+      let q = supabase.from('fna_gl_audit_log').select('*').eq('org_id', orgId).order('id', { ascending: false }).limit(opts.limit);
+      if (opts?.glEntryId !== undefined) q = q.eq('gl_entry_id', opts.glEntryId);
+      const { data, error } = await q;
+      if (error) return []; // Migration 019 pas appliquée
+      return (data ?? []).map((r: any) => toCamel(r)) as GLAuditLogEntry[];
+    }
+    try {
+      const rows = await paginatedSelect<any>(() => {
+        let q = supabase.from('fna_gl_audit_log').select('*').eq('org_id', orgId).order('id', { ascending: false });
+        if (opts?.glEntryId !== undefined) q = q.eq('gl_entry_id', opts.glEntryId);
+        return q;
+      }, 'getGLAuditLog');
+      return rows.map((r: any) => toCamel(r)) as GLAuditLogEntry[];
+    } catch {
       // Migration 019 pas appliquée → silencieusement vide
       return [];
     }
-    return (data ?? []).map((r: any) => toCamel(r)) as GLAuditLogEntry[];
   }
   async getLastGLAuditHash(orgId: string): Promise<string> {
     try {
@@ -442,20 +474,28 @@ export class SupabaseProvider implements DataProvider {
     }
   }
 
-  // Budgets
+  // Budgets — pagination obligatoire : year × accounts × months dépasse rapidement 1000
   async getBudgets(orgId: string, year: number, version: string) {
-    const { data } = await supabase.from('fna_budgets').select('*')
-      .eq('org_id', orgId).eq('year', year).eq('version', version);
-    return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_budgets').select('*')
+        .eq('org_id', orgId).eq('year', year).eq('version', version),
+      'getBudgets',
+    );
+    return rows.map((r: any) => toCamel(r)) as BudgetLine[];
   }
   async getAllBudgets(orgId: string) {
-    const { data } = await supabase.from('fna_budgets').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_budgets').select('*').eq('org_id', orgId),
+      'getAllBudgets',
+    );
+    return rows.map((r: any) => toCamel(r)) as BudgetLine[];
   }
   async getBudgetsByYear(orgId: string, year: number) {
-    const { data } = await supabase.from('fna_budgets').select('*')
-      .eq('org_id', orgId).eq('year', year);
-    return (data ?? []).map((r: any) => toCamel(r)) as BudgetLine[];
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_budgets').select('*').eq('org_id', orgId).eq('year', year),
+      'getBudgetsByYear',
+    );
+    return rows.map((r: any) => toCamel(r)) as BudgetLine[];
   }
   async bulkUpsertBudgets(lines: BudgetLine[]) {
     const rows = lines.map(l => toSnake(l));
@@ -517,7 +557,11 @@ export class SupabaseProvider implements DataProvider {
 
   // Attention points
   async getAttentionPoints(orgId: string) {
-    const { data } = await supabase.from('fna_attention_points').select('*').eq('org_id', orgId);
+    // Pagination : accumulation au fil du temps des points d'attention détectés
+    const data = await paginatedSelect<any>(
+      () => supabase.from('fna_attention_points').select('*').eq('org_id', orgId),
+      'getAttentionPoints',
+    );
     return (data ?? []).map((r: any) => toCamel(r)) as AttentionPoint[];
   }
   async upsertAttentionPoint(p: Omit<AttentionPoint, 'id'> & { id?: number }): Promise<number> {
@@ -536,7 +580,11 @@ export class SupabaseProvider implements DataProvider {
 
   // Action plans
   async getActionPlans(orgId: string) {
-    const { data } = await supabase.from('fna_action_plans').select('*').eq('org_id', orgId);
+    // Pagination : plans d'action peuvent s'accumuler
+    const data = await paginatedSelect<any>(
+      () => supabase.from('fna_action_plans').select('*').eq('org_id', orgId),
+      'getActionPlans',
+    );
     return (data ?? []).map((r: any) => toCamel(r)) as ActionPlan[];
   }
   async upsertActionPlan(p: Omit<ActionPlan, 'id'> & { id?: number }): Promise<number> {
@@ -555,7 +603,11 @@ export class SupabaseProvider implements DataProvider {
 
   // Mappings
   async getMappings(orgId: string) {
-    const { data } = await supabase.from('fna_account_mappings').select('*').eq('org_id', orgId);
+    // Pagination : 1 mapping par compte du fichier source, peut être > 1000
+    const data = await paginatedSelect<any>(
+      () => supabase.from('fna_account_mappings').select('*').eq('org_id', orgId),
+      'getMappings',
+    );
     return (data ?? []).map((r: any) => toCamel(r)) as AccountMapping[];
   }
   async upsertMapping(m: AccountMapping) {
@@ -583,10 +635,13 @@ export class SupabaseProvider implements DataProvider {
   }
 
   async getAnalyticCodes(orgId: string, axisId?: string) {
-    let q = supabase.from('fna_analytic_codes').select('*').eq('org_id', orgId);
-    if (axisId) q = q.eq('axis_id', axisId);
-    const { data } = await q;
-    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticCode[];
+    // Pagination : un plan analytique fin peut dépasser 1000 codes (WBS détaillé, etc.)
+    const rows = await paginatedSelect<any>(() => {
+      let q = supabase.from('fna_analytic_codes').select('*').eq('org_id', orgId);
+      if (axisId) q = q.eq('axis_id', axisId);
+      return q;
+    }, 'getAnalyticCodes');
+    return rows.map((r: any) => toCamel(r)) as AnalyticCode[];
   }
   async upsertAnalyticCode(code: AnalyticCode) {
     check(await supabase.from('fna_analytic_codes').upsert(toSnake(code)));
@@ -621,7 +676,11 @@ export class SupabaseProvider implements DataProvider {
   }
 
   async getAnalyticAssignments(orgId: string) {
-    const { data } = await supabase.from('fna_analytic_assignments').select('*').eq('org_id', orgId);
+    // Pagination obligatoire : 1 assignment par écriture GL → dépasse 1000 facilement
+    const data = await paginatedSelect<any>(
+      () => supabase.from('fna_analytic_assignments').select('*').eq('org_id', orgId),
+      'getAnalyticAssignments',
+    );
     return (data ?? []).map((r: any) => toCamel(r)) as AnalyticAssignment[];
   }
   async bulkInsertAnalyticAssignments(assignments: AnalyticAssignment[]) {
@@ -648,15 +707,23 @@ export class SupabaseProvider implements DataProvider {
   }
 
   async getAnalyticBudgets(orgId: string) {
-    const { data } = await supabase.from('fna_analytic_budgets').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticBudget[];
+    // Pagination : code × période = potentiellement > 1000
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_analytic_budgets').select('*').eq('org_id', orgId),
+      'getAnalyticBudgets',
+    );
+    return rows.map((r: any) => toCamel(r)) as AnalyticBudget[];
   }
 
   // ── Activités ──────────────────────────────────────────────────────
   async getActivities(orgId: string) {
-    const { data } = await supabase.from('fna_activities').select('*')
-      .eq('org_id', orgId).order('created_at', { ascending: false });
-    return (data ?? []).map((r: any) => toCamel(r)) as Activity[];
+    // Pagination : log d'activité peut grossir indéfiniment
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_activities').select('*')
+        .eq('org_id', orgId).order('created_at', { ascending: false }),
+      'getActivities',
+    );
+    return rows.map((r: any) => toCamel(r)) as Activity[];
   }
   async getActivity(id: number) {
     const { data } = await supabase.from('fna_activities').select('*').eq('id', id).maybeSingle();
@@ -699,12 +766,19 @@ export class SupabaseProvider implements DataProvider {
     return data ? toCamel(data) as ChatMessage : undefined;
   }
   async getChatMessagesByChannel(channelId: string) {
-    const { data } = await supabase.from('fna_chat_messages').select('*').eq('channel_id', channelId).order('created_at');
-    return (data ?? []).map((r: any) => toCamel(r)) as ChatMessage[];
+    // Pagination : un canal actif dépasse 1000 messages
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_chat_messages').select('*').eq('channel_id', channelId).order('created_at'),
+      'getChatMessagesByChannel',
+    );
+    return rows.map((r: any) => toCamel(r)) as ChatMessage[];
   }
   async getChatMessagesByOrg(orgId: string) {
-    const { data } = await supabase.from('fna_chat_messages').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as ChatMessage[];
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_chat_messages').select('*').eq('org_id', orgId),
+      'getChatMessagesByOrg',
+    );
+    return rows.map((r: any) => toCamel(r)) as ChatMessage[];
   }
   async addChatMessage(msg: Omit<ChatMessage, 'id'>) {
     const row = toSnake(msg); delete row.id;
