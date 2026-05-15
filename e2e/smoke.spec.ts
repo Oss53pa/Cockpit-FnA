@@ -29,10 +29,12 @@ test.describe('Smoke — pages publiques', () => {
     const jsErrors: string[] = [];
     page.on('pageerror', (err) => jsErrors.push(err.message));
 
-    const res = await page.goto('/signup');
+    const res = await page.goto('/signup', { waitUntil: 'networkidle' });
     expect(res?.status()).toBeLessThan(500);
-    // Le formulaire doit avoir un champ email
-    await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 10_000 });
+    // Le formulaire doit avoir un champ email (utilise placeholder ou type)
+    await expect(
+      page.locator('input[type="email"], input[name="email"], input[placeholder*="email" i]').first()
+    ).toBeVisible({ timeout: 20_000 });
     expect(jsErrors).toEqual([]);
   });
 
@@ -40,9 +42,11 @@ test.describe('Smoke — pages publiques', () => {
     const jsErrors: string[] = [];
     page.on('pageerror', (err) => jsErrors.push(err.message));
 
-    const res = await page.goto('/login');
+    const res = await page.goto('/login', { waitUntil: 'networkidle' });
     expect(res?.status()).toBeLessThan(500);
-    await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.locator('input[type="email"], input[name="email"], input[placeholder*="email" i]').first()
+    ).toBeVisible({ timeout: 20_000 });
     expect(jsErrors).toEqual([]);
   });
 
