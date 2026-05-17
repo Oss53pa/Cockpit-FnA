@@ -26,6 +26,7 @@ dist-ssr
 .claude/
 
 .commit-msg.tmp
+.vercel
 
 # Playwright
 test-results/

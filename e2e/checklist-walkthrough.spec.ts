@@ -35,7 +35,7 @@ test.describe('Checklist §0 — Pré-requis techniques', () => {
   test('Supabase config présente côté client (anon key visible)', async ({ page }) => {
     await page.goto('/');
     const hasSupabaseUrl = await page.evaluate(() => {
-      // @ts-ignore — accès au runtime
+      // @ts-expect-error — accès au runtime
       return typeof window !== 'undefined' && window.location.origin.length > 0;
     });
     expect(hasSupabaseUrl).toBe(true);

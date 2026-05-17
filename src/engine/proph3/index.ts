@@ -10,6 +10,10 @@ import { checkOllamaStatus, chatWithOllama, buildSystemPrompt, type OllamaStatus
 import { searchKnowledge } from '../../syscohada/knowledge';
 import { fmtMoney } from '../../lib/format';
 import { runIntelligenceAnalysis, type IntelligenceReport } from './intelligence';
+import {
+  federatedSearchKnowledge,
+  federatedLogAudit,
+} from '../../lib/proph3tFederation';
 
 export interface Proph3Analysis { score: FinancialScore; anomalies: AnomalyReport; predictions: TresoForecast; commentary: FullCommentary; sig: SIG; ratios: Ratio[]; bilanActif: Line[]; bilanPassif: Line[]; intelligence?: IntelligenceReport; }
 export type { FinancialScore, AnomalyReport, TresoForecast, FullCommentary, OllamaStatus, IntelligenceReport };
@@ -65,14 +69,28 @@ function sanitizeUserQuestion(question: string): string {
   return q.trim();
 }
 
-export async function askProph3(question: string, analysis: Proph3Analysis | null, companyName?: string, country?: string, currency?: string): Promise<string> {
+export async function askProph3(question: string, analysis: Proph3Analysis | null, companyName?: string, country?: string, currency?: string, orgId?: string): Promise<string> {
+  const t0 = Date.now();
   // CORRECTION (audit) : sanitisation de la question utilisateur AVANT injection
   // dans le prompt — protection contre prompt injection / fuite de contexte.
   const safeQuestion = sanitizeUserQuestion(question);
-  const chunks = searchKnowledge(safeQuestion, 3);
-  const kCtx = chunks.map((c) => `### ${c.title}\n${c.content}`).join('\n\n');
+
+  // Knowledge retrieval — federated first (central RAG SYSCOHADA toujours à
+  // jour, partagé avec les 6 autres apps du catalogue), fallback local si le
+  // core est down ou si l'utilisateur n'a pas de token SSO Atlas Studio.
+  const [centralRefs, localChunks] = await Promise.all([
+    federatedSearchKnowledge(safeQuestion, 3),
+    Promise.resolve(searchKnowledge(safeQuestion, 3)),
+  ]);
+  const allChunks = centralRefs.length > 0
+    ? centralRefs.map((c) => ({ title: c.title, content: c.content }))
+    : localChunks;
+  const kCtx = allChunks.map((c) => `### ${c.title}\n${c.content}`).join('\n\n');
+  const knowledgeSource = centralRefs.length > 0 ? 'federated' : 'local';
   const local = genLocal(safeQuestion, analysis, kCtx);
 
+  let finalAnswer = local;
+  let llmUsed: 'ollama' | 'local' = 'local';
   try {
     const st = await checkOllamaStatus();
     if (st.available && st.model) {
@@ -89,10 +107,28 @@ export async function askProph3(question: string, analysis: Proph3Analysis | nul
         { role: 'system', content: sp + (kCtx ? `\n\n--- Référence SYSCOHADA ---\n${kCtx}` : '') },
         { role: 'user', content: userMessage },
       ], st.model);
-      return response.content;
+      finalAnswer = response.content;
+      llmUsed = 'ollama';
     }
   } catch { /* fallback silencieux vers le moteur local */ }
-  return local;
+
+  // Fire-and-forget audit (federated). Ne bloque pas la réponse — si le core
+  // est down, la trace locale d'Ollama suffit.
+  void federatedLogAudit({
+    action: 'ai_response',
+    orgId,
+    content: {
+      question_len: safeQuestion.length,
+      answer_len: finalAnswer.length,
+      knowledge_source: knowledgeSource,
+      knowledge_hits: allChunks.length,
+      llm: llmUsed,
+      latency_ms: Date.now() - t0,
+      has_analysis: !!analysis,
+    },
+  });
+
+  return finalAnswer;
 }
 
 function genLocal(q: string, a: Proph3Analysis | null, kCtx: string): string {
