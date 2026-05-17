@@ -8,6 +8,7 @@ import { DemoBanner } from './components/layout/DemoBanner';
 import { DemoTour } from './components/layout/DemoTour';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { OrgGuard } from './components/auth/OrgGuard';
 import { ToastContainer } from './components/ui/Toast';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { OnboardingModal } from './components/ui/OnboardingModal';
@@ -201,7 +202,7 @@ function App() {
         <Route path="/demo" element={<Suspense fallback={<PageFallback />}><Demo /></Suspense>} />
 
         {/* Routes protégées */}
-        <Route path="/home" element={<ProtectedRoute><DemoBanner /><Home /><FloatingAI /><DemoTour /></ProtectedRoute>} />
+        <Route path="/home" element={<ProtectedRoute><OrgGuard><DemoBanner /><Home /><FloatingAI /><DemoTour /></OrgGuard></ProtectedRoute>} />
         <Route path="/dashboards" element={<ProtectedRoute><AppLayout><Dashboards /></AppLayout></ProtectedRoute>} />
         {/* Synthèse : hub regroupant Vue d'ensemble + Santé entreprise + Alertes */}
         <Route path="/dashboard/home" element={<ProtectedRoute><AppLayout><SyntheseHub /></AppLayout></ProtectedRoute>} />
