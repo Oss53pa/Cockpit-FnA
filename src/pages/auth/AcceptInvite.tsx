@@ -117,6 +117,31 @@ export default function AcceptInvite() {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
+
+      // CRITIQUE : l'utilisateur invité doit atterrir sur l'org à laquelle il
+      // a été invité, pas sur l'OnboardingModal qui demanderait de créer une
+      // nouvelle entreprise. On lit fna_user_orgs (peuplée par cockpit-invite-user
+      // ETAPE 2) et on persiste l'org choisie dans localStorage avant le redirect.
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const uid = sessionData?.session?.user?.id;
+        if (uid) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: userOrgs } = await (supabase as any)
+            .from('fna_user_orgs')
+            .select('org_id')
+            .eq('user_id', uid);
+          const firstOrgId = userOrgs?.[0]?.org_id;
+          if (firstOrgId) {
+            // safeLocalStorage indisponible ici (lib hors AcceptInvite) — fallback try/catch
+            try { localStorage.setItem('current-org', firstOrgId); } catch { /* quota / Safari iOS privé */ }
+          }
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[AcceptInvite] résolution org échouée (non bloquant):', e);
+      }
+
       toast.success('Mot de passe défini', `Bienvenue${userName ? ' ' + userName : ''} ! Connexion en cours…`);
       // Petit délai pour que le toast soit visible
       setTimeout(() => navigate('/home', { replace: true }), 800);

@@ -2,8 +2,32 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Favicon + icônes PWA -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon.svg" />
+    <link rel="mask-icon" href="/icons/icon.svg" color="#7FA88E" />
+
+    <!-- PWA — installation poste de travail + barre des tâches + écran d'accueil mobile -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#7FA88E" />
+    <meta name="application-name" content="Cockpit FnA" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Cockpit FnA" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="msapplication-TileColor" content="#7FA88E" />
+    <meta name="msapplication-config" content="none" />
+
+    <!-- SEO + Open Graph -->
+    <meta name="description" content="Cockpit de pilotage financier SYSCOHADA révisé 2017. Bilan, compte de résultat, SIG, ratios et trésorerie en temps réel." />
+    <meta property="og:title" content="Cockpit FnA — Pilotage financier SYSCOHADA" />
+    <meta property="og:description" content="Bilan, compte de résultat, SIG, ratios et trésorerie en temps réel." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icons/icon.svg" />
+    <meta name="twitter:card" content="summary" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Police principale : Dosis (sans-serif moderne, géométrique, lisible).
@@ -13,7 +37,7 @@
       href="https://fonts.googleapis.com/css2?family=Dosis:wght@200..800&family=Inter:wght@400;500;600;700&family=Grand+Hotel&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <title>CockPit F&amp;A — Reporting & Analyse Financière SYSCOHADA</title>
+    <title>Cockpit FnA — Pilotage financier SYSCOHADA</title>
   </head>
   <body>
     <div id="root"></div>

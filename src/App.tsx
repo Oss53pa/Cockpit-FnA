@@ -12,6 +12,7 @@ import { OrgGuard } from './components/auth/OrgGuard';
 import { ToastContainer } from './components/ui/Toast';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { OnboardingModal } from './components/ui/OnboardingModal';
+import { InstallPrompt } from './components/ui/InstallPrompt';
 import { ReadOnlyBanner } from './components/ui/ReadOnlyBanner';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
@@ -173,6 +174,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <ActivitySidebarToggle />
       <ActivitySidebar />
       <OnboardingModal />
+      <InstallPrompt />
     </div>
   );
 }

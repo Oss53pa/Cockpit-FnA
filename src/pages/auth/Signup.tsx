@@ -21,8 +21,9 @@ export default function Signup() {
   const [orgName, setOrgName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({});
   const [globalError, setGlobalError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailConfirmRequired, setEmailConfirmRequired] = useState(false);
@@ -37,6 +38,8 @@ export default function Signup() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs.email = "Format d'email invalide";
     if (!password) errs.password = 'Mot de passe requis';
     else if (password.length < 8) errs.password = 'Min. 8 caractères';
+    if (!confirmPassword) errs.confirmPassword = 'Confirmation requise';
+    else if (password !== confirmPassword) errs.confirmPassword = 'Les mots de passe ne correspondent pas';
 
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -183,6 +186,29 @@ export default function Signup() {
                     />
                   </div>
                   {errors.password && <p className="text-xs text-error mt-1">{errors.password}</p>}
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1 block">
+                    Confirmer le mot de passe <span className="text-error">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={e => { setConfirmPassword(e.target.value); setErrors(p => ({ ...p, confirmPassword: undefined })); }}
+                      className={`input pl-10 ${errors.confirmPassword ? 'border-error' : ''}`}
+                      placeholder="Retapez le mot de passe"
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+                  {errors.confirmPassword && <p className="text-xs text-error mt-1">{errors.confirmPassword}</p>}
+                  {confirmPassword && password && password !== confirmPassword && !errors.confirmPassword && (
+                    <p className="text-xs text-warning mt-1">⚠ Les mots de passe ne correspondent pas</p>
+                  )}
                 </div>
 
                 {/* CGU */}

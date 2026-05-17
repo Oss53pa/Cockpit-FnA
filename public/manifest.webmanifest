@@ -1,0 +1,44 @@
+{
+  "name": "Cockpit FnA — Pilotage financier SYSCOHADA",
+  "short_name": "Cockpit FnA",
+  "description": "Cockpit de pilotage financier SYSCOHADA révisé 2017. Bilan, compte de résultat, SIG, ratios et trésorerie en temps réel.",
+  "id": "cockpit-fna",
+  "start_url": "/home",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "theme_color": "#7FA88E",
+  "background_color": "#FAF8F4",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["finance", "business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Importer Grand Livre",
+      "short_name": "Import GL",
+      "description": "Importer un fichier de Grand Livre (CSV, XLSX)",
+      "url": "/imports"
+    },
+    {
+      "name": "Synthèse de gestion",
+      "short_name": "Synthèse",
+      "description": "Bilan, CR, SIG et trésorerie",
+      "url": "/dashboard/home"
+    },
+    {
+      "name": "Catalogue de dashboards",
+      "short_name": "Dashboards",
+      "description": "30+ vues SYSCOHADA",
+      "url": "/dashboards"
+    }
+  ]
+}
