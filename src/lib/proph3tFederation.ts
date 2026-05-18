@@ -1,4 +1,10 @@
-// @ts-nocheck — WIP: waiting for @atlas-studio/proph3t-client package
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck — WIP: waiting for @atlas-studio/proph3t-client package (peer dep
+// linké via file:../SiteWeb Atlas Studio/proph3t-client en local, absent en CI).
+// `@ts-nocheck` est requis car les types ne sont pas résolvables hors du
+// worktree local. Le code est défensif (try/catch + return null/[]) donc
+// l'absence du package en runtime ne casse pas l'app — cf. dégradation
+// gracieuse dans la docstring ci-dessous.
 /**
  * Proph3t federation adapter for Cockpit F&A.
  *
