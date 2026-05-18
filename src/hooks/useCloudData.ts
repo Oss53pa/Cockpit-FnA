@@ -21,6 +21,7 @@
  *   invalidateCloudData('organizations');
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { invalidateCache } from '../db/cachedProvider';
 
 // ── Bus d'invalidation simple (pas de dépendance externe) ─────────────
 type Listener = () => void;
@@ -33,8 +34,27 @@ function subscribe(tag: string, fn: Listener): () => void {
   return () => set!.delete(fn);
 }
 
-/** Force tous les hooks abonnés à `tag` à se rafraîchir immédiatement. */
+/**
+ * Map tags utilisés par les hooks → préfixes du cache provider.
+ * Permet à `invalidateCloudData('gl')` de purger aussi le cache du provider
+ * (sinon le hook se relance mais récupère la même donnée en cache).
+ */
+const TAG_TO_CACHE_PREFIX: Record<string, string> = {
+  gl: 'gl:',
+  organizations: 'orgs:',
+  fiscalYears: 'fy:',
+  periods: 'periods:',
+  accounts: 'accounts:',
+  imports: 'imports:',
+};
+
+/** Force tous les hooks abonnés à `tag` à se rafraîchir immédiatement.
+ *  Purge aussi le cache du provider pour ce tag (si mapping connu). */
 export function invalidateCloudData(tag: string): void {
+  // Purger le cache provider AVANT de notifier les hooks (sinon les hooks
+  // récupèrent la version cachée au lieu de re-fetcher)
+  const prefix = TAG_TO_CACHE_PREFIX[tag];
+  if (prefix) invalidateCache(prefix);
   const set = listeners.get(tag);
   if (set) for (const fn of set) fn();
 }
@@ -52,6 +72,8 @@ export function invalidateMany(tags: string[]): void {
  * Préférable à `window.location.reload()` qui perd l'état UI / formulaires.
  */
 export function invalidateAllCloudData(): void {
+  // Purger tout le cache provider d'abord
+  invalidateCache();
   for (const set of listeners.values()) {
     for (const fn of set) fn();
   }

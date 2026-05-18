@@ -48,6 +48,7 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, GLAuditLogEntry,
 } from './schema';
+import { withCache } from './cachedProvider';
 
 export interface GLFilter {
   orgId: string;
@@ -289,4 +290,6 @@ function selectProvider(): DataProvider {
   return new DemoProvider(new SupabaseProvider());
 }
 
-export const dataProvider: DataProvider = selectProvider();
+// Wrap dans le cache TTL + déduplication pour éviter les multi-fetches de
+// 8000+ entries paginé sur chaque navigation de page.
+export const dataProvider: DataProvider = withCache(selectProvider());
