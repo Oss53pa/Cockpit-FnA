@@ -9,7 +9,7 @@ import { db, type TiersUnmatched, type GLEntry } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory } from '../hooks/useFinancials';
-import { detectTiersColumns, importGLTiers, importGLTiersBatch, migrateGLPeriods, resyncAccountLabels, parseFile, TiersMapping, TiersImportReport } from '../engine/importer';
+import { detectTiersColumns, importGLTiers, importGLTiersBatch, migrateGLPeriods, resyncAccountLabels, parseFile, TiersMapping, TiersImportReport, computeFileHash, findDuplicateImport } from '../engine/importer';
 import { downloadTiersTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 import { Shield } from 'lucide-react';
@@ -125,6 +125,25 @@ export default function ImportTiers() {
     setBatchProgress(null);
     try {
       const allFiles = [file, ...extraFiles];
+      // Détection de doublon : vérifier chaque fichier contre l'historique
+      // (hash SHA-256). En mode multi-fichiers, on alerte pour TOUS les
+      // doublons trouvés en une fois.
+      const duplicates: string[] = [];
+      for (const f of allFiles) {
+        const h = await computeFileHash(f);
+        const dup = await findDuplicateImport(currentOrgId, h, 'TIERS');
+        if (dup) {
+          duplicates.push(`• "${f.name}" → déjà importé le ${new Date(dup.date).toLocaleDateString('fr-FR')} (${dup.count} lignes)`);
+        }
+      }
+      if (duplicates.length > 0) {
+        const ok = confirm(
+          `⚠ ${duplicates.length} fichier(s) déjà importé(s) :\n\n${duplicates.join('\n')}\n\n` +
+          `Continuer peut créer des enrichissements redondants. Recommandation : supprimer d'abord les anciens imports via l'historique.\n\n` +
+          `Continuer quand même ?`,
+        );
+        if (!ok) { setLoading(false); return; }
+      }
       const res = await importGLTiersBatch(
         allFiles,
         mapping as TiersMapping,

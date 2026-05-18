@@ -427,6 +427,7 @@ export class SupabaseProvider implements DataProvider {
     orgId: string;
     user: string;
     fileName: string;
+    fileHash?: string;
     source: string;
     count: number;
     rejected: number;
@@ -443,6 +444,7 @@ export class SupabaseProvider implements DataProvider {
         p_org_id:    payload.orgId,
         p_user:      payload.user,
         p_file_name: payload.fileName,
+        p_file_hash: payload.fileHash ?? null,
         p_source:    payload.source,
         p_count:     payload.count,
         p_rejected:  payload.rejected,

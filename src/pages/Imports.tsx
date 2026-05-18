@@ -9,7 +9,7 @@ import { dataProvider } from '../db/provider';
 import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';
 import { useOrgPermissions } from '../hooks/useOrgPermissions';
-import { detectColumns, importGL, migrateGLPeriods, resyncAccountLabels, parseFile, ColumnMapping, ImportReport } from '../engine/importer';
+import { detectColumns, importGL, migrateGLPeriods, resyncAccountLabels, parseFile, ColumnMapping, ImportReport, computeFileHash, findDuplicateImport } from '../engine/importer';
 import { downloadGLTemplate } from '../engine/templates';
 import { fmtFull } from '../lib/format';
 
@@ -63,6 +63,20 @@ export default function Imports() {
     }
     setLoading(true);
     try {
+      // Détection de doublon : si le même fichier a déjà été importé pour
+      // cette org, alerter l'utilisateur avant de créer des écritures en double.
+      const fileHash = await computeFileHash(file);
+      const dup = await findDuplicateImport(currentOrgId, fileHash, 'GL');
+      if (dup) {
+        const dupDate = new Date(dup.date).toLocaleString('fr-FR');
+        const ok = confirm(
+          `⚠ Ce fichier a déjà été importé le ${dupDate} (${dup.count.toLocaleString('fr-FR')} écritures).\n\n` +
+          `Continuer va créer des écritures EN DOUBLE.\n\n` +
+          `Recommandation : supprimer d'abord l'ancien import "${dup.fileName}" via l'historique ci-dessous, puis re-importer.\n\n` +
+          `Voulez-vous quand même continuer ?`,
+        );
+        if (!ok) { setLoading(false); return; }
+      }
       const res = await importGL(file, mapping as ColumnMapping, {
         orgId: currentOrgId, periodId, user: 'Utilisateur local', source,
       });
@@ -85,7 +99,10 @@ export default function Imports() {
   const deleteImport = async (imp: typeof history[number]) => {
     if (!confirm(`Supprimer l'import "${imp.fileName}" et ses ${imp.count} écritures ?`)) return;
     try {
-      await dataProvider.deleteGLByImport(Number(imp.id));
+      // Cascade DELETE via FK Postgres (migration 021) : supprimer l'import
+      // supprime AUTOMATIQUEMENT toutes ses écritures GL en une seule
+      // transaction atomique. Plus besoin du 2-step (deleteGLByImport puis
+      // deleteImport) qui pouvait laisser un état partiel en cas d'échec.
       await dataProvider.deleteImport(Number(imp.id));
       invalidateCloudData('gl');
       invalidateCloudData('imports');

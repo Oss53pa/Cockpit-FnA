@@ -149,6 +149,7 @@ export interface DataProvider {
     orgId: string;
     user: string;
     fileName: string;
+    fileHash?: string;
     source: string;
     count: number;
     rejected: number;

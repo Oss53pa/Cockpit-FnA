@@ -24,6 +24,54 @@ const debug = (...args: unknown[]): void => {
   if (import.meta.env.DEV) console.log(...args);
 };
 
+/**
+ * Calcule un hash SHA-256 du contenu binaire d'un fichier.
+ * Permet la détection de doublon : si le même fichier est ré-uploadé,
+ * le hash est identique et on peut alerter l'utilisateur.
+ */
+export async function computeFileHash(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const subtle = (typeof globalThis !== 'undefined' && globalThis.crypto?.subtle) || null;
+  if (!subtle) {
+    // Fallback : fileName + size (faible mais mieux que rien)
+    return `nohash:${file.name}:${file.size}`;
+  }
+  const digest = await subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Détection de doublon : vérifie si un import du même hash existe déjà
+ * pour cette org. Retourne l'import existant ou `null`.
+ *
+ * @param orgId Organisation cible
+ * @param fileHash Hash SHA-256 du fichier en cours d'upload
+ * @param kind Type d'import (filter pour éviter de confondre GL et TIERS)
+ */
+export async function findDuplicateImport(
+  orgId: string,
+  fileHash: string,
+  kind?: string,
+): Promise<{ id: number; fileName: string; date: number; count: number } | null> {
+  try {
+    const imports = await dataProvider.getImports(orgId);
+    const dup = imports.find((i) =>
+      (i as any).fileHash === fileHash && (!kind || i.kind === kind),
+    );
+    if (!dup) return null;
+    return {
+      id: dup.id!,
+      fileName: dup.fileName,
+      date: dup.date,
+      count: dup.count,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── IMPORT BULLETPROOF AVEC EXCELJS ────────────────────────────────────
 // Lit n'importe quel fichier Excel généré par ExcelJS sans dépendre de la
 // détection de feuille. Stratégie : scanne TOUTES les feuilles, trouve la
@@ -909,11 +957,15 @@ export async function importGL(
   if (newFYs.length > 0) await dataProvider.bulkUpsertFiscalYears(newFYs);
   if (newPeriods.length > 0) await dataProvider.bulkUpsertPeriods(newPeriods);
 
+  // Calculer le hash du fichier pour détecter d'éventuels doublons à l'avenir
+  const fileHash = await computeFileHash(file);
+
   const importId = await dataProvider.addImport({
     orgId: opts.orgId,
     date: Date.now(),
     user: opts.user,
     fileName: file.name,
+    fileHash,
     source: opts.source,
     kind: 'GL',
     count: entries.length,
@@ -1711,11 +1763,15 @@ export async function importGLTiers(
   }));
 
   let importId: number;
+  // Calculer le hash UNE fois pour le passer à la RPC ou au fallback.
+  // Permet la détection de doublon ultérieure via findDuplicateImport.
+  const fileHash = await computeFileHash(file);
   const atomic = dataProvider.importTiersAtomic
     ? await dataProvider.importTiersAtomic({
         orgId: opts.orgId,
         user: opts.user,
         fileName: file.name,
+        fileHash,
         source: opts.source,
         count: enriched,
         rejected: errors.length + unmatched,
@@ -1735,6 +1791,7 @@ export async function importGLTiers(
       date: Date.now(),
       user: opts.user,
       fileName: file.name,
+      fileHash,
       source: opts.source,
       kind: 'TIERS',
       count: enriched,
