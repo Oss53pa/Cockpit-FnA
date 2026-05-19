@@ -222,21 +222,25 @@ export default function ImportTiers() {
   };
 
   // Statistiques tiers actuelles
-  type TiersCat = { label: string; prefix: string; count: number; entries: number; top: Array<{ code: string; label: string; solde: number }> };
+  // tabKey = identifiant onglet (clients/fournisseurs/personnel/etat/autres)
+  // match  = fonction qui dit si un compte appartient à cette catégorie
+  //          (permet de gérer 43-44 et 45-48 comme catégories combinées)
+  type TiersCat = {
+    label: string;
+    tabKey: 'clients' | 'fournisseurs' | 'personnel' | 'etat' | 'autres';
+    accountRanges: string; // label humain : "411", "401", "42", "43-44", "45-48"
+    count: number;
+    entries: number;
+    top: Array<{ code: string; label: string; solde: number }>;
+  };
   const [tiersStats, setTiersStats] = useState<{ total: number; cats: TiersCat[] } | null>(null);
   const refreshStats = useCallback(async () => {
     if (!currentOrgId) return;
-    // FIX : utilise dataProvider (Supabase paginé) au lieu de db.gl (Dexie
-    // cache local, vide depuis la migration full Supabase). C'est ce qui
-    // faisait que les onglets Clients/Fournisseurs/Personnel n'affichaient
-    // rien : Dexie ne contenait aucune écriture.
     const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
     const withTiers = entries.filter((e) => !!e.tiers);
     const aggregate = (arr: typeof entries) => {
       const map = new Map<string, { label: string; solde: number }>();
       for (const e of arr) {
-        // On agrège PAR CODE TIERS uniquement (pas par account). Si pas de
-        // tier code, l'écriture est déjà filtrée par `withTiers`.
         const k = e.tiers as string;
         const cur = map.get(k) ?? { label: e.label || k, solde: 0 };
         cur.solde += e.debit - e.credit;
@@ -247,26 +251,30 @@ export default function ImportTiers() {
         .sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde))
         .slice(0, 10);
     };
-    const catDefs = [
-      { label: 'Fournisseurs', prefix: '40' },         // 401, 408 (FNP), 409
-      { label: 'Clients', prefix: '41' },              // 411, 412, 416, 417…
-      { label: 'Personnel', prefix: '42' },
-      { label: 'Organismes sociaux', prefix: '43' },
-      { label: 'État & collectivités', prefix: '44' },
-      { label: 'Associés & groupe', prefix: '45' },
-      { label: 'Débiteurs/créditeurs divers', prefix: '47' },
-      { label: 'Créances/dettes HAO', prefix: '48' },
+    // Catégorisation SYSCOHADA — 5 catégories alignées 1:1 avec les onglets UI :
+    //   Clients      = comptes 41 (411 principalement, 412 FAE, 416 douteux…)
+    //   Fournisseurs = comptes 40 (401 principal, 408 FNP, 409 avances…)
+    //   Personnel    = comptes 42
+    //   État & Org.  = comptes 43 ET 44 combinés
+    //   Autres tiers = comptes 45, 46, 47, 48 (tout le reste de la classe 4 tiers)
+    const catDefs: Array<{ label: string; tabKey: TiersCat['tabKey']; accountRanges: string; matches: (acc: string) => boolean }> = [
+      { label: 'Clients', tabKey: 'clients', accountRanges: '411', matches: (a) => a.startsWith('41') },
+      { label: 'Fournisseurs', tabKey: 'fournisseurs', accountRanges: '401', matches: (a) => a.startsWith('40') },
+      { label: 'Personnel', tabKey: 'personnel', accountRanges: '42', matches: (a) => a.startsWith('42') },
+      { label: 'État & Organismes', tabKey: 'etat', accountRanges: '43-44', matches: (a) => a.startsWith('43') || a.startsWith('44') },
+      { label: 'Autres tiers', tabKey: 'autres', accountRanges: '45-48', matches: (a) => a.startsWith('45') || a.startsWith('46') || a.startsWith('47') || a.startsWith('48') },
     ];
     const cats: TiersCat[] = catDefs.map((d) => {
-      const sub = withTiers.filter((e) => e.account.startsWith(d.prefix));
-      return { ...d, count: new Set(sub.map((e) => e.tiers)).size, entries: sub.length, top: aggregate(sub) };
+      const sub = withTiers.filter((e) => d.matches(e.account));
+      return {
+        label: d.label,
+        tabKey: d.tabKey,
+        accountRanges: d.accountRanges,
+        count: new Set(sub.map((e) => e.tiers)).size,
+        entries: sub.length,
+        top: aggregate(sub),
+      };
     });
-    // Aussi compter les écritures avec tiers sur comptes non-standard
-    const allPrefixes = catDefs.map((d) => d.prefix);
-    const otherEntries = withTiers.filter((e) => !allPrefixes.some((p) => e.account.startsWith(p)));
-    if (otherEntries.length > 0) {
-      cats.push({ label: 'Autres comptes', prefix: '—', count: new Set(otherEntries.map((e) => e.tiers)).size, entries: otherEntries.length, top: aggregate(otherEntries) });
-    }
     setTiersStats({ total: withTiers.length, cats });
   }, [currentOrgId]);
 
@@ -379,30 +387,23 @@ export default function ImportTiers() {
           </div>
         )}
 
-        {/* Stats tiers actuelles */}
+        {/* Stats tiers actuelles — filtrage par tabKey (1:1 avec les onglets) */}
         {tiersStats && (() => {
-          const tabFilter: Record<string, string[]> = {
-            all: [],
-            clients: ['411'],
-            fournisseurs: ['401'],
-            personnel: ['42'],
-            etat: ['43', '44'],
-            autres: ['45', '46', '47', '48'],
-          };
-          const prefixes = tabFilter[tiersTab] ?? [];
-          const visibleCats = prefixes.length === 0
+          // L'onglet "all" affiche toutes les catégories. Sinon on filtre par tabKey
+          // qui matche exactement la valeur de l'onglet (clients/fournisseurs/...).
+          const visibleCats = tiersTab === 'all'
             ? tiersStats.cats
-            : tiersStats.cats.filter((c) => prefixes.some((p) => c.prefix.startsWith(p)));
+            : tiersStats.cats.filter((c) => c.tabKey === tiersTab);
           return (
             <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {tiersTab === 'all' && <StatCard label="Total écritures tiers" value={tiersStats.total} />}
                 {visibleCats.map((c) => (
-                  <StatCard key={c.prefix} label={`${c.label} (${c.prefix})`} value={c.count} good={c.count > 0} />
+                  <StatCard key={c.tabKey} label={`${c.label} (${c.accountRanges})`} value={c.count} good={c.count > 0} />
                 ))}
               </div>
               {visibleCats.filter((c) => c.top.length > 0).map((cat) => (
-                <Card key={cat.prefix} title={`Top 10 — ${cat.label}`} subtitle={`Comptes ${cat.prefix} · ${cat.entries} écritures · ${cat.count} tiers`}>
+                <Card key={cat.tabKey} title={`Top 10 — ${cat.label}`} subtitle={`Comptes ${cat.accountRanges} · ${cat.entries} écritures · ${cat.count} tiers`}>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead><tr className="border-b border-primary-200 dark:border-primary-800 text-primary-500 uppercase tracking-wider">
@@ -417,6 +418,15 @@ export default function ImportTiers() {
                   </div>
                 </Card>
               ))}
+              {/* Si l'onglet sélectionné n'a aucun tier, message explicite */}
+              {tiersTab !== 'all' && visibleCats.length > 0 && visibleCats.every((c) => c.count === 0) && (
+                <Card>
+                  <p className="text-sm text-primary-500 text-center py-6">
+                    Aucun tier détecté dans cette catégorie pour l'org courante.
+                    {visibleCats[0]?.tabKey === 'autres' && ' (Comptes 45-48 : associés, débiteurs divers, transitoires, HAO)'}
+                  </p>
+                </Card>
+              )}
             </div>
           );
         })()}
