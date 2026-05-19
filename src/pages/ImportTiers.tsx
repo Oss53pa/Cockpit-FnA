@@ -191,7 +191,8 @@ export default function ImportTiers() {
   const diagnosticTiers = async () => {
     const code = prompt('Diagnostic — entrez un code tiers ou un préfixe de compte (ex: CLI001, 411) :');
     if (!code) return;
-    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+    // FIX : dataProvider (Supabase paginé) au lieu de db.gl (Dexie vide)
+    const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
     const filtered = entries.filter((e) =>
       (e.tiers && e.tiers.toUpperCase().includes(code.toUpperCase())) ||
       e.account.startsWith(code)
@@ -223,13 +224,20 @@ export default function ImportTiers() {
   // Statistiques tiers actuelles
   type TiersCat = { label: string; prefix: string; count: number; entries: number; top: Array<{ code: string; label: string; solde: number }> };
   const [tiersStats, setTiersStats] = useState<{ total: number; cats: TiersCat[] } | null>(null);
-  const refreshStats = async () => {
-    const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+  const refreshStats = useCallback(async () => {
+    if (!currentOrgId) return;
+    // FIX : utilise dataProvider (Supabase paginé) au lieu de db.gl (Dexie
+    // cache local, vide depuis la migration full Supabase). C'est ce qui
+    // faisait que les onglets Clients/Fournisseurs/Personnel n'affichaient
+    // rien : Dexie ne contenait aucune écriture.
+    const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
     const withTiers = entries.filter((e) => !!e.tiers);
     const aggregate = (arr: typeof entries) => {
       const map = new Map<string, { label: string; solde: number }>();
       for (const e of arr) {
-        const k = e.tiers || e.account;
+        // On agrège PAR CODE TIERS uniquement (pas par account). Si pas de
+        // tier code, l'écriture est déjà filtrée par `withTiers`.
+        const k = e.tiers as string;
         const cur = map.get(k) ?? { label: e.label || k, solde: 0 };
         cur.solde += e.debit - e.credit;
         map.set(k, cur);
@@ -240,8 +248,8 @@ export default function ImportTiers() {
         .slice(0, 10);
     };
     const catDefs = [
-      { label: 'Fournisseurs', prefix: '401' },
-      { label: 'Clients', prefix: '411' },
+      { label: 'Fournisseurs', prefix: '40' },         // 401, 408 (FNP), 409
+      { label: 'Clients', prefix: '41' },              // 411, 412, 416, 417…
       { label: 'Personnel', prefix: '42' },
       { label: 'Organismes sociaux', prefix: '43' },
       { label: 'État & collectivités', prefix: '44' },
@@ -260,7 +268,13 @@ export default function ImportTiers() {
       cats.push({ label: 'Autres comptes', prefix: '—', count: new Set(otherEntries.map((e) => e.tiers)).size, entries: otherEntries.length, top: aggregate(otherEntries) });
     }
     setTiersStats({ total: withTiers.length, cats });
-  };
+  }, [currentOrgId]);
+
+  // Auto-charge les stats à l'ouverture de la page (et quand on importe).
+  // Sans ça, le user devait cliquer "Stats tiers" → les onglets étaient vides.
+  useEffect(() => {
+    void refreshStats();
+  }, [refreshStats, report]);
 
   return (
     <div>
@@ -301,7 +315,8 @@ export default function ImportTiers() {
               setLoading(true);
               try {
                 const { verifyChain } = await import('../lib/auditHash');
-                const entries = await db.gl.where('orgId').equals(currentOrgId).toArray();
+                // FIX : dataProvider (Supabase paginé) au lieu de db.gl (Dexie vide)
+                const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
                 const tiersEntries = entries.filter((e) => !!e.tiers);
                 if (tiersEntries.length === 0) { toast.info('Aucune écriture tiers', 'Importez d\'abord un GL Tiers'); return; }
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- verifyChain accepte HashableEntry[], GLEntry est compatible mais le TS lib n'expose pas la conversion
