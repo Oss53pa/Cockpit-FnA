@@ -763,7 +763,22 @@ const auxColumns: Column<AuxBalanceRow>[] = [
 function AuxView({ orgId, year, importId, kind }: { orgId: string; year: number; importId: string; kind: 'client' | 'fournisseur' }) {
   const [rows, setRows] = useState<AuxBalanceRow[]>([]);
   const [search, setSearch] = useState('');
-  useEffect(() => { if (orgId) computeAuxBalance({ orgId, year, kind, importId }).then(setRows); }, [orgId, year, kind, importId]);
+  // Diagnostic data quality : pour détecter "0 tier renseigné" et afficher
+  // une bannière "Import GL Tiers requis" au lieu d'une ligne aggrégée mystérieuse.
+  const [diag, setDiag] = useState<{ totalEntries: number; withTiers: number; distinctAccounts: number } | null>(null);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void computeAuxBalance({ orgId, year, kind, importId }).then(setRows);
+    // Diagnostic indépendant pour la bannière info
+    const prefix = kind === 'client' ? '411' : '401';
+    void dataProvider.getGLEntries({ orgId }).then((entries) => {
+      const sub = entries.filter((e) => e.account.startsWith(prefix));
+      const withTiers = sub.filter((e) => !!e.tiers).length;
+      const distinctAccounts = new Set(sub.map((e) => e.account)).size;
+      setDiag({ totalEntries: sub.length, withTiers, distinctAccounts });
+    });
+  }, [orgId, year, kind, importId]);
 
   const filtered = rows.filter((r) => !search || r.tier.toLowerCase().includes(search.toLowerCase()) || r.label.toLowerCase().includes(search.toLowerCase()) || r.account.includes(search));
   const totD = filtered.reduce((s, r) => s + r.debit, 0);
@@ -771,8 +786,40 @@ function AuxView({ orgId, year, importId, kind }: { orgId: string; year: number;
   const totS = filtered.reduce((s, r) => s + r.solde, 0);
   const balanced = Math.abs(totD - totC - totS) < 1;
 
+  // Détection : aucun tier code n'est renseigné dans le GL pour ces comptes.
+  // C'est le cas typique où :
+  //   - L'import GL est OK (entries > 0)
+  //   - Mais l'import GL Tiers n'a pas été lancé (ou ses enrichissements
+  //     ont été perdus suite à un cleanup / re-import GL).
+  // Dans ce cas, la balance auxiliaire fallback sur "agrégation par libellé"
+  // (1 seule ligne "CLIENTS" pour 2930 écritures) — pas utile pour l'utilisateur.
+  const noTiersEnriched = diag !== null && diag.totalEntries > 0 && diag.withTiers === 0;
+
   return (
     <div className="space-y-4">
+      {noTiersEnriched && (
+        <Card>
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10 border-l-4 border-warning">
+            <svg className="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="flex-1 text-xs">
+              <p className="font-semibold text-warning-dark">Import GL Tiers requis pour le détail par {kind === 'client' ? 'client' : 'fournisseur'}</p>
+              <p className="mt-1 text-primary-700 dark:text-primary-300 leading-relaxed">
+                Votre Grand Livre contient <strong className="num">{diag.totalEntries.toLocaleString('fr-FR')}</strong> écritures
+                sur les comptes {kind === 'client' ? '411' : '401'}, mais <strong>aucune n'a de code tiers renseigné</strong>.
+                La balance ne peut donc afficher qu'une ligne agrégée par compte parent.
+              </p>
+              <p className="mt-2 text-primary-600 dark:text-primary-400">
+                → Allez sur <strong>Imports Tiers</strong> et déposez votre fichier GL Tiers. L'algorithme va enrichir
+                automatiquement les écritures GL existantes avec le code tiers individuel
+                (CLI001, CLI002, FRN042…), et cette balance affichera enfin le détail par tier.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="flex gap-2 items-center">
           <input className="input !py-1.5 max-w-xs" placeholder={`Tiers / libellé ${kind === 'client' ? 'client' : 'fournisseur'}…`}
@@ -956,10 +1003,47 @@ function DiscrepancyModal({ open, onClose, rows, entries }: {
 // ─── 4. BALANCE ÂGÉE (Clients ou Fournisseurs) ────────────────────
 function AgedView({ orgId, year, importId, kind }: { orgId: string; year: number; importId: string; kind: 'client' | 'fournisseur' }) {
   const [data, setData] = useState<{ buckets: string[]; rows: AgedTier[] }>({ buckets: [], rows: [] });
-  useEffect(() => { if (orgId) agedBalance(orgId, year, kind, importId).then(setData); }, [orgId, year, kind, importId]);
+  // Idem AuxView : détecte si aucun tier code n'est renseigné pour afficher
+  // une bannière d'aide au lieu d'un tableau vide énigmatique.
+  const [noTiersEnriched, setNoTiersEnriched] = useState(false);
+  const [totalEntries, setTotalEntries] = useState(0);
+  useEffect(() => {
+    if (!orgId) return;
+    void agedBalance(orgId, year, kind, importId).then(setData);
+    const prefix = kind === 'client' ? '411' : '401';
+    void dataProvider.getGLEntries({ orgId }).then((entries) => {
+      const sub = entries.filter((e) => e.account.startsWith(prefix));
+      setTotalEntries(sub.length);
+      setNoTiersEnriched(sub.length > 0 && sub.filter((e) => !!e.tiers).length === 0);
+    });
+  }, [orgId, year, kind, importId]);
 
   if (data.rows.length === 0) {
-    return <Card><p className="text-sm text-primary-500 text-center py-6">Aucune balance âgée à afficher.</p></Card>;
+    return (
+      <div className="space-y-4">
+        {noTiersEnriched && (
+          <Card>
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10 border-l-4 border-warning">
+              <svg className="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="flex-1 text-xs">
+                <p className="font-semibold text-warning-dark">Balance âgée indisponible — import GL Tiers requis</p>
+                <p className="mt-1 text-primary-700 dark:text-primary-300 leading-relaxed">
+                  {totalEntries.toLocaleString('fr-FR')} écritures sur les comptes {kind === 'client' ? '411' : '401'}, mais
+                  aucune n'a de code tiers. La balance âgée ne peut pas calculer l'antériorité par tier individuel
+                  sans codes tiers.
+                </p>
+                <p className="mt-2 text-primary-600 dark:text-primary-400">
+                  → Allez sur <strong>Imports Tiers</strong> et déposez votre fichier GL Tiers.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+        {!noTiersEnriched && <Card><p className="text-sm text-primary-500 text-center py-6">Aucune balance âgée à afficher.</p></Card>}
+      </div>
+    );
   }
   const totalsByBucket = data.buckets.map((_, i) => data.rows.reduce((s, r) => s + r.buckets[i], 0));
   const grandTotal = data.rows.reduce((s, r) => s + r.total, 0);
