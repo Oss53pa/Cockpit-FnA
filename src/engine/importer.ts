@@ -1823,30 +1823,25 @@ export async function importGLTiers(
     await logGLChanges(opts.orgId, withSource);
   }
 
-  // 5) Contrôle de cohérence : solde tiers vs solde GL par compte collectif.
-  // Aggrégation par racine SYSCOHADA (2 premiers chiffres = classe comptable :
-  // 40 fournisseurs, 41 clients, 42 personnel, 44 état). Comparer "401" du
-  // fichier tiers à la SOMME de tous les sous-comptes (401xxx, 408xxx) du
-  // GL — sinon un GL utilisant 408100 (FNP) vs un tiers déclaré sur 401
-  // donnerait toujours un faux écart.
+  // ── 5) Contrôle de cohérence — DÉSACTIVÉ ───────────────────────────
+  //
+  // L'ancien contrôle agrégeait les soldes par compte collectif (401, 411…)
+  // et les comparait à un solde GL aggrégé par racine de classe SYSCOHADA.
+  // Deux problèmes :
+  //   1. L'aggrégation par classe (2 premiers chiffres) faisait collisionner
+  //      des comptes parents distincts : 410 et 411 ont la même classe "41"
+  //      → même soldeGL affiché → faux positif d'écart sur l'un des deux.
+  //   2. Sémantiquement, le rapport doit montrer le DÉTAIL par tier individuel
+  //      (CLI001, FRN042…), pas une agrégation parent qui masque l'info.
+  //
+  // Aujourd'hui l'information utile est ailleurs :
+  //   - "GL enrichies = N" dans le rapport (combien d'écritures matchées)
+  //   - Tableau "Lignes non rapprochées" (chaque ligne tier orpheline avec
+  //     son contexte complet pour arbitrage manuel)
+  //   - Page Bal. aux. Clients / Fournisseurs (solde par tier individuel)
+  //
+  // On retourne donc un tableau vide pour ne pas casser l'API publique.
   const coherenceCheck: TiersImportReport['coherenceCheck'] = [];
-  for (const [account, soldeTiers] of tiersBalanceByAccount) {
-    // Pour les comptes parents (selon le classifier), aggréger par racine de
-    // classe. Pour les détails, garder le comportement startsWith.
-    const useClassRoot = classifier.isParentAccount(account);
-    const root = classifier.classRoot(account);
-    const soldeGL = glEntries
-      .filter((e) => useClassRoot ? e.account.startsWith(root) : (e.account === account || e.account.startsWith(account)))
-      .reduce((s, e) => s + e.debit - e.credit, 0);
-    const ecart = Math.round((soldeGL - soldeTiers) * 100) / 100;
-    coherenceCheck.push({
-      account,
-      soldeGL: Math.round(soldeGL * 100) / 100,
-      soldeTiers: Math.round(soldeTiers * 100) / 100,
-      ecart,
-      ok: Math.abs(ecart) < 1,
-    });
-  }
 
   // Push vers Supabase en arrière-plan
   import('../db/supabaseSync').then(({ pushOrgToSupabase, pushGLToSupabase }) => {
@@ -1904,26 +1899,14 @@ export async function importGLTiersBatch(
     glEntries: initialGL,
     classifier: getClassifier(org?.coaSystem),
   };
-  // Index par id pour appliquer les mutations dans le cache en O(1)
-  const glById = new Map<number, GLEntry>();
-  for (const e of initialGL) {
-    if (e.id !== undefined) glById.set(e.id, e);
-  }
-  // Snapshot du soldeGL initial par classe (pour le check de cohérence
-  // agrégé : on veut comparer le solde GL AVANT le 1er import au cumul des
-  // soldes tiers sur N fichiers, pas un solde qui mute en cours de route)
-  const initialSoldeGLByAccount = new Map<string, number>();
-
   const combined: TiersImportReport = {
     totalRows: 0,
     enriched: 0,
     unmatched: 0,
     skipped: 0,
     errors: [],
-    coherenceCheck: [],
+    coherenceCheck: [], // toujours vide (cf. note dans importGLTiers)
   };
-  // Cumul des soldes tiers par compte sur tous les fichiers
-  const totalSoldeTiersByAccount = new Map<string, number>();
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -1934,29 +1917,7 @@ export async function importGLTiersBatch(
     combined.unmatched += r.unmatched;
     combined.skipped += r.skipped;
     combined.errors.push(...r.errors.map((e) => ({ ...e, reason: `[${f.name}] ${e.reason}` })));
-    // Capture le soldeGL initial à la 1re passe (avant mutation), accumule
-    // les soldeTiers à chaque passe
-    for (const c of r.coherenceCheck) {
-      if (!initialSoldeGLByAccount.has(c.account)) {
-        initialSoldeGLByAccount.set(c.account, c.soldeGL);
-      }
-      totalSoldeTiersByAccount.set(
-        c.account,
-        (totalSoldeTiersByAccount.get(c.account) ?? 0) + c.soldeTiers,
-      );
-    }
   }
 
-  for (const [account, soldeTiers] of totalSoldeTiersByAccount) {
-    const soldeGL = initialSoldeGLByAccount.get(account) ?? 0;
-    const ecart = Math.round((soldeGL - soldeTiers) * 100) / 100;
-    combined.coherenceCheck.push({
-      account,
-      soldeGL: Math.round(soldeGL * 100) / 100,
-      soldeTiers: Math.round(soldeTiers * 100) / 100,
-      ecart,
-      ok: Math.abs(ecart) < 1,
-    });
-  }
   return combined;
 }

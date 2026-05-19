@@ -562,41 +562,15 @@ export default function ImportTiers() {
               <StatCard label="Erreurs" value={report.errors.length} bad={report.errors.length > 0} />
             </div>
 
-            {/* Contrôle de cohérence GL vs Tiers */}
-            {report.coherenceCheck.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-xs uppercase tracking-wider font-semibold mb-2">Contrôle de cohérence GL ↔ Tiers</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800 sticky top-0 bg-white dark:bg-primary-950">
-                      <tr>
-                        <th className="text-left py-1.5 px-2">Compte collectif</th>
-                        <th className="text-right py-1.5 px-2">Solde GL</th>
-                        <th className="text-right py-1.5 px-2">Solde Tiers</th>
-                        <th className="text-right py-1.5 px-2">Écart</th>
-                        <th className="text-center py-1.5 px-2">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
-                      {report.coherenceCheck.map((c, i) => (
-                        <tr key={i} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
-                          <td className="py-1.5 px-2 font-mono">{c.account}</td>
-                          <td className="py-1.5 px-2 text-right num">{fmtFull(c.soldeGL)}</td>
-                          <td className="py-1.5 px-2 text-right num">{fmtFull(c.soldeTiers)}</td>
-                          <td className={`py-1.5 px-2 text-right num ${!c.ok ? 'text-error font-semibold' : ''}`}>{fmtFull(c.ecart)}</td>
-                          <td className="py-1.5 px-2 text-center">
-                            {c.ok
-                              ? <Badge variant="success"><CheckCircle2 className="w-3 h-3" /> OK</Badge>
-                              : <Badge variant="error"><XCircle className="w-3 h-3" /> Écart</Badge>
-                            }
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            {/* Note : on ne montre PLUS de "Contrôle de cohérence" agrégé sur
+                les comptes collectifs/parents (401, 411, 410…). Le GL Tiers
+                est précisément destiné à donner le DÉTAIL par tier individuel
+                (CLI001, FRN042…), pas à afficher des sommes parent qui
+                masquent les vrais détails. Toute l'information utile est
+                visible dans :
+                  - Le compteur "GL enrichies" ci-dessus
+                  - Le tableau "Lignes non rapprochées" plus bas (par ligne)
+                  - La page Bal. aux. Clients / Fournisseurs (par tier) */}
 
             {report.errors.length > 0 && (
               <div className="mb-4">
