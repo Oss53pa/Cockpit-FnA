@@ -20,7 +20,20 @@ const supabase = supabaseTyped as any;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 function check<T>(result: { data: T | null; error: any }): T {
-  if (result.error) throw new Error(result.error.message);
+  if (result.error) {
+    const msg = result.error.message ?? String(result.error);
+    const code = result.error.code;
+    // PostgreSQL error 42501 = insufficient_privilege ("permission denied for table X")
+    // Signal typique d'une session expirée : le client tombe en anon, qui n'a
+    // que SELECT. On enrichit le message pour aider le diagnostic utilisateur.
+    if (code === '42501' || msg.toLowerCase().includes('permission denied for table')) {
+      throw new Error(
+        `Session expirée ou permissions insuffisantes (${msg}). ` +
+        `Déconnectez-vous puis reconnectez-vous, puis réessayez l'opération.`,
+      );
+    }
+    throw new Error(msg);
+  }
   return result.data as T;
 }
 

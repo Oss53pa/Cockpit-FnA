@@ -63,6 +63,18 @@ export default function Imports() {
     }
     setLoading(true);
     try {
+      // Vérification auth AVANT toute opération DB : si la session a expiré,
+      // les INSERT échouent avec "permission denied for table fna_imports".
+      const { supabase } = await import('../lib/supabase');
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        toast.error(
+          'Session expirée',
+          'Votre session a expiré. Cliquez sur "Se déconnecter" puis reconnectez-vous pour relancer l\'import.',
+        );
+        setLoading(false);
+        return;
+      }
       // Détection de doublon : si le même fichier a déjà été importé pour
       // cette org, alerter l'utilisateur avant de créer des écritures en double.
       const fileHash = await computeFileHash(file);

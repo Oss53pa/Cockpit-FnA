@@ -124,6 +124,20 @@ export default function ImportTiers() {
     setLoading(true);
     setBatchProgress(null);
     try {
+      // Vérification auth AVANT toute opération DB : si la session a expiré,
+      // les INSERT échouent avec "permission denied for table fna_imports"
+      // (le client tombe en anon, qui n'a que SELECT). Erreur cryptique pour
+      // l'utilisateur — on intercepte et on propose une re-connexion.
+      const { supabase } = await import('../lib/supabase');
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        toast.error(
+          'Session expirée',
+          'Votre session a expiré. Cliquez sur "Se déconnecter" puis reconnectez-vous pour relancer l\'import.',
+        );
+        setLoading(false);
+        return;
+      }
       const allFiles = [file, ...extraFiles];
       // Détection de doublon : vérifier chaque fichier contre l'historique
       // (hash SHA-256). En mode multi-fichiers, on alerte pour TOUS les
