@@ -12,6 +12,7 @@ import { assertPeriodOpen, PeriodLockedError } from '../lib/periodLock';
 import { getClassifier } from './accountingSystems';
 import { hungarianMaximize } from './hungarian';
 import { logGLChanges, type AuditChange } from '../lib/glAuditLog';
+import { applyTiersRules } from './tiersRules';
 
 /**
  * Debug helper — log uniquement en développement (strip en prod).
@@ -1020,6 +1021,19 @@ export async function importGL(
       prevHash = hash;
     }
     await dataProvider.bulkInsertGL(tagged);
+
+    // ── Ré-application des règles de correction tiers mémorisées ──
+    // Les corrections d'incohérences (compte → tiers) faites précédemment
+    // se ré-appliquent automatiquement aux nouvelles écritures sans tiers,
+    // pour ne pas avoir à les refaire à la main. Non bloquant.
+    try {
+      await applyTiersRules(opts.orgId);
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn('[importGL] applyTiersRules a échoué (non bloquant) :', err);
+      }
+    }
   }
 
   // Statistique des années présentes dans les écritures

@@ -7,7 +7,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage, TiersUnmatched, GLAuditLogEntry,
+  Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
 } from './schema';
 import { supabase as supabaseTyped } from '../lib/supabase';
 
@@ -165,7 +165,7 @@ export class SupabaseProvider implements DataProvider {
     // Ordre : enfants d'abord pour respecter les FK (au cas où Supabase n'ait pas
     // ON DELETE CASCADE configuré sur toutes les FK fna_*).
     const tables = [
-      'fna_tiers_unmatched',
+      'fna_tiers_unmatched', 'fna_tiers_rules',
       'fna_gl_entries', 'fna_imports', 'fna_budgets', 'fna_account_mappings',
       'fna_accounts', 'fna_periods', 'fna_fiscal_years',
       'fna_attention_points', 'fna_action_plans', 'fna_reports',
@@ -340,6 +340,27 @@ export class SupabaseProvider implements DataProvider {
   }
   async deleteTiersUnmatchedByImport(importId: number) {
     check(await supabase.from('fna_tiers_unmatched').delete().eq('import_id', importId));
+  }
+
+  // Tiers rules — règles de correction tiers mémorisées
+  async getTiersRules(orgId: string) {
+    const rows = await paginatedSelect<any>(() =>
+      supabase.from('fna_tiers_rules').select('*').eq('org_id', orgId).order('created_at', { ascending: false }),
+    'getTiersRules');
+    return rows.map((r: any) => toCamel(r)) as TiersRule[];
+  }
+  async upsertTiersRule(rule: Omit<TiersRule, 'id'> & { id?: number }): Promise<number> {
+    const row = normalizeTsFields(toSnake(rule));
+    if (rule.id) {
+      check(await supabase.from('fna_tiers_rules').update(row).eq('id', rule.id));
+      return rule.id;
+    }
+    delete row.id;
+    const result = check(await supabase.from('fna_tiers_rules').insert(row).select('id').single());
+    return (result as any).id;
+  }
+  async deleteTiersRule(id: number) {
+    check(await supabase.from('fna_tiers_rules').delete().eq('id', id));
   }
 
   // GL Audit log

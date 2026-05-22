@@ -172,6 +172,28 @@ export type TiersUnmatched = {
   createdAt: number;
 };
 
+/**
+ * Règle de correction tiers MÉMORISÉE. Issue d'une correction manuelle d'une
+ * incohérence du rapprochement (écriture de classe 4 sans code tiers) :
+ *   • action 'assign' : « compte (+ libellé contient) → poser le code tiers X ».
+ *     Réappliquée automatiquement après chaque import GL pour ne pas refaire la
+ *     correction à la main.
+ *   • action 'ignore' : marque l'écart comme justifié (régularisation, OD…) →
+ *     exclu de l'écart du rapprochement, avec un motif.
+ */
+export type TiersRule = {
+  id?: number;
+  orgId: string;
+  account: string;            // compte GL ciblé (match exact)
+  labelContains?: string;     // optionnel : le libellé doit contenir ce motif (insensible casse)
+  action: 'assign' | 'ignore';
+  tiers?: string;             // action 'assign' : code tiers à poser
+  tiersLabel?: string;        // action 'assign' : libellé tiers (optionnel)
+  reason?: string;            // justification (action 'ignore') ou note libre
+  createdAt: number;
+  createdBy?: string;
+};
+
 export type ReportDoc = {
   id?: number;
   orgId: string;
@@ -427,6 +449,7 @@ class CockpitDB extends Dexie {
   channels!: Table<Channel, string>;
   chatMessages!: Table<ChatMessage, number>;
   tiersUnmatched!: Table<TiersUnmatched, number>;
+  tiersRules!: Table<TiersRule, number>;
 
   constructor() {
     super('CockpitFA');
@@ -472,6 +495,10 @@ class CockpitDB extends Dexie {
     // v8 : lignes GL Tiers non rapprochées (révision manuelle)
     this.version(8).stores({
       tiersUnmatched: '++id, orgId, importId, resolvedAt, reason, [orgId+resolvedAt], [orgId+importId]',
+    });
+    // v9 : règles de correction tiers mémorisées (réappliquées aux imports)
+    this.version(9).stores({
+      tiersRules: '++id, orgId, account, [orgId+account]',
     });
   }
 }

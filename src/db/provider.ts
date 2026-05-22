@@ -46,7 +46,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage, TiersUnmatched, GLAuditLogEntry,
+  Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
 } from './schema';
 import { withCache } from './cachedProvider';
 
@@ -111,6 +111,11 @@ export interface DataProvider {
   deleteTiersUnmatched(id: number): Promise<void>;
   /** Supprime toutes les lignes unmatched liées à un import (cascade quand on supprime l'import). */
   deleteTiersUnmatchedByImport(importId: number): Promise<void>;
+
+  // Tiers rules — règles de correction tiers mémorisées (réappliquées aux imports)
+  getTiersRules(orgId: string): Promise<TiersRule[]>;
+  upsertTiersRule(rule: Omit<TiersRule, 'id'> & { id?: number }): Promise<number>;
+  deleteTiersRule(id: number): Promise<void>;
   // GL Audit log — modifications a posteriori (post-insertion) sur les écritures GL.
   // Chaîne SHA-256 par org, immuable (pas de UPDATE/DELETE policies en DB).
   getGLAuditLog?(orgId: string, opts?: { glEntryId?: number; limit?: number }): Promise<GLAuditLogEntry[]>;

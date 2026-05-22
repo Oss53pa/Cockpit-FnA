@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Search, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -7,16 +8,17 @@ import { TabSwitch } from '../components/ui/TabSwitch';
 import { toast } from '../components/ui/Toast';
 import { VirtualTable, type Column } from '../components/ui/VirtualTable';
 import { useApp } from '../store/app';
-import type { GLEntry, ImportLog } from '../db/schema';
+import type { GLEntry, ImportLog, TiersRule } from '../db/schema';
 import { dataProvider } from '../db/provider';
-import { useCloudData } from '../hooks/useCloudData';
-import { computeBalance, computeAuxBalance, type BalanceRow, type AuxBalanceRow } from '../engine/balance';
+import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
+import { computeBalance, computeAuxBalance, computeTiersReconciliation, matchesDrill, type BalanceRow, type AuxBalanceRow, type GLDrillFilter, type TiersReconRow } from '../engine/balance';
+import { applyTiersRules, loadTiersRules } from '../engine/tiersRules';
 import { agedBalance, type AgedTier } from '../engine/analytics';
 import { fmtFull } from '../lib/format';
 import { verifyChain } from '../lib/auditHash';
 import Imports from './Imports';
 
-type Tab = 'import' | 'gl' | 'bg' | 'baC' | 'baF' | 'ageeC' | 'ageeF';
+type Tab = 'import' | 'gl' | 'bg' | 'baC' | 'baF' | 'recon' | 'ageeC' | 'ageeF';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'import', label: 'Import' },
@@ -24,9 +26,22 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'bg',     label: 'Balance générale' },
   { key: 'baC',    label: 'Bal. aux. Clients' },
   { key: 'baF',    label: 'Bal. aux. Fournisseurs' },
+  { key: 'recon',  label: 'Rapprochement tiers' },
   { key: 'ageeC',  label: 'Bal. âgée Clients' },
   { key: 'ageeF',  label: 'Bal. âgée Fournisseurs' },
 ];
+
+// Décrit un filtre de drill-down GL en texte court (pour la puce retirable).
+function describeDrill(d: GLDrillFilter): string {
+  const parts: string[] = [];
+  if (d.tiers) parts.push(`Tiers ${d.tiers}`);
+  if (d.account) parts.push(`Compte ${d.account}`);
+  else if (d.accountPrefix) parts.push(`Comptes ${d.accountPrefix}*`);
+  else if (d.accountIn) parts.push(d.accountIn.length === 1 ? `Compte ${d.accountIn[0]}` : `${d.accountIn.length} compte(s)`);
+  if (d.label) parts.push(`« ${d.label} »`);
+  if (d.noTiers) parts.push('sans code tiers');
+  return parts.join(' · ') || 'Filtre actif';
+}
 
 // ─── Page racine ──────────────────────────────────────────────────
 export default function GrandLivre() {
@@ -40,6 +55,10 @@ export default function GrandLivre() {
   })();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [importId, setImportId] = useState<string>('all');
+  // Drill-down : filtre GL posé en cliquant un tiers dans une balance auxiliaire
+  // ou la vue de rapprochement. Bascule automatiquement sur l'onglet Grand Livre.
+  const [drill, setDrill] = useState<GLDrillFilter | null>(null);
+  const drillToGL = (d: GLDrillFilter) => { setDrill(d); setTab('gl'); };
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any | null>(null);
   const [auditing, setAuditing] = useState(false);
@@ -157,10 +176,11 @@ export default function GrandLivre() {
       )}
 
       {tab === 'import' && <Imports />}
-      {tab === 'gl'     && imports.length > 0 && <GLView      orgId={currentOrgId} year={currentYear} importId={importId} />}
+      {tab === 'gl'     && imports.length > 0 && <GLView      orgId={currentOrgId} year={currentYear} importId={importId} drill={drill} onClearDrill={() => setDrill(null)} />}
       {tab === 'bg'     && imports.length > 0 && <BGView      orgId={currentOrgId} year={currentYear} importId={importId} />}
-      {tab === 'baC'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="client" />}
-      {tab === 'baF'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" />}
+      {tab === 'baC'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="client" onDrill={drillToGL} />}
+      {tab === 'baF'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" onDrill={drillToGL} />}
+      {tab === 'recon'  && imports.length > 0 && <ReconView   orgId={currentOrgId} year={currentYear} importId={importId} onDrill={drillToGL} />}
       {tab === 'ageeC'  && imports.length > 0 && <AgedView    orgId={currentOrgId} year={currentYear} importId={importId} kind="client" />}
       {tab === 'ageeF'  && imports.length > 0 && <AgedView    orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" />}
     </div>
@@ -336,7 +356,7 @@ const glColumns: Column<GLRow>[] = [
   { header: 'Solde',           width: '110px', align: 'right', cell: (e) => <span className={clsx('num', e.solde < 0 ? 'text-error' : '')}>{fmtFull(e.solde)}</span> },
 ];
 
-function GLView({ orgId, year, importId }: { orgId: string; year: number; importId: string }) {
+function GLView({ orgId, year, importId, drill, onClearDrill }: { orgId: string; year: number; importId: string; drill?: GLDrillFilter | null; onClearDrill?: () => void }) {
   const [search, setSearch] = useState('');
   const [journal, setJournal] = useState('all');
   const [accountPrefix, setAccountPrefix] = useState('');
@@ -380,6 +400,7 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
       .filter((e) => importId === 'all' || String(e.importId) === String(importId))
       .filter((e) => journal === 'all' || e.journal === journal)
       .filter((e) => !accountPrefix || e.account.startsWith(accountPrefix))
+      .filter((e) => !drill || matchesDrill(e, drill))
       .filter((e) => {
         if (!search) return true;
         const q = search.toLowerCase();
@@ -393,7 +414,7 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
       running.set(e.account, cur);
       return { ...e, soldeProgressif: cur, solde: e.debit - e.credit };
     });
-  }, [entries, periodIds, importId, journal, accountPrefix, search]);
+  }, [entries, periodIds, importId, journal, accountPrefix, search, drill]);
 
   const totD = rows.reduce((s, e) => s + e.debit, 0);
   const totC = rows.reduce((s, e) => s + e.credit, 0);
@@ -416,6 +437,17 @@ function GLView({ orgId, year, importId }: { orgId: string; year: number; import
           </span>
           <EquilibreBadge balanced={balanced} delta={totD - totC} />
         </div>
+        {drill && (
+          <div className="mt-2 flex items-center gap-2 text-xs">
+            <span className="text-primary-500">Filtre tiers actif :</span>
+            <span className="inline-flex items-center gap-1.5 bg-accent/10 text-accent rounded-full px-2.5 py-1 font-semibold">
+              {describeDrill(drill)}
+              {onClearDrill && (
+                <button onClick={onClearDrill} className="hover:text-accent-dark" title="Retirer le filtre tiers" aria-label="Retirer le filtre tiers">✕</button>
+              )}
+            </span>
+          </div>
+        )}
       </Card>
 
       <Card padded={false}>
@@ -760,7 +792,7 @@ const auxColumns: Column<AuxBalanceRow>[] = [
   { header: 'Solde',   width: '150px', align: 'right', cell: (r) => <span className={clsx('num font-semibold', r.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(r.solde)}</span> },
 ];
 
-function AuxView({ orgId, year, importId, kind }: { orgId: string; year: number; importId: string; kind: 'client' | 'fournisseur' }) {
+function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year: number; importId: string; kind: 'client' | 'fournisseur'; onDrill: (d: GLDrillFilter) => void }) {
   const [rows, setRows] = useState<AuxBalanceRow[]>([]);
   const [search, setSearch] = useState('');
   // Diagnostic data quality : pour détecter "0 tier renseigné" et afficher
@@ -829,10 +861,12 @@ function AuxView({ orgId, year, importId, kind }: { orgId: string; year: number;
           </span>
           <EquilibreBadge balanced={balanced} delta={totD - totC} />
         </div>
+        <p className="mt-2 text-[11px] text-primary-400">💡 Cliquez une ligne pour ouvrir le Grand Livre filtré sur ce tiers.</p>
       </Card>
       <Card padded={false}>
         <VirtualTable
           rows={filtered} rowKey={(r) => r.tier} rowHeight={30} height={560}
+          onRowClick={(r) => onDrill(r.drill)}
           empty={`Aucun tiers ${kind} avec un solde non nul — vérifie que des écritures ${kind === 'client' ? '411' : '401'} existent.`}
           columns={auxColumns}
           footer={<>
@@ -998,6 +1032,521 @@ function DiscrepancyModal({ open, onClose, rows, entries }: {
       </div>
     </div>
   );
+}
+
+// ─── 3bis. RAPPROCHEMENT TIERS (Balance auxiliaire ↔ Grand Livre) ──
+// Pour chaque compte collectif de la classe 4, décompose le solde GL en
+// rattaché aux tiers / centralisation / écart (réellement sans tiers). L'écart
+// est ce qui empêche les deux balances de « communier ».
+function ReconView({ orgId, year, importId, onDrill }: { orgId: string; year: number; importId: string; onDrill: (d: GLDrillFilter) => void }) {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<TiersReconRow[]>([]);
+  const [rules, setRules] = useState<TiersRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [correctionRow, setCorrectionRow] = useState<TiersReconRow | null>(null);
+  const [showRules, setShowRules] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!orgId) return;
+    setLoading(true);
+    Promise.all([
+      computeTiersReconciliation({ orgId, year, importId }),
+      loadTiersRules(orgId),
+    ])
+      .then(([recon, rls]) => { setRows(recon); setRules(rls); })
+      .finally(() => setLoading(false));
+  }, [orgId, year, importId, refreshKey]);
+
+  // Recalcule le rapprochement + invalide le cache GL (les corrections ont
+  // muté des écritures / créé des règles).
+  const refresh = () => { invalidateCloudData('gl'); setRefreshKey((k) => k + 1); };
+
+  const reapplyRules = async () => {
+    setApplying(true);
+    try {
+      const { updated } = await applyTiersRules(orgId);
+      toast.success('Règles réappliquées', `${updated} écriture(s) rattachée(s)`);
+      refresh();
+    } catch (e: any) {
+      toast.error('Échec de la réapplication', e.message);
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const deleteRule = async (id?: number) => {
+    if (id === undefined) return;
+    if (!confirm('Supprimer cette règle de correction ?\nLes écritures déjà corrigées ne sont PAS annulées (seules les futures imports / réapplications cessent de l\'utiliser ; les justifications réapparaîtront en écart).')) return;
+    try {
+      await dataProvider.deleteTiersRule(id);
+      toast.success('Règle supprimée');
+      refresh();
+    } catch (e: any) {
+      toast.error('Suppression impossible', e.message);
+    }
+  };
+
+  // Regroupe les collectifs par catégorie (Clients / Fournisseurs / …) en
+  // conservant l'ordre des préfixes (déjà triés par le moteur).
+  const groups = useMemo(() => {
+    const m = new Map<string, { label: string; rows: TiersReconRow[] }>();
+    for (const r of rows) {
+      const g = m.get(r.category) ?? { label: r.categoryLabel, rows: [] };
+      g.rows.push(r);
+      m.set(r.category, g);
+    }
+    return Array.from(m.values());
+  }, [rows]);
+
+  const totalEcart = useMemo(() => rows.reduce((s, r) => s + r.ecart, 0), [rows]);
+
+  if (loading) {
+    return <Card><p className="text-sm text-primary-500 text-center py-6">Calcul du rapprochement…</p></Card>;
+  }
+  if (rows.length === 0) {
+    return <Card><p className="text-sm text-primary-500 text-center py-6">Aucun compte tiers (classe 4) trouvé sur l'exercice.</p></Card>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="card border-l-4 !border-l-accent bg-accent/5 p-4 text-xs text-primary-700 dark:text-primary-300">
+        <p className="text-sm font-semibold text-accent mb-1">Communion Balance auxiliaire ↔ Grand Livre</p>
+        <p>
+          Le solde GL de chaque collectif se décompose en <strong>rattaché aux tiers</strong>,
+          {' '}<strong>centralisation</strong> (écritures sur le compte collectif parent, qui dupliquent le détail)
+          {' '}et <strong>écart</strong> = la part <strong>réellement non rattachée</strong> à un tiers individuel.
+          {' '}Un écart nul = communion parfaite. Pour le réduire, importez le{' '}
+          <button className="text-accent underline font-semibold" onClick={() => navigate('/import-tiers')}>Grand Livre Tiers</button>.
+        </p>
+        <p className="mt-2">
+          Écart total non rattaché :{' '}
+          <span className={clsx('num font-bold', Math.round(Math.abs(totalEcart)) >= 1 ? 'text-error' : 'text-success')}>{fmtFull(totalEcart)}</span>
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button className="btn-outline !py-1 text-xs" onClick={() => setShowRules((v) => !v)}>
+            {showRules ? 'Masquer' : 'Voir'} les règles mémorisées ({rules.length})
+          </button>
+          <button className="btn-outline !py-1 text-xs" onClick={reapplyRules} disabled={applying || rules.length === 0}>
+            {applying ? 'Application…' : 'Réappliquer les règles'}
+          </button>
+          <span className="text-[11px] text-primary-400">💡 Cliquez un écart pour corriger les écritures sans tiers et mémoriser la règle.</span>
+        </div>
+      </div>
+
+      {showRules && <RulesPanel rules={rules} onDelete={deleteRule} />}
+
+      <Card padded={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-primary-500 border-b-2 border-primary-300 dark:border-primary-700 bg-primary-100 dark:bg-primary-900 sticky top-0 z-10">
+              <tr>
+                <th className="text-left py-2 w-8"></th>
+                <th className="text-left py-2 px-3">Compte collectif</th>
+                <th className="text-right py-2 px-3">Solde GL</th>
+                <th className="text-right py-2 px-3">Rattaché tiers</th>
+                <th className="text-right py-2 px-3">Centralisation</th>
+                <th className="text-right py-2 px-3">Écart (sans tiers)</th>
+                <th className="text-right py-2 px-3">Tiers</th>
+                <th className="text-center py-2 px-3">Statut</th>
+                <th className="text-right py-2 px-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
+              {groups.map((g) => {
+                const gGL = g.rows.reduce((s, r) => s + r.soldeGL, 0);
+                const gEcart = g.rows.reduce((s, r) => s + r.ecart, 0);
+                return [
+                  <tr key={`cat-${g.label}`} className="bg-primary-200 dark:bg-primary-800 font-semibold">
+                    <td className="py-1.5 pl-2 w-8"></td>
+                    <td className="py-1.5 px-3">{g.label} <span className="text-[10px] text-primary-500 font-normal">({g.rows.length} compte{g.rows.length > 1 ? 's' : ''})</span></td>
+                    <td className="py-1.5 px-3 text-right num">{fmtFull(gGL)}</td>
+                    <td className="py-1.5 px-3"></td>
+                    <td className="py-1.5 px-3"></td>
+                    <td className={clsx('py-1.5 px-3 text-right num', Math.round(Math.abs(gEcart)) >= 1 && 'text-error')}>{fmtFull(gEcart)}</td>
+                    <td className="py-1.5 px-3"></td>
+                    <td className="py-1.5 px-3"></td>
+                    <td className="py-1.5 px-3"></td>
+                  </tr>,
+                  ...g.rows.flatMap((r) => {
+                    const isOpen = expanded[r.collective];
+                    const detailsShown = r.details.slice(0, 100);
+                    return [
+                      <tr key={`h-${r.collective}`} className="hover:bg-primary-100/50 dark:hover:bg-primary-900/50">
+                        <td className="py-2 pl-2 w-8 text-center">
+                          <button onClick={() => setExpanded((e) => ({ ...e, [r.collective]: !e[r.collective] }))}
+                            className="w-5 h-5 rounded hover:bg-primary-300 dark:hover:bg-primary-700 text-xs font-bold">
+                            {isOpen ? '−' : '+'}
+                          </button>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="num font-mono font-semibold">{r.collective}</span>
+                          <span className="text-xs text-primary-500 ml-2">{r.label}</span>
+                          <span className="text-[10px] text-primary-400 ml-2">({r.nbEntries} écr.)</span>
+                        </td>
+                        <td className="py-2 px-3 text-right num font-semibold">{fmtFull(r.soldeGL)}</td>
+                        <td className="py-2 px-3 text-right num">{fmtFull(r.soldeTiers)}</td>
+                        <td className="py-2 px-3 text-right num">
+                          {Math.round(Math.abs(r.soldeCentralisation)) >= 1 ? (
+                            <button
+                              className="text-primary-500 hover:text-accent hover:underline"
+                              title={`Voir les ${r.nbEntriesCentralisation} écriture(s) de centralisation`}
+                              onClick={() => onDrill(r.centralisationDrill)}
+                            >
+                              {fmtFull(r.soldeCentralisation)}
+                            </button>
+                          ) : <span className="text-primary-400">—</span>}
+                        </td>
+                        <td className="py-2 px-3 text-right num">
+                          {r.ok ? (
+                            <span className="text-success">{fmtFull(0)}</span>
+                          ) : (
+                            <button
+                              className="font-semibold text-error hover:underline"
+                              title={`Corriger les ${r.nbEntriesSansTiers} écriture(s) sans code tiers`}
+                              onClick={() => setCorrectionRow(r)}
+                            >
+                              {fmtFull(r.ecart)} · corriger
+                            </button>
+                          )}
+                          {Math.round(Math.abs(r.soldeJustifie)) >= 1 && (
+                            <div className="text-[10px] text-primary-400">
+                              <button className="hover:text-accent hover:underline" title={`${r.nbEntriesJustifie} écriture(s) justifiée(s)`} onClick={() => onDrill(r.justifieDrill)}>
+                                dont {fmtFull(r.soldeJustifie)} justifié
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-right num">{r.nbTiers}</td>
+                        <td className="py-2 px-3 text-center">
+                          {r.ok
+                            ? <span className="text-xs font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full">✓ Communié</span>
+                            : <span className="text-xs font-semibold text-error bg-error/10 px-2 py-0.5 rounded-full">⚠ {r.nbEntriesSansTiers} sans tiers</span>}
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          <button className="text-xs text-accent hover:underline" onClick={() => onDrill(r.drill)}>Voir GL →</button>
+                        </td>
+                      </tr>,
+                      ...(isOpen ? [
+                        <tr key={`d-${r.collective}`}>
+                          <td></td>
+                          <td colSpan={8} className="py-2 px-3">
+                            {detailsShown.length === 0 ? (
+                              <p className="text-[11px] text-primary-400 italic py-1">Aucun tiers détaillé — l'intégralité du solde est centralisée ou sans code tiers.</p>
+                            ) : (
+                              <div className="rounded-lg border border-primary-200 dark:border-primary-800 overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="text-[10px] uppercase tracking-wider text-primary-500 bg-primary-100/60 dark:bg-primary-900/40">
+                                    <tr>
+                                      <th className="text-left py-1.5 px-2">Tiers</th>
+                                      <th className="text-left py-1.5 px-2">Libellé</th>
+                                      <th className="text-right py-1.5 px-2">Débit</th>
+                                      <th className="text-right py-1.5 px-2">Crédit</th>
+                                      <th className="text-right py-1.5 px-2">Solde</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                                    {detailsShown.map((d) => (
+                                      <tr key={d.tier}
+                                        className="cursor-pointer hover:bg-accent/10"
+                                        title="Voir les écritures de ce tiers au Grand Livre"
+                                        onClick={() => onDrill(d.drill)}>
+                                        <td className="py-1 px-2 num font-mono">{d.tier}</td>
+                                        <td className="py-1 px-2 truncate max-w-[280px]">{d.label}</td>
+                                        <td className="py-1 px-2 text-right num">{d.debit > 0 ? fmtFull(d.debit) : ''}</td>
+                                        <td className="py-1 px-2 text-right num">{d.credit > 0 ? fmtFull(d.credit) : ''}</td>
+                                        <td className={clsx('py-1 px-2 text-right num font-semibold', d.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(d.solde)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {r.details.length > detailsShown.length && (
+                                  <p className="text-[10px] text-primary-400 italic py-1.5 px-2">
+                                    … et {r.details.length - detailsShown.length} autres tiers
+                                    {r.kind === 'client' ? " — voir l'onglet Bal. aux. Clients." : r.kind === 'fournisseur' ? " — voir l'onglet Bal. aux. Fournisseurs." : '.'}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>,
+                      ] : []),
+                    ];
+                  }),
+                ];
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {correctionRow && (
+        <CorrectionModal
+          orgId={orgId}
+          year={year}
+          importId={importId}
+          row={correctionRow}
+          onClose={() => setCorrectionRow(null)}
+          onApplied={() => { setCorrectionRow(null); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Panneau : règles de correction tiers mémorisées ──────────────
+function RulesPanel({ rules, onDelete }: { rules: TiersRule[]; onDelete: (id?: number) => void }) {
+  if (rules.length === 0) {
+    return (
+      <Card>
+        <p className="text-xs text-primary-500 text-center py-3">Aucune règle mémorisée. Corrigez un écart et cochez « mémoriser » pour en créer une.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card padded={false}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800 bg-primary-100/60 dark:bg-primary-900/40">
+            <tr>
+              <th className="text-left py-2 px-3">Compte</th>
+              <th className="text-left py-2 px-3">Si libellé contient</th>
+              <th className="text-left py-2 px-3">Action</th>
+              <th className="text-left py-2 px-3">Tiers / Motif</th>
+              <th className="text-left py-2 px-3">Créée le</th>
+              <th className="text-center py-2 px-3">—</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+            {rules.map((r) => (
+              <tr key={r.id} className="hover:bg-primary-50 dark:hover:bg-primary-900/50">
+                <td className="py-1.5 px-3 num font-mono">{r.account}</td>
+                <td className="py-1.5 px-3">{r.labelContains ? `« ${r.labelContains} »` : <span className="text-primary-400">tout le compte</span>}</td>
+                <td className="py-1.5 px-3">
+                  {r.action === 'assign'
+                    ? <span className="text-success font-semibold">Affecter</span>
+                    : <span className="text-warning font-semibold">Justifier</span>}
+                </td>
+                <td className="py-1.5 px-3">{r.action === 'assign' ? <span className="num font-mono">{r.tiers}{r.tiersLabel ? ` — ${r.tiersLabel}` : ''}</span> : (r.reason || '—')}</td>
+                <td className="py-1.5 px-3 text-primary-400">{r.createdAt ? new Date(r.createdAt).toLocaleDateString('fr-FR') : '—'}</td>
+                <td className="py-1.5 px-3 text-center">
+                  <button className="btn-ghost !p-1 text-primary-500 hover:text-error" title="Supprimer la règle" onClick={() => onDelete(r.id)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Modale : correction des écritures sans tiers (écart) + mémorisation ──
+function CorrectionModal({ orgId, year, importId, row, onClose, onApplied }: {
+  orgId: string;
+  year: number;
+  importId: string;
+  row: TiersReconRow;
+  onClose: () => void;
+  onApplied: () => void;
+}) {
+  // Écritures de l'écart (sans tiers, non centralisées/justifiées) du collectif,
+  // groupées par compte + libellé pour la correction en lot.
+  type Grp = { account: string; label: string; debit: number; credit: number; solde: number; count: number };
+  const [groupsList, setGroupsList] = useState<Grp[]>([]);
+  const [existingTiers, setExistingTiers] = useState<{ code: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // État de saisie par groupe (clé = account||label)
+  const [draft, setDraft] = useState<Record<string, { action: 'assign' | 'ignore'; tiers: string; reason: string; scope: 'label' | 'account'; memorize: boolean }>>({});
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const [periods, entries] = await Promise.all([
+          dataProvider.getPeriods(orgId),
+          dataProvider.getGLEntries({ orgId }),
+        ]);
+        const ids = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
+        const inScope = (e: GLEntry) => ids.has(e.periodId) && (!importId || importId === 'all' || String(e.importId) === String(importId));
+        // Écart = écritures du collectif correspondant au filtre ecartDrill
+        const ecartEntries = entries.filter((e) => inScope(e) && matchesDrill(e, row.ecartDrill));
+        const map = new Map<string, Grp>();
+        for (const e of ecartEntries) {
+          const lbl = (e.label ?? '').trim();
+          const key = `${e.account}||${lbl}`;
+          const g = map.get(key) ?? { account: e.account, label: lbl, debit: 0, credit: 0, solde: 0, count: 0 };
+          g.debit += e.debit; g.credit += e.credit; g.solde = g.debit - g.credit; g.count++;
+          map.set(key, g);
+        }
+        // Tiers existants (pour autocomplétion)
+        const tmap = new Map<string, string>();
+        for (const e of entries) {
+          if (e.tiers && !tmap.has(e.tiers)) tmap.set(e.tiers, (e.label ?? '').trim());
+        }
+        if (!alive) return;
+        setGroupsList(Array.from(map.values()).sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde)));
+        setExistingTiers(Array.from(tmap.entries()).map(([code, label]) => ({ code, label })).sort((a, b) => a.code.localeCompare(b.code)));
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [orgId, year, importId, row.collective]);
+
+  const keyOf = (g: Grp) => `${g.account}||${g.label}`;
+  const getDraft = (g: Grp) => draft[keyOf(g)] ?? { action: 'assign' as const, tiers: '', reason: '', scope: 'label' as const, memorize: true };
+  const setGroupDraft = (g: Grp, patch: Partial<ReturnType<typeof getDraft>>) =>
+    setDraft((d) => ({ ...d, [keyOf(g)]: { ...getDraft(g), ...patch } }));
+
+  const applyGroup = async (g: Grp) => {
+    const d = getDraft(g);
+    if (d.action === 'assign' && !d.tiers.trim()) { toast.warning('Code tiers requis', 'Saisissez un code tiers à affecter.'); return; }
+    if (d.action === 'ignore' && !d.reason.trim()) { toast.warning('Motif requis', 'Indiquez un motif de justification.'); return; }
+    setSaving(true);
+    try {
+      const labelContains = d.scope === 'label' && g.label ? g.label : undefined;
+      // 1) Mémoriser la règle (toujours, sauf si l'utilisateur décoche)
+      if (d.memorize) {
+        await dataProvider.upsertTiersRule({
+          orgId,
+          account: g.account,
+          labelContains,
+          action: d.action,
+          tiers: d.action === 'assign' ? d.tiers.trim() : undefined,
+          tiersLabel: d.action === 'assign' ? (existingTiers.find((t) => t.code === d.tiers.trim())?.label || g.label || undefined) : undefined,
+          reason: d.action === 'ignore' ? d.reason.trim() : undefined,
+          createdAt: Date.now(),
+        });
+      }
+      // 2) Appliquer maintenant
+      if (d.action === 'assign') {
+        if (d.memorize) {
+          // La règle persistée pose le tiers sur toutes les écritures correspondantes
+          await applyTiersRules(orgId);
+        } else {
+          // Correction one-shot : poser le tiers directement sur les écritures du groupe
+          await assignTiersToGroup(orgId, year, importId, g, d.tiers.trim());
+        }
+      }
+      // action 'ignore' : pas de mutation — le rapprochement reclasse en « justifié »
+      toast.success('Correction appliquée', d.action === 'assign' ? `${g.account} → ${d.tiers.trim()}` : `${g.account} justifié`);
+      onApplied();
+    } catch (e: any) {
+      toast.error('Échec de la correction', e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-primary-950 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between p-5 border-b border-primary-200 dark:border-primary-800">
+          <div>
+            <h3 className="text-base font-semibold">Corriger l'écart — {row.collective} {row.label}</h3>
+            <p className="text-xs text-primary-500 mt-1">
+              {row.nbEntriesSansTiers} écriture(s) sans code tiers · écart <span className="num font-semibold text-error">{fmtFull(row.ecart)}</span>.
+              Affectez un tiers ou justifiez. Cochez « mémoriser » pour ne plus y revenir aux prochains imports.
+            </p>
+          </div>
+          <button onClick={onClose} className="btn-ghost !p-1.5">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* datalist partagée pour autocomplétion des codes tiers existants */}
+          <datalist id="tiers-codes">
+            {existingTiers.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+          </datalist>
+
+          {loading ? (
+            <p className="text-sm text-primary-500 text-center py-8">Chargement des écritures…</p>
+          ) : groupsList.length === 0 ? (
+            <p className="text-sm text-primary-500 text-center py-8">Aucune écriture sans tiers à corriger.</p>
+          ) : (
+            <div className="space-y-2">
+              {groupsList.map((g) => {
+                const d = getDraft(g);
+                return (
+                  <div key={keyOf(g)} className="rounded-lg border border-primary-200 dark:border-primary-800 p-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                      <div className="text-xs">
+                        <span className="num font-mono font-semibold">{g.account}</span>
+                        <span className="text-primary-600 dark:text-primary-300 ml-2">{g.label || <em className="text-primary-400">(sans libellé)</em>}</span>
+                        <span className="text-[10px] text-primary-400 ml-2">{g.count} écr.</span>
+                      </div>
+                      <span className={clsx('num text-xs font-semibold', g.solde < 0 ? 'text-error' : '')}>{fmtFull(g.solde)}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select className="input !w-auto !py-1 text-xs" value={d.action} onChange={(e) => setGroupDraft(g, { action: e.target.value as 'assign' | 'ignore' })}>
+                        <option value="assign">Affecter un tiers</option>
+                        <option value="ignore">Justifier / ignorer</option>
+                      </select>
+                      {d.action === 'assign' ? (
+                        <input
+                          className="input !w-44 !py-1 text-xs font-mono"
+                          list="tiers-codes"
+                          placeholder="Code tiers (ex CLI001)"
+                          value={d.tiers}
+                          onChange={(e) => setGroupDraft(g, { tiers: e.target.value })}
+                        />
+                      ) : (
+                        <input
+                          className="input !w-64 !py-1 text-xs"
+                          placeholder="Motif (ex: régularisation, OD interne)"
+                          value={d.reason}
+                          onChange={(e) => setGroupDraft(g, { reason: e.target.value })}
+                        />
+                      )}
+                      <select className="input !w-auto !py-1 text-xs" value={d.scope} onChange={(e) => setGroupDraft(g, { scope: e.target.value as 'label' | 'account' })} title="Portée de la règle mémorisée">
+                        <option value="label">Ce libellé</option>
+                        <option value="account">Tout le compte {g.account}</option>
+                      </select>
+                      <label className="flex items-center gap-1 text-[11px] text-primary-600 dark:text-primary-300">
+                        <input type="checkbox" checked={d.memorize} onChange={(e) => setGroupDraft(g, { memorize: e.target.checked })} />
+                        mémoriser
+                      </label>
+                      <button className="btn-primary !py-1 !px-3 text-xs" disabled={saving} onClick={() => applyGroup(g)}>Appliquer</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Correction one-shot (sans règle) : pose le code tiers sur les écritures sans
+// tiers d'un compte + libellé donnés, avec trace dans l'audit log.
+async function assignTiersToGroup(orgId: string, year: number, importId: string, g: { account: string; label: string }, tiers: string) {
+  const [periods, entries] = await Promise.all([
+    dataProvider.getPeriods(orgId),
+    dataProvider.getGLEntries({ orgId }),
+  ]);
+  const ids = new Set(periods.filter((p) => p.year === year).map((p) => p.id));
+  const targets = entries.filter((e) =>
+    ids.has(e.periodId) &&
+    (!importId || importId === 'all' || String(e.importId) === String(importId)) &&
+    e.account === g.account &&
+    (e.label ?? '').trim() === g.label &&
+    !e.tiers &&
+    e.id !== undefined,
+  );
+  const { logGLChanges } = await import('../lib/glAuditLog');
+  type Change = Parameters<typeof logGLChanges>[1][number];
+  const changes: Change[] = [];
+  for (const e of targets) {
+    await dataProvider.updateGLEntry(e.id!, { tiers });
+    changes.push({ glEntryId: e.id!, field: 'tiers', oldValue: e.tiers, newValue: tiers, reason: 'manual_match', sourceKind: 'MANUAL' });
+  }
+  if (changes.length > 0) await logGLChanges(orgId, changes);
 }
 
 // ─── 4. BALANCE ÂGÉE (Clients ou Fournisseurs) ────────────────────

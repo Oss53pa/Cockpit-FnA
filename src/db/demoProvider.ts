@@ -17,7 +17,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage, TiersUnmatched,
+  Activity, Channel, ChatMessage, TiersUnmatched, TiersRule,
 } from './schema';
 import {
   isDemoActive, DEMO_ORG, DEMO_BALANCE, DEMO_PERIODS, DEMO_IMPORTS,
@@ -242,6 +242,17 @@ export class DemoProvider implements DataProvider {
   }
   deleteTiersUnmatched(id: number) { return this.inner.deleteTiersUnmatched(id); }
   deleteTiersUnmatchedByImport(importId: number) { return this.inner.deleteTiersUnmatchedByImport(importId); }
+
+  // ── Tiers rules (règles de correction mémorisées) ──
+  async getTiersRules(orgId: string): Promise<TiersRule[]> {
+    if (isDemo(orgId)) return [];
+    return this.inner.getTiersRules(orgId);
+  }
+  upsertTiersRule(rule: Omit<TiersRule, 'id'> & { id?: number }) {
+    if (isDemo(rule.orgId)) return Promise.resolve(rule.id ?? 1);
+    return this.inner.upsertTiersRule(rule);
+  }
+  deleteTiersRule(id: number) { return this.inner.deleteTiersRule(id); }
 
   // ── GL Audit log ──
   async getGLAuditLog(orgId: string, opts?: { glEntryId?: number; limit?: number }) {

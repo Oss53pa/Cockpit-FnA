@@ -194,6 +194,17 @@ export class ElectronProvider implements DataProvider {
     /* noop */
   }
 
+  // Tiers rules — non implémenté en Electron (chemin Supabase prioritaire).
+  async getTiersRules(_orgId: string) {
+    return [];
+  }
+  async upsertTiersRule(_rule: any): Promise<number> {
+    return _rule?.id ?? 0;
+  }
+  async deleteTiersRule(_id: number) {
+    /* noop */
+  }
+
   // Budgets
   async getBudgets(orgId: string, year: number, version: string) {
     const rows = await api().db.query(
