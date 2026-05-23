@@ -197,6 +197,27 @@ export function withCache(inner: DataProvider): DataProvider {
           return result;
         };
       }
+      // (D-01) Import GL Tiers atomique (RPC) : ajoute un import + enrichit le GL
+      // + écrit les lignes non rapprochées → invalider GL ET imports, sinon les
+      // dashboards lisent le cache GL périmé juste après l'import.
+      if (prop === 'importTiersAtomic') {
+        return async (...args: unknown[]) => {
+          const result = await original.apply(target, args);
+          invalidateCache('gl:');
+          invalidateCache('imports:');
+          return result;
+        };
+      }
+      // (D-01) Clôture / réouverture d'exercice : bascule `closed` sur l'exercice
+      // ET ses périodes → invalider fy + periods (le verrou de période en dépend).
+      if (prop === 'setFiscalYearClosed') {
+        return async (...args: unknown[]) => {
+          const result = await original.apply(target, args);
+          invalidateCache('fy:');
+          invalidateCache('periods:');
+          return result;
+        };
+      }
 
       // Tout le reste : passthrough
       return original.bind(target);

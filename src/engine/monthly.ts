@@ -7,6 +7,12 @@ import { computeBilan, Line } from './statements';
 import { CR_FLOW, CRSection, getSectionDefs, INTERMEDIATE_LABELS, loadLabels } from './budgetActual';
 import { findSyscoAccount } from '../syscohada/coa';
 
+// Log diagnostique strippé en production (Vite remplace import.meta.env.DEV par
+// false au build). Évite de divulguer orgId / montants budget dans la console
+// prod (T-02) tout en gardant les traces utiles en développement.
+// eslint-disable-next-line no-console
+const debug = (...args: unknown[]): void => { if (import.meta.env.DEV) console.warn(...args); };
+
 export type MonthlyLine = {
   code: string;
   label: string;
@@ -99,9 +105,9 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     const allOrgBudgets = await dataProvider.getAllBudgets(orgId);
     if (allOrgBudgets.length > 0) {
       const yearsWithBudget = Array.from(new Set(allOrgBudgets.map((b) => b.year))).sort((a, b) => b - a);
-      console.warn('[monthly] Pas de budget pour ' + year + ' (orgId=' + orgId + '). Annees disponibles : ' + yearsWithBudget.join(', '));
+      debug('[monthly] Pas de budget pour ' + year + ' (orgId=' + orgId + '). Annees disponibles : ' + yearsWithBudget.join(', '));
     } else {
-      console.warn('[monthly] Aucun budget charge pour orgId=' + orgId + '. Allez dans Budget pour en charger un.');
+      debug('[monthly] Aucun budget charge pour orgId=' + orgId + '. Allez dans Budget pour en charger un.');
     }
   }
   const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
@@ -115,7 +121,7 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
       map.set(l.account, (map.get(l.account) ?? 0) + Number(l.amount));
     }
     const uniqueAccounts = new Set(lines.map((l) => l.account)).size;
-    console.log('[monthly] Budget charge : orgId=' + orgId + ' year=' + year + ' version=' + lastVersion + ' (' + lines.length + ' lignes, ' + uniqueAccounts + ' comptes)');
+    debug('[monthly] Budget charge : orgId=' + orgId + ' year=' + year + ' version=' + lastVersion + ' (' + lines.length + ' lignes, ' + uniqueAccounts + ' comptes)');
   }
 
   // ── Réalisé N-1 par mois (mêmes périodes, année year-1) ──
@@ -137,8 +143,7 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
       map.set(l.account, (map.get(l.account) ?? 0) + Number(l.amount));
     }
     n1Source = 'budget';
-    // eslint-disable-next-line no-console
-    console.info(`[monthly] N-1 = Budget ${year - 1} version=${lastVersionN1} (${linesN1.length} lignes)`);
+    debug(`[monthly] N-1 = Budget ${year - 1} version=${lastVersionN1} (${linesN1.length} lignes)`);
   }
 
   // Etape 2 : fallback sur GL N-1 si aucun budget N-1
@@ -162,8 +167,7 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
         map.set(e.account, (map.get(e.account) ?? 0) + net);
       }
       n1Source = 'gl';
-      // eslint-disable-next-line no-console
-      console.info(`[monthly] N-1 = GL realise ${year - 1} (fallback, pas de Budget N-1)`);
+      debug(`[monthly] N-1 = GL realise ${year - 1} (fallback, pas de Budget N-1)`);
     }
   }
   // Roll-up Budget N-1 parent → enfants pour aligner sur les codes GL detailes
