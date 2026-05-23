@@ -8,6 +8,11 @@ import './index.css';
 // les écrans authentifiés). Side-effect : applyPalette(loadPalette()).
 import './store/theme';
 import { ensureSeeded } from './db/seed';
+import { initSentry } from './lib/sentry';
+
+// Suivi d'erreurs Sentry — actif uniquement si VITE_SENTRY_DSN est défini
+// (et seulement en build de production, cf. lib/sentry.ts).
+initSentry();
 
 ensureSeeded().catch((e) => console.error('Seed failed', e));
 

@@ -24,6 +24,7 @@
     "@nivo/pie": "^0.99.0",
     "@nivo/radar": "^0.99.0",
     "@nivo/sankey": "^0.99.0",
+    "@sentry/react": "^10.53.1",
     "@supabase/auth-helpers-react": "^0.15.0",
     "@supabase/supabase-js": "^2.103.3",
     "@tremor/react": "^3.18.7",
