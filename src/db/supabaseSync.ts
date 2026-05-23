@@ -173,15 +173,34 @@ export async function pushGLToSupabase(orgId: string): Promise<number> {
   const entries = await db.gl.where('orgId').equals(orgId).toArray();
   if (entries.length === 0) return 0;
 
-  // Supprimer les anciennes entrées cloud pour cet org
-  await supabase.from('fna_gl_entries').delete().eq('org_id', orgId);
-
-  // Pousser par chunks de 500
   const rows = entries.map((e) => {
     const s = toSnake(e);
     delete s.id; // Supabase bigserial auto
     return s;
   });
+
+  // (S-02) Voie ATOMIQUE : RPC Postgres fna_replace_gl (DELETE + INSERT dans UNE
+  // seule transaction). Avant, le client faisait delete() PUIS insert() par
+  // chunks sans transaction : un échec de chunk après le delete pouvait DÉTRUIRE
+  // tout le GL cloud de l'org (la source de vérité). Fallback gracieux sur
+  // l'ancienne voie si la RPC n'est pas (encore) déployée (migration 022).
+  try {
+    const { error } = await supabase.rpc('fna_replace_gl', { p_org_id: orgId, p_rows: rows });
+    if (!error) return entries.length;
+    const code = (error as any).code as string | undefined;
+    const msg = error.message || '';
+    const missing = code === '42883' || code === 'PGRST202'
+      || msg.includes('does not exist') || msg.includes('Could not find the function');
+    if (!missing) throw new Error(`Push GL (RPC fna_replace_gl) : ${msg}`);
+    console.warn('[pushGLToSupabase] RPC fna_replace_gl absente — fallback delete+insert (migration 022 ?).');
+  } catch (e: any) {
+    // Échec réseau/inattendu de la RPC : on tente le fallback (qui re-DELETE
+    // d'abord, donc pas de doublon même si la RPC avait commité côté serveur).
+    console.warn('[pushGLToSupabase] RPC échouée, fallback delete+insert :', e?.message ?? e);
+  }
+
+  // Voie LEGACY (non atomique) — conservée pour compat si la RPC est absente.
+  await supabase.from('fna_gl_entries').delete().eq('org_id', orgId);
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await supabase.from('fna_gl_entries').insert(rows.slice(i, i + 500));
     if (error) throw new Error(`Push GL chunk ${i}: ${error.message}`);
