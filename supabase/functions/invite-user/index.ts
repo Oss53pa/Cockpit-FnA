@@ -12,7 +12,9 @@
 //   redirectTo?: string
 // }
 //
-// Deploy : supabase functions deploy invite-user --no-verify-jwt
+// Deploy : supabase functions deploy invite-user
+//   (NE PAS utiliser --no-verify-jwt : la fonction valide désormais le JWT de
+//    l'appelant et exige qu'il soit ADMIN de la licence ciblée — cf. SEC-01.)
 // Secrets : SUPABASE_SERVICE_ROLE_KEY
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -47,6 +49,27 @@ Deno.serve(async (req: Request) => {
     }
 
     const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+    // ── (SEC-01) Authn + Authz : valider le JWT de l'appelant, puis exiger qu'il
+    // soit ADMIN ACTIF de la licence ciblée AVANT toute écriture service-role.
+    // Auparavant : aucun contrôle → n'importe qui pouvait attribuer un siège
+    // (et le rôle 'admin') sur une licence arbitraire. Fail-closed.
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+    if (!token) return json({ error: 'Authentification requise' }, 401);
+    const { data: callerData, error: callerErr } = await supa.auth.getUser(token);
+    const caller = callerData?.user;
+    if (callerErr || !caller) return json({ error: 'Jeton invalide ou expiré' }, 401);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: seat, error: seatErr } = await (supa as any)
+      .from('licence_seats')
+      .select('role, active')
+      .eq('user_id', caller.id)
+      .eq('licence_id', body.licenceId)
+      .maybeSingle();
+    if (seatErr || !seat || seat.active !== true || seat.role !== 'admin') {
+      return json({ error: 'Droits administrateur requis sur cette licence' }, 403);
+    }
+
     const role = body.role ?? 'viewer';
 
     // Invite via auth.admin (idempotent : Supabase Auth gère les doublons)

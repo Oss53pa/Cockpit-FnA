@@ -28,17 +28,8 @@ const CORS = {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
-  const url = new URL(req.url);
-  if (url.searchParams.get('debug') === '1') {
-    return json(200, {
-      env: {
-        RESEND_API_KEY_set: RESEND_API_KEY.length > 0,
-        SUPABASE_URL: SUPABASE_URL || null,
-        SUPABASE_SERVICE_ROLE_KEY_set: SUPABASE_SERVICE_KEY.length > 0,
-        SUPABASE_SERVICE_ROLE_KEY_length: SUPABASE_SERVICE_KEY.length,
-      },
-    });
-  }
+  // (SEC-02) Endpoint ?debug=1 RETIRÉ : il exposait la config (URL Supabase,
+  // présence + longueur de la SERVICE_ROLE_KEY) sans aucune authentification.
 
   if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return json(200, {
@@ -52,9 +43,18 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const auth = req.headers.get('Authorization');
-  const apikey = req.headers.get('apikey');
-  if (!auth && !apikey) return json(200, { success: false, error: 'Authorization requis' });
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+  // ── (SEC-01) AUTHENTIFICATION de l'appelant ──────────────────────────────
+  // On ne se contente PLUS de vérifier la présence d'un header (la clé anon est
+  // publique → contournable par n'importe qui). On VALIDE le JWT de l'utilisateur
+  // connecté et on récupère son uid. NB : déployer de préférence cette fonction
+  // SANS `--no-verify-jwt` ; ce contrôle applicatif est une défense en profondeur.
+  const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return json(401, { success: false, error: 'Authentification requise' });
+  const { data: callerData, error: callerErr } = await supabase.auth.getUser(token);
+  const caller = callerData?.user;
+  if (callerErr || !caller) return json(401, { success: false, error: 'Jeton invalide ou expiré' });
 
   let body: any;
   try { body = await req.json(); } catch { return json(200, { success: false, error: 'Body JSON invalide' }); }
@@ -64,7 +64,27 @@ Deno.serve(async (req: Request) => {
     return json(200, { success: false, error: 'Champs requis : email, appUrl, html', received: { email: !!email, appUrl: !!appUrl, html: !!htmlTemplate } });
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  // ── (SEC-01) AUTORISATION : l'appelant doit être ADMIN de CHAQUE org ciblée ──
+  // Sans ce contrôle, n'importe quel utilisateur authentifié pouvait, via la
+  // service-role (qui ignore la RLS), s'auto-rattacher (ou rattacher un tiers) en
+  // `admin` à une organisation arbitraire — brèche multi-tenant majeure.
+  const targetOrgIds: string[] = Array.isArray(orgIds) ? orgIds.filter(Boolean) : [];
+  if (targetOrgIds.length > 0) {
+    const { data: memberships, error: mErr } = await supabase
+      .from('fna_user_orgs')
+      .select('org_id, role')
+      .eq('user_id', caller.id)
+      .in('org_id', targetOrgIds);
+    if (mErr) return json(500, { success: false, error: 'Vérification des droits impossible' });
+    const adminOrgs = new Set(
+      (memberships ?? []).filter((m: any) => m.role === 'admin').map((m: any) => m.org_id),
+    );
+    const forbidden = targetOrgIds.filter((id) => !adminOrgs.has(id));
+    if (forbidden.length > 0) {
+      return json(403, { success: false, error: `Droits administrateur requis sur : ${forbidden.join(', ')}` });
+    }
+  }
+
   const redirectTo = `${appUrl.replace(/\/$/, '')}/auth/accept-invite`;
 
   // ETAPE 1 : Genere lien Supabase Auth
