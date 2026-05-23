@@ -89,9 +89,8 @@ export async function pullFromSupabase(
     progress('Grand Livre');
     const glRows = await fetchAll('fna_gl_entries', oid);
     if (glRows.length > 0) {
-      // Supabase a des donnees → on remplace en local
-      const oldGlKeys = await db.gl.where('orgId').equals(oid).primaryKeys();
-      if (oldGlKeys.length > 0) await db.gl.bulkDelete(oldGlKeys);
+      // Supabase a des donnees → on remplace en local.
+      // Mapping (pur, hors Dexie) effectue AVANT la transaction.
       const mapped = glRows.map((r: any) => {
         const c = toCamel(r) as any;
         c.importId = c.importId != null ? String(c.importId) : undefined;
@@ -101,9 +100,17 @@ export async function pullFromSupabase(
         if (c.credit != null) c.credit = Number(c.credit);
         return c;
       });
-      for (let i = 0; i < mapped.length; i += 5000) {
-        await db.gl.bulkAdd(mapped.slice(i, i + 5000));
-      }
+      // (S-01) ATOMICITE : suppression de l'ancien GL local + re-insertion dans
+      // UNE SEULE transaction Dexie. Avant, un crash/refresh/coupure entre le
+      // delete et la fin des bulkAdd laissait le Grand Livre local vide ou
+      // partiel → etats financiers faux jusqu'au prochain pull reussi.
+      await db.transaction('rw', db.gl, async () => {
+        const oldGlKeys = await db.gl.where('orgId').equals(oid).primaryKeys();
+        if (oldGlKeys.length > 0) await db.gl.bulkDelete(oldGlKeys);
+        for (let i = 0; i < mapped.length; i += 5000) {
+          await db.gl.bulkAdd(mapped.slice(i, i + 5000));
+        }
+      });
       totalEntries += mapped.length;
       console.log(`[Sync] GL: ${mapped.length} ecritures pulled depuis Supabase`);
     } else {
@@ -121,8 +128,7 @@ export async function pullFromSupabase(
     progress('Budgets');
     const budgets = await fetchAll('fna_budgets', oid);
     if (budgets.length > 0) {
-      // Supabase a des budgets → replace en local
-      await db.budgets.where('orgId').equals(oid).delete();
+      // Supabase a des budgets → replace en local (mapping hors transaction).
       const rows = budgets.map((r: any) => {
         const c = toCamel(r) as any;
         delete c.id;
@@ -131,7 +137,11 @@ export async function pullFromSupabase(
         if (c.month != null) c.month = Number(c.month);
         return c;
       });
-      await db.budgets.bulkAdd(rows);
+      // (S-01) ATOMICITE : delete + bulkAdd des budgets dans une seule transaction.
+      await db.transaction('rw', db.budgets, async () => {
+        await db.budgets.where('orgId').equals(oid).delete();
+        await db.budgets.bulkAdd(rows);
+      });
       console.log(`[Sync] Budgets: ${rows.length} lignes pulled depuis Supabase`);
     } else {
       const localCount = await db.budgets.where('orgId').equals(oid).count();
