@@ -13,6 +13,7 @@ import { useApp } from '../store/app';
 import { computeCapitalVariation, type CapitalMovement } from '../engine/flows';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 export default function CapitalVariationPage() {
@@ -118,13 +119,14 @@ export default function CapitalVariationPage() {
           <ChartCard title="Évolution par rubrique" subtitle="Ouverture vs clôture" accent={ct.accent}>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartData} barCategoryGap="30%">
+                <ChartGradients />
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="name" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                <Bar dataKey="Ouverture" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Clôture" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Ouverture" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Clôture" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>

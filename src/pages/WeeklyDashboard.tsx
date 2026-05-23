@@ -3,6 +3,7 @@
  */
 import { TrendingUp, Wallet, AlertTriangle, Target } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip } from 'recharts';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -43,6 +44,7 @@ export default function WeeklyDashboardPage() {
       <ChartCard title="Évolution CA — derniers mois" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={180}>
           <AreaChart data={monthly.map((m) => ({ mois: m.mois, ca: m.realise }))}>
+            <ChartGradients />
             <defs>
               <linearGradient id="weekly-ca" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={ct.accent} stopOpacity={0.5} />

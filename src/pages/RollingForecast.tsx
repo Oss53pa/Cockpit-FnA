@@ -13,6 +13,7 @@ import { useApp } from '../store/app';
 import { forecastTresorerie, type TresoForecast } from '../engine/proph3/predictions';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 export default function RollingForecastPage() {
@@ -124,6 +125,7 @@ export default function RollingForecastPage() {
           >
             <ResponsiveContainer width="100%" height={360}>
               <ComposedChart data={chartData}>
+                <ChartGradients />
                 <defs>
                   <linearGradient id="forecast-area" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={ct.accent} stopOpacity={0.4} />

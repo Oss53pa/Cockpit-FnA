@@ -13,6 +13,7 @@ import { useApp } from '../store/app';
 import { computeMonthlyTFT, type MonthlyTFT } from '../engine/flows';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 export default function TFTMonthlyPage() {
@@ -126,6 +127,7 @@ export default function TFTMonthlyPage() {
           >
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={chartData} barCategoryGap="25%">
+                <ChartGradients />
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="mois" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />
@@ -138,9 +140,9 @@ export default function TFTMonthlyPage() {
                 />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
                 <ReferenceLine y={0} stroke={ct.grid} />
-                <Bar dataKey="Exploitation" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Investissement" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Financement" fill={ct.at(3)} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Exploitation" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Investissement" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Financement" fill={`url(#${barGradId(3)})`} radius={[6, 6, 0, 0]} />
                 <Line type="monotone" dataKey="Variation TN" stroke={ct.accent} strokeWidth={2.5} dot={{ r: 3, fill: ct.accent }} activeDot={{ r: 5 }} />
               </ComposedChart>
             </ResponsiveContainer>

@@ -18,6 +18,7 @@ import {
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { ChartCard } from '../../components/ui/ChartCard';
+import { ChartGradients, barGradId } from '../../components/charts/ChartGradients';
 import { useApp } from '../../store/app';
 import { useChartTheme } from '../../lib/chartTheme';
 import { fmtFull } from '../../lib/format';
@@ -165,11 +166,12 @@ export default function AnalyticalAxisDashboard({
             <ChartCard title={`Top 10 codes — ${amountLabel}`}>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={top} layout="vertical">
+                  <ChartGradients />
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                   <XAxis type="number" tickFormatter={fmtFull} tick={{ fontSize: 9 }} />
                   <YAxis type="category" dataKey="code" width={80} tick={{ fontSize: 10 }} />
                   <Tooltip formatter={(v) => fmtFull(Number(v))} />
-                  <Bar dataKey="amount" name={amountLabel} fill={ct.at(0)} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="amount" name={amountLabel} fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>

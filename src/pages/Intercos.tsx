@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Users, AlertTriangle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -62,6 +63,7 @@ export default function IntercosPage() {
       <ChartCard title="Soldes par compte intra-groupe" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data} layout="vertical">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis type="number" {...ct.axisProps} tickFormatter={fmtK} />
             <YAxis type="category" dataKey="label" width={200} {...ct.axisProps} />

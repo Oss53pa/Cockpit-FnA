@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import { Building2, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ReferenceLine } from 'recharts';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -60,6 +61,7 @@ export default function SectorBenchmarkPage() {
       <ChartCard title={`Ratios vs cibles sectorielles — ${sector}`} subtitle="Bar = valeur tenant · Ligne = cible secteur" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={compared} barCategoryGap="30%">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="code" {...ct.axisProps} />
             <YAxis {...ct.axisProps} unit="%" />

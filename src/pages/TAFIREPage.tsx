@@ -14,6 +14,7 @@ import { useApp } from '../store/app';
 import { computeTAFIRE, type TAFIREResult } from '../engine/flows';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 export default function TAFIREPage() {
@@ -61,6 +62,7 @@ export default function TAFIREPage() {
       <ChartCard title="Comparaison Emplois vs Ressources" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData} barCategoryGap="35%">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="categorie" {...ct.axisProps} />
             <YAxis {...ct.axisProps} tickFormatter={fmtK} />

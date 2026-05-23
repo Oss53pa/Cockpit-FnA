@@ -13,6 +13,7 @@ import { useApp } from '../store/app';
 import { db } from '../db/schema';
 import { fmtPct } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 export default function LettragePage() {
@@ -72,6 +73,7 @@ export default function LettragePage() {
         <ChartCard title="Vieillissement non lettré" subtitle="Distribution par âge" accent={ct.accent}>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={Object.entries(stats.aged).map(([k, v]) => ({ name: k, count: v }))} barCategoryGap="30%">
+              <ChartGradients />
               <CartesianGrid {...ct.gridProps} />
               <XAxis dataKey="name" {...ct.axisProps} />
               <YAxis {...ct.axisProps} />

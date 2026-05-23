@@ -16,6 +16,7 @@ import { fmtFull } from '../lib/format';
 import { AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticBranch, AnalyticAssignment } from '../db/schema';
 import { BRANCH_LABELS, BRANCH_COLORS, inferBranch } from '../engine/analyticBranch';
 import { dataProvider } from '../db/provider';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import {
   getAxes, saveAxis, deleteAxis,
   getCodes, saveCode, deleteCode,
@@ -155,13 +156,14 @@ function DashboardTab({ orgId, year, axes, ct }: { orgId: string; year: number; 
         <ChartCard title="Charges vs Produits par section">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data.filter((r) => r.codeId !== '__unassigned__').slice(0, 10)} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tickFormatter={fmtFull} tick={{ fontSize: 9 }} />
               <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 9 }} />
               <Tooltip formatter={(v) => fmtFull(Number(v))} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="charges" name="Charges" fill={ct.at(0)} radius={[0, 3, 3, 0]} />
-              <Bar dataKey="produits" name="Produits" fill={ct.at(4)} radius={[0, 3, 3, 0]} />
+              <Bar dataKey="charges" name="Charges" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="produits" name="Produits" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -172,11 +174,12 @@ function DashboardTab({ orgId, year, axes, ct }: { orgId: string; year: number; 
         <ChartCard title="Taux de couverture par axe">
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={coverage.byAxis} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
               <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v) => `${v} %`} />
-              <Bar dataKey="rate" name="Couverture" fill={ct.at(2)} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="rate" name="Couverture" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -221,13 +224,14 @@ function DashboardTab({ orgId, year, axes, ct }: { orgId: string; year: number; 
         <ChartCard title={`Évolution mensuelle — ${data.find((r) => r.codeId === selected)?.label ?? selected}`}>
           <ResponsiveContainer width="100%" height={250}>
             <ComposedChart data={monthly.months.map((m, i) => ({ mois: m, charges: monthly.charges[i], produits: monthly.produits[i], resultat: monthly.produits[i] - monthly.charges[i] }))}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v) => fmtFull(Number(v))} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="charges" name="Charges" fill={ct.at(0)} />
-              <Bar dataKey="produits" name="Produits" fill={ct.at(4)} />
+              <Bar dataKey="charges" name="Charges" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="produits" name="Produits" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
               <Line type="monotone" dataKey="resultat" name="Résultat" stroke={ct.at(2)} strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -1050,11 +1054,12 @@ function WBSTab({ orgId, year, axes, ct }: { orgId: string; year: number; axes: 
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={top5Profitable} layout="vertical">
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis type="number" tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
                 <YAxis type="category" dataKey="projectCode" width={80} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v) => fmtFull(Number(v))} />
-                <Bar dataKey="margeNette" name="Marge nette" fill={ct.at(2)} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="margeNette" name="Marge nette" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -1066,6 +1071,7 @@ function WBSTab({ orgId, year, axes, ct }: { orgId: string; year: number; axes: 
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={top5Loss} layout="vertical">
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis type="number" tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
                 <YAxis type="category" dataKey="projectCode" width={80} tick={{ fontSize: 10 }} />
@@ -1104,13 +1110,14 @@ function WBSTab({ orgId, year, axes, ct }: { orgId: string; year: number; axes: 
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <ComposedChart data={compareBarData}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="code" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={60} />
                 <YAxis tickFormatter={fmtFull} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v) => fmtFull(Number(v))} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="Revenus" fill={ct.at(4)} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Coûts" fill={ct.at(0)} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Revenus" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Coûts" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
                 <Line type="monotone" dataKey="Marge" stroke={ct.at(2)} strokeWidth={2} dot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -1405,11 +1412,12 @@ function OverviewTab({
         <ChartCard title="Couverture par axe">
           <ResponsiveContainer width="100%" height={Math.max(140, stats.byAxisCoverage.length * 36)}>
             <BarChart data={stats.byAxisCoverage} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
               <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v) => `${v} %`} />
-              <Bar dataKey="rate" name="Couverture" fill={ct.at(2)} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="rate" name="Couverture" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

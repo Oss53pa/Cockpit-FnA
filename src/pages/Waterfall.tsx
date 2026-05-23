@@ -12,6 +12,7 @@ import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
 import { useBudgetActual, useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { fmtFull, fmtK } from '../lib/format';
 import { bySection, computeIntermediates } from '../engine/budgetActual';
 
@@ -189,6 +190,7 @@ export default function Waterfall() {
         <div className="w-full" style={{ height: 430 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 40, right: 20, bottom: 80, left: 60 }} barCategoryGap={6}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--p-200))" />
               <XAxis
                 dataKey="name"

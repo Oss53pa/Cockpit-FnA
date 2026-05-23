@@ -9,7 +9,7 @@ import { useBudgetActual, useCapitalVariation, useCurrentOrg, useMonthlyBilan, u
 import { bySection, computeIntermediates, CR_FLOW, CRSection, CustomSection, INTERMEDIATE_LABELS, loadCustomSections, loadLabels, loadOrder, saveCustomSections, saveLabels, saveOrder } from '../engine/budgetActual';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { useApp } from '../store/app';
-import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 // Line type utilisé via CollapsibleTable
 import type { BalanceRow } from '../engine/balance';
 import { fmtFull, fmtK } from '../lib/format';
@@ -690,7 +690,6 @@ function CapitalVarCard({ rows, hideCodes }: { rows: any[]; hideCodes?: boolean 
 // ─── BUDGET vs ACTUAL ──────────────────────────────────────────────
 function BudgetActualView() {
   const rows = useBudgetActual();
-  const ct = useChartTheme();
   const [view, setView] = useState<'table' | 'dashboard' | 'monthly'>('table');
   const sections = bySection(rows);
   const intermediates = computeIntermediates(sections);
@@ -852,13 +851,14 @@ function BudgetActualView() {
             <div className="p-5">
               <ResponsiveContainer width="100%" height={340}>
                 <BarChart data={sections.map((s) => ({ name: s.label, Réalisé: s.totalRealise, Budget: s.totalBudget }))}>
+                  <ChartGradients />
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
-                  <Bar dataKey="Budget" fill={ct.barAlt} radius={[3,3,0,0]} />
+                  <Bar dataKey="Réalisé" fill={`url(#${barGradId(0)})`} radius={[6,6,0,0]} />
+                  <Bar dataKey="Budget" fill={`url(#${barGradId(1)})`} radius={[6,6,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -868,6 +868,7 @@ function BudgetActualView() {
             <div className="p-5">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={sections.map((s) => ({ name: s.label, ecart: s.totalEcart, isCharge: s.isCharge }))}>
+                  <ChartGradients />
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${fmtK(v)}`} />

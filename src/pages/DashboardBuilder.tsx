@@ -30,6 +30,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { KPICard } from '../components/ui/KPICardV2';
 import { ChartCard } from '../components/ui/ChartCard';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { toast } from '../components/ui/Toast';
 import { useStatements, useRatios, useMonthlyCA, useCurrentOrg } from '../hooks/useFinancials';
 import { fmtFull, fmtK } from '../lib/format';
@@ -246,6 +247,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
       <ChartCard title="Évolution CA mensuel" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={monthly.map((m) => ({ mois: m.mois, ca: m.realise }))}>
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="mois" {...ct.axisProps} />
             <YAxis {...ct.axisProps} tickFormatter={fmtK} />
@@ -290,6 +292,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
       <ChartCard title="Évolution trésorerie" accent={ct.at(2)}>
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={monthly.map((m) => ({ mois: m.mois, ca: m.realise }))}>
+            <ChartGradients />
             <defs>
               <linearGradient id="treso-grad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={ct.accent} stopOpacity={0.4} />
@@ -320,6 +323,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
         <ChartCard title="Cascade SIG" accent={ct.accent}>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={data}>
+              <ChartGradients />
               <CartesianGrid {...ct.gridProps} />
               <XAxis dataKey="name" {...ct.axisProps} />
               <YAxis {...ct.axisProps} tickFormatter={fmtK} />
@@ -341,6 +345,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
         <ChartCard title="Budget vs Réalisé" accent={ct.accent}>
           <ResponsiveContainer width="100%" height={220}>
             <ComposedChart data={data}>
+              <ChartGradients />
               <CartesianGrid {...ct.gridProps} />
               <XAxis dataKey="mois" {...ct.axisProps} />
               <YAxis {...ct.axisProps} tickFormatter={fmtK} />
@@ -385,6 +390,7 @@ function WidgetRenderer({ type, onRemove, editing }: { type: WidgetType; onRemov
         <ChartCard title="Résultat net mensuel" accent={ct.accent}>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data}>
+              <ChartGradients />
               <CartesianGrid {...ct.gridProps} />
               <XAxis dataKey="mois" {...ct.axisProps} />
               <YAxis {...ct.axisProps} tickFormatter={fmtK} />

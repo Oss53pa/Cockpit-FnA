@@ -13,6 +13,7 @@ import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { useBalance, useBudgetActual, useCurrentOrg, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId, areaGradId } from '../components/charts/ChartGradients';
 import { bySection, loadLabels, computeBudgetActual } from '../engine/budgetActual';
 import { useApp } from '../store/app';
 import { dataProvider } from '../db/provider';
@@ -277,16 +278,17 @@ function ChargesProduits() {
           <ChartCard title="Évolution mensuelle des charges par nature" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chargesEvol}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="achats" name="Achats" stackId="1" fill={ct.at(0)} stroke={ct.at(0)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="personnel" name="Personnel" stackId="1" fill={ct.at(1)} stroke={ct.at(1)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="services" name="Services ext." stackId="1" fill={ct.at(2)} stroke={ct.at(2)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="amortissements" name="Amortiss." stackId="1" fill={ct.at(3)} stroke={ct.at(3)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={ct.at(4)} stroke={ct.at(4)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="achats" name="Achats" stackId="1" fill={`url(#${areaGradId(0)})`} stroke={ct.at(0)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="personnel" name="Personnel" stackId="1" fill={`url(#${areaGradId(1)})`} stroke={ct.at(1)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="services" name="Services ext." stackId="1" fill={`url(#${areaGradId(2)})`} stroke={ct.at(2)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="amortissements" name="Amortiss." stackId="1" fill={`url(#${areaGradId(3)})`} stroke={ct.at(3)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={`url(#${areaGradId(4)})`} stroke={ct.at(4)} fillOpacity={0.8} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -313,13 +315,14 @@ function ChargesProduits() {
           <ChartCard title="Charges Fixes vs Variables">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={charFixes}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="fixes" name="Charges fixes" stackId="a" fill={ct.at(0)} />
-                <Bar dataKey="variables" name="Variables" stackId="a" fill={ct.at(1)} radius={[3,3,0,0]} />
+                <Bar dataKey="fixes" name="Charges fixes" stackId="a" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="variables" name="Variables" stackId="a" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -363,15 +366,16 @@ function ChargesProduits() {
           <ChartCard title="Évolution mensuelle des produits par nature" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={produitsEvol}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="ventes" name="Ventes" stackId="1" fill={ct.at(0)} stroke={ct.at(0)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="services" name="Services" stackId="1" fill={ct.at(1)} stroke={ct.at(1)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="subventions" name="Subventions" stackId="1" fill={ct.at(2)} stroke={ct.at(2)} fillOpacity={0.8} />
-                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={ct.at(3)} stroke={ct.at(3)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="ventes" name="Ventes" stackId="1" fill={`url(#${areaGradId(0)})`} stroke={ct.at(0)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="services" name="Services" stackId="1" fill={`url(#${areaGradId(1)})`} stroke={ct.at(1)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="subventions" name="Subventions" stackId="1" fill={`url(#${areaGradId(2)})`} stroke={ct.at(2)} fillOpacity={0.8} />
+                <Area type="monotone" dataKey="autres" name="Autres" stackId="1" fill={`url(#${areaGradId(3)})`} stroke={ct.at(3)} fillOpacity={0.8} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -402,13 +406,14 @@ function ChargesProduits() {
           <ChartCard title="Budget vs Réalisé par poste" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={budgetVsRealise} layout="vertical" barGap={4}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <YAxis type="category" dataKey="poste" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="realise" name="Réalisé" fill={ct.at(0)} radius={[0,3,3,0]} />
-                <Bar dataKey="budget" name="Budget" fill={ct.at(3)} radius={[0,3,3,0]} />
+                <Bar dataKey="realise" name="Réalisé" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
+                <Bar dataKey="budget" name="Budget" fill={`url(#${barGradId(3)})`} radius={[0,6,6,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -522,24 +527,26 @@ function CRBlock() {
           <ChartCard title="Top 10 comptes de la section">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={[...sec.rows].sort((a, b) => b.realise - a.realise).slice(0, 10)} layout="vertical">
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={70} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
-                <Bar dataKey="realise" fill={ct.bar} radius={[0,3,3,0]} />
+                <Bar dataKey="realise" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
           <ChartCard title="Réalisé vs Budget par compte">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={[...sec.rows].sort((a, b) => b.realise - a.realise).slice(0, 10)}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="code" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="realise" name="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
-                <Bar dataKey="budget" name="Budget" fill={ct.barAlt} radius={[3,3,0,0]} />
+                <Bar dataKey="realise" name="Réalisé" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="budget" name="Budget" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -912,13 +919,14 @@ function CashflowStatement() {
       <div className="p-4">
         <ResponsiveContainer width="100%" height={380}>
           <ComposedChart data={chartData}>
+            <ChartGradients />
             <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
             <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
             <Tooltip formatter={(v: any) => fmtFull(v)} />
             <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="bottom" />
-            <Bar dataKey="cashIn" name="Cash in" fill={ct.at(0)} />
-            <Bar dataKey="cashOut" name="Cash out" fill={ct.at(1)} />
+            <Bar dataKey="cashIn" name="Cash in" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+            <Bar dataKey="cashOut" name="Cash out" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
             <Line type="linear" dataKey="solde" name="Solde" stroke={ct.at(2)} strokeWidth={2.5} dot={{ r: 4, fill: ct.at(2) }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -1055,6 +1063,7 @@ function ReceivablesReview() {
           <p className="text-xs font-semibold mb-2">Account receivable per month</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={arData}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
@@ -1069,6 +1078,7 @@ function ReceivablesReview() {
           <p className="text-xs font-semibold mb-2">Account payable per month</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={apData}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
@@ -1323,11 +1333,12 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         <ChartCard title="Évolution mensuelle de la section" className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={evolMensuelle}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="valeur" fill={ct.bar} radius={[3,3,0,0]} />
+              <Bar dataKey="valeur" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1352,11 +1363,12 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         <ChartCard title="Top 10 comptes">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={top10} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="code" tick={{ fontSize: 9 }} width={80} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="realise" fill={ct.bar} radius={[0,3,3,0]} />
+              <Bar dataKey="realise" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1364,13 +1376,14 @@ function CRSecDetail({ sectionKey }: { sectionKey: any }) {
         <ChartCard title="Réalisé vs Budget — Top 10">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={top10}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="code" tick={{ fontSize: 9 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="realise" name="Réalisé" fill={ct.bar} radius={[3,3,0,0]} />
-              <Bar dataKey="budget" name="Budget" fill={ct.barAlt} radius={[3,3,0,0]} />
+              <Bar dataKey="realise" name="Réalisé" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="budget" name="Budget" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1458,6 +1471,7 @@ function CycleClient() {
         <ChartCard title="Balance âgée clients">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bucketTotals}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="tranche" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
@@ -1486,13 +1500,14 @@ function CycleClient() {
         <ChartCard title="Évolution des créances">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={creancesEvol}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Area type="monotone" dataKey="total" name="Créances totales" fill={ct.at(0) + '30'} stroke={ct.at(0)} strokeWidth={2} />
-              <Area type="monotone" dataKey="douteuses" name="Douteuses" fill={ct.at(1) + '30'} stroke={ct.at(1)} strokeWidth={2} />
+              <Area type="monotone" dataKey="total" name="Créances totales" fill={`url(#${areaGradId(0)})`} stroke={ct.at(0)} strokeWidth={2} />
+              <Area type="monotone" dataKey="douteuses" name="Douteuses" fill={`url(#${areaGradId(1)})`} stroke={ct.at(1)} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1500,12 +1515,13 @@ function CycleClient() {
         <ChartCard title="Taux de recouvrement mensuel (%)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={recouv}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={[60, 100]} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="taux" name="Taux recouvrement" radius={[4,4,0,0]}>
+              <Bar dataKey="taux" name="Taux recouvrement" radius={[6, 6, 0, 0]}>
                 {recouv.map((e, i) => <Cell key={i} fill={e.taux >= 90 ? ct.at(4) : e.taux >= 80 ? ct.at(3) : ct.at(1)} />)}
               </Bar>
             </BarChart>
@@ -1712,6 +1728,7 @@ function CycleFournisseur() {
         <ChartCard title="Balance âgée fournisseurs">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bucketTotals}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="tranche" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
@@ -1741,13 +1758,14 @@ function CycleFournisseur() {
         <ChartCard title="Évolution des dettes fournisseurs">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={dettesEvol}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Area type="monotone" dataKey="total" name="Total dettes" fill={ct.at(5) + '30'} stroke={ct.at(5)} strokeWidth={2} />
-              <Area type="monotone" dataKey="echues" name="Échues" fill={ct.at(1) + '30'} stroke={ct.at(1)} strokeWidth={2} />
+              <Area type="monotone" dataKey="total" name="Total dettes" fill={`url(#${areaGradId(5)})`} stroke={ct.at(5)} strokeWidth={2} />
+              <Area type="monotone" dataKey="echues" name="Échues" fill={`url(#${areaGradId(1)})`} stroke={ct.at(1)} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1755,11 +1773,12 @@ function CycleFournisseur() {
         <ChartCard title="📅 Échéancier de paiement (prévisionnel)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={echeancier}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="periode" tick={{ fontSize: 9 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="montant" name="Décaissements prévus" fill={ct.at(2)} radius={[4,4,0,0]} />
+              <Bar dataKey="montant" name="Décaissements prévus" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -1954,13 +1973,14 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="Encaissements vs Décaissements" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={260}>
               <ComposedChart data={tresorerieEvol}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="encaissements" name="Encaissements" fill={ct.at(4)} radius={[3,3,0,0]} />
-                <Bar dataKey="decaissements" name="Décaissements" fill={ct.at(1)} radius={[3,3,0,0]} />
+                <Bar dataKey="encaissements" name="Encaissements" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="decaissements" name="Décaissements" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
                 <Line type="monotone" dataKey="solde" name="Solde trésorerie" stroke={ct.at(2)} strokeWidth={2.5} dot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -1969,14 +1989,15 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="Flux par catégorie">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={fluxData}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="exploitation" name="Exploitation" fill={ct.at(4)} radius={[3,3,0,0]} />
-                <Bar dataKey="investissement" name="Investissement" fill={ct.at(0)} radius={[3,3,0,0]} />
-                <Bar dataKey="financement" name="Financement" fill={ct.at(2)} radius={[3,3,0,0]} />
+                <Bar dataKey="exploitation" name="Exploitation" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="investissement" name="Investissement" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="financement" name="Financement" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -2072,14 +2093,15 @@ function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr' | 'pre
           <ChartCard title="Prévisionnel de trésorerie — 6 mois (3 scénarios)">
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={previsionnel}>
+                <ChartGradients />
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                 <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Area type="monotone" dataKey="optimiste" name="Scénario optimiste" fill={ct.at(4) + '20'} stroke={ct.at(4)} strokeWidth={2} />
-                <Area type="monotone" dataKey="base" name="Scénario base" fill={ct.at(0) + '20'} stroke={ct.at(0)} strokeWidth={2.5} />
-                <Area type="monotone" dataKey="pessimiste" name="Scénario pessimiste" fill={ct.at(1) + '20'} stroke={ct.at(1)} strokeWidth={2} />
+                <Area type="monotone" dataKey="optimiste" name="Scénario optimiste" fill={`url(#${areaGradId(4)})`} stroke={ct.at(4)} strokeWidth={2} />
+                <Area type="monotone" dataKey="base" name="Scénario base" fill={`url(#${areaGradId(0)})`} stroke={ct.at(0)} strokeWidth={2.5} />
+                <Area type="monotone" dataKey="pessimiste" name="Scénario pessimiste" fill={`url(#${areaGradId(1)})`} stroke={ct.at(1)} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -2214,14 +2236,15 @@ function MasseSalariale() {
             <ChartCard title="Évolution mensuelle de la masse salariale" className="lg:col-span-2">
               <ResponsiveContainer width="100%" height={240}>
                 <ComposedChart data={msEvol}>
+                  <ChartGradients />
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                   <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Bar dataKey="salaires" name="Salaires" stackId="a" fill={ct.at(0)} />
-                  <Bar dataKey="charges" name="Charges sociales" stackId="a" fill={ct.at(1)} />
-                  <Bar dataKey="primes" name="Primes" stackId="a" fill={ct.at(2)} radius={[3,3,0,0]} />
+                  <Bar dataKey="salaires" name="Salaires" stackId="a" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="charges" name="Charges sociales" stackId="a" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="primes" name="Primes" stackId="a" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
                   <Line type="monotone" dataKey="budget" name="Budget" stroke={ct.at(1)} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -2294,14 +2317,15 @@ function MasseSalariale() {
             <ChartCard title="Dotations vs Reprises — évolution mensuelle">
               <ResponsiveContainer width="100%" height={230}>
                 <ComposedChart data={provEvol}>
+                  <ChartGradients />
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                   <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
                   <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any) => fmtFull(v)} />
                   <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Bar yAxisId="left" dataKey="dotations" name="Dotations" fill={ct.at(1)} radius={[3,3,0,0]} />
-                  <Bar yAxisId="left" dataKey="reprises" name="Reprises" fill={ct.at(4)} radius={[3,3,0,0]} />
+                  <Bar yAxisId="left" dataKey="dotations" name="Dotations" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="reprises" name="Reprises" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
                   <Line yAxisId="right" type="monotone" dataKey="solde" name="Solde provisions" stroke={ct.at(2)} strokeWidth={2} dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -2456,11 +2480,12 @@ function Stocks() {
         <ChartCard title="Valorisation par catégorie">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={stocks} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="label" tick={{ fontSize: 10 }} width={140} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="value" radius={[0,4,4,0]}>
+              <Bar dataKey="value" radius={[0,6,6,0]}>
                 {stocks.map((s, i) => <Cell key={i} fill={s.color} />)}
               </Bar>
             </BarChart>
@@ -2500,14 +2525,15 @@ function Immobilisations() {
       <ChartCard title="Décomposition par catégorie">
         <ResponsiveContainer width="100%" height={340}>
           <BarChart data={data} layout="vertical">
+            <ChartGradients />
             <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
             <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
             <YAxis type="category" dataKey="label" tick={{ fontSize: 10 }} width={140} />
             <Tooltip formatter={(v: any) => fmtFull(v)} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="brute" name="Valeur brute" fill={ct.at(0)} radius={[0,3,3,0]} />
-            <Bar dataKey="amort" name="Amortissements" fill={ct.at(3)} radius={[0,3,3,0]} />
-            <Bar dataKey="vnc" name="VNC" fill={ct.at(4)} radius={[0,3,3,0]} />
+            <Bar dataKey="brute" name="Valeur brute" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
+            <Bar dataKey="amort" name="Amortissements" fill={`url(#${barGradId(3)})`} radius={[0,6,6,0]} />
+            <Bar dataKey="vnc" name="VNC" fill={`url(#${barGradId(4)})`} radius={[0,6,6,0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -2593,12 +2619,13 @@ function SecIndustrie() {
         <ChartCard title="Production mensuelle vs objectif">
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={monthlyData}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="production" name="Production" fill={ct.bar} radius={[3,3,0,0]} />
+              <Bar dataKey="production" name="Production" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
               <Line type="monotone" dataKey="objectif" name="Objectif moyen" stroke={ct.at(3)} strokeDasharray="5 5" dot={false} strokeWidth={2} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -2674,11 +2701,12 @@ function SecBTP() {
         <ChartCard title="Évolution des travaux facturés">
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={monthly.labels.map((m, i) => ({ mois: m, travaux: monthly.values[i] }))}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Area type="monotone" dataKey="travaux" stroke={ct.bar} fill={`${ct.bar}30`} strokeWidth={2} />
+              <Area type="monotone" dataKey="travaux" stroke={ct.bar} fill={`url(#${areaGradId(0)})`} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2691,11 +2719,12 @@ function SecBTP() {
               { cat: 'Main-d\'œuvre', montant: mainoeuvre * 0.7 },
               { cat: 'Locations', montant: locations },
             ]}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="cat" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="montant" fill={ct.at(1)} radius={[4,4,0,0]} />
+              <Bar dataKey="montant" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2788,12 +2817,13 @@ function SecCommerce() {
         <ChartCard title="Évolution des ventes et de la marge">
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={monthlyData}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="mois" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="ventes" name="Ventes" fill={ct.bar} radius={[3,3,0,0]} />
+              <Bar dataKey="ventes" name="Ventes" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
               <Line type="monotone" dataKey="marge" name="Marge" stroke={ct.at(1)} strokeWidth={2.5} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -2802,11 +2832,12 @@ function SecCommerce() {
         <ChartCard title="Ventilation du CA par famille">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={familles} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={100} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="ca" fill={ct.bar} radius={[0,4,4,0]} />
+              <Bar dataKey="ca" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -2882,11 +2913,12 @@ function SecMicrofinance() {
         <ChartCard title="Qualité du portefeuille de crédit">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={portfolio}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="tranche" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="encours" radius={[4,4,0,0]}>
+              <Bar dataKey="encours" radius={[6, 6, 0, 0]}>
                 {portfolio.map((_, i) => <Cell key={i} fill={ct.at(i)} />)}
               </Bar>
             </BarChart>
@@ -2995,11 +3027,12 @@ function SecImmobilierCom() {
         <ChartCard title="Loyers par site">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={lots} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={140} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="loyer" fill={ct.bar} radius={[0,4,4,0]} />
+              <Bar dataKey="loyer" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -3145,11 +3178,12 @@ function SecAgriculture() {
         <ChartCard title="Marge par spéculation">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={cultures}>
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis dataKey="nom" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="ca" name="CA" fill={ct.bar} radius={[3,3,0,0]} />
+              <Bar dataKey="ca" name="CA" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -3190,11 +3224,12 @@ function SecSante() {
         <ChartCard title="Recettes par service">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={services} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="nom" tick={{ fontSize: 10 }} width={120} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
-              <Bar dataKey="ca" fill={ct.bar} radius={[0,4,4,0]} />
+              <Bar dataKey="ca" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -3382,13 +3417,14 @@ function Analytique({ id: _id }: { id: string }) {
         <ChartCard title="Produits vs Charges par centre">
           <ResponsiveContainer width="100%" height={Math.max(260, data.length * 35)}>
             <BarChart data={data.slice(0, 15)} layout="vertical">
+              <ChartGradients />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={120} />
               <Tooltip formatter={(v: any) => fmtFull(v)} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="produits" name="Produits" fill={ct.at(0)} radius={[0,3,3,0]} />
-              <Bar dataKey="charges" name="Charges" fill={ct.at(1)} radius={[0,3,3,0]} />
+              <Bar dataKey="produits" name="Produits" fill={`url(#${barGradId(0)})`} radius={[0,6,6,0]} />
+              <Bar dataKey="charges" name="Charges" fill={`url(#${barGradId(1)})`} radius={[0,6,6,0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

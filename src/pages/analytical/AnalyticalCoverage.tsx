@@ -16,6 +16,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { ChartCard } from '../../components/ui/ChartCard';
+import { ChartGradients, barGradId } from '../../components/charts/ChartGradients';
 import { useApp } from '../../store/app';
 import { useChartTheme } from '../../lib/chartTheme';
 import { dataProvider } from '../../db/provider';
@@ -103,11 +104,12 @@ export default function AnalyticalCoverage() {
               ) : (
                 <ResponsiveContainer width="100%" height={Math.max(160, data.byJournal.length * 32)}>
                   <BarChart data={data.byJournal} layout="vertical">
+                    <ChartGradients />
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                     <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
                     <YAxis type="category" dataKey="journal" width={70} tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v) => `${v} %`} />
-                    <Bar dataKey="rate" fill={ct.at(0)} radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="rate" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -120,11 +122,12 @@ export default function AnalyticalCoverage() {
               ) : (
                 <ResponsiveContainer width="100%" height={Math.max(160, data.byClass.length * 32)}>
                   <BarChart data={data.byClass} layout="vertical">
+                    <ChartGradients />
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color, #e5e5e5)" />
                     <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
                     <YAxis type="category" dataKey="class" width={50} tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v) => `${v} %`} />
-                    <Bar dataKey="rate" fill={ct.at(4)} radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="rate" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

@@ -14,6 +14,7 @@ import { useApp } from '../store/app';
 import { computeMonthlyBilan } from '../engine/monthly';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 type Side = 'actif' | 'passif';
@@ -82,6 +83,7 @@ export default function BilanMonthlyPage() {
       <ChartCard title={`Évolution ${side} — top postes`} subtitle="12 mois — vue empilée" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={chartData}>
+            <ChartGradients />
             <defs>
               {grandsPostes.map((_, i) => (
                 <linearGradient key={i} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">

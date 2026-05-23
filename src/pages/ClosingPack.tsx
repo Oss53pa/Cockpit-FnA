@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { Printer, Sparkles, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, BarChart, Bar, Cell } from 'recharts';
+import { ChartGradients } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { useApp } from '../store/app';
@@ -106,6 +107,7 @@ export default function ClosingPackPage() {
             <div className="h-28 bg-primary-50/50 dark:bg-primary-950/50 rounded-xl p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={evolutionCA}>
+                  <ChartGradients />
                   <defs>
                     <linearGradient id="ca-gradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={ct.accent} stopOpacity={0.4} />
@@ -123,6 +125,7 @@ export default function ClosingPackPage() {
             <div className="h-28 bg-primary-50/50 dark:bg-primary-950/50 rounded-xl p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={ratios.slice(0, 5).map((r) => ({ name: r.code, value: r.value, status: r.status }))} layout="vertical">
+                  <ChartGradients />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {ratios.slice(0, 5).map((r, i) => (
                       <Cell key={i} fill={r.status === 'good' ? SEMANTIC.success : r.status === 'warn' ? SEMANTIC.warning : SEMANTIC.danger} />

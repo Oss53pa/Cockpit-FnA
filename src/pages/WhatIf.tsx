@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react';
 import { TrendingUp, Sliders, Target } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -99,15 +100,16 @@ export default function WhatIfPage() {
       <ChartCard title="Comparaison Actuel vs Simulé" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={chartData} barCategoryGap="30%">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="name" {...ct.axisProps} />
             <YAxis {...ct.axisProps} tickFormatter={fmtK} />
             <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
             <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
             <ReferenceLine y={0} stroke={ct.grid} />
-            <Bar dataKey="CA" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Marge" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Charges" fill={ct.at(3)} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="CA" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+            <Bar dataKey="Marge" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
+            <Bar dataKey="Charges" fill={`url(#${barGradId(3)})`} radius={[6, 6, 0, 0]} />
             <Line type="monotone" dataKey="Résultat" stroke={ct.accent} strokeWidth={3} dot={{ r: 6 }} />
           </ComposedChart>
         </ResponsiveContainer>

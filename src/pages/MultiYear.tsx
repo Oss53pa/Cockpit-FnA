@@ -14,6 +14,7 @@ import { computeBalance } from '../engine/balance';
 import { computeBilan, computeSIG } from '../engine/statements';
 import { fmtFull, fmtK, fmtPct } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 interface YearSnap {
@@ -133,14 +134,15 @@ export default function MultiYearPage() {
           <ChartCard title="Structure financière par exercice" subtitle="Total Actif vs Capitaux propres vs Trésorerie" accent={ct.at(2)}>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={snaps} barCategoryGap="30%">
+                <ChartGradients />
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="year" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                <Bar dataKey="totalActif" name="Total Actif" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="capPropres" name="Capitaux propres" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="treso" name="Trésorerie nette" fill={ct.accent} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="totalActif" name="Total Actif" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="capPropres" name="Capitaux propres" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="treso" name="Trésorerie nette" fill={ct.accent} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>

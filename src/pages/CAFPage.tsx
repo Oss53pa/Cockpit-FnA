@@ -14,6 +14,7 @@ import { useApp } from '../store/app';
 import { computeMonthlyTFT } from '../engine/flows';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { useCurrentOrg, useStatements } from '../hooks/useFinancials';
 
 export default function CAFPage() {
@@ -72,16 +73,17 @@ export default function CAFPage() {
       <ChartCard title="Décomposition CAF par mois" subtitle="Résultat + dotations − reprises − cessions" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={chartData} stackOffset="sign">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="mois" {...ct.axisProps} />
             <YAxis {...ct.axisProps} tickFormatter={fmtK} />
             <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
             <ReferenceLine y={0} stroke={ct.grid} />
-            <Bar dataKey="Résultat" stackId="caf" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Dotations" stackId="caf" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Reprises" stackId="caf" fill={ct.at(3)} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Cessions" stackId="caf" fill={ct.at(4)} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Résultat" stackId="caf" fill={`url(#${barGradId(0)})`} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Dotations" stackId="caf" fill={`url(#${barGradId(2)})`} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Reprises" stackId="caf" fill={`url(#${barGradId(3)})`} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Cessions" stackId="caf" fill={`url(#${barGradId(4)})`} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>

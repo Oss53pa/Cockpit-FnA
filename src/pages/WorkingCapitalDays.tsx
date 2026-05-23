@@ -11,6 +11,7 @@ import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useStatements, useRatios, useCurrentOrg } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients } from '../components/charts/ChartGradients';
 
 export default function WorkingCapitalDaysPage() {
   const org = useCurrentOrg();
@@ -82,6 +83,7 @@ export default function WorkingCapitalDaysPage() {
       <ChartCard title="Décomposition du cycle" subtitle="Plus le CCC est court, mieux c'est" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} barCategoryGap="30%">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="name" {...ct.axisProps} />
             <YAxis {...ct.axisProps} />

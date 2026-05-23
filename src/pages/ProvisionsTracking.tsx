@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Shield, TrendingUp, TrendingDown } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -65,13 +66,14 @@ export default function ProvisionsTrackingPage() {
       <ChartCard title="Mouvements mensuels" subtitle="Dotations vs Reprises sur 12 mois" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data.monthly} barCategoryGap="25%">
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="mois" {...ct.axisProps} />
             <YAxis {...ct.axisProps} tickFormatter={fmtK} />
             <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
             <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-            <Bar dataKey="Dotations" fill={ct.at(1)} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Reprises" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Dotations" fill={`url(#${barGradId(1)})`} radius={[6, 6, 0, 0]} />
+            <Bar dataKey="Reprises" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>

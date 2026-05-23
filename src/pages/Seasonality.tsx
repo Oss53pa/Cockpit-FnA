@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Calendar, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
+import { ChartGradients, barGradId } from '../components/charts/ChartGradients';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -68,6 +69,7 @@ export default function SeasonalityPage() {
       <ChartCard title="Index de saisonnalité mensuel" subtitle="100 = mois moyen · au-dessus = pic, en-dessous = creux" accent={ct.accent}>
         <ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={data}>
+            <ChartGradients />
             <CartesianGrid {...ct.gridProps} />
             <XAxis dataKey="mois" {...ct.axisProps} />
             <YAxis yAxisId="left" {...ct.axisProps} tickFormatter={fmtK} />
@@ -75,7 +77,7 @@ export default function SeasonalityPage() {
             <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
             <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
             <ReferenceLine yAxisId="right" y={100} stroke={ct.accent} strokeDasharray="3 3" label={{ value: 'Moyenne', fill: ct.accent, fontSize: 10 }} />
-            <Bar yAxisId="left" dataKey="ca" name="CA" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
+            <Bar yAxisId="left" dataKey="ca" name="CA" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
             <Line yAxisId="right" type="monotone" dataKey="index" name="Index saisonnier" stroke={ct.accent} strokeWidth={2.5} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
