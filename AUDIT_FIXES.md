@@ -21,7 +21,7 @@ Les schémas **ne sont pas compatibles** avec Cockpit FnA :
 **Cockpit FnA tourne en mode local-first (IndexedDB / Dexie)** :
 - Toutes les données métier (orgs, GL, périodes, budgets) restent dans le navigateur de l'utilisateur
 - Supabase n'est utilisé que pour l'auth (login/logout)
-- L'audit trail SHA-256 et le verrou des périodes fonctionnent **côté Dexie via les hooks** (`db.gl.hook('creating'/'updating'/'deleting')`)
+- L'audit trail SHA-256 est calculé à l'insertion (cf. `lib/auditHash.ts`) ; le verrou des périodes est appliqué **à la frontière métier**, dans `importGL()` via `assertPeriodOpen()` (`lib/periodLock.ts`), et NON via des hooks Dexie (`db.gl` est un cache de réplication/seed qui recopie des écritures de périodes déjà clôturées — un hook les bloquerait à tort)
 - Aucun besoin actuel de sync cloud
 
 → **Les migrations `001-011` restent dans `supabase/migrations/` pour référence future** mais ne sont pas appliquées sur le projet Atlas Studio. Si une migration cloud Cockpit est nécessaire un jour, deux pistes :

@@ -505,49 +505,27 @@ class CockpitDB extends Dexie {
 
 export const db = new CockpitDB();
 
-// ── Dexie hooks : verrouillage des periodes cloturees (P2-12) ──────
-// Toute tentative d'INSERT/UPDATE/DELETE sur une ecriture dont la date tombe
-// dans une periode `closed === true` est BLOQUEE par exception.
-// Couvre automatiquement : importGL, addEntry manuel, updateEntry, deleteEntry.
+// ── Verrouillage des périodes clôturées (P2-12) ────────────────────────────
 //
-// Override admin (a venir Phase B) : un utilisateur avec role 'accountant_admin'
-// pourra contourner via un flag context et tracer dans period_audit_log.
-async function assertWritable(orgId: string | undefined, date: string | undefined): Promise<void> {
-  if (!orgId || !date) return;
-  const periods = await db.periods.where('orgId').equals(orgId).toArray();
-  const year = parseInt(date.substring(0, 4), 10);
-  const month = parseInt(date.substring(5, 7), 10);
-  const period = periods.find((p) => p.year === year && p.month === month);
-  if (period?.closed) {
-    throw new Error(`Période ${period.id} (${date}) clôturée — écriture refusée. Utilisez "Réouvrir la période" pour modifier.`);
-  }
-}
-
-db.gl.hook('creating', function (_primKey, obj) {
-  // Hook synchrone Dexie — on lance la verification async sans bloquer.
-  // En cas de violation, l'exception remonte au caller.
-  this.onsuccess = () => { /* noop */ };
-  this.onerror = () => { /* noop */ };
-  void assertWritable(obj.orgId, obj.date).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('[periodLock] Insertion bloquée :', err.message);
-    throw err;
-  });
-});
-
-db.gl.hook('updating', function (mods, _primKey, obj) {
-  const newDate = (mods as Partial<GLEntry>).date ?? obj.date;
-  void assertWritable(obj.orgId, newDate).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('[periodLock] Modification bloquée :', err.message);
-    throw err;
-  });
-});
-
-db.gl.hook('deleting', function (_primKey, obj) {
-  void assertWritable(obj.orgId, obj.date).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('[periodLock] Suppression bloquée :', err.message);
-    throw err;
-  });
-});
+// Le verrou N'EST PAS posé via des hooks Dexie `db.gl.hook(...)`. Il est
+// appliqué à la FRONTIÈRE MÉTIER, dans `importGL()` (cf. engine/importer.ts),
+// qui appelle `assertPeriodOpen(date, orgId)` (cf. lib/periodLock.ts) AVANT
+// d'insérer de nouvelles écritures — refusant l'import dès qu'une date tombe
+// dans une période `closed`.
+//
+// Pourquoi PAS un hook Dexie :
+//   1. `db.gl` est un cache local alimenté par RÉPLICATION (pull Supabase →
+//      Dexie, cf. supabaseSync.ts) et par le SEEDING démo (demoSeed.ts). Ces
+//      écritures recopient légitimement des écritures historiques de périodes
+//      déjà clôturées — un verrou au niveau du hook les rejetterait et
+//      corromprait le cache (et casserait la restauration de sauvegarde).
+//      Les vraies mutations utilisateur passent par `dataProvider` → Supabase,
+//      jamais par `db.gl` directement.
+//   2. Un hook `creating/updating/deleting` est SYNCHRONE : il ne peut ni lire
+//      un autre object store (`periods`) depuis la transaction `gl`-scoped
+//      (→ "object store not found" en boucle au seeding), ni `await` une
+//      vérification async (la promesse se détache, l'écriture n'est jamais
+//      réellement bloquée).
+//
+// Override admin (à venir) : un rôle 'accountant_admin' pourra rouvrir une
+// période via `unlockPeriod()` (tracé dans l'audit log).
