@@ -32,8 +32,8 @@ export function Gauge({ value, max = 100, label, displayValue, unit, target, inv
 
   const formatted = displayValue ?? `${Number.isFinite(value) ? value.toFixed(value < 10 ? 1 : 0) : '—'}${unit ? ` ${unit}` : ''}`;
 
-  // Géométrie du demi-cercle (haut) : centre (60,62), rayon 48.
-  const cx = 60, cy = 62, r = 48, sw = 11;
+  // Géométrie du demi-cercle (haut) : centre (60,64), rayon 48.
+  const cx = 60, cy = 64, r = 48, sw = 12;
   const polar = (ang: number) => ({
     x: cx + r * Math.cos((ang * Math.PI) / 180),
     y: cy - r * Math.sin((ang * Math.PI) / 180),
@@ -44,26 +44,37 @@ export function Gauge({ value, max = 100, label, displayValue, unit, target, inv
     return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
   };
   const endAngle = 180 - (pct / 100) * 180;
+  const knob = polar(endAngle); // position du repère au bout de l'arc
 
-  // Id de dégradé unique par instance (évite les collisions entre jauges).
-  const gid = 'gauge-' + useId().replace(/:/g, '');
+  // Ids uniques par instance (évite les collisions entre jauges).
+  const uid = useId().replace(/:/g, '');
+  const gid = 'gauge-' + uid;
+  const fid = 'glow-' + uid;
 
   return (
     <div className="text-center">
-      <svg viewBox="0 0 120 72" className="w-[120px] h-[72px] mx-auto block">
+      <svg viewBox="0 0 120 78" className="w-[122px] h-[78px] mx-auto block">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={color} stopOpacity={0.5} />
+            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
             <stop offset="100%" stopColor={color} stopOpacity={1} />
           </linearGradient>
+          <filter id={fid} x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor={color} floodOpacity="0.45" />
+          </filter>
         </defs>
         {/* Piste */}
         <path d={arc(180, 0)} fill="none" stroke="rgb(var(--p-200))" strokeWidth={sw} strokeLinecap="round" />
-        {/* Valeur */}
+        {/* Valeur (avec lueur douce) */}
         {pct > 0.5 && (
-          <path d={arc(180, endAngle)} fill="none" stroke={`url(#${gid})`} strokeWidth={sw} strokeLinecap="round" className="transition-all duration-500 ease-spring" />
+          <>
+            <path d={arc(180, endAngle)} fill="none" stroke={`url(#${gid})`} strokeWidth={sw} strokeLinecap="round" filter={`url(#${fid})`} className="transition-all duration-500 ease-spring" />
+            {/* Repère arrondi au bout de l'arc */}
+            <circle cx={knob.x} cy={knob.y} r={sw / 2 + 1.5} fill="rgb(var(--bg-surface))" />
+            <circle cx={knob.x} cy={knob.y} r={sw / 2 - 1.5} fill={color} />
+          </>
         )}
-        <text x={cx} y={cy - 5} textAnchor="middle" className="num" style={{ fontSize: 17, fontWeight: 700, fill: color }}>
+        <text x={cx} y={cy - 6} textAnchor="middle" className="num" style={{ fontSize: 18, fontWeight: 700, fill: color }}>
           {formatted}
         </text>
       </svg>
