@@ -24,6 +24,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { useChartTheme } from '../lib/chartTheme';
+import { ChartGradients, barGradId, areaGradId } from '../components/charts/ChartGradients';
 import { fmtFull, fmtK } from '../lib/format';
 import { exportStatementsPDF } from '../engine/exporter';
 import { computeMonthlyBilan } from '../engine/monthly';
@@ -243,14 +244,15 @@ export default function DashboardHome() {
           <ChartCard title="Chiffre d'Affaires" subtitle="Réalisé · Budget · N-1 (mensuel)" className="lg:col-span-2" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={caData} barGap={2} barCategoryGap="30%">
+                <ChartGradients />
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="mois" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                <Bar dataKey="realise" name="Réalisé" fill={ct.at(0)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="budget" name="Budget" fill={ct.at(2)} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="n1" name="N-1" fill={ct.at(4)} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="realise" name="Réalisé" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="budget" name="Budget" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="n1" name="N-1" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -313,17 +315,12 @@ export default function DashboardHome() {
           <ChartCard title="Évolution de la Trésorerie Nette" subtitle="Cumul mensuel YTD — calculé depuis le Grand Livre" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={treso}>
-                <defs>
-                  <linearGradient id="colorTreso" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={ct.at(0)} stopOpacity={0.5} />
-                    <stop offset="100%" stopColor={ct.at(0)} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+                <ChartGradients />
                 <CartesianGrid {...ct.gridProps} />
                 <XAxis dataKey="mois" {...ct.axisProps} />
                 <YAxis {...ct.axisProps} tickFormatter={fmtK} />
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} />
-                <Area type="monotone" dataKey="solde" stroke={ct.at(0)} strokeWidth={2.5} fill="url(#colorTreso)" />
+                <Area type="monotone" dataKey="solde" stroke={ct.at(0)} strokeWidth={2.5} fill={`url(#${areaGradId(0)})`} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
