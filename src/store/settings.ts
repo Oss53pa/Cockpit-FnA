@@ -1,5 +1,6 @@
 // Paramètres personnalisables persistés en localStorage (par société)
 import { create } from 'zustand';
+import { safeLocalStorage } from '../lib/safeStorage';
 
 export type RatioTarget = {
   code: string;
@@ -40,7 +41,7 @@ const KEY = 'settings-ratio-targets';
 
 function load(): Record<string, RatioTarget> {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = safeLocalStorage.getItem(KEY);
     if (!raw) throw new Error();
     return JSON.parse(raw);
   } catch {
@@ -49,7 +50,7 @@ function load(): Record<string, RatioTarget> {
 }
 
 function persist(state: Record<string, RatioTarget>) {
-  localStorage.setItem(KEY, JSON.stringify(state));
+  safeLocalStorage.setItem(KEY, JSON.stringify(state));
 }
 
 export const useSettings = create<SettingsState>((set) => ({

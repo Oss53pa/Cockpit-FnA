@@ -6,7 +6,11 @@
  * puis re-prompt automatique.
  *
  * Réinit possible via "factory reset" qui efface aussi tous les paramètres.
+ *
+ * NB sécurité (SEC-04) : ce verrou est un garde-fou UI côté client, PAS une
+ * frontière de sécurité — la vraie protection des données est la RLS Supabase.
  */
+import { safeLocalStorage } from './safeStorage';
 
 const HASH_KEY = 'admin-pwd-hash';
 const SALT_KEY = 'admin-pwd-salt';
@@ -29,54 +33,54 @@ function generateSalt(): string {
 
 /** Indique si un mot de passe admin a déjà été configuré. */
 export function isAdminPasswordSet(): boolean {
-  return !!localStorage.getItem(HASH_KEY);
+  return !!safeLocalStorage.getItem(HASH_KEY);
 }
 
 /** Indique si la session admin est actuellement déverrouillée (< 30 min). */
 export function isAdminUnlocked(): boolean {
-  const until = parseInt(localStorage.getItem(SESSION_KEY) ?? '0', 10);
+  const until = parseInt(safeLocalStorage.getItem(SESSION_KEY) ?? '0', 10);
   return Date.now() < until;
 }
 
 /** Renouvelle la session après une activité. */
 export function refreshAdminSession() {
   if (isAdminUnlocked()) {
-    localStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DURATION_MS));
+    safeLocalStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DURATION_MS));
   }
 }
 
 /** Configure un nouveau mot de passe admin (premier setup ou changement). */
 export async function setAdminPassword(password: string): Promise<void> {
-  if (password.length < 4) throw new Error('Le mot de passe doit contenir au moins 4 caractères.');
+  if (password.length < 8) throw new Error('Le mot de passe doit contenir au moins 8 caractères.');
   const salt = generateSalt();
   const hash = await sha256Hex(salt + password);
-  localStorage.setItem(SALT_KEY, salt);
-  localStorage.setItem(HASH_KEY, hash);
+  safeLocalStorage.setItem(SALT_KEY, salt);
+  safeLocalStorage.setItem(HASH_KEY, hash);
   // Une fois configuré, on déverrouille immédiatement
-  localStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DURATION_MS));
+  safeLocalStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DURATION_MS));
 }
 
 /** Vérifie un mot de passe et déverrouille la session si correct. */
 export async function unlockAdmin(password: string): Promise<boolean> {
-  const expectedHash = localStorage.getItem(HASH_KEY);
-  const salt = localStorage.getItem(SALT_KEY);
+  const expectedHash = safeLocalStorage.getItem(HASH_KEY);
+  const salt = safeLocalStorage.getItem(SALT_KEY);
   if (!expectedHash || !salt) return false;
   const hash = await sha256Hex(salt + password);
   if (hash !== expectedHash) return false;
-  localStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DURATION_MS));
+  safeLocalStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DURATION_MS));
   return true;
 }
 
 /** Verrouille immédiatement la session. */
 export function lockAdmin() {
-  localStorage.removeItem(SESSION_KEY);
+  safeLocalStorage.removeItem(SESSION_KEY);
 }
 
 /** Supprime le mot de passe admin (réinit). À utiliser avec précaution. */
 export function resetAdminPassword() {
-  localStorage.removeItem(HASH_KEY);
-  localStorage.removeItem(SALT_KEY);
-  localStorage.removeItem(SESSION_KEY);
+  safeLocalStorage.removeItem(HASH_KEY);
+  safeLocalStorage.removeItem(SALT_KEY);
+  safeLocalStorage.removeItem(SESSION_KEY);
 }
 
 /** Change le mot de passe en vérifiant l'ancien d'abord. */

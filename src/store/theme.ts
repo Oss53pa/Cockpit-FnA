@@ -1,5 +1,6 @@
 // Palette globale appliquée à toute l'app (charts, tables, KPIs, dashboards)
 import { create } from 'zustand';
+import { safeLocalStorage } from '../lib/safeStorage';
 
 export type PaletteKey = string;
 
@@ -182,13 +183,13 @@ const CUSTOM_KEY = 'app-custom-palettes';
 
 export function loadCustomPalettes(): Record<string, Palette> {
   try {
-    const raw = localStorage.getItem(CUSTOM_KEY);
+    const raw = safeLocalStorage.getItem(CUSTOM_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
 
 function saveCustomPalettes(palettes: Record<string, Palette>) {
-  localStorage.setItem(CUSTOM_KEY, JSON.stringify(palettes));
+  safeLocalStorage.setItem(CUSTOM_KEY, JSON.stringify(palettes));
 }
 
 /** Toutes les palettes disponibles (built-in + custom) */
@@ -270,25 +271,25 @@ type ThemeState = {
 // custom (mix de vieilles couleurs marine/sable/etc.) continuent de la voir.
 const TWISTY_MIGRATION_KEY = 'twisty-migration-v3';
 try {
-  if (typeof window !== 'undefined' && !localStorage.getItem(TWISTY_MIGRATION_KEY)) {
-    localStorage.setItem(KEY, 'twisty');
+  if (typeof window !== 'undefined' && !safeLocalStorage.getItem(TWISTY_MIGRATION_KEY)) {
+    safeLocalStorage.setItem(KEY, 'twisty');
     // Purge la custom palette 'twisty' eventuelle
     try {
-      const raw = localStorage.getItem(CUSTOM_KEY);
+      const raw = safeLocalStorage.getItem(CUSTOM_KEY);
       if (raw) {
         const customs = JSON.parse(raw);
         if (customs && typeof customs === 'object' && 'twisty' in customs) {
           delete customs.twisty;
-          localStorage.setItem(CUSTOM_KEY, JSON.stringify(customs));
+          safeLocalStorage.setItem(CUSTOM_KEY, JSON.stringify(customs));
         }
       }
     } catch { /* invalid JSON — on laisse */ }
-    localStorage.setItem(TWISTY_MIGRATION_KEY, '1');
+    safeLocalStorage.setItem(TWISTY_MIGRATION_KEY, '1');
   }
 } catch { /* SSR / privacy mode */ }
 
 function loadKey(): string {
-  const v = localStorage.getItem(KEY);
+  const v = safeLocalStorage.getItem(KEY);
   if (!v) return 'twisty';
   const all = getAllPalettes();
   return v in all ? v : 'twisty';
@@ -308,7 +309,7 @@ export const useTheme = create<ThemeState>((set, get) => ({
   setPalette: (k) => {
     const all = { ...BUILTIN_PALETTES, ...get().customPalettes };
     const p = all[k] ?? BUILTIN_PALETTES.twisty;
-    localStorage.setItem(KEY, k);
+    safeLocalStorage.setItem(KEY, k);
     applyPalette(p);
     set({ paletteKey: k, palette: p });
   },
@@ -323,7 +324,7 @@ export const useTheme = create<ThemeState>((set, get) => ({
     saveCustomPalettes(customs);
     // Si la palette supprimée était active, revenir à graphite
     if (get().paletteKey === id) {
-      localStorage.setItem(KEY, 'twisty');
+      safeLocalStorage.setItem(KEY, 'twisty');
       applyPalette(BUILTIN_PALETTES.twisty);
       set({ customPalettes: customs, paletteKey: 'twisty', palette: BUILTIN_PALETTES.twisty });
     } else {
