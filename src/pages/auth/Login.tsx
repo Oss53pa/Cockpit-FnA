@@ -57,12 +57,19 @@ export default function Login() {
   const ssoUrl = `${ATLAS_STUDIO_URL}/portal/login?next=${encodeURIComponent(window.location.origin + next)}`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-950 dark:to-primary-900 p-4">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen flex items-center justify-center bg-bgpage dark:bg-primary-950 p-4 overflow-hidden">
+      {/* Halo d'accent de marque (sauge/terracotta selon la palette active) */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(60% 45% at 50% 0%, rgb(var(--accent) / 0.14), transparent 70%)' }}
+      />
+      <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <Sparkles className="w-8 h-8 text-primary-700 dark:text-primary-300" />
+          <div className="inline-flex items-center gap-2.5 mb-2">
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-accent/10 text-accent ring-1 ring-accent/20">
+              <Sparkles className="w-6 h-6" />
+            </span>
             <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
           </div>
           <p className="text-sm text-primary-500">Pilotage financier SYSCOHADA</p>
@@ -73,7 +80,7 @@ export default function Login() {
 
           {magicSent ? (
             <div className="text-center py-4">
-              <Mail className="w-10 h-10 mx-auto mb-3 text-primary-500" />
+              <Mail className="w-10 h-10 mx-auto mb-3 text-accent" />
               <p className="font-medium mb-1">Lien envoyé !</p>
               <p className="text-sm text-primary-500">
                 Consultez votre boîte <strong>{email}</strong> et cliquez sur le lien de connexion.
@@ -133,7 +140,7 @@ export default function Login() {
 
                 {error && <p className="text-xs text-error">{error}</p>}
 
-                <button type="submit" disabled={loading} className="btn-primary w-full">
+                <button type="submit" disabled={loading} className="btn-accent w-full">
                   {loading ? (
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
