@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, ArrowLeft, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const ATLAS_STUDIO_URL = 'https://atlas-studio.org';
@@ -44,12 +44,8 @@ export default function ForgotPassword() {
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(60% 45% at 50% 0%, rgb(var(--accent) / 0.14), transparent 70%)' }} />
       <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2.5 mb-2">
-            <span className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-accent/10 text-accent ring-1 ring-accent/20">
-              <Sparkles className="w-6 h-6" />
-            </span>
-            <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
-          </div>
+          <h1 className="font-display text-5xl leading-none text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary-400 mt-3 font-medium">Pilotage financier SYSCOHADA</p>
         </div>
 
         <div className="card p-8">

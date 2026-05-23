@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LogIn, Mail, Lock, Sparkles, ExternalLink } from 'lucide-react';
+import { LogIn, Mail, Lock, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 const ATLAS_STUDIO_URL = 'https://atlas-studio.org';
@@ -66,13 +66,8 @@ export default function Login() {
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2.5 mb-2">
-            <span className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-accent/10 text-accent ring-1 ring-accent/20">
-              <Sparkles className="w-6 h-6" />
-            </span>
-            <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
-          </div>
-          <p className="text-sm text-primary-500">Pilotage financier SYSCOHADA</p>
+          <h1 className="font-display text-5xl leading-none text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary-400 mt-3 font-medium">Pilotage financier SYSCOHADA</p>
         </div>
 
         <div className="card p-8">
@@ -94,7 +89,6 @@ export default function Login() {
                 className="btn-primary w-full mb-3"
                 title="Connexion via votre compte Atlas Studio"
               >
-                <Sparkles className="w-4 h-4" />
                 Se connecter avec Atlas Studio
                 <ExternalLink className="w-3 h-3 opacity-70" />
               </a>

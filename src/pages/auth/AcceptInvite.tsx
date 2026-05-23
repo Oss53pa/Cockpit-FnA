@@ -15,7 +15,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Lock, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Lock, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { toast } from '../../components/ui/Toast';
 
@@ -182,11 +182,8 @@ export default function AcceptInvite() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-bgpage">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <Sparkles className="w-7 h-7 text-accent" />
-            <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-50">Cockpit FnA</h1>
-          </div>
-          <p className="text-sm text-primary-500">Définissez votre mot de passe</p>
+          <h1 className="font-display text-5xl leading-none text-primary-900 dark:text-primary-50">Cockpit FnA</h1>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary-400 mt-3 font-medium">Définissez votre mot de passe</p>
         </div>
 
         <div className="card p-7">
@@ -269,7 +266,7 @@ export default function AcceptInvite() {
             <button
               type="submit"
               disabled={submitting || password.length < 8 || password !== confirmPassword}
-              className="btn-clay w-full"
+              className="btn-accent w-full"
             >
               {submitting ? 'Validation…' : 'Définir mon mot de passe et continuer →'}
             </button>

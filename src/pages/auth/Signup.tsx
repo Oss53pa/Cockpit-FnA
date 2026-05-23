@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Mail, Lock, User, Building2, Sparkles, ExternalLink } from 'lucide-react';
+import { UserPlus, Mail, Lock, User, Building2, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 const ATLAS_STUDIO_URL = 'https://atlas-studio.org';
@@ -72,13 +72,8 @@ export default function Signup() {
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(60% 45% at 50% 0%, rgb(var(--accent) / 0.14), transparent 70%)' }} />
       <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2.5 mb-2">
-            <span className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-accent/10 text-accent ring-1 ring-accent/20">
-              <Sparkles className="w-6 h-6" />
-            </span>
-            <h1 className="text-2xl font-bold text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
-          </div>
-          <p className="text-sm text-primary-500">Créez votre espace de pilotage</p>
+          <h1 className="font-display text-5xl leading-none text-primary-900 dark:text-primary-100">Cockpit FnA</h1>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary-400 mt-3 font-medium">Créez votre espace de pilotage</p>
         </div>
 
         <div className="card p-8">
@@ -103,7 +98,6 @@ export default function Signup() {
                 href={`${ATLAS_STUDIO_URL}/portal/signup?next=${encodeURIComponent(window.location.origin + '/home')}`}
                 className="btn-primary w-full mb-3"
               >
-                <Sparkles className="w-4 h-4" />
                 Créer un compte Atlas Studio
                 <ExternalLink className="w-3 h-3 opacity-70" />
               </a>
