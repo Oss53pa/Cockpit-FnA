@@ -222,6 +222,16 @@ export default function CashflowForecast() {
               pointBorderColor={{ theme: 'background' }}
               enableArea
               areaOpacity={0.12}
+              defs={[{
+                id: 'cgNivoGrad',
+                type: 'linearGradient',
+                x1: 0, y1: 0, x2: 0, y2: 1,
+                colors: [
+                  { offset: 0, color: 'inherit', opacity: 0.95 },
+                  { offset: 100, color: 'inherit', opacity: 0.5 },
+                ],
+              }]}
+              fill={[{ match: '*', id: 'cgNivoGrad' }]}
               enableGridY
               axisLeft={{ format: (v: number) => fmtK(v) }}
               theme={nivoTheme}
@@ -254,6 +264,16 @@ export default function CashflowForecast() {
               padding={0.25}
               colors={({ data }) => ((data as any).value >= 0 ? SEMANTIC.success : SEMANTIC.danger)}
               colorBy="indexValue"
+              defs={[{
+                id: 'cgNivoGrad',
+                type: 'linearGradient',
+                x1: 0, y1: 0, x2: 0, y2: 1,
+                colors: [
+                  { offset: 0, color: 'inherit', opacity: 0.95 },
+                  { offset: 100, color: 'inherit', opacity: 0.5 },
+                ],
+              }]}
+              fill={[{ match: '*', id: 'cgNivoGrad' }]}
               axisBottom={{ tickRotation: -45 }}
               axisLeft={{ format: (v: number) => fmtK(v) }}
               enableLabel={false}

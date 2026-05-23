@@ -110,6 +110,16 @@ export default function ParetoAccounts() {
               return ct.accent + '47';                    // 28% opacity
             }}
             colorBy="indexValue"
+            defs={[{
+              id: 'cgNivoGrad',
+              type: 'linearGradient',
+              x1: 0, y1: 0, x2: 0, y2: 1,
+              colors: [
+                { offset: 0, color: 'inherit', opacity: 0.95 },
+                { offset: 100, color: 'inherit', opacity: 0.5 },
+              ],
+            }]}
+            fill={[{ match: '*', id: 'cgNivoGrad' }]}
             axisBottom={{
               tickRotation: -45,
               tickSize: 0,
@@ -159,6 +169,16 @@ export default function ParetoAccounts() {
             theme={{ ...nivoTheme, grid: { line: { stroke: 'rgb(var(--p-200))', strokeDasharray: '2 4' } } }}
             enableArea
             areaOpacity={0.08}
+            defs={[{
+              id: 'cgNivoGrad',
+              type: 'linearGradient',
+              x1: 0, y1: 0, x2: 0, y2: 1,
+              colors: [
+                { offset: 0, color: 'inherit', opacity: 0.95 },
+                { offset: 100, color: 'inherit', opacity: 0.5 },
+              ],
+            }]}
+            fill={[{ match: '*', id: 'cgNivoGrad' }]}
             markers={[
               {
                 axis: 'y',

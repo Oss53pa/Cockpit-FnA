@@ -271,6 +271,16 @@ export default function ExecutiveSummary() {
               maxValue={100}
               margin={{ top: 40, right: 80, bottom: 40, left: 80 }}
               colors={[ct.at(0), ct.at(3) + '80']}
+              defs={[{
+                id: 'cgNivoGrad',
+                type: 'linearGradient',
+                x1: 0, y1: 0, x2: 0, y2: 1,
+                colors: [
+                  { offset: 0, color: 'inherit', opacity: 0.95 },
+                  { offset: 100, color: 'inherit', opacity: 0.5 },
+                ],
+              }]}
+              fill={[{ match: '*', id: 'cgNivoGrad' }]}
               borderColor={{ from: 'color' }}
               gridLabelOffset={18}
               dotSize={6}
@@ -297,6 +307,16 @@ export default function ExecutiveSummary() {
               padding={0.35}
               colors={({ data }) => (data as any).color as string}
               colorBy="indexValue"
+              defs={[{
+                id: 'cgNivoGrad',
+                type: 'linearGradient',
+                x1: 0, y1: 0, x2: 0, y2: 1,
+                colors: [
+                  { offset: 0, color: 'inherit', opacity: 0.95 },
+                  { offset: 100, color: 'inherit', opacity: 0.5 },
+                ],
+              }]}
+              fill={[{ match: '*', id: 'cgNivoGrad' }]}
               borderRadius={3}
               axisBottom={{ tickRotation: -25, legendOffset: 42 }}
               axisLeft={{ format: (v: number) => fmtK(v) }}
@@ -324,6 +344,16 @@ export default function ExecutiveSummary() {
               padAngle={1}
               cornerRadius={4}
               colors={[ct.at(0), ct.at(3), ct.at(4)]}
+              defs={[{
+                id: 'cgNivoGrad',
+                type: 'linearGradient',
+                x1: 0, y1: 0, x2: 0, y2: 1,
+                colors: [
+                  { offset: 0, color: 'inherit', opacity: 0.95 },
+                  { offset: 100, color: 'inherit', opacity: 0.5 },
+                ],
+              }]}
+              fill={[{ match: '*', id: 'cgNivoGrad' }]}
               borderWidth={2}
               borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
               enableArcLinkLabels={false}
