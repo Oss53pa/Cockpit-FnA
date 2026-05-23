@@ -10,7 +10,7 @@
 import { useCloudData } from './useCloudData';
 import type { ImportLog, Organization, Period } from '../db/schema';
 import { dataProvider } from '../db/provider';
-import { computeBalance } from '../engine/balance';
+import { computeBalance, type BalanceRow } from '../engine/balance';
 import { computeBilan, computeSIG } from '../engine/statements';
 import { computeRatios } from '../engine/ratios';
 import { computeMonthlyBilan, computeMonthlyCR } from '../engine/monthly';
@@ -195,8 +195,30 @@ export function useStatements() {
   return { balance, movements, bilan, cr, sig, unclassifiedAccounts: bilan.unclassifiedAccounts };
 }
 
+/**
+ * Balance d'OUVERTURE (à-nouveaux) = balance cumulée − mouvements de l'exercice,
+ * compte par compte. Sert à dériver les capitaux propres / total actif
+ * d'ouverture pour un ROE/ROA en moyenne (B-3).
+ */
+function subtractBalances(cumul: BalanceRow[], mov: BalanceRow[]): BalanceRow[] {
+  const movByAcc = new Map(mov.map((r) => [r.account, r]));
+  return cumul.map((r) => {
+    const solde = r.solde - (movByAcc.get(r.account)?.solde ?? 0);
+    return {
+      account: r.account,
+      label: r.label,
+      debit: solde > 0 ? solde : 0,
+      credit: solde < 0 ? -solde : 0,
+      solde,
+      soldeD: solde > 0 ? solde : 0,
+      soldeC: solde < 0 ? -solde : 0,
+    };
+  });
+}
+
 export function useRatios() {
   const balance = useBalance();
+  const movements = useBalanceMovements();
   const customTargets = useSettings((s) => s.ratioTargets);
   const fromMonth = useApp((s) => s.fromMonth);
   const toMonth = useApp((s) => s.toMonth);
@@ -242,7 +264,14 @@ export function useRatios() {
   }
   if (periodDays <= 0) periodDays = 360;
 
-  return computeRatios(balance, customTargets, { periodDays });
+  // Capitaux propres / total actif d'OUVERTURE → ROE/ROA en moyenne (B-3).
+  // L'ouverture = cumul − mouvements ; son bilan donne _CP et _BZ d'ouverture.
+  const opening = movements.length > 0 ? subtractBalances(balance, movements) : null;
+  const bilanOuverture = opening ? computeBilan(opening) : null;
+  const previousCapPropres = bilanOuverture?.passif.find((l) => l.code === '_CP')?.value;
+  const previousTotalActif = bilanOuverture?.actif.find((l) => l.code === '_BZ')?.value;
+
+  return computeRatios(balance, customTargets, { periodDays, previousCapPropres, previousTotalActif });
 }
 
 export function useMonthlyCR() {

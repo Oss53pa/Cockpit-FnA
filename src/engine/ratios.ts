@@ -141,6 +141,22 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   })();
   const caf = sig.resultat + dotN - repN;
 
+  // ── ROE / ROA — dénominateurs (B-3) ──────────────────────────────────────
+  // Si les capitaux/actifs d'OUVERTURE sont fournis (opts.*), on utilise la
+  // moyenne (ouverture + clôture)/2 (convention IFRS/US-GAAP). Sinon, fallback :
+  // capitaux/actifs de clôture diminués du résultat de l'exercice (≈ ouverture).
+  // GARDE-FOU : si le dénominateur est ≤ 0 (situation nette négative, ou résultat
+  // qui dépasse les capitaux propres), le ratio n'est PAS significatif → NaN
+  // (affiché « N/A ») plutôt qu'un pourcentage négatif aberrant.
+  const roeDenom = opts?.previousCapPropres !== undefined
+    ? (opts.previousCapPropres + capPropres) / 2
+    : (capPropres - sig.resultat);
+  const roaDenom = opts?.previousTotalActif !== undefined
+    ? (opts.previousTotalActif + totalActif) / 2
+    : (totalActif - sig.resultat);
+  const roe = roeDenom > 0 ? pct(sig.resultat, roeDenom) : NaN;
+  const roa = roaDenom > 0 ? pct(sig.resultat, roaDenom) : NaN;
+
   // Helper factorisé : crée une entrée ratio avec application des cibles custom
   const mk = (code: string, label: string, family: Ratio['family'], value: number, unit: Ratio['unit'], formula: string, fallbackTarget: number, inverse = false): Ratio => {
     const custom = tg(code);
@@ -193,22 +209,12 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
     // Convention IFRS/US-GAAP : si capitaux d'ouverture connus, utiliser la
     // moyenne (ouverture + clôture) / 2. Sinon fallback : capPropres - résultat
     // (approximation qui ignore apports/distributions intermédiaires).
-    mk('ROE', 'ROE', 'Rentabilité',
-      pct(sig.resultat,
-        opts?.previousCapPropres !== undefined
-          ? (opts.previousCapPropres + capPropres) / 2
-          : (capPropres - sig.resultat)),
-      '%',
+    mk('ROE', 'ROE', 'Rentabilité', roe, '%',
       opts?.previousCapPropres !== undefined
         ? 'Résultat net / [(Capitaux propres N-1 + N) / 2]'
         : 'Résultat net / Capitaux propres (ouverture estimée)',
       12),
-    mk('ROA', 'ROA', 'Rentabilité',
-      pct(sig.resultat,
-        opts?.previousTotalActif !== undefined
-          ? (opts.previousTotalActif + totalActif) / 2
-          : (totalActif - sig.resultat)),
-      '%',
+    mk('ROA', 'ROA', 'Rentabilité', roa, '%',
       opts?.previousTotalActif !== undefined
         ? 'Résultat net / [(Total Actif N-1 + N) / 2]'
         : 'Résultat net / Total Actif (ouverture estimée)',

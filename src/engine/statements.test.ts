@@ -76,6 +76,48 @@ describe('computeSIG', () => {
   });
 });
 
+describe('SIG — classification des dotations financières / HAO (B-1)', () => {
+  // 681 = dotation exploitation, 686 = dotation financière, 687 = dotation HAO.
+  // Le RÉSULTAT NET doit être INVARIANT (la reclassification ne déplace les
+  // montants qu'entre RE / RF / RHAO), mais les SIG intermédiaires doivent
+  // refléter le bon rangement SYSCOHADA.
+  const rows = [
+    row('701', 0, 10000),  // Ventes 10 000
+    row('601', 3000, 0),   // Achats 3 000
+    row('681', 500, 0),    // Dotation amort. EXPLOITATION
+    row('686', 200, 0),    // Dotation à caractère FINANCIER
+    row('687', 100, 0),    // Dotation HAO
+    row('671', 50, 0),     // Charge financière (intérêts)
+    row('82', 0, 300),     // Produit HAO (prix de cession)
+  ];
+
+  it('exclut 686/687 du résultat d\'exploitation', () => {
+    const { sig } = computeSIG(rows);
+    // EBE = 10000 − 3000 = 7000 ; dotations EXPLOITATION = 681 = 500 → RE = 6500.
+    // (l'ancien code soustrayait 686+687 ici → RE aurait été 6200)
+    expect(sig.re).toBe(6500);
+  });
+
+  it('rattache la dotation financière (686) au résultat financier', () => {
+    const { sig } = computeSIG(rows);
+    // RF = produits fin. (0) − [charges fin. 671 (50) + dot. fin. 686 (200)] = −250
+    expect(sig.rf).toBe(-250);
+  });
+
+  it('rattache la dotation HAO (687) au résultat HAO', () => {
+    const { sig } = computeSIG(rows);
+    // RHAO = produit HAO (300) − [charges HAO (0) + dot. HAO 687 (100)] = 200
+    expect(sig.rhao).toBe(200);
+  });
+
+  it('laisse le RÉSULTAT NET inchangé (invariance de la reclassification)', () => {
+    const { sig } = computeSIG(rows);
+    // Net = 10300 produits − 3850 charges = 6450, et = rao + rhao − part − impôt
+    expect(sig.resultat).toBe(6450);
+    expect(sig.rao + sig.rhao).toBe(sig.resultat); // part = impôt = 0 ici
+  });
+});
+
 describe('cohérence Bilan vs SIG', () => {
   it('le résultat du Bilan et le résultat net du SIG sont identiques sur un dataset balanced', () => {
     const rows = [
@@ -91,5 +133,29 @@ describe('cohérence Bilan vs SIG', () => {
     const { sig } = computeSIG(rows);
     const bilanResultat = bilan.passif.find((l) => l.code === 'CF')?.value ?? 0;
     expect(Math.abs(bilanResultat - sig.resultat)).toBeLessThan(1);
+  });
+
+  it('boucle Bilan = CR même avec dotations financières/HAO et comptes classe 8', () => {
+    const rows = [
+      row('101', 0, 20000),  // Capital
+      row('231', 12000, 0),  // Immobilisations
+      row('521', 8000, 0),   // Banque
+      row('701', 0, 15000),  // Ventes
+      row('601', 6000, 0),   // Achats
+      row('681', 800, 0),    // Dotation exploitation
+      row('686', 300, 0),    // Dotation financière
+      row('687', 150, 0),    // Dotation HAO
+      row('82', 0, 500),     // Produit HAO
+      row('81', 400, 0),     // Charge HAO (VNC cédée)
+      row('89', 200, 0),     // Impôt sur le résultat
+    ];
+    const bilan = computeBilan(rows);
+    const { sig } = computeSIG(rows);
+    const bilanResultat = bilan.passif.find((l) => l.code === 'CF')?.value ?? 0;
+    // Source unique → égalité stricte (au flottant près)
+    expect(Math.abs(bilanResultat - sig.resultat)).toBeLessThan(1);
+    // Net = 15500 produits (701=15000 + 82=500) − 7850 charges
+    // (cl.6: 601+681+686+687=7250 ; 81=400 ; 89=200) = 7650
+    expect(sig.resultat).toBe(7650);
   });
 });

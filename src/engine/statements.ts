@@ -123,6 +123,24 @@ export function findUnclassifiedAccounts(rows: BalanceRow[]): UnclassifiedAccoun
   return result.sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
 }
 
+/**
+ * Résultat net de l'exercice = Σ produits (classe 7 + produits HAO 82/84/86/88)
+ * − Σ charges (classe 6 + charges HAO 81/83/85/87/89).
+ *
+ * SOURCE UNIQUE du résultat net : appelée à la fois par le Bilan (poste CF) et
+ * par le Compte de résultat / SIG (`computeSIG`). Garantit par construction le
+ * BOUCLAGE Bilan = Compte de résultat (B-2) — les deux ne peuvent plus diverger
+ * tant qu'on leur passe la même balance. Définition complète (toutes classes 6/7
+ * + 8 de gestion) → indépendante du découpage en SIG, donc robuste aux comptes
+ * atypiques.
+ */
+export function computeNetResult(rows: BalanceRow[]): number {
+  const charges = sumBy(rows, ['6', '81', '83', '85', '87', '89']);
+  const produits = -sumBy(rows, ['7', '82', '84', '86', '88']);
+  const net = produits - charges;
+  return net === 0 ? 0 : net; // normalise -0 → 0
+}
+
 export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { actif: Line[]; passif: Line[]; totalActif: number; totalPassif: number; unclassifiedAccounts: UnclassifiedAccount[] } {
   // Fonctions d'aide : solde D positif pour actif, solde C positif pour passif.
   // Utilise sumMoneyWhere (Money interne, bigint) pour éviter les erreurs
@@ -140,9 +158,7 @@ export function computeBilan(rows: BalanceRow[], movements?: BalanceRow[]): { ac
   // sans objet, etc.) etait OMIS — provoquait une sous-estimation des produits
   // exceptionnels et donc du résultat net dans certains exercices.
   const resSource = movements && movements.length > 0 ? movements : rows;
-  const charges = sumBy(resSource, ['6', '81', '83', '85', '87', '89']);
-  const produits = -sumBy(resSource, ['7', '82', '84', '86', '88']);
-  const resultat = produits - charges;
+  const resultat = computeNetResult(resSource);
 
   // ── ACTIF ──────────────────────────────────────────────────────────
   // Approche par solde net : chaque compte de classes 2-5 apparaît UNE SEULE FOIS
@@ -396,10 +412,17 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const impotsTaxes = soldeD('64') - soldeC('64');
   const autresCharges = soldeD('65') - soldeC('65');
   const personnel = soldeD('66') - soldeC('66');
-  // Dotations nettes = (D−C) des classes 68 & 69 d'exploitation, diminuées des
-  // reprises nettes sur la classe 79. On utilise le NET (soldeD − soldeC) pour
-  // chaque classe pour gérer correctement les éventuels soldes inversés.
-  const dotations = (soldeD('68', '69') - soldeC('68', '69')) - (soldeC('79') - soldeD('79'));
+  // Dotations d'EXPLOITATION uniquement (SYSCOHADA art. 38) :
+  //   = toutes dotations (68/69 net) − dotations à caractère FINANCIER (686/696)
+  //     − dotations à caractère HAO (687/697), diminuées des reprises nettes 79.
+  // Les dotations financières/HAO sont reclassées plus bas dans le résultat
+  // financier / HAO. On part de l'agrégat 68/69 COMPLET puis on retranche les
+  // sous-ensembles fin./HAO : aucun compte 68x/69x n'est ainsi perdu (le
+  // résultat net reste exhaustif), seul le RANGEMENT entre RE/RF/RHAO est corrigé.
+  const dotFin = soldeD('686', '696') - soldeC('686', '696');
+  const dotHAO = soldeD('687', '697') - soldeC('687', '697');
+  const dotExpl = (soldeD('68', '69') - soldeC('68', '69')) - dotFin - dotHAO;
+  const dotations = dotExpl - (soldeC('79') - soldeD('79'));
 
   // SIG — Marge brute SYSCOHADA (sans double comptage des RRR)
   // Les ventes brutes (venteMarch / venteProd) n'incluent PAS les comptes
@@ -421,20 +444,23 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const ebe = valeurAjoutee - personnel;
   const re = ebe - dotations;
 
-  // Résultat financier
+  // Résultat financier — intègre les dotations à caractère financier (686/696)
   const prodFin = soldeC('77') - soldeD('77');
-  const chargeFin = soldeD('67') - soldeC('67');
+  const chargeFin = (soldeD('67') - soldeC('67')) + dotFin;
   const rf = prodFin - chargeFin;
 
-  // Résultat HAO
+  // Résultat HAO — intègre les dotations à caractère HAO (687/697)
   const prodHAO = soldeC('82', '84', '86', '88') - soldeD('82', '84', '86', '88');
-  const chargeHAO = soldeD('81', '83', '85') - soldeC('81', '83', '85');
+  const chargeHAO = (soldeD('81', '83', '85') - soldeC('81', '83', '85')) + dotHAO;
   const rhao = prodHAO - chargeHAO;
 
   const rao = re + rf;
   const participation = soldeD('87') - soldeC('87');
   const impot = soldeD('89') - soldeC('89');
-  const resultat = rao + rhao - participation - impot;
+  // Résultat net via la SOURCE UNIQUE (computeNetResult) → bouclage Bilan = CR
+  // garanti. Pour un plan standard, ce résultat est strictement égal à
+  // rao + rhao − participation − impôt (décomposition exhaustive ci-dessus).
+  const resultat = computeNetResult(rows);
 
   const sig: SIG = { ca, margeBrute, valeurAjoutee, ebe, re, rf, rao, rhao, resultat, impot };
 

@@ -1,7 +1,7 @@
 // TFT, TAFIRE, Variation des capitaux propres — SYSCOHADA révisé 2017
 //
 // Source de données : Supabase via dataProvider (obligatoire).
-import { computeBalance } from './balance';
+import { computeBalance, type BalanceRow } from './balance';
 import { computeBilan, computeSIG, Line } from './statements';
 import { dataProvider } from '../db/provider';
 import { sumMoneyWhere } from '../lib/moneySum';
@@ -29,6 +29,17 @@ async function getMovementsByPrefix(orgId: string, year: number, prefixes: strin
     c += e.credit;
   }
   return { debit: d, credit: c };
+}
+
+// Dotations sur IMMOBILISATIONS = 681 (hors 6817 = prov. actif circulant) + 687
+// (DAP HAO sur immo). À utiliser pour reconstituer les ACQUISITIONS brutes
+// d'immobilisations — à ne PAS confondre avec les dotations TOTALES (68+69) qui
+// servent à la CAFG. Source unique partagée par TFT annuel/mensuel et TAFIRE
+// (M-2 : avant, le TFT mensuel et la TAFIRE utilisaient à tort 68+69 complet).
+export function sumDotationsImmo(rows: BalanceRow[]): number {
+  return rows
+    .filter((r) => (r.account.startsWith('681') && !r.account.startsWith('6817')) || r.account.startsWith('687'))
+    .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
 }
 
 async function buildSnapshots(orgId: string, year: number) {
@@ -85,16 +96,8 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
   const dotationsNettes = dotationsTot - reprises;
 
-  // Dotations sur IMMOBILISATIONS uniquement (pour le calcul des acquisitions)
-  // = 681 (DAP exploitation hors 6817 actif circulant) + 687 (DAP HAO immo)
-  // EXCLUT 691 (provisions risques exploitation) et 6817 (provisions actif circulant)
-  // qui ne se rattachent PAS aux immobilisations.
-  const dotationsImmo = closingBal
-    .filter((r) =>
-      (r.account.startsWith('681') && !r.account.startsWith('6817'))
-      || r.account.startsWith('687')
-    )
-    .reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
+  // Dotations sur IMMOBILISATIONS uniquement (pour le calcul des acquisitions).
+  const dotationsImmo = sumDotationsImmo(closingBal);
 
   // Plus / moins values sur cessions
   // (P1-4) VNC strictement compte 685 (Valeur nette comptable des immobilisations
@@ -128,12 +131,15 @@ export async function computeTFT(orgId: string, year: number): Promise<TFTResult
   const varBFR = varStocks + varCreances + varDettesExpl;
   const fluxOperationnels = cafg + varBFR;
 
-  // Flux d'investissement
-  // Acquisitions = ΔImmo nette + dotations IMMO (réintégration de l'amortissement)
-  // → ΔBrut = ΔNet + Δamortissement = ΔNet + dotImmo (on suppose pas de cession majeure)
+  // Flux d'investissement — reconstitution des ACQUISITIONS BRUTES à partir de
+  // la VNC (valeur nette comptable) :
+  //   VNC_clôture = VNC_ouverture + acquisitions − dotations_immo − VNC_cédée
+  //   ⇒ acquisitions = ΔVNC + dotations_immo + VNC_cédée
+  // (M-1) On ajoute la VNC des immo CÉDÉES (685), sinon les cessions minorent à
+  // tort les acquisitions calculées les exercices où il y a des sorties d'actif.
   const immoO = bilanO.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
   const immoC = bilanC.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
-  const acquisitions = -(immoC - immoO + dotationsImmo);
+  const acquisitions = -(immoC - immoO + dotationsImmo + vnc);
   const cessions = pxCess; // prix des cessions (82)
   const fluxInvestissement = acquisitions + cessions;
 
@@ -254,6 +260,10 @@ async function computeTFTForRange(orgId: string, year: number, fromMonth: number
   const reprises = periodBal
     .filter((r) => r.account.startsWith('78') || r.account.startsWith('79'))
     .reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
+  // (M-2) Dotations sur IMMOBILISATIONS (681 hors 6817 + 687) — pour les
+  // acquisitions. Distinctes des dotations TOTALES (ci-dessus) qui alimentent la
+  // CAFG. Avant, le TFT mensuel utilisait à tort 68+69 complet → acquisitions surévaluées.
+  const dotationsImmo = sumDotationsImmo(periodBal);
   // (P1-4) VNC cédée : compte 685 strict (Valeur nette comptable des
   // immobilisations cédées). 81 entier englobait des charges HAO non liées.
   const vnc = periodBal.filter((r) => r.account.startsWith('685')).reduce((s, r) => s + r.soldeD, 0);
@@ -271,7 +281,8 @@ async function computeTFTForRange(orgId: string, year: number, fromMonth: number
 
   const immoO = bilanO.actif.filter((l) => ['AD','AE','AF','AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
   const immoC = bilanC.actif.filter((l) => ['AD','AE','AF','AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
-  const acquisitions = -(immoC - immoO + dotations);
+  // (M-1/M-2) Acquisitions brutes = ΔVNC + dotations IMMO + VNC cédée.
+  const acquisitions = -(immoC - immoO + dotationsImmo + vnc);
   const fluxInv = acquisitions + pxCess;
 
   // (P1-5) Capital + emprunts : on utilise les MOUVEMENTS BRUTS de la période
@@ -390,18 +401,18 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
   const totalRessourcesStables = cafg + augCapital + augSubv + pxCess + newEmprunts;
 
   // Emplois stables
+  // (M-1/M-2) Investissements = acquisitions brutes = ΔVNC + dotations IMMO
+  // (681 hors 6817 + 687, et NON 68+69 complet) + VNC des immo cédées (685).
+  const dotationsImmo = sumDotationsImmo(closingBal);
   const immoO = bilanO.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
   const immoC = bilanC.actif.filter((l) => ['AD', 'AE', 'AF', 'AG'].includes(l.code)).reduce((s, l) => s + l.value, 0);
-  const investissements = Math.max((immoC - immoO + dotations), 0);
-  // (P0-6) Distributions de dividendes lues du compte 457 (Associés - dividendes
-  // à payer). SYSCOHADA art. 38 — comptes 457x : dividendes à verser aux associés.
-  // Les paiements effectués dans l'exercice apparaissent en débits de 457
-  // (diminution de la dette de l'entreprise vis-à-vis des associés).
-  // Calcul : variation négative (= versements) + dotation initiale via résultat N-1.
-  const dividendesPayes = closingBal
-    .filter((r) => r.account.startsWith('457'))
-    .reduce((s, r) => s + r.soldeD - r.soldeC, 0);
-  const distributions = Math.max(dividendesPayes, 0);
+  const investissements = Math.max((immoC - immoO + dotationsImmo + vnc), 0);
+  // (m-1) Distributions de dividendes = mouvements DÉBIT bruts du compte 457
+  // (paiements effectifs aux associés), cohérent avec le TFT annuel (l.~162) et
+  // computeCapitalVariation. Le solde NET pouvait sous-estimer les versements
+  // quand une dette de dividende est constatée puis soldée dans le même exercice.
+  const movDistrib = await getMovementsByPrefix(orgId, year, ['457']);
+  const distributions = movDistrib.debit;
 
   const totalEmploisStables = investissements + distributions + remboursements;
 

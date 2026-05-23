@@ -55,4 +55,34 @@ describe('computeRatios', () => {
       expect(['good', 'warn', 'alert']).toContain(r.status);
     }
   });
+
+  describe('ROE / ROA — capitaux d\'ouverture (B-3)', () => {
+    // Capital 1000 + résultat 300 → capitaux propres clôture = 1300.
+    const rows = [
+      row('101', 0, 1000), // Capital
+      row('701', 0, 500),  // Ventes
+      row('601', 200, 0),  // Achats → résultat 300
+      row('521', 1300, 0), // Banque (équilibre)
+    ];
+
+    it('utilise la moyenne (ouverture+clôture) quand previousCapPropres est fourni', () => {
+      const roeAvg = computeRatios(rows, undefined, { previousCapPropres: 1000 })
+        .find((r) => r.code === 'ROE')!.value;
+      // 300 / [(1000 + 1300)/2 = 1150] = 26.09 %
+      expect(roeAvg).toBeCloseTo(26.09, 1);
+    });
+
+    it('retombe sur l\'approximation (capPropres − résultat) sans opts', () => {
+      const roeFallback = computeRatios(rows).find((r) => r.code === 'ROE')!.value;
+      // 300 / (1300 − 300 = 1000) = 30 %
+      expect(roeFallback).toBeCloseTo(30, 1);
+    });
+
+    it('retourne NaN (N/A) si les capitaux propres moyens sont ≤ 0', () => {
+      // Situation nette d'ouverture très négative → dénominateur moyen < 0.
+      const roe = computeRatios(rows, undefined, { previousCapPropres: -3000 })
+        .find((r) => r.code === 'ROE')!.value;
+      expect(Number.isNaN(roe)).toBe(true);
+    });
+  });
 });
