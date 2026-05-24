@@ -19,11 +19,11 @@ import { PALETTES, PaletteKey, useTheme } from '../store/theme';
 import { dataProvider } from '../db/provider';
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { TabDonnees } from './Settings/TabDonnees';
-import { TabUsers } from './Settings/TabUsers';
-import { TabEmails } from './Settings/TabEmails';
-import { TabIntegrations } from './Settings/TabIntegrations';
-import { Row, Field, SelectField } from './Settings/helpers';
+import { TabDonnees } from './settings/TabDonnees';
+import { TabUsers } from './settings/TabUsers';
+import { TabEmails } from './settings/TabEmails';
+import { TabIntegrations } from './settings/TabIntegrations';
+import { Row, Field, SelectField } from './settings/helpers';
 
 type Tab = 'apparence' | 'societes' | 'exercices' | 'ratios' | 'donnees' | 'users' | 'ia' | 'emails' | 'integrations';
 
