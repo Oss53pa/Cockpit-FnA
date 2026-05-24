@@ -1,142 +1,72 @@
 // Waterfall Analysis
 // Cascade visuelle : décomposition du Résultat Net SIG ou des écarts
-// Budget/Réalisé section par section.
+// Budget/Réalisé section par section. Rendu en barres « pilule » ECharts.
 import { useMemo, useState } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, Target } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, LabelList } from 'recharts';
+import { TrendingUp, TrendingDown, Target } from 'lucide-react';
 import { ChartCard } from '../components/ui/ChartCard';
+import { Chart } from '../components/ui/Chart';
 import { DashHeader } from '../components/ui/DashHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
 import { useBudgetActual, useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
-import { ChartGradients } from '../components/charts/ChartGradients';
 import { fmtFull, fmtK } from '../lib/format';
 import { bySection, computeIntermediates } from '../engine/budgetActual';
+import { waterfallOption, type WaterfallDatum } from '../lib/chartTemplates';
 
 type Mode = 'sig' | 'variance';
 
-/**
- * Construit les données waterfall pour recharts.
- * On simule une cascade avec deux séries :
- * - 'invisible' : décalage pour que la barre commence au bon niveau
- * - 'value' : valeur visible (hauteur de la barre)
- */
-type WaterfallRow = {
-  name: string;
-  invisible: number;
-  value: number;
-  displayValue: number;
-  color: string;
-  isTotal?: boolean;
-};
-
-function buildWaterfall(steps: Array<{ name: string; delta: number; isTotal?: boolean; color?: string }>): WaterfallRow[] {
-  const rows: WaterfallRow[] = [];
-  let running = 0;
-  for (const s of steps) {
-    if (s.isTotal) {
-      rows.push({
-        name: s.name,
-        invisible: 0,
-        value: Math.abs(running + s.delta),
-        displayValue: running + s.delta,
-        color: s.color ?? ((running + s.delta) >= 0 ? '#1e40af' : '#dc2626'),
-        isTotal: true,
-      });
-      running += s.delta;
-    } else {
-      // Pour une barre incrémentale
-      if (s.delta >= 0) {
-        rows.push({
-          name: s.name,
-          invisible: running,
-          value: s.delta,
-          displayValue: s.delta,
-          color: s.color ?? '#22c55e',
-        });
-      } else {
-        rows.push({
-          name: s.name,
-          invisible: running + s.delta,
-          value: -s.delta,
-          displayValue: s.delta,
-          color: s.color ?? '#ef4444',
-        });
-      }
-      running += s.delta;
-    }
-  }
-  return rows;
-}
-
 export default function Waterfall() {
-  const { currentYear, currentOrgId } = useApp();
+  const { currentYear, currentOrgId, theme } = useApp();
   const org = useCurrentOrg();
   const { sig } = useStatements();
   const rows = useBudgetActual();
   const ct = useChartTheme();
   const [mode, setMode] = useState<Mode>('sig');
+  const dark = theme === 'dark';
 
-  // Mode SIG : cascade du CA au Résultat Net
-  const sigSteps = useMemo(() => {
+  // Mode SIG : cascade du CA au Résultat Net (deltas signés ; totaux = valeur absolue)
+  const sigSteps = useMemo<WaterfallDatum[]>(() => {
     if (!sig) return [];
-    const steps = [
-      { name: "Chiffre d'affaires", delta: sig.ca, color: ct.at(0) },
-      { name: 'Achats & MP', delta: -(sig.ca - sig.margeBrute), color: '#ef4444' },
-      { name: 'MARGE BRUTE', delta: 0, isTotal: true, color: ct.at(3) },
-      { name: 'Services ext., transports, impôts', delta: -(sig.margeBrute - sig.valeurAjoutee), color: '#ef4444' },
-      { name: 'VALEUR AJOUTÉE', delta: 0, isTotal: true, color: ct.at(3) },
-      { name: 'Charges de personnel', delta: -(sig.valeurAjoutee - sig.ebe), color: '#ef4444' },
-      { name: 'EBE', delta: 0, isTotal: true, color: ct.at(3) },
-      { name: 'Dotations / amortissements', delta: -(sig.ebe - sig.re), color: '#ef4444' },
-      { name: "Résultat d'exploitation", delta: 0, isTotal: true, color: ct.at(3) },
-      { name: 'Résultat financier', delta: sig.rf, color: sig.rf >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Résultat HAO', delta: sig.rhao, color: sig.rhao >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Impôt sur le résultat', delta: -sig.impot, color: '#ef4444' },
-      { name: 'RÉSULTAT NET', delta: 0, isTotal: true, color: sig.resultat >= 0 ? '#1e40af' : '#dc2626' },
+    return [
+      { label: 'CA', value: sig.ca, isTotal: true },
+      { label: 'Achats & MP', value: -(sig.ca - sig.margeBrute) },
+      { label: 'Marge brute', value: sig.margeBrute, isTotal: true },
+      { label: 'Services ext.', value: -(sig.margeBrute - sig.valeurAjoutee) },
+      { label: 'Valeur ajoutée', value: sig.valeurAjoutee, isTotal: true },
+      { label: 'Personnel', value: -(sig.valeurAjoutee - sig.ebe) },
+      { label: 'EBE', value: sig.ebe, isTotal: true },
+      { label: 'Amort.', value: -(sig.ebe - sig.re) },
+      { label: 'Rés. expl.', value: sig.re, isTotal: true },
+      { label: 'Rés. fin.', value: sig.rf },
+      { label: 'HAO', value: sig.rhao },
+      { label: 'Impôt', value: -sig.impot },
+      { label: 'Rés. net', value: sig.resultat, isTotal: true },
     ];
-    // Ajuster les "total" delta pour être cohérent avec running
-    return steps;
-  }, [sig, ct]);
+  }, [sig]);
 
   // Mode Variance : décomposition des écarts budget par section
-  const varianceSteps = useMemo(() => {
+  const varianceSteps = useMemo<WaterfallDatum[]>(() => {
     if (!rows.length) return [];
     const sections = bySection(rows, currentOrgId);
     const inter = computeIntermediates(sections);
-
-    const produitsExpl = sections.find((s) => s.section === 'produits_expl');
-    const chargesExpl = sections.find((s) => s.section === 'charges_expl');
-    const produitsFin = sections.find((s) => s.section === 'produits_fin');
-    const chargesFin = sections.find((s) => s.section === 'charges_fin');
-    const produitsHAO = sections.find((s) => s.section === 'produits_hao');
-    const chargesHAO = sections.find((s) => s.section === 'charges_hao');
-    const impots = sections.find((s) => s.section === 'impots');
-
-    const budgetResNet = inter.res_net.budget;
-    const realiseResNet = inter.res_net.realise;
-
-    // Contribution de chaque section à l'écart (réalisé - budget)
-    // Pour les produits : écart positif = bon
-    // Pour les charges : écart positif (réalisé > budget) = mauvais
-    const contrib = (sec: typeof produitsExpl, sign: 1 | -1) => sec ? (sec.totalRealise - sec.totalBudget) * sign : 0;
-
+    const find = (s: string) => sections.find((x) => x.section === s);
+    // Pour les produits : écart positif = bon. Pour les charges : on inverse le signe.
+    const contrib = (sec: ReturnType<typeof find>, sign: 1 | -1) => sec ? (sec.totalRealise - sec.totalBudget) * sign : 0;
     return [
-      { name: 'Budget Résultat Net', delta: budgetResNet, isTotal: true, color: ct.at(3) },
-      { name: 'Δ Produits exploitation', delta: contrib(produitsExpl, 1), color: contrib(produitsExpl, 1) >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Δ Charges exploitation', delta: contrib(chargesExpl, -1), color: contrib(chargesExpl, -1) >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Δ Produits financiers', delta: contrib(produitsFin, 1), color: contrib(produitsFin, 1) >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Δ Charges financières', delta: contrib(chargesFin, -1), color: contrib(chargesFin, -1) >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Δ HAO (net)', delta: contrib(produitsHAO, 1) + contrib(chargesHAO, -1), color: '#6b7280' },
-      { name: 'Δ Impôts', delta: contrib(impots, -1), color: contrib(impots, -1) >= 0 ? '#22c55e' : '#ef4444' },
-      { name: 'Réalisé Résultat Net', delta: 0, isTotal: true, color: realiseResNet >= 0 ? '#1e40af' : '#dc2626' },
+      { label: 'Budget RN', value: inter.res_net.budget, isTotal: true },
+      { label: 'Δ Prod. expl.', value: contrib(find('produits_expl'), 1) },
+      { label: 'Δ Ch. expl.', value: contrib(find('charges_expl'), -1) },
+      { label: 'Δ Prod. fin.', value: contrib(find('produits_fin'), 1) },
+      { label: 'Δ Ch. fin.', value: contrib(find('charges_fin'), -1) },
+      { label: 'Δ HAO', value: contrib(find('produits_hao'), 1) + contrib(find('charges_hao'), -1) },
+      { label: 'Δ Impôts', value: contrib(find('impots'), -1) },
+      { label: 'Réalisé RN', value: inter.res_net.realise, isTotal: true },
     ];
-  }, [rows, currentOrgId, ct]);
+  }, [rows, currentOrgId]);
 
-  const data = useMemo(() => buildWaterfall(mode === 'sig' ? sigSteps : varianceSteps), [mode, sigSteps, varianceSteps]);
+  const data = mode === 'sig' ? sigSteps : varianceSteps;
 
   // KPIs d'en-tête
   const headerKpis = useMemo(() => {
@@ -176,62 +106,27 @@ export default function Waterfall() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KPICard title={headerKpis.kpi1.title} value={headerKpis.kpi1.value} unit={mode === 'sig' ? 'XOF' : 'XOF'} subValue={headerKpis.kpi1.sub} icon={<TrendingUp className="w-4 h-4" />} color={ct.at(0)} />
+        <KPICard title={headerKpis.kpi1.title} value={headerKpis.kpi1.value} unit="XOF" subValue={headerKpis.kpi1.sub} icon={<TrendingUp className="w-4 h-4" />} color={ct.at(0)} />
         <KPICard title={headerKpis.kpi2.title} value={headerKpis.kpi2.value} unit="XOF" subValue={headerKpis.kpi2.sub} icon={<Target className="w-4 h-4" />} color={ct.at(3)} />
-        <KPICard title={headerKpis.kpi3.title} value={headerKpis.kpi3.value} unit={mode === 'sig' ? 'XOF' : 'XOF'} subValue={headerKpis.kpi3.sub} icon={<Target className="w-4 h-4" />} color={ct.at(4)} />
-        <KPICard title={headerKpis.kpi4.title} value={headerKpis.kpi4.value} unit={mode === 'variance' && typeof headerKpis.kpi4.value === 'string' && !headerKpis.kpi4.value.match(/[A-Za-z]/) ? 'XOF' : ''} subValue={headerKpis.kpi4.sub} icon={(sig?.resultat ?? 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />} color={(sig?.resultat ?? 0) >= 0 ? '#22c55e' : '#ef4444'} />
+        <KPICard title={headerKpis.kpi3.title} value={headerKpis.kpi3.value} unit="XOF" subValue={headerKpis.kpi3.sub} icon={<Target className="w-4 h-4" />} color={ct.at(4)} />
+        <KPICard title={headerKpis.kpi4.title} value={headerKpis.kpi4.value} unit={mode === 'variance' && typeof headerKpis.kpi4.value === 'string' && !headerKpis.kpi4.value.match(/[A-Za-z]/) ? 'XOF' : ''} subValue={headerKpis.kpi4.sub} icon={(sig?.resultat ?? 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />} color={(sig?.resultat ?? 0) >= 0 ? ct.at(0) : ct.at(1)} />
       </div>
 
       <ChartCard
         title={mode === 'sig' ? 'Cascade SIG — du CA au Résultat Net' : "Décomposition de l'écart Budget Résultat Net → Réalisé Résultat Net"}
-        subtitle={mode === 'sig' ? 'Vert : contributions positives · Rouge : charges / pertes · Bleu : totaux intermédiaires' : 'Vert : écart favorable · Rouge : écart défavorable'}
+        subtitle={mode === 'sig' ? 'Apports (positifs) · charges (négatifs) · totaux intermédiaires (neutres)' : 'Écart favorable (positif) · défavorable (négatif) · bornes Budget/Réalisé (neutres)'}
         accent={ct.at(0)}
       >
-        <div className="w-full" style={{ height: 430 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 40, right: 20, bottom: 80, left: 60 }} barCategoryGap={6}>
-              <ChartGradients />
-              <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--p-200))" />
-              <XAxis
-                dataKey="name"
-                angle={-35}
-                textAnchor="end"
-                interval={0}
-                tick={{ fontSize: 10, fill: 'rgb(var(--p-600))' }}
-                height={100}
-              />
-              <YAxis tickFormatter={(v: number) => fmtK(v)} tick={{ fontSize: 10, fill: 'rgb(var(--p-500))' }} />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload || !payload.length) return null;
-                  const d = payload[0].payload as WaterfallRow;
-                  return (
-                    <div style={{ background: 'rgb(var(--p-900))', color: 'rgb(var(--p-50))', padding: '8px 12px', borderRadius: 8, fontSize: 11 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{d.name}</div>
-                      <div className="num">{d.isTotal ? 'Total : ' : d.displayValue >= 0 ? '+ ' : ''}{fmtFull(d.displayValue)} XOF</div>
-                    </div>
-                  );
-                }}
-              />
-              <ReferenceLine y={0} stroke="rgb(var(--p-400))" strokeWidth={1} />
-              {/* Barre invisible qui crée le décalage vertical */}
-              <Bar dataKey="invisible" stackId="a" fill="transparent" />
-              {/* Barre visible colorée */}
-              <Bar dataKey="value" stackId="a" radius={[4, 4, 0, 0]}>
-                {data.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} stroke={entry.isTotal ? 'rgb(var(--p-900))' : 'transparent'} strokeWidth={entry.isTotal ? 1.5 : 0} />
-                ))}
-                <LabelList
-                  dataKey="displayValue"
-                  position="top"
-                  formatter={(v) => fmtK(Number(v))}
-                  fontSize={9}
-                  fill="rgb(var(--p-700))"
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <Chart
+          height={430}
+          option={waterfallOption(data, {
+            colors: ct.colors,
+            textColor: dark ? '#d4d4d4' : '#525252',
+            trackColor: ct.colors[4] ?? '#737373',
+            valueFormatter: (v) => fmtK(v),
+            barWidth: 22,
+          })}
+        />
       </ChartCard>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
@@ -239,17 +134,17 @@ export default function Waterfall() {
           <ul className="text-[12px] text-primary-600 dark:text-primary-300 space-y-2 leading-relaxed">
             {mode === 'sig' ? (
               <>
-                <li>🟢 Les barres <strong>vertes</strong> représentent les <strong>produits</strong> qui ajoutent au résultat (CA, produits financiers, HAO positif).</li>
-                <li>🔴 Les barres <strong>rouges</strong> représentent les <strong>charges</strong> qui réduisent le résultat (achats, personnel, dotations, impôts).</li>
-                <li>🔵 Les barres <strong>bleues</strong> cadrées sont des <strong>totaux intermédiaires</strong> (Marge brute, VA, EBE, RE, RN).</li>
+                <li>Les barres <strong>positives</strong> représentent les <strong>produits</strong> qui ajoutent au résultat (CA, produits financiers, HAO positif).</li>
+                <li>Les barres <strong>négatives</strong> représentent les <strong>charges</strong> qui réduisent le résultat (achats, personnel, dotations, impôts).</li>
+                <li>Les barres <strong>neutres</strong> sont des <strong>totaux intermédiaires</strong> (Marge brute, VA, EBE, RE, RN).</li>
                 <li>Suivez la cascade de gauche à droite pour voir chaque étape de transformation du CA en résultat final.</li>
               </>
             ) : (
               <>
-                <li>🟢 Les barres <strong>vertes</strong> indiquent un <strong>écart favorable</strong> par rapport au budget (produits supérieurs ou charges inférieures).</li>
-                <li>🔴 Les barres <strong>rouges</strong> indiquent un <strong>écart défavorable</strong> (produits sous budget ou charges au-dessus).</li>
-                <li>🔵 Le point de départ est le <strong>Budget Résultat Net</strong>, l'arrivée est le <strong>Réalisé Résultat Net</strong>.</li>
-                <li>🔍 Les sections avec le plus gros écart absolu méritent l'attention pour expliquer la performance.</li>
+                <li>Les barres <strong>positives</strong> indiquent un <strong>écart favorable</strong> par rapport au budget (produits supérieurs ou charges inférieures).</li>
+                <li>Les barres <strong>négatives</strong> indiquent un <strong>écart défavorable</strong> (produits sous budget ou charges au-dessus).</li>
+                <li>Le point de départ est le <strong>Budget Résultat Net</strong>, l'arrivée est le <strong>Réalisé Résultat Net</strong>.</li>
+                <li>Les sections avec le plus gros écart absolu méritent l'attention pour expliquer la performance.</li>
               </>
             )}
           </ul>
@@ -259,16 +154,16 @@ export default function Waterfall() {
           <div className="space-y-2">
             {data
               .filter((d) => !d.isTotal)
-              .sort((a, b) => Math.abs(b.displayValue) - Math.abs(a.displayValue))
+              .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
               .slice(0, 5)
               .map((d, i) => (
                 <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-primary-100/40 dark:hover:bg-primary-900/40">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.value >= 0 ? ct.colors[0] : ct.colors[1] }} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-medium truncate">{d.name}</p>
+                    <p className="text-[12px] font-medium truncate">{d.label}</p>
                   </div>
-                  <span className={`num text-[12px] font-semibold ${d.displayValue >= 0 ? 'text-success' : 'text-error'}`}>
-                    {d.displayValue >= 0 ? '+' : ''}{fmtFull(d.displayValue)}
+                  <span className={`num text-[12px] font-semibold ${d.value >= 0 ? 'text-success' : 'text-error'}`}>
+                    {d.value >= 0 ? '+' : ''}{fmtFull(d.value)}
                   </span>
                 </div>
               ))}

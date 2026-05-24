@@ -16,16 +16,19 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { ChartCard } from '../../components/ui/ChartCard';
+import { Chart } from '../../components/ui/Chart';
 import { ChartGradients, barGradId } from '../../components/charts/ChartGradients';
 import { useApp } from '../../store/app';
 import { useChartTheme } from '../../lib/chartTheme';
 import { dataProvider } from '../../db/provider';
 import { loadAnalyticContext, computeCoverageBreakdown } from '../../engine/analyticDashboards';
+import { explodedDonutOption } from '../../lib/chartTemplates';
 import type { GLEntry } from '../../db/schema';
 
 export default function AnalyticalCoverage() {
-  const { currentOrgId, currentYear } = useApp();
+  const { currentOrgId, currentYear, theme } = useApp();
   const ct = useChartTheme();
+  const dark = theme === 'dark';
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     total: number; assigned: number; coverageRate: number;
@@ -93,6 +96,27 @@ export default function AnalyticalCoverage() {
                   <Line type="monotone" dataKey="rate" stroke={ct.at(2)} strokeWidth={2} dot={{ r: 4 }} name="Couverture" />
                 </LineChart>
               </ResponsiveContainer>
+            </ChartCard>
+          )}
+
+          {/* Donut couverture par journal — vue d'ensemble + taux global au centre */}
+          {data.byJournal.length > 0 && (
+            <ChartCard title="Répartition de la couverture par journal" subtitle="Part des lignes éligibles (classes 6/7) · taux global au centre">
+              <Chart
+                height={300}
+                option={explodedDonutOption(
+                  [...data.byJournal].sort((a, b) => b.total - a.total).map((j) => ({ name: j.journal, value: j.total })),
+                  {
+                    colors: ct.colors,
+                    textColor: dark ? '#d4d4d4' : '#404040',
+                    trackColor: dark ? '#202020' : '#ffffff',
+                    explodeIndex: 0,
+                    centerTitle: `${data.coverageRate}%`,
+                    centerSubtitle: 'COUVERTURE',
+                    valueFormatter: (v) => `${v.toLocaleString('fr-FR')} lignes`,
+                  },
+                )}
+              />
             </ChartCard>
           )}
 

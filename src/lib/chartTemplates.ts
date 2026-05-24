@@ -24,6 +24,8 @@ interface CommonOpts {
   trackColor?: string;
   /** Suffixe d'unité ('%', ' M', '€'…) appliqué aux valeurs */
   unit?: string;
+  /** Formatage custom des valeurs (prioritaire sur `unit`) — ex. fmtK pour XOF */
+  valueFormatter?: (v: number) => string;
   /** Largeur de barre en px */
   barWidth?: number;
 }
@@ -44,6 +46,7 @@ export function pillBarOption(
   const text = opts.textColor ?? '#737373';
   const track = opts.trackColor ?? 'rgba(120,120,120,0.14)';
   const unit = opts.unit ?? '';
+  const fmt = opts.valueFormatter ?? ((v: number) => `${v}${unit}`);
   const bw = opts.barWidth ?? 26;
   const max = opts.max ?? Math.ceil((Math.max(...data.map((d) => d.value)) || 1) * 1.15);
   const radius = [bw, bw, bw, bw];
@@ -53,7 +56,7 @@ export function pillBarOption(
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'none' },
-      formatter: (ps: any[]) => `${ps[0].axisValue}<br/><b>${ps[0].value}${unit}</b>`,
+      formatter: (ps: any[]) => `${ps[0].axisValue}<br/><b>${fmt(ps[0].value)}</b>`,
     },
     legend: { show: false },
     xAxis: {
@@ -81,7 +84,7 @@ export function pillBarOption(
           color: '#fff',
           fontWeight: 700,
           fontFamily: 'Exo 2',
-          formatter: (p: any) => `${p.value}${unit}`,
+          formatter: (p: any) => fmt(p.value),
         },
       },
     ],
@@ -105,7 +108,8 @@ export function explodedDonutOption(
   const colors = opts.colors ?? FALLBACK;
   const text = opts.textColor ?? '#404040';
   const border = opts.trackColor ?? '#ffffff';
-  const unit = opts.unit ?? '%';
+  const unit = opts.unit ?? '';
+  const fmt = opts.valueFormatter ?? ((v: number) => `${v}${unit}`);
   const explode = opts.explodeIndex ?? -1;
 
   return {
@@ -114,7 +118,7 @@ export function explodedDonutOption(
     yAxis: { show: false },
     tooltip: {
       trigger: 'item',
-      formatter: (p: any) => `${p.name}<br/><b>${p.value}${unit}</b> (${p.percent}%)`,
+      formatter: (p: any) => `${p.name}<br/><b>${fmt(p.value)}</b> (${p.percent}%)`,
     },
     legend: { show: false },
     title: opts.centerTitle
@@ -150,7 +154,7 @@ export function explodedDonutOption(
           color: '#fff',
           fontWeight: 700,
           fontFamily: 'Exo 2',
-          formatter: (p: any) => `${p.value}${unit}`,
+          formatter: (p: any) => `${Math.round(p.percent)}%`,
         },
         data: data.map((d, i) => ({
           name: d.name,
@@ -182,6 +186,9 @@ export function waterfallOption(
   const totalColor = opts.trackColor ?? pick(colors, 4);
   const text = opts.textColor ?? '#737373';
   const unit = opts.unit ?? '';
+  const fmt = opts.valueFormatter ?? ((v: number) => `${v}${unit}`);
+  // Valeur signée, sans signe pour les totaux/sous-totaux
+  const sign = (d: WaterfallDatum) => (d.isTotal || d.value < 0 ? fmt(d.value) : `+${fmt(d.value)}`);
   const bw = opts.barWidth ?? 30;
   const radius = [bw, bw, bw, bw];
 
@@ -216,9 +223,8 @@ export function waterfallOption(
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
       formatter: (ps: any[]) => {
-        const idx = ps[0].dataIndex;
-        const d = data[idx];
-        return `${d.label}<br/><b>${d.value >= 0 ? '+' : ''}${d.value}${unit}</b>`;
+        const d = data[ps[0].dataIndex];
+        return `${d.label}<br/><b>${sign(d)}</b>`;
       },
     },
     legend: { show: false },
@@ -260,7 +266,7 @@ export function waterfallOption(
           color: text,
           fontWeight: 700,
           fontFamily: 'Exo 2',
-          formatter: (p: any) => `${data[p.dataIndex].value >= 0 ? '+' : ''}${data[p.dataIndex].value}${unit}`,
+          formatter: (p: any) => sign(data[p.dataIndex]),
         },
       },
     ],
