@@ -111,6 +111,7 @@ const dashboards = [
   { id: 'proph3t',      route: '/dashboard/proph3t',           name: 'Proph3t · Intelligence ★★',    desc: 'Date-aware · Predict · Correct · Suggest · Audit · Memorize — orchestrateur d\'IA financière déterministe',           icon: 'Brain',          cat: 'Direction' },
   // ─── Builder personnalisé (Sprint 4) ──────────────────────────
   { id: 'builder',      route: '/builder',                     name: 'Mes dashboards personnalisés', desc: 'Composez vos propres dashboards par drag & drop : KPIs, charts, tables. Persistance locale.',                  icon: 'LayoutGrid',     cat: 'Custom'    },
+  { id: 'chart_gallery',route: '/dashboard/chart-gallery',     name: 'Galerie de graphiques ★',      desc: '3 modèles réutilisables : barres « pilule » + timeline, donut explosé, waterfall « pilule » — sur la palette de marque', icon: 'BarChart4', cat: 'Standard' },
 ];
 
 type ViewMode = 'cards' | 'table' | 'kanban';
