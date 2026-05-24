@@ -6,6 +6,7 @@
 //   - Si user authentifié → org-id = `demo-org-{userId8}` + push complet vers Supabase
 //     (isolation par utilisateur, RLS auto via fna_user_orgs lors du pushAllToSupabase).
 //   - Si user non authentifié → org-id = `demo-org` + Dexie uniquement (mode dégradé).
+import { safeLocalStorage } from '../lib/safeStorage';
 import { db, GLEntry, Account, AttentionPoint, ActionPlan } from '../db/schema';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { pushAllToSupabase } from '../db/supabaseSync';
@@ -480,7 +481,7 @@ export async function loadDemoData(): Promise<{ accounts: number; entries: numbe
       ],
       orgId: DEMO_ORG_ID,
     };
-    localStorage.setItem(memKey, JSON.stringify(memory));
+    safeLocalStorage.setItem(memKey, JSON.stringify(memory));
   } catch { /* localStorage indisponible */ }
 
   // ─── Rapport démo pré-rédigé ────────────────────────────────────────
@@ -564,9 +565,9 @@ export async function unloadDemoData(): Promise<void> {
     }
   }
 
-  try { localStorage.removeItem('proph3t-memory'); } catch { /* noop */ }
-  try { localStorage.removeItem('demo-mode'); } catch { /* noop */ }
-  try { localStorage.removeItem('demo-tour-step'); } catch { /* noop */ }
+  try { safeLocalStorage.removeItem('proph3t-memory'); } catch { /* noop */ }
+  try { safeLocalStorage.removeItem('demo-mode'); } catch { /* noop */ }
+  try { safeLocalStorage.removeItem('demo-tour-step'); } catch { /* noop */ }
 }
 
 /**

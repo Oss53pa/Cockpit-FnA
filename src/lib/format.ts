@@ -2,9 +2,11 @@
 // instantané quand l'utilisateur toggle Entier ↔ Abrégé, on dispatch un événement
 // custom 'amount-mode-changed' depuis le store. Les composants peuvent s'abonner
 // via useSyncExternalStore (voir useAmountMode plus bas).
+import { safeLocalStorage } from './safeStorage';
+
 function currentMode(): 'full' | 'short' {
   try {
-    const v = localStorage.getItem('amount-mode');
+    const v = safeLocalStorage.getItem('amount-mode');
     return v === 'short' ? 'short' : 'full';
   } catch { return 'full'; }
 }

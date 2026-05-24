@@ -1,6 +1,7 @@
 // Visite guidée flottante — accompagne l'utilisateur de page en page
 // pendant le mode démo. Persistant, repositionnable, escapable.
 import { useEffect, useRef, useState } from 'react';
+import { safeLocalStorage } from '../../lib/safeStorage';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Check, X, GripVertical, Sparkles,
@@ -40,7 +41,7 @@ export function DemoTour() {
   const [collapsed, setCollapsed] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number }>(() => {
     try {
-      const s = localStorage.getItem('demo-tour-pos');
+      const s = safeLocalStorage.getItem('demo-tour-pos');
       if (s) return JSON.parse(s);
     } catch { /* */ }
     return { x: window.innerWidth - 380, y: window.innerHeight - 320 };
@@ -60,7 +61,7 @@ export function DemoTour() {
     }
     function onUp() {
       if (dragRef.current) {
-        try { localStorage.setItem('demo-tour-pos', JSON.stringify(pos)); } catch { /* */ }
+        try { safeLocalStorage.setItem('demo-tour-pos', JSON.stringify(pos)); } catch { /* */ }
       }
       dragRef.current = null;
     }

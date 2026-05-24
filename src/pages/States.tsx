@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { Download, FileSpreadsheet, Printer, Sparkles, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
@@ -343,9 +344,9 @@ function CRCustomize({ cr, hideCodes }: { cr: any[]; hideCodes?: boolean }) {
   };
   const reset = () => {
     if (!confirm('Restaurer les libellés, l\'ordre et supprimer les sections personnalisées ?')) return;
-    localStorage.removeItem(`cr-section-labels:${currentOrgId}`);
-    localStorage.removeItem(`cr-section-order:${currentOrgId}`);
-    localStorage.removeItem(`cr-section-custom:${currentOrgId}`);
+    safeLocalStorage.removeItem(`cr-section-labels:${currentOrgId}`);
+    safeLocalStorage.removeItem(`cr-section-order:${currentOrgId}`);
+    safeLocalStorage.removeItem(`cr-section-custom:${currentOrgId}`);
     setCustoms([]);
     setOrder(loadOrder(currentOrgId));
     setLabels(loadLabels(currentOrgId));

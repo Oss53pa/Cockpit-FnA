@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { SEMANTIC } from '../lib/semantic';
 import {
   Plus, Save, Eye, Edit, Trash2, GripVertical,
@@ -127,13 +128,13 @@ const STORAGE_KEY = 'cockpit-custom-dashboards';
 
 function loadDashboards(): CustomDashboard[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = safeLocalStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
 
 function saveDashboards(dashboards: CustomDashboard[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(dashboards));
+  safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(dashboards));
 }
 
 // ── Widget renderer (alimenté par les hooks data) ────────────────────

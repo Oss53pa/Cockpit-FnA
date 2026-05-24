@@ -28,6 +28,8 @@
 import { Proph3tClient, Proph3tError } from "@atlas-studio/proph3t-client";
 import type { KnowledgeHit, MemoryHit } from "@atlas-studio/proph3t-client";
 
+import { safeLocalStorage } from './safeStorage';
+
 const ATLAS_SUPABASE_URL =
   import.meta.env.VITE_ATLAS_SUPABASE_URL ??
   "https://vgtmljfayiysuvrcmunt.supabase.co";
@@ -51,7 +53,7 @@ export function getProph3tClient(): Proph3tClient | null {
 
   let token: string | null = null;
   try {
-    token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    token = safeLocalStorage.getItem(TOKEN_STORAGE_KEY);
   } catch {
     /* localStorage unavailable */
   }
@@ -75,7 +77,7 @@ export function resetProph3tClient(): void {
   cachedClient = null;
   cachedToken = null;
   try {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    safeLocalStorage.removeItem(TOKEN_STORAGE_KEY);
   } catch {
     /* ignore */
   }

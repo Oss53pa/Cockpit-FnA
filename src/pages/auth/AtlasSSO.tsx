@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 
@@ -51,8 +52,8 @@ export default function AtlasSSO() {
         // Functions du core Atlas Studio (proph3t-tool-direct, ...).
         // Voir docs/Proph3t_FEDERATION.md.
         try {
-          localStorage.setItem('atlas_federation_token', token);
-        } catch { /* localStorage indispo (Safari incognito) — la fédération sera désactivée. */ }
+          safeLocalStorage.setItem('atlas_federation_token', token);
+        } catch { /* noop — safeLocalStorage already handles quota/security errors */ }
 
         // 2. Établir la session Supabase via verifyOtp
         setStatus('Établissement de la session...');

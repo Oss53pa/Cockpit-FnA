@@ -513,15 +513,15 @@ export function getModelHistory(orgId: string, modelId?: string): CRModelHistory
  */
 export function migrateLegacySettings(orgId: string): boolean {
   const sentinel = `cockpit-cr-migrated:${orgId}`;
-  if (localStorage.getItem(sentinel)) return false;
+  if (safeLocalStorage.getItem(sentinel)) return false;
 
   try {
-    const customRaw = localStorage.getItem(`cr-section-custom:${orgId}`);
-    const labelsRaw = localStorage.getItem(`cr-section-labels:${orgId}`);
-    const orderRaw = localStorage.getItem(`cr-section-order:${orgId}`);
+    const customRaw = safeLocalStorage.getItem(`cr-section-custom:${orgId}`);
+    const labelsRaw = safeLocalStorage.getItem(`cr-section-labels:${orgId}`);
+    const orderRaw = safeLocalStorage.getItem(`cr-section-order:${orgId}`);
     if (!customRaw && !labelsRaw && !orderRaw) {
       // Rien à migrer
-      localStorage.setItem(sentinel, '1');
+      safeLocalStorage.setItem(sentinel, '1');
       return false;
     }
 
@@ -530,7 +530,7 @@ export function migrateLegacySettings(orgId: string): boolean {
     const order: string[] = orderRaw ? JSON.parse(orderRaw) : [];
 
     if (customSections.length === 0 && Object.keys(labels).length === 0) {
-      localStorage.setItem(sentinel, '1');
+      safeLocalStorage.setItem(sentinel, '1');
       return false;
     }
 
@@ -566,7 +566,7 @@ export function migrateLegacySettings(orgId: string): boolean {
     }
 
     saveModel(base);
-    localStorage.setItem(sentinel, '1');
+    safeLocalStorage.setItem(sentinel, '1');
     return true;
   } catch (e) {
     console.warn('CR Models: migration legacy échouée', e);

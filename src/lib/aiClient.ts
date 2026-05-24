@@ -11,6 +11,8 @@
  * En production sans Ollama, le mode 'openai' est requis.
  */
 
+import { safeLocalStorage } from './safeStorage';
+
 const CFG_KEY = 'ai-config';
 
 export type AIProvider = 'ollama' | 'openai' | 'none';
@@ -72,7 +74,7 @@ const DEPRECATED_MODELS: Record<string, string> = {
 
 export function loadConfig(): AIConfig {
   try {
-    const raw = localStorage.getItem(CFG_KEY);
+    const raw = safeLocalStorage.getItem(CFG_KEY);
     if (!raw) return { ...DEFAULTS };
     const parsed = { ...DEFAULTS, ...JSON.parse(raw) };
     // Nettoie les champs sensibles (clé API, URLs) pour éviter les erreurs fetch
@@ -86,7 +88,7 @@ export function loadConfig(): AIConfig {
       parsed.openaiModel = DEPRECATED_MODELS[oldModel];
       // eslint-disable-next-line no-console
       console.info(`[AI] Migration auto modèle décommissionné : ${oldModel} → ${parsed.openaiModel}`);
-      try { localStorage.setItem(CFG_KEY, JSON.stringify(parsed)); } catch { /* ignore */ }
+      safeLocalStorage.setItem(CFG_KEY, JSON.stringify(parsed));
     }
     return parsed;
   } catch { return { ...DEFAULTS }; }
@@ -97,7 +99,7 @@ export function saveConfig(cfg: Partial<AIConfig>) {
   if (cfg.openaiBaseUrl) cfg.openaiBaseUrl = sanitize(cfg.openaiBaseUrl);
   if (cfg.ollamaUrl) cfg.ollamaUrl = sanitize(cfg.ollamaUrl);
   const merged = { ...loadConfig(), ...cfg };
-  localStorage.setItem(CFG_KEY, JSON.stringify(merged));
+  safeLocalStorage.setItem(CFG_KEY, JSON.stringify(merged));
   return merged;
 }
 

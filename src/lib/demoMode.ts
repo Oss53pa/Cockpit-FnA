@@ -3,6 +3,7 @@
 // l'org courante avec 'demo-org'.
 import { useSyncExternalStore } from 'react';
 import { useApp } from '../store/app';
+import { safeLocalStorage } from './safeStorage';
 
 export const DEMO_FLAG_KEY = 'demo-mode';
 export const DEMO_TOUR_STEP_KEY = 'demo-tour-step';
@@ -15,24 +16,24 @@ function notify() { listeners.forEach((fn) => fn()); }
 
 // Helpers d'écriture (à utiliser depuis l'UI)
 export function setDemoMode(on: boolean) {
-  if (on) localStorage.setItem(DEMO_FLAG_KEY, '1');
-  else localStorage.removeItem(DEMO_FLAG_KEY);
+  if (on) safeLocalStorage.setItem(DEMO_FLAG_KEY, '1');
+  else safeLocalStorage.removeItem(DEMO_FLAG_KEY);
   notify();
 }
 
 export function setTourStep(step: number) {
-  localStorage.setItem(DEMO_TOUR_STEP_KEY, String(step));
+  safeLocalStorage.setItem(DEMO_TOUR_STEP_KEY, String(step));
   notify();
 }
 
 export function markTourDone() {
-  localStorage.setItem(DEMO_TOUR_DONE_KEY, '1');
+  safeLocalStorage.setItem(DEMO_TOUR_DONE_KEY, '1');
   notify();
 }
 
 export function resetTour() {
-  localStorage.removeItem(DEMO_TOUR_STEP_KEY);
-  localStorage.removeItem(DEMO_TOUR_DONE_KEY);
+  safeLocalStorage.removeItem(DEMO_TOUR_STEP_KEY);
+  safeLocalStorage.removeItem(DEMO_TOUR_DONE_KEY);
   notify();
 }
 
@@ -44,9 +45,9 @@ function subscribe(fn: () => void) {
 }
 
 function getSnapshot() {
-  const flag = localStorage.getItem(DEMO_FLAG_KEY) === '1';
-  const step = parseInt(localStorage.getItem(DEMO_TOUR_STEP_KEY) || '0', 10) || 0;
-  const done = localStorage.getItem(DEMO_TOUR_DONE_KEY) === '1';
+  const flag = safeLocalStorage.getItem(DEMO_FLAG_KEY) === '1';
+  const step = parseInt(safeLocalStorage.getItem(DEMO_TOUR_STEP_KEY) || '0', 10) || 0;
+  const done = safeLocalStorage.getItem(DEMO_TOUR_DONE_KEY) === '1';
   return `${flag ? '1' : '0'}|${step}|${done ? '1' : '0'}`;
 }
 

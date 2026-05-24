@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, Send, X } from 'lucide-react';
+import { safeLocalStorage } from '../../lib/safeStorage';
 import { useRatios, useStatements } from '../../hooks/useFinancials';
 import { fmtMoney } from '../../lib/format';
 
@@ -8,14 +9,14 @@ import { fmtMoney } from '../../lib/format';
 const POS_KEY = 'proph3t-bubble-pos';
 function loadPos(): { x: number; y: number } {
   try {
-    const raw = localStorage.getItem(POS_KEY);
+    const raw = safeLocalStorage.getItem(POS_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   // Position par défaut : bottom-right
   return { x: window.innerWidth - 80, y: window.innerHeight - 80 };
 }
 function savePos(p: { x: number; y: number }) {
-  try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+  try { safeLocalStorage.setItem(POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
 }
 
 export function FloatingAI() {

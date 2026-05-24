@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { safeLocalStorage } from '../../lib/safeStorage';
 import { toast } from '../../components/ui/Toast';
 
 export default function AcceptInvite() {
@@ -134,7 +135,7 @@ export default function AcceptInvite() {
           const firstOrgId = userOrgs?.[0]?.org_id;
           if (firstOrgId) {
             // safeLocalStorage indisponible ici (lib hors AcceptInvite) — fallback try/catch
-            try { localStorage.setItem('current-org', firstOrgId); } catch { /* quota / Safari iOS privé */ }
+            try { safeLocalStorage.setItem('current-org', firstOrgId); } catch { /* quota / Safari iOS privé */ }
           }
         }
       } catch (e) {

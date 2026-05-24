@@ -1,4 +1,5 @@
 // Multi-devises — Taux de change et conversion
+import { safeLocalStorage } from '../lib/safeStorage';
 
 export interface ExchangeRate {
   date: string;       // YYYY-MM-DD
@@ -10,11 +11,11 @@ export interface ExchangeRate {
 const KEY = 'exchange-rates';
 
 export function loadRates(): ExchangeRate[] {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; }
+  try { return JSON.parse(safeLocalStorage.getItem(KEY) ?? '[]'); } catch { return []; }
 }
 
 export function saveRates(rates: ExchangeRate[]): void {
-  localStorage.setItem(KEY, JSON.stringify(rates));
+  safeLocalStorage.setItem(KEY, JSON.stringify(rates));
 }
 
 export function addRate(rate: ExchangeRate): void {

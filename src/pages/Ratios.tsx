@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { LayoutGrid, Table as TableIcon, LayoutDashboard, Download, CheckCircle2, AlertTriangle, XCircle, Calculator, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
@@ -27,10 +28,10 @@ type Family = typeof families[number] | 'Toutes';
 export default function Ratios() {
   const ratios = useRatios();
   const [view, setView] = useState<View>(() => {
-    const v = localStorage.getItem(VIEW_KEY);
+    const v = safeLocalStorage.getItem(VIEW_KEY);
     return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
   });
-  const setViewMode = (v: View) => { setView(v); localStorage.setItem(VIEW_KEY, v); };
+  const setViewMode = (v: View) => { setView(v); safeLocalStorage.setItem(VIEW_KEY, v); };
   const [family, setFamily] = useState<Family>('Toutes');
   const navigate = useNavigate();
 

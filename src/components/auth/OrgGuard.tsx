@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 type OrgState = 'loading' | 'has-org' | 'no-org' | 'demo' | 'unauth';
 
@@ -26,7 +27,7 @@ export function OrgGuard({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       // Mode démo : bypass
-      if (typeof localStorage !== 'undefined' && localStorage.getItem('demo-mode') === '1') {
+      if (typeof localStorage !== 'undefined' && safeLocalStorage.getItem('demo-mode') === '1') {
         if (!cancelled) setState('demo');
         return;
       }

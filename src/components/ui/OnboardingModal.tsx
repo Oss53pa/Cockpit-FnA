@@ -25,6 +25,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Building2, ArrowRight, ArrowLeft, CheckCircle2, Loader2, AlertCircle, Upload, ShieldCheck, Sparkles } from 'lucide-react';
+import { safeLocalStorage } from '../../lib/safeStorage';
 import { useApp } from '../../store/app';
 import { dataProvider } from '../../db/provider';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -72,7 +73,7 @@ export function OnboardingModal() {
         setUserId(uid);
 
         // En mode démo : ne pas perturber le parcours
-        const isDemoMode = typeof localStorage !== 'undefined' && localStorage.getItem('demo-mode') === '1';
+        const isDemoMode = typeof localStorage !== 'undefined' && safeLocalStorage.getItem('demo-mode') === '1';
         if (isDemoMode) return;
 
         // Vérifie si user a au moins 1 org mappée

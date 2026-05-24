@@ -10,14 +10,16 @@ import {
   Search, FileText, Mail, Phone, ShieldCheck,
 } from 'lucide-react';
 
+import { safeLocalStorage } from '../lib/safeStorage';
+
 type Mode = 'dark' | 'light';
 const STORAGE_KEY = 'cockpit-landing-theme';
 const ATLAS_STUDIO_URL = 'https://atlas-studio.org';
 
 function loadTheme(): Mode {
-  try { const v = localStorage.getItem(STORAGE_KEY); return v === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
+  try { const v = safeLocalStorage.getItem(STORAGE_KEY); return v === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
 }
-function saveTheme(m: Mode) { try { localStorage.setItem(STORAGE_KEY, m); } catch { /* ignore */ } }
+function saveTheme(m: Mode) { try { safeLocalStorage.setItem(STORAGE_KEY, m); } catch { /* ignore */ } }
 
 /* ═══ Hook scroll-triggered animations ═══ */
 function useInView(threshold = 0.15) {
@@ -736,7 +738,7 @@ export default function Landing() {
               <a href="#" className="hover:opacity-80">CGU</a>
               {/* Accès direct à l'application — temporaire le temps de finaliser la migration Supabase */}
               <button onClick={() => {
-                  try { localStorage.setItem('app-bypass', '1'); } catch { /* noop */ }
+                  try { safeLocalStorage.setItem('app-bypass', '1'); } catch { /* noop */ }
                   navigate('/home');
                 }}
                 title="Accès direct à l'application (temporaire)"

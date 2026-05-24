@@ -24,6 +24,7 @@ import { dataProvider } from '../db/provider';
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { useApp } from '../store/app';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -37,7 +38,7 @@ import {
 // User loaded from localStorage (compatible with Settings users system)
 type AppUser = { id: string; name: string; email: string; role: string };
 function loadUsers(): AppUser[] {
-  try { return JSON.parse(localStorage.getItem('cockpit-users') ?? '[]'); } catch { return []; }
+  try { return JSON.parse(safeLocalStorage.getItem('cockpit-users') ?? '[]'); } catch { return []; }
 }
 function getCurrentUser(): AppUser {
   try {

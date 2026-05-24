@@ -13,6 +13,8 @@
  * pour que Proph3t s'améliore réellement entre les sessions, par société.
  */
 
+import { safeLocalStorage } from '../../lib/safeStorage';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════════════════════════════════════
@@ -115,14 +117,14 @@ function emptyState(orgId: string): LearningState {
 function loadLocalCache(): Record<string, CacheEntry> {
   try {
     if (typeof localStorage === 'undefined') return {};
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = safeLocalStorage.getItem(CACHE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
 function saveLocalCache(data: Record<string, CacheEntry>) {
   try {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    safeLocalStorage.setItem(CACHE_KEY, JSON.stringify(data));
   } catch { /* quota */ }
 }
 

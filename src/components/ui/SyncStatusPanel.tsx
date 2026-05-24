@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, AlertTriangle, Cloud, Database, Shield, ArrowRight } from 'lucide-react';
+import { safeLocalStorage } from '../../lib/safeStorage';
 import { db } from '../../db/schema';
 import { dataProvider } from '../../db/provider';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -45,7 +46,7 @@ export function SyncStatusPanel() {
       return;
     }
     // Mode démo : pas de diagnostic sync (tout est hardcodé)
-    if (currentOrgId.startsWith('demo-org') && localStorage.getItem('demo-mode') === '1') {
+    if (currentOrgId.startsWith('demo-org') && safeLocalStorage.getItem('demo-mode') === '1') {
       setStats((s) => ({ ...s, loading: false }));
       return;
     }

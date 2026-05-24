@@ -12,6 +12,7 @@
  * Avantage : aucune page n'a besoin de connaître la démo. Le routage est
  * fait au niveau de la DAL.
  */
+import { safeLocalStorage } from '../lib/safeStorage';
 import type { DataProvider, GLFilter } from './provider';
 import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
@@ -122,7 +123,7 @@ export class DemoProvider implements DataProvider {
   // ── Organizations ──
   async getOrganizations(): Promise<Organization[]> {
     const real = await this.inner.getOrganizations().catch(() => [] as Organization[]);
-    if (typeof window !== 'undefined' && localStorage.getItem('demo-mode') === '1') {
+    if (typeof window !== 'undefined' && safeLocalStorage.getItem('demo-mode') === '1') {
       // Inject demo org if missing
       const exists = real.some((o) => o.id.startsWith('demo-org'));
       if (!exists) return [DEMO_ORG, ...real];

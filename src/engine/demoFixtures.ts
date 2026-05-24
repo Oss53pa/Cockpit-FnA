@@ -13,6 +13,7 @@
  * Les hooks `useFinancials` détectent le flag et retournent ces fixtures
  * au lieu d'interroger le dataProvider.
  */
+import { safeLocalStorage } from '../lib/safeStorage';
 import type { BalanceRow } from './balance';
 import type { SIG, Line } from './statements';
 import type { Ratio } from './ratios';
@@ -25,7 +26,7 @@ const Y = new Date().getFullYear();
 // ────────────────────────────────────────────────────────────────────
 export function isDemoActive(currentOrgId?: string | null): boolean {
   if (typeof window === 'undefined') return false;
-  const flag = localStorage.getItem('demo-mode') === '1';
+  const flag = safeLocalStorage.getItem('demo-mode') === '1';
   if (!flag) return false;
   if (currentOrgId === undefined) return true; // flag suffit
   return !!currentOrgId && currentOrgId.startsWith('demo-org');

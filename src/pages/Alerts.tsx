@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Settings2, LayoutGrid, Rows3, LayoutDashboard } from 'lucide-react';
 import clsx from 'clsx';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -30,11 +31,11 @@ type Thresholds = {
 const defaults: Thresholds = { liquiditeGenerale: 1.5, endettement: 1.0, autonomie: 0.5, dsoMax: 60, tresoMin: 0 };
 
 function loadAck(orgId: string): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(keyOrg(ACK_KEY, orgId)) ?? '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(safeLocalStorage.getItem(keyOrg(ACK_KEY, orgId)) ?? '[]')); } catch { return new Set(); }
 }
-function saveAck(s: Set<string>, orgId: string) { localStorage.setItem(keyOrg(ACK_KEY, orgId), JSON.stringify([...s])); }
+function saveAck(s: Set<string>, orgId: string) { safeLocalStorage.setItem(keyOrg(ACK_KEY, orgId), JSON.stringify([...s])); }
 function loadThresholds(orgId: string): Thresholds {
-  try { return { ...defaults, ...JSON.parse(localStorage.getItem(keyOrg(THRESHOLDS_KEY, orgId)) ?? '{}') }; } catch { return defaults; }
+  try { return { ...defaults, ...JSON.parse(safeLocalStorage.getItem(keyOrg(THRESHOLDS_KEY, orgId)) ?? '{}') }; } catch { return defaults; }
 }
 
 export default function Alerts() {
@@ -51,10 +52,10 @@ export default function Alerts() {
     setTh(loadThresholds(currentOrgId));
   }, [currentOrgId]);
   const [view, setView] = useState<ViewMode>(() => {
-    const v = localStorage.getItem(VIEW_KEY);
+    const v = safeLocalStorage.getItem(VIEW_KEY);
     return (v === 'cards' || v === 'table' || v === 'kanban' || v === 'list') ? v : 'cards';
   });
-  const setViewMode = (v: ViewMode) => { setView(v); localStorage.setItem(VIEW_KEY, v); };
+  const setViewMode = (v: ViewMode) => { setView(v); safeLocalStorage.setItem(VIEW_KEY, v); };
 
   useEffect(() => saveAck(ack, currentOrgId), [ack, currentOrgId]);
 
@@ -91,7 +92,7 @@ export default function Alerts() {
   const resetAck = () => { setAck(new Set()); };
 
   const saveThresholds = () => {
-    localStorage.setItem(keyOrg(THRESHOLDS_KEY, currentOrgId), JSON.stringify(th));
+    safeLocalStorage.setItem(keyOrg(THRESHOLDS_KEY, currentOrgId), JSON.stringify(th));
     setOpenSettings(false);
   };
 

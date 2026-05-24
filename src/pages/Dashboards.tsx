@@ -1,5 +1,6 @@
 import * as Icons from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -123,13 +124,13 @@ type Category = typeof CATEGORIES[number];
 export default function Dashboards() {
   const [filter, setFilter] = useState<Category>('Tous');
   const [view, setView] = useState<ViewMode>(() => {
-    const v = localStorage.getItem(VIEW_KEY);
+    const v = safeLocalStorage.getItem(VIEW_KEY);
     return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
   });
   const navigate = useNavigate();
   const list = dashboards.filter((d) => filter === 'Tous' || d.cat === filter);
 
-  const setViewMode = (m: ViewMode) => { setView(m); localStorage.setItem(VIEW_KEY, m); };
+  const setViewMode = (m: ViewMode) => { setView(m); safeLocalStorage.setItem(VIEW_KEY, m); };
 
   return (
     <div>

@@ -18,6 +18,7 @@
 //     - clearMemory(orgId)       — async
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { encryptJson, decryptJson } from '../../lib/proph3Crypto';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 export interface Observation {
   date: number;
@@ -52,14 +53,14 @@ function emptyMemory(orgId: string): Memory {
 function loadCache(): Record<string, { mem: Memory; loadedAt: number }> {
   try {
     if (typeof localStorage === 'undefined') return {};
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = safeLocalStorage.getItem(CACHE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
 function saveCache(data: Record<string, { mem: Memory; loadedAt: number }>) {
   try {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    safeLocalStorage.setItem(CACHE_KEY, JSON.stringify(data));
   } catch { /* quota exceeded — non bloquant */ }
 }
 

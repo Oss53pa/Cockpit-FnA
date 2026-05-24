@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { pullFromSupabase, autoRecoverDexieToSupabase } from '../db/supabaseSync';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -29,7 +30,7 @@ function syncCurrentUserToStorage(user: User) {
   let role = 'viewer';
   let orgIds: string[] = [];
   try {
-    const localUsers = JSON.parse(localStorage.getItem('cockpit-users') ?? '[]');
+    const localUsers = JSON.parse(safeLocalStorage.getItem('cockpit-users') ?? '[]');
     const localMatch = localUsers.find((u: any) => u.email?.toLowerCase() === user.email?.toLowerCase());
     if (localMatch) {
       role = localMatch.role ?? role;
@@ -121,11 +122,11 @@ export function useAuth() {
         sessionStorage.removeItem('cockpit-current-user');
         // CRITIQUE multi-tenant : ne pas conserver l'org de l'user précédent
         // sur un device partagé. useOrgResolver re-pioche au prochain login.
-        localStorage.removeItem('current-org');
+        safeLocalStorage.removeItem('current-org');
         // Clear aussi les flags démo et autres caches user-spécifiques
-        localStorage.removeItem('demo-mode');
-        localStorage.removeItem('demo-tour-step');
-        localStorage.removeItem('demo-tour-done');
+        safeLocalStorage.removeItem('demo-mode');
+        safeLocalStorage.removeItem('demo-tour-step');
+        safeLocalStorage.removeItem('demo-tour-done');
         try {
           window.dispatchEvent(new CustomEvent('cockpit-auth-changed', { detail: null }));
         } catch { /* ignore */ }

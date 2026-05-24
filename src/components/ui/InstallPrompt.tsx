@@ -15,6 +15,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 // Type non standard, défini par la spec « beforeinstallprompt »
 interface BeforeInstallPromptEvent extends Event {
@@ -37,7 +38,7 @@ export function InstallPrompt() {
     }
     // Vérifie le cooldown de refus
     try {
-      const dismissedAt = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+      const dismissedAt = parseInt(safeLocalStorage.getItem(DISMISS_KEY) || '0', 10);
       if (dismissedAt && Date.now() - dismissedAt < DISMISS_COOLDOWN_MS) return;
     } catch { /* ignore */ }
 
@@ -67,7 +68,7 @@ export function InstallPrompt() {
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'dismissed') {
-        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* ignore */ }
+        try { safeLocalStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* ignore */ }
       }
     } finally {
       setDeferredPrompt(null);
@@ -76,7 +77,7 @@ export function InstallPrompt() {
   };
 
   const handleDismiss = () => {
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* ignore */ }
+    try { safeLocalStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* ignore */ }
     setShow(false);
   };
 

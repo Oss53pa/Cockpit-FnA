@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Link2, Plus, Target, Trash2, Zap, LayoutGrid, Rows3, LayoutDashboard } from 'lucide-react';
 import clsx from 'clsx';
+import { safeLocalStorage } from '../lib/safeStorage';
 
 type ViewMode = 'cards' | 'table' | 'kanban';
 const VIEW_KEY_POINTS = 'attention-points-view';
@@ -117,10 +118,10 @@ function PointsView({ points, plans }: { points: AttentionPoint[]; plans: Action
   const [filter, setFilter] = useState<'all' | AttentionPoint['status']>('all');
   const [sevFilter, setSevFilter] = useState<'all' | AttentionPoint['severity']>('all');
   const [view, setView] = useState<ViewMode>(() => {
-    const v = localStorage.getItem(VIEW_KEY_POINTS);
+    const v = safeLocalStorage.getItem(VIEW_KEY_POINTS);
     return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
   });
-  const setViewMode = (v: ViewMode) => { setView(v); localStorage.setItem(VIEW_KEY_POINTS, v); };
+  const setViewMode = (v: ViewMode) => { setView(v); safeLocalStorage.setItem(VIEW_KEY_POINTS, v); };
 
   const filtered = points.filter((p) =>
     (filter === 'all' || p.status === filter) &&
@@ -404,10 +405,10 @@ function PlanView({ plans, points }: { plans: ActionPlan[]; points: AttentionPoi
   const [filter, setFilter] = useState<'all' | ActionPlan['status']>('all');
   const [prioFilter, setPrioFilter] = useState<'all' | ActionPlan['priority']>('all');
   const [view, setView] = useState<ViewMode>(() => {
-    const v = localStorage.getItem(VIEW_KEY_PLANS);
+    const v = safeLocalStorage.getItem(VIEW_KEY_PLANS);
     return (v === 'table' || v === 'kanban' || v === 'cards') ? v : 'cards';
   });
-  const setViewMode = (v: ViewMode) => { setView(v); localStorage.setItem(VIEW_KEY_PLANS, v); };
+  const setViewMode = (v: ViewMode) => { setView(v); safeLocalStorage.setItem(VIEW_KEY_PLANS, v); };
 
   const today = new Date().toISOString().substring(0, 10);
   const filtered = plans.filter((p) =>

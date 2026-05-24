@@ -3,10 +3,12 @@
  * Aucune donnée ne quitte le poste de l'utilisateur.
  */
 
+import { safeLocalStorage } from './safeStorage';
+
 const DEFAULT_URL = 'http://localhost:11434';
 
 function getBaseUrl(): string {
-  return localStorage.getItem('ollama-url') || import.meta.env.VITE_OLLAMA_URL || DEFAULT_URL;
+  return safeLocalStorage.getItem('ollama-url') || import.meta.env.VITE_OLLAMA_URL || DEFAULT_URL;
 }
 
 export interface OllamaModel {
@@ -45,7 +47,7 @@ export async function checkOllama(): Promise<OllamaStatus> {
       size: m.size,
       modified_at: m.modified_at,
     }));
-    const selected = localStorage.getItem('ollama-model') || models[0]?.name || null;
+    const selected = safeLocalStorage.getItem('ollama-model') || models[0]?.name || null;
     const status: OllamaStatus = { available: true, models, selectedModel: selected };
     lastOllamaStatus = status;
     return status;
@@ -131,15 +133,15 @@ export async function chatComplete(
 
 /** Sauvegarde les préférences Ollama */
 export function saveOllamaConfig(config: { url?: string; model?: string; temperature?: number }) {
-  if (config.url) localStorage.setItem('ollama-url', config.url);
-  if (config.model) localStorage.setItem('ollama-model', config.model);
-  if (config.temperature !== undefined) localStorage.setItem('ollama-temperature', String(config.temperature));
+  if (config.url) safeLocalStorage.setItem('ollama-url', config.url);
+  if (config.model) safeLocalStorage.setItem('ollama-model', config.model);
+  if (config.temperature !== undefined) safeLocalStorage.setItem('ollama-temperature', String(config.temperature));
 }
 
 export function getOllamaConfig() {
   return {
-    url: localStorage.getItem('ollama-url') || DEFAULT_URL,
-    model: localStorage.getItem('ollama-model') || '',
-    temperature: parseFloat(localStorage.getItem('ollama-temperature') || '0.3'),
+    url: safeLocalStorage.getItem('ollama-url') || DEFAULT_URL,
+    model: safeLocalStorage.getItem('ollama-model') || '',
+    temperature: parseFloat(safeLocalStorage.getItem('ollama-temperature') || '0.3'),
   };
 }

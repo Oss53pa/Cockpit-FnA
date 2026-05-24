@@ -6,6 +6,8 @@
 //   2. URL Ollama configurable via VITE_OLLAMA_BASE / localStorage (reverse proxy).
 //   3. Température configurable via paramètre + fallback raisonnable.
 //   4. Cache statut OK pour éviter le flapping.
+import { safeLocalStorage } from '../../lib/safeStorage';
+
 export interface OllamaMessage { role: 'system' | 'user' | 'assistant'; content: string; }
 export interface OllamaResponse { content: string; model: string; tokensUsed: number; latencyMs: number; }
 export interface OllamaStatus { available: boolean; model: string | null; models: string[]; }
@@ -27,7 +29,7 @@ const PREFERRED_MODELS = [
 
 function getBase(): string {
   if (typeof window !== 'undefined') {
-    const stored = window.localStorage.getItem('proph3-ollama-base');
+    const stored = safeLocalStorage.getItem('proph3-ollama-base');
     if (stored) return stored;
   }
   return import.meta.env?.VITE_OLLAMA_BASE ?? 'http://localhost:11434';
@@ -35,7 +37,7 @@ function getBase(): string {
 
 function getDefaultModel(): string | null {
   if (typeof window !== 'undefined') {
-    const stored = window.localStorage.getItem('proph3-ollama-model');
+    const stored = safeLocalStorage.getItem('proph3-ollama-model');
     if (stored) return stored;
   }
   return import.meta.env?.VITE_OLLAMA_MODEL ?? null;
@@ -43,7 +45,7 @@ function getDefaultModel(): string | null {
 
 function getDefaultTemperature(): number {
   if (typeof window !== 'undefined') {
-    const stored = window.localStorage.getItem('proph3-ollama-temperature');
+    const stored = safeLocalStorage.getItem('proph3-ollama-temperature');
     if (stored) {
       const n = parseFloat(stored);
       if (Number.isFinite(n) && n >= 0 && n <= 2) return n;
