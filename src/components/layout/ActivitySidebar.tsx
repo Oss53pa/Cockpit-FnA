@@ -19,6 +19,7 @@ import { dataProvider } from '../../db/provider';
 import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
 import { toast } from '../ui/Toast';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 const SIDEBAR_OPEN_KEY = 'activity-sidebar-open';
 const SIDEBAR_FILTER_KEY = 'activity-sidebar-filter';
@@ -48,7 +49,7 @@ const KIND_COLORS: Record<ActivityKind, string> = {
 
 export function ActivitySidebarToggle() {
   const orgId = useApp((s) => s.currentOrgId);
-  const open = typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_OPEN_KEY) === '1';
+  const open = typeof window !== 'undefined' && safeLocalStorage.getItem(SIDEBAR_OPEN_KEY) === '1';
   const [, setTick] = useState(0);
 
   const { data: activities = [] } = useCloudData<Activity[]>(
@@ -58,7 +59,7 @@ export function ActivitySidebarToggle() {
   );
 
   const toggle = () => {
-    localStorage.setItem(SIDEBAR_OPEN_KEY, open ? '0' : '1');
+    safeLocalStorage.setItem(SIDEBAR_OPEN_KEY, open ? '0' : '1');
     window.dispatchEvent(new Event('activity-sidebar-toggle'));
     setTick((t) => t + 1);
   };
@@ -89,21 +90,21 @@ export function ActivitySidebarToggle() {
 export function ActivitySidebar() {
   const orgId = useApp((s) => s.currentOrgId);
   const location = useLocation();
-  const [open, setOpen] = useState(() => typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_OPEN_KEY) === '1');
-  const [filter, setFilter] = useState<Filter>(() => (localStorage.getItem(SIDEBAR_FILTER_KEY) as Filter) || 'all');
+  const [open, setOpen] = useState(() => typeof window !== 'undefined' && safeLocalStorage.getItem(SIDEBAR_OPEN_KEY) === '1');
+  const [filter, setFilter] = useState<Filter>(() => (safeLocalStorage.getItem(SIDEBAR_FILTER_KEY) as Filter) || 'all');
   const [showResolved, setShowResolved] = useState(false);
   const [scope, setScope] = useState<'all' | 'current'>('all');
   const [newKind, setNewKind] = useState<ActivityKind>('comment');
   const [newContent, setNewContent] = useState('');
 
   useEffect(() => {
-    const onChange = () => setOpen(localStorage.getItem(SIDEBAR_OPEN_KEY) === '1');
+    const onChange = () => setOpen(safeLocalStorage.getItem(SIDEBAR_OPEN_KEY) === '1');
     window.addEventListener('activity-sidebar-toggle', onChange);
     return () => window.removeEventListener('activity-sidebar-toggle', onChange);
   }, []);
 
   const close = () => {
-    localStorage.setItem(SIDEBAR_OPEN_KEY, '0');
+    safeLocalStorage.setItem(SIDEBAR_OPEN_KEY, '0');
     setOpen(false);
     window.dispatchEvent(new Event('activity-sidebar-toggle'));
   };
@@ -136,7 +137,7 @@ export function ActivitySidebar() {
 
   const setFilterPersist = (f: Filter) => {
     setFilter(f);
-    localStorage.setItem(SIDEBAR_FILTER_KEY, f);
+    safeLocalStorage.setItem(SIDEBAR_FILTER_KEY, f);
   };
 
   const addActivity = async () => {

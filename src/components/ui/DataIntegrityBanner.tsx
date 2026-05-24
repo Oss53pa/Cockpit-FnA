@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { dataProvider } from '../../db/provider';
 import { useCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 export function DataIntegrityBanner() {
   const currentOrgId = useApp((s) => s.currentOrgId);
@@ -71,14 +72,14 @@ export function DataIntegrityBanner() {
 
   const dismissed = useMemo(() => {
     if (typeof window === 'undefined') return false;
-    return localStorage.getItem(`data-integrity-banner-dismissed:${currentOrgId}`) === '1';
+    return safeLocalStorage.getItem(`data-integrity-banner-dismissed:${currentOrgId}`) === '1';
   }, [currentOrgId]);
 
   if (!diagnostics || !diagnostics.hasMultipleImports || dismissed) return null;
   if (currentImport !== 'all' && diagnostics.overlapCount === 0) return null;
 
   const handleDismiss = () => {
-    if (currentOrgId) localStorage.setItem(`data-integrity-banner-dismissed:${currentOrgId}`, '1');
+    if (currentOrgId) safeLocalStorage.setItem(`data-integrity-banner-dismissed:${currentOrgId}`, '1');
   };
 
   const handleSwitchToLatest = () => {

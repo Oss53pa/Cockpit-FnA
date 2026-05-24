@@ -3,6 +3,7 @@
 // Source de données : Supabase via dataProvider (obligatoire).
 import { dataProvider } from '../db/provider';
 import { findSyscoAccount } from '../syscohada/coa';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { Line } from './statements';
 import { getActiveModel, modelToSectionDefs, modelToOrder, migrateLegacySettings } from './crModels';
 
@@ -78,18 +79,18 @@ const KEY_CUSTOM = 'cr-section-custom';
 
 export function loadCustomSections(orgId: string): CustomSection[] {
   try {
-    const raw = localStorage.getItem(`${KEY_CUSTOM}:${orgId}`);
+    const raw = safeLocalStorage.getItem(`${KEY_CUSTOM}:${orgId}`);
     if (raw) return JSON.parse(raw) as CustomSection[];
   } catch { /* ignore */ }
   return [];
 }
 export function saveCustomSections(orgId: string, sections: CustomSection[]) {
-  localStorage.setItem(`${KEY_CUSTOM}:${orgId}`, JSON.stringify(sections));
+  safeLocalStorage.setItem(`${KEY_CUSTOM}:${orgId}`, JSON.stringify(sections));
 }
 
 export function loadLabels(orgId: string): Record<CRSection, string> {
   try {
-    const raw = localStorage.getItem(`${KEY_LABELS}:${orgId}`);
+    const raw = safeLocalStorage.getItem(`${KEY_LABELS}:${orgId}`);
     const overrides = raw ? JSON.parse(raw) : {};
     const out: Record<string, string> = {};
     for (const k of Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[]) {
@@ -102,14 +103,14 @@ export function loadLabels(orgId: string): Record<CRSection, string> {
   } catch { return Object.fromEntries(Object.entries(DEFAULT_SECTION_DEFS).map(([k, v]) => [k, v.label])) as any; }
 }
 export function saveLabels(orgId: string, labels: Record<CRSection, string>) {
-  localStorage.setItem(`${KEY_LABELS}:${orgId}`, JSON.stringify(labels));
+  safeLocalStorage.setItem(`${KEY_LABELS}:${orgId}`, JSON.stringify(labels));
 }
 export function loadOrder(orgId: string): CRSection[] {
   const defaults = Object.keys(DEFAULT_SECTION_DEFS) as CRDefaultSection[];
   const customIds = loadCustomSections(orgId).map((c) => c.id);
   let stored: string[] = [];
   try {
-    const raw = localStorage.getItem(`${KEY_ORDER}:${orgId}`);
+    const raw = safeLocalStorage.getItem(`${KEY_ORDER}:${orgId}`);
     if (raw) stored = JSON.parse(raw);
   } catch { /* ignore */ }
   const all = [...defaults, ...customIds];
@@ -119,7 +120,7 @@ export function loadOrder(orgId: string): CRSection[] {
   return filtered;
 }
 export function saveOrder(orgId: string, order: CRSection[]) {
-  localStorage.setItem(`${KEY_ORDER}:${orgId}`, JSON.stringify(order));
+  safeLocalStorage.setItem(`${KEY_ORDER}:${orgId}`, JSON.stringify(order));
 }
 
 // CR_SECTIONS dynamique — lit le MODÈLE ACTIF du module crModels (Phase 3 / propagation).

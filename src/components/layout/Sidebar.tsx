@@ -10,6 +10,7 @@ import { useCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
 import { getTotalUnread } from '../../engine/chat';
 import clsx from 'clsx';
+import { safeLocalStorage } from '../../lib/safeStorage';
 
 const sections = [
   {
@@ -79,10 +80,10 @@ type Props = {
 // Persistance des sections ouvertes/fermées
 const SECTIONS_KEY = 'sidebar-sections-collapsed';
 function loadCollapsedSections(): Record<string, boolean> {
-  try { return JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? '{}'); } catch { return {}; }
+  try { return JSON.parse(safeLocalStorage.getItem(SECTIONS_KEY) ?? '{}'); } catch { return {}; }
 }
 function saveCollapsedSections(state: Record<string, boolean>) {
-  localStorage.setItem(SECTIONS_KEY, JSON.stringify(state));
+  safeLocalStorage.setItem(SECTIONS_KEY, JSON.stringify(state));
 }
 
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: Props) {

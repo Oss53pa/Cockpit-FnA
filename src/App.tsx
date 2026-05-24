@@ -18,6 +18,7 @@ import { lazyWithRetry } from './lib/lazyWithRetry';
 import { useApp } from './store/app';
 import { useAmountMode } from './lib/format';
 import { useOrgResolver } from './hooks/useOrgResolver';
+import { safeLocalStorage } from './lib/safeStorage';
 import Home from './pages/Home';
 
 // Auth pages — format unifié Atlas Studio Suite
@@ -131,7 +132,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   // Si l'user n'a aucune org, OnboardingModal se déclenche (cf. plus bas).
   useOrgResolver();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
+  const [collapsed, setCollapsed] = useState(() => safeLocalStorage.getItem('sidebar-collapsed') === 'true');
   // Triple mécanisme pour garantir le re-render au toggle Entier ↔ Abrégé :
   // 1) abonnement au store Zustand
   // 2) abonnement à l'event custom via useAmountMode (useSyncExternalStore)
@@ -147,7 +148,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   const toggleCollapse = () => {
     const next = !collapsed;
     setCollapsed(next);
-    localStorage.setItem('sidebar-collapsed', String(next));
+    safeLocalStorage.setItem('sidebar-collapsed', String(next));
   };
 
   return (

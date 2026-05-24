@@ -12,6 +12,7 @@
 import { db } from './schema';
 import { toSnake, toCamel } from './caseConvert';
 import { supabase as supabaseTyped, isSupabaseConfigured } from '../lib/supabase';
+import { safeLocalStorage } from '../lib/safeStorage';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FnaDatabase, PostgrestErrorWithCode } from './database.types';
 
@@ -302,11 +303,9 @@ export async function autoRecoverDexieToSupabase(
   if (!isSupabaseConfigured) return result;
 
   // Marker : on ne re-tente pas si déjà fait sur ce device.
-  try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(RECOVERY_MARKER_KEY) === '1') {
-      return result;
-    }
-  } catch { /* sandboxed */ }
+  if (safeLocalStorage.getItem(RECOVERY_MARKER_KEY) === '1') {
+    return result;
+  }
 
   // BUG FIX URGENT : on UNIONNE les orgIds passés (depuis fna_user_orgs auth)
   // avec les orgIds présents dans Dexie. Cas critique : l'utilisateur a des
@@ -364,12 +363,8 @@ export async function autoRecoverDexieToSupabase(
     }
   }
 
-  // Pose le marker pour ne pas re-tenter
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(RECOVERY_MARKER_KEY, '1');
-    }
-  } catch { /* sandboxed */ }
+  // Pose le marker pour ne pas re-tenter (safeLocalStorage: never throws)
+  safeLocalStorage.setItem(RECOVERY_MARKER_KEY, '1');
 
   return result;
 }

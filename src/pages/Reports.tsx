@@ -19,6 +19,7 @@ import type { ReportDoc } from '../db/schema';
 import { Block, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
 import { computeBilan, computeSIG } from '../engine/statements';
 import { fmtMoney } from '../lib/format';
+import { safeLocalStorage } from '../lib/safeStorage';
 // ─── sous-modules ─────────────────────────────────────────────────
 import { uid, QUICK_TEMPLATES, TEMPLATE_DEFAULTS, filterConditionalBlocks } from './Reports/reportData';
 import { renderPages } from './Reports/renderPages';
@@ -47,7 +48,7 @@ export default function Reports() {
   const [insertAtIndex, setInsertAtIndex] = useState<number | null>(null);
   const [tocLabel, setTocLabel] = useState('');
   const [journal, setJournal] = useState<Array<{ date: number; title: string; format: string }>>(() => {
-    try { return JSON.parse(localStorage.getItem('report-journal') ?? '[]'); } catch { return []; }
+    try { return JSON.parse(safeLocalStorage.getItem('report-journal') ?? '[]'); } catch { return []; }
   });
 
   const { data: savedReports = [] as ReportDoc[] } = useCloudData<ReportDoc[]>(
@@ -111,17 +112,17 @@ export default function Reports() {
   };
 
   const [leftCollapsed, setLeftCollapsed] = useState(() => {
-    if (!localStorage.getItem('reports-twisty-init')) {
-      localStorage.setItem('reports-left-collapsed', 'true');
-      localStorage.setItem('reports-right-collapsed', 'true');
-      localStorage.setItem('reports-twisty-init', '1');
+    if (!safeLocalStorage.getItem('reports-twisty-init')) {
+      safeLocalStorage.setItem('reports-left-collapsed', 'true');
+      safeLocalStorage.setItem('reports-right-collapsed', 'true');
+      safeLocalStorage.setItem('reports-twisty-init', '1');
       return true;
     }
-    return localStorage.getItem('reports-left-collapsed') === 'true';
+    return safeLocalStorage.getItem('reports-left-collapsed') === 'true';
   });
-  const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('reports-right-collapsed') === 'true');
-  const toggleLeft = () => { const n = !leftCollapsed; setLeftCollapsed(n); localStorage.setItem('reports-left-collapsed', String(n)); };
-  const toggleRight = () => { const n = !rightCollapsed; setRightCollapsed(n); localStorage.setItem('reports-right-collapsed', String(n)); };
+  const [rightCollapsed, setRightCollapsed] = useState(() => safeLocalStorage.getItem('reports-right-collapsed') === 'true');
+  const toggleLeft = () => { const n = !leftCollapsed; setLeftCollapsed(n); safeLocalStorage.setItem('reports-left-collapsed', String(n)); };
+  const toggleRight = () => { const n = !rightCollapsed; setRightCollapsed(n); safeLocalStorage.setItem('reports-right-collapsed', String(n)); };
 
   const { data: templates = [] } = useCloudData(
     () => currentOrgId ? dataProvider.getTemplates(currentOrgId) : Promise.resolve([]),
@@ -347,7 +348,7 @@ export default function Reports() {
     const entry = { date: Date.now(), title, format };
     const updated = [entry, ...journal].slice(0, 50);
     setJournal(updated);
-    localStorage.setItem('report-journal', JSON.stringify(updated));
+    safeLocalStorage.setItem('report-journal', JSON.stringify(updated));
   };
 
   const generate = (download: boolean = true) => {
@@ -654,7 +655,7 @@ export default function Reports() {
                 ))}
               </div>
               {journal.length > 10 && <p className="text-[10px] text-primary-400 mt-2">+ {journal.length - 10} autres</p>}
-              <button className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 mt-2 transition" onClick={() => { setJournal([]); localStorage.removeItem('report-journal'); }}>Effacer l'historique</button>
+              <button className="text-[10px] text-primary-500 hover:text-primary-900 dark:hover:text-primary-100 mt-2 transition" onClick={() => { setJournal([]); safeLocalStorage.removeItem('report-journal'); }}>Effacer l'historique</button>
             </div>
           )}
         </aside>
