@@ -9,7 +9,7 @@ import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { useCurrentOrg } from '../hooks/useFinancials';
 
 const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
@@ -22,7 +22,7 @@ export default function AnomaliesHeatmap() {
 
   useEffect(() => {
     if (!currentOrgId) return;
-    db.gl.where('orgId').equals(currentOrgId).toArray().then((entries) => {
+    dataProvider.getGLEntries({ orgId: currentOrgId }).then((entries) => {
       const yearEntries = entries.filter((e) => e.date.startsWith(String(currentYear)));
       const cats: Record<string, number[]> = {
         "Classe 6 en crédit (anormal)": Array(12).fill(0),

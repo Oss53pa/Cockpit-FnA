@@ -10,7 +10,7 @@ import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { verifyChain } from '../lib/auditHash';
 import { fmtFull } from '../lib/format';
 import { useCurrentOrg } from '../hooks/useFinancials';
@@ -24,7 +24,9 @@ export default function AuditTrailVisualizer() {
 
   useEffect(() => {
     if (!currentOrgId) return;
-    db.gl.where('orgId').equals(currentOrgId).sortBy('id').then(setEntries);
+    dataProvider.getGLEntries({ orgId: currentOrgId }).then((es) =>
+      setEntries(es.slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0)))
+    );
   }, [currentOrgId]);
 
   const runVerify = async () => {

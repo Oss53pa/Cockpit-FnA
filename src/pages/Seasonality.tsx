@@ -11,7 +11,7 @@ import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { fmtFull, fmtK, fmtPct } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 import { useCurrentOrg } from '../hooks/useFinancials';
@@ -26,7 +26,7 @@ export default function SeasonalityPage() {
 
   useEffect(() => {
     if (!currentOrgId) return;
-    db.gl.where('orgId').equals(currentOrgId).toArray().then((entries) => {
+    dataProvider.getGLEntries({ orgId: currentOrgId }).then((entries) => {
       // Agrège CA / charges par mois sur tous les exercices disponibles
       const monthly = Array(12).fill(0).map(() => ({ ca: 0, charges: 0, samples: 0 }));
       for (const e of entries) {

@@ -11,7 +11,7 @@ import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 import { useCurrentOrg } from '../hooks/useFinancials';
@@ -32,7 +32,7 @@ export default function IntercosPage() {
 
   useEffect(() => {
     if (!currentOrgId) return;
-    db.gl.where('orgId').equals(currentOrgId).toArray().then(setEntries);
+    dataProvider.getGLEntries({ orgId: currentOrgId }).then(setEntries);
   }, [currentOrgId]);
 
   const data = useMemo(() => {

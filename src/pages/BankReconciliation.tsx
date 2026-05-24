@@ -10,7 +10,7 @@ import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { ChartCard } from '../components/ui/ChartCard';
 import { KPICard } from '../components/ui/KPICardV2';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 import { useCurrentOrg } from '../hooks/useFinancials';
@@ -27,7 +27,7 @@ export default function BankReconciliationPage() {
 
   useEffect(() => {
     if (!currentOrgId) return;
-    db.gl.where('orgId').equals(currentOrgId).toArray().then((entries) => {
+    dataProvider.getGLEntries({ orgId: currentOrgId }).then((entries) => {
       const banks = Array.from(new Set(entries.filter((e) => e.account.startsWith('521') || e.account.startsWith('522')).map((e) => e.account)));
       setBankAccounts(banks);
       if (banks[0]) setSelectedAccount(banks[0]);

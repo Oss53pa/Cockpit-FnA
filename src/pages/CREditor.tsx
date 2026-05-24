@@ -27,7 +27,7 @@ import { ChartCard } from '../components/ui/ChartCard';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
 import { useCurrentOrg } from '../hooks/useFinancials';
-import { db } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import {
   listModels, saveModel, publishModel, activateModel, duplicateModel,
   deleteModel, addSection, updateSection, removeSection, validateModel,
@@ -221,7 +221,7 @@ export default function CREditorPage() {
     // RÉELLEMENT mouvementé, même si db.accounts ne contient que les racines.
     Promise.all([
       listCRAccounts(currentOrgId),
-      db.gl.where('orgId').equals(currentOrgId).toArray(),
+      dataProvider.getGLEntries({ orgId: currentOrgId }),
     ]).then(([coaList, entries]) => {
       const labelByCode = new Map(coaList.map((a) => [a.code, a.label]));
       // Libellé GL le plus fréquent par compte (proxy quand db.accounts n'a
