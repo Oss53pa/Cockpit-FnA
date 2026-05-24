@@ -9,17 +9,41 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
 } from './schema';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type {
+  FnaDatabase, WithId, PostgrestErrorWithCode,
+  FnaOrganizationRow, FnaAnalyticCodeRow, FnaUserOrgRow,
+} from './database.types';
 import { supabase as supabaseTyped } from '../lib/supabase';
 
 import { toSnake, toCamel } from './caseConvert';
 
-// Les tables fna_* ne sont pas declarees dans le type Database (qui contient
-// la version sans prefixe pour la compatibilite multi-app). On bypasse donc le
-// type checking sur from() pour ces tables — retour brut RPC standard.
-const supabase = supabaseTyped as any;
+// Les tables fna_* ne sont pas dans Database (qui contient la version sans préfixe).
+// On re-cast vers FnaDatabase pour bénéficier du typage fna_* tout en gardant
+// la sécurité (unknown intermédiaire = pas de suppression arbitraire du typage).
+const supabase = supabaseTyped as unknown as SupabaseClient<FnaDatabase>;
 
 // ── Helpers ──────────────────────────────────────────────────────────
-function check<T>(result: { data: T | null; error: any }): T {
+
+/**
+ * Retourne le builder Supabase pour une table fna_* casté en `any`.
+ *
+ * Le client supabase est typé avec FnaDatabase, ce qui force les arguments
+ * de .insert()/.upsert()/.update() à correspondre exactement aux types Row
+ * définis dans database.types.ts. `toSnake()` produit un Record<string,unknown>
+ * qui n'est pas structurellement assignable — d'où les erreurs "type never".
+ * PostgreSQL valide les colonnes au runtime ; ce cast est donc sûr.
+ *
+ * On caste le builder (pas l'argument) pour que toutes les méthodes chaînées
+ * (eq, order, select…) restent accessibles.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fromAny(table: string): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (supabase as any).from(table);
+}
+
+function check<T>(result: { data: T | null; error: PostgrestErrorWithCode | null }): T {
   if (result.error) {
     const msg = result.error.message ?? String(result.error);
     const code = result.error.code;
@@ -48,10 +72,11 @@ function check<T>(result: { data: T | null; error: any }): T {
  * numériques (debit, credit, count…) restent intacts.
  */
 const TIMESTAMP_FIELDS = new Set(['changed_at', 'resolved_at', 'created_at']);
-function normalizeTsFields<T extends Record<string, any>>(row: T): T {
+function normalizeTsFields<T extends Record<string, unknown>>(row: T): T {
   for (const k of Object.keys(row)) {
     if (TIMESTAMP_FIELDS.has(k) && typeof row[k] === 'number') {
-      (row as any)[k] = new Date(row[k]).toISOString();
+      // On mute via Object.assign pour éviter le cast as any sur l'index
+      Object.assign(row, { [k]: new Date(row[k] as number).toISOString() });
     }
   }
   return row;
@@ -74,8 +99,13 @@ function normalizeTsFields<T extends Record<string, any>>(row: T): T {
  *   (closure sur les filtres). Indispensable car chaque .range() consomme la
  *   requête côté supabase-js.
  * @param label Nom de méthode pour les messages d'erreur (debugging)
+ *
+ * NOTE : PostgrestFilterBuilder implémente PromiseLike (then/catch) mais pas
+ * Promise complète. On type le retour de buildQuery() en `any` pour que TS
+ * accepte l'appel `.range(...).then()` sans erreur de surcharge.
  */
-async function paginatedSelect<T = any>(
+async function paginatedSelect<T = Record<string, unknown>>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   buildQuery: () => any,
   label = 'paginatedSelect',
 ): Promise<T[]> {
@@ -83,17 +113,24 @@ async function paginatedSelect<T = any>(
   const all: T[] = [];
   let offset = 0;
   while (true) {
-    const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
-    if (error) throw new Error(`${label}: ${error.message}`);
-    if (!data || data.length === 0) break;
-    all.push(...data);
-    if (data.length < PAGE) break;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (buildQuery().range(offset, offset + PAGE - 1) as any);
+    if (error) throw new Error(`${label}: ${(error as { message: string }).message}`);
+    if (!data || (data as T[]).length === 0) break;
+    all.push(...(data as T[]));
+    if ((data as T[]).length < PAGE) break;
     offset += PAGE;
   }
   return all;
 }
 
 // ── Provider ─────────────────────────────────────────────────────────
+//
+// NOTE sur les `as any` dans les mutations (.insert/.upsert/.update) :
+// `toSnake()` produit un `Record<string, any>` (transformations dynamiques de clés).
+// Le client Supabase typé attend des types `Insert<T>`/`Update<T>` stricts, ce qui
+// est structurellement incompatible avec un Record générique. Ces casts sont sûrs :
+// PostgreSQL rejette au runtime les colonnes inconnues ou les types incorrects.
 export class SupabaseProvider implements DataProvider {
   // Organizations
   /**
@@ -111,7 +148,7 @@ export class SupabaseProvider implements DataProvider {
     if (!userId) {
       // Pas de session → fallback sur SELECT direct (RLS protège déjà)
       const { data } = await supabase.from('fna_organizations').select('*');
-      return (data ?? []).map((r: any) => toCamel(r)) as Organization[];
+      return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as Organization[];
     }
 
     // 2) JOIN fna_user_orgs → fna_organizations pour récupérer rôle + org
@@ -127,19 +164,27 @@ export class SupabaseProvider implements DataProvider {
         supabase.from('fna_organizations').select('*'),
         supabase.from('fna_user_orgs').select('org_id, role').eq('user_id', userId),
       ]);
-      const roleMap = new Map((rolesData ?? []).map((r: any) => [r.org_id, r.role]));
-      return (orgsData ?? []).map((r: any) => ({
-        ...(toCamel(r) as Organization),
-        role: (roleMap.get(r.id) ?? undefined) as 'admin' | 'editor' | 'viewer' | undefined,
+      const roleMap = new Map((rolesData ?? []).map((r) => [
+        (r as FnaUserOrgRow).org_id,
+        (r as FnaUserOrgRow).role,
+      ]));
+      return (orgsData ?? []).map((r) => ({
+        ...(toCamel(r as Record<string, unknown>) as Organization),
+        role: (roleMap.get((r as FnaOrganizationRow).id) ?? undefined) as 'admin' | 'editor' | 'viewer' | undefined,
       }));
     }
 
+    // Le JOIN retourne des objets { role, fna_organizations: FnaOrganizationRow }
+    type JoinRow = { role: 'admin' | 'editor' | 'viewer'; fna_organizations: FnaOrganizationRow | null };
     return (data ?? [])
-      .filter((row: any) => row.fna_organizations)
-      .map((row: any) => ({
-        ...(toCamel(row.fna_organizations) as Organization),
-        role: row.role as 'admin' | 'editor' | 'viewer',
-      }));
+      .filter((row) => (row as JoinRow).fna_organizations)
+      .map((row) => {
+        const typedRow = row as JoinRow;
+        return {
+          ...(toCamel(typedRow.fna_organizations as Record<string, unknown>) as Organization),
+          role: typedRow.role,
+        };
+      });
   }
   async getOrganization(id: string) {
     const { data } = await supabase.from('fna_organizations').select('*').eq('id', id).single();
@@ -156,7 +201,7 @@ export class SupabaseProvider implements DataProvider {
     // il n'appartient pas à fna_organizations — strip avant upsert sinon
     // PostgREST rejette "column 'role' does not exist".
     if ('role' in row) delete row.role;
-    check(await supabase.from('fna_organizations').upsert(row));
+    check(await fromAny('fna_organizations').upsert(row));
   }
   async deleteOrganization(id: string) {
     check(await supabase.from('fna_organizations').delete().eq('id', id));
@@ -164,7 +209,7 @@ export class SupabaseProvider implements DataProvider {
   async deleteOrganizationCascade(id: string) {
     // Ordre : enfants d'abord pour respecter les FK (au cas où Supabase n'ait pas
     // ON DELETE CASCADE configuré sur toutes les FK fna_*).
-    const tables = [
+    const tables: Array<keyof FnaDatabase['public']['Tables']> = [
       'fna_tiers_unmatched', 'fna_tiers_rules',
       'fna_gl_entries', 'fna_imports', 'fna_budgets', 'fna_account_mappings',
       'fna_accounts', 'fna_periods', 'fna_fiscal_years',
@@ -175,7 +220,8 @@ export class SupabaseProvider implements DataProvider {
     ];
     for (const t of tables) {
       // On ignore les erreurs (table sans la colonne org_id ou rangée déjà absente)
-      await supabase.from(t).delete().eq('org_id', id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from(t) as any).delete().eq('org_id', id);
     }
     check(await supabase.from('fna_organizations').delete().eq('id', id));
   }
@@ -183,16 +229,16 @@ export class SupabaseProvider implements DataProvider {
   // Fiscal years
   async getFiscalYears(orgId: string) {
     const { data } = await supabase.from('fna_fiscal_years').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as FiscalYear[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as FiscalYear[];
   }
   async upsertFiscalYear(fy: FiscalYear) {
-    check(await supabase.from('fna_fiscal_years').upsert(toSnake(fy)));
+    check(await fromAny('fna_fiscal_years').upsert(toSnake(fy)));
   }
   async bulkUpsertFiscalYears(fys: FiscalYear[]) {
     if (fys.length === 0) return;
     const rows = fys.map((f) => toSnake(f));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_fiscal_years').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_fiscal_years').upsert(rows.slice(i, i + 500)));
     }
   }
   async deleteFiscalYearCascade(fy: FiscalYear) {
@@ -207,23 +253,23 @@ export class SupabaseProvider implements DataProvider {
     check(await supabase.from('fna_fiscal_years').delete().eq('id', fy.id));
   }
   async setFiscalYearClosed(fy: FiscalYear, closed: boolean) {
-    check(await supabase.from('fna_fiscal_years').update({ closed }).eq('id', fy.id));
-    check(await supabase.from('fna_periods').update({ closed }).eq('fiscal_year_id', fy.id));
+    check(await fromAny('fna_fiscal_years').update({ closed }).eq('id', fy.id));
+    check(await fromAny('fna_periods').update({ closed }).eq('fiscal_year_id', fy.id));
   }
 
   // Periods
   async getPeriods(orgId: string) {
     const { data } = await supabase.from('fna_periods').select('*').eq('org_id', orgId).order('month');
-    return (data ?? []).map((r: any) => toCamel(r)) as Period[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as Period[];
   }
   async upsertPeriod(p: Period) {
-    check(await supabase.from('fna_periods').upsert(toSnake(p)));
+    check(await fromAny('fna_periods').upsert(toSnake(p)));
   }
   async bulkUpsertPeriods(ps: Period[]) {
     if (ps.length === 0) return;
     const rows = ps.map((p) => toSnake(p));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_periods').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_periods').upsert(rows.slice(i, i + 500)));
     }
   }
 
@@ -234,7 +280,7 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_accounts').select('*').eq('org_id', orgId),
       'getAccounts',
     );
-    return rows.map((r: any) => toCamel(r)) as Account[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as Account[];
   }
   async getAccount(orgId: string, code: string) {
     const { data } = await supabase.from('fna_accounts').select('*')
@@ -242,12 +288,12 @@ export class SupabaseProvider implements DataProvider {
     return data ? toCamel(data) as Account : undefined;
   }
   async upsertAccount(account: Account) {
-    check(await supabase.from('fna_accounts').upsert(toSnake(account)));
+    check(await fromAny('fna_accounts').upsert(toSnake(account)));
   }
   async bulkUpsertAccounts(accounts: Account[]) {
     const rows = accounts.map(a => toSnake(a));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_accounts').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_accounts').upsert(rows.slice(i, i + 500)));
     }
   }
   async deleteAccount(orgId: string, code: string) {
@@ -275,23 +321,23 @@ export class SupabaseProvider implements DataProvider {
       if (filter.toDate) q = q.lte('date', filter.toDate);
       return q;
     }, 'getGLEntries');
-    return rows.map((r: any) => toCamel(r)) as GLEntry[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as GLEntry[];
   }
   async bulkInsertGL(entries: GLEntry[]) {
     const rows = entries.map(e => toSnake(e));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_gl_entries').insert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_gl_entries').insert(rows.slice(i, i + 500)));
     }
   }
   async bulkUpsertGL(entries: GLEntry[]) {
     if (entries.length === 0) return;
     const rows = entries.map(e => toSnake(e));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_gl_entries').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_gl_entries').upsert(rows.slice(i, i + 500)));
     }
   }
   async updateGLEntry(id: number, changes: Partial<GLEntry>) {
-    check(await supabase.from('fna_gl_entries').update(toSnake(changes)).eq('id', id));
+    check(await fromAny('fna_gl_entries').update(toSnake(changes)).eq('id', id));
   }
   async deleteGLByImport(importId: number) {
     check(await supabase.from('fna_gl_entries').delete().eq('import_id', importId));
@@ -300,13 +346,13 @@ export class SupabaseProvider implements DataProvider {
   // Imports
   async getImports(orgId: string) {
     const { data } = await supabase.from('fna_imports').select('*').eq('org_id', orgId).order('date', { ascending: false });
-    return (data ?? []).map((r: any) => toCamel(r)) as ImportLog[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as ImportLog[];
   }
   async addImport(log: Omit<ImportLog, 'id'>): Promise<number> {
     const row = toSnake(log);
     delete row.id;
-    const result = check(await supabase.from('fna_imports').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_imports').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async deleteImport(id: number) {
     check(await supabase.from('fna_imports').delete().eq('id', id));
@@ -320,20 +366,20 @@ export class SupabaseProvider implements DataProvider {
       if (opts?.importId !== undefined) q = q.eq('import_id', opts.importId);
       return q;
     }, 'getTiersUnmatched');
-    return rows.map((r: any) => toCamel(r)) as TiersUnmatched[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as TiersUnmatched[];
   }
   async bulkInsertTiersUnmatched(rows: Omit<TiersUnmatched, 'id'>[]) {
     if (rows.length === 0) return;
     const snakes = rows.map((r) => normalizeTsFields(toSnake(r)));
     for (let i = 0; i < snakes.length; i += 500) {
-      check(await supabase.from('fna_tiers_unmatched').insert(snakes.slice(i, i + 500)));
+      check(await fromAny('fna_tiers_unmatched').insert(snakes.slice(i, i + 500)));
     }
   }
   async updateTiersUnmatched(id: number, changes: Partial<TiersUnmatched>) {
     // Convertit les timestamps numériques (epoch ms) en ISO avant l'UPDATE :
     // les colonnes Postgres sont en timestamptz, un cast direct depuis bigint
     // donnerait des dates absurdes (1970+epochSeconds).
-    check(await supabase.from('fna_tiers_unmatched').update(normalizeTsFields(toSnake(changes))).eq('id', id));
+    check(await fromAny('fna_tiers_unmatched').update(normalizeTsFields(toSnake(changes))).eq('id', id));
   }
   async deleteTiersUnmatched(id: number) {
     check(await supabase.from('fna_tiers_unmatched').delete().eq('id', id));
@@ -347,17 +393,17 @@ export class SupabaseProvider implements DataProvider {
     const rows = await paginatedSelect<any>(() =>
       supabase.from('fna_tiers_rules').select('*').eq('org_id', orgId).order('created_at', { ascending: false }),
     'getTiersRules');
-    return rows.map((r: any) => toCamel(r)) as TiersRule[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as TiersRule[];
   }
   async upsertTiersRule(rule: Omit<TiersRule, 'id'> & { id?: number }): Promise<number> {
     const row = normalizeTsFields(toSnake(rule));
     if (rule.id) {
-      check(await supabase.from('fna_tiers_rules').update(row).eq('id', rule.id));
+      check(await fromAny('fna_tiers_rules').update(row).eq('id', rule.id));
       return rule.id;
     }
     delete row.id;
-    const result = check(await supabase.from('fna_tiers_rules').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_tiers_rules').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async deleteTiersRule(id: number) {
     check(await supabase.from('fna_tiers_rules').delete().eq('id', id));
@@ -372,7 +418,7 @@ export class SupabaseProvider implements DataProvider {
       if (opts?.glEntryId !== undefined) q = q.eq('gl_entry_id', opts.glEntryId);
       const { data, error } = await q;
       if (error) return []; // Migration 019 pas appliquée
-      return (data ?? []).map((r: any) => toCamel(r)) as GLAuditLogEntry[];
+      return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as GLAuditLogEntry[];
     }
     try {
       const rows = await paginatedSelect<any>(() => {
@@ -380,7 +426,7 @@ export class SupabaseProvider implements DataProvider {
         if (opts?.glEntryId !== undefined) q = q.eq('gl_entry_id', opts.glEntryId);
         return q;
       }, 'getGLAuditLog');
-      return rows.map((r: any) => toCamel(r)) as GLAuditLogEntry[];
+      return rows.map((r) => toCamel(r as Record<string, unknown>)) as GLAuditLogEntry[];
     } catch {
       // Migration 019 pas appliquée → silencieusement vide
       return [];
@@ -388,9 +434,10 @@ export class SupabaseProvider implements DataProvider {
   }
   async getLastGLAuditHash(orgId: string): Promise<string> {
     try {
-      const { data, error } = await supabase.rpc('fna_get_last_audit_hash', { p_org_id: orgId });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await supabase.rpc('fna_get_last_audit_hash', { p_org_id: orgId } as any);
       if (error) return '';
-      return (data as any) ?? '';
+      return typeof data === 'string' ? data : '';
     } catch {
       return '';
     }
@@ -420,12 +467,13 @@ export class SupabaseProvider implements DataProvider {
         source_kind: c.sourceKind ?? '',
         source_id: c.sourceId ?? '',
       }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await supabase.rpc('fna_append_audit_log', {
         p_org_id: orgId,
         p_changes: payload,
-      });
+      } as any);
       if (error) {
-        const code = (error as any).code;
+        const code = (error as PostgrestErrorWithCode).code;
         const msg = error.message || '';
         if (code === '42883' || code === 'PGRST202' || msg.includes('does not exist')) {
           // Migration 020 pas appliquée → caller fait fallback
@@ -434,9 +482,9 @@ export class SupabaseProvider implements DataProvider {
         throw new Error(`appendGLAuditLogAtomic: ${msg}`);
       }
       return typeof data === 'number' ? data : changes.length;
-    } catch (e: any) {
+    } catch (e: unknown) {
       // eslint-disable-next-line no-console
-      console.warn('[appendGLAuditLogAtomic] échec, retour null pour fallback:', e?.message ?? e);
+      console.warn('[appendGLAuditLogAtomic] échec, retour null pour fallback:', (e as { message?: string })?.message ?? e);
       return null;
     }
   }
@@ -445,7 +493,7 @@ export class SupabaseProvider implements DataProvider {
     const snakes = rows.map((r) => normalizeTsFields(toSnake(r)));
     try {
       for (let i = 0; i < snakes.length; i += 500) {
-        check(await supabase.from('fna_gl_audit_log').insert(snakes.slice(i, i + 500)));
+        check(await fromAny('fna_gl_audit_log').insert(snakes.slice(i, i + 500)));
       }
     } catch (e) {
       // Migration 019 pas appliquée → non bloquant
@@ -474,6 +522,7 @@ export class SupabaseProvider implements DataProvider {
       // Conversion camelCase → snake_case pour les unmatched (la RPC attend
       // les clés en snake_case, comme les colonnes Postgres).
       const unmatchedSnake = payload.unmatched.map((u) => toSnake(u));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await supabase.rpc('fna_import_tiers', {
         p_org_id:    payload.orgId,
         p_user:      payload.user,
@@ -486,11 +535,11 @@ export class SupabaseProvider implements DataProvider {
         p_report:    payload.report,
         p_enriched:  payload.enriched,
         p_unmatched: unmatchedSnake,
-      });
+      } as any);
       if (error) {
         // 42883 = "function does not exist" → migration pas appliquée
         // PGRST202 = "Could not find the function" → idem côté PostgREST
-        const code = (error as any).code;
+        const code = (error as PostgrestErrorWithCode).code;
         if (code === '42883' || code === 'PGRST202' || (error.message || '').includes('does not exist')) {
           // eslint-disable-next-line no-console
           console.warn('[importTiersAtomic] RPC non déployée — fallback sur séquentiel.');
@@ -498,14 +547,15 @@ export class SupabaseProvider implements DataProvider {
         }
         throw new Error(`importTiersAtomic: ${error.message}`);
       }
-      if (!data || typeof (data as any).import_id !== 'number') {
+      const rpcResult = data as { import_id?: unknown } | null;
+      if (!rpcResult || typeof rpcResult.import_id !== 'number') {
         return null;
       }
-      return { importId: (data as any).import_id };
-    } catch (e: any) {
+      return { importId: rpcResult.import_id };
+    } catch (e: unknown) {
       // Tout autre échec : ne pas casser l'import — fallback séquentiel
       // eslint-disable-next-line no-console
-      console.warn('[importTiersAtomic] échec, fallback séquentiel:', e?.message ?? e);
+      console.warn('[importTiersAtomic] échec, fallback séquentiel:', (e as { message?: string })?.message ?? e);
       return null;
     }
   }
@@ -517,26 +567,26 @@ export class SupabaseProvider implements DataProvider {
         .eq('org_id', orgId).eq('year', year).eq('version', version),
       'getBudgets',
     );
-    return rows.map((r: any) => toCamel(r)) as BudgetLine[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as BudgetLine[];
   }
   async getAllBudgets(orgId: string) {
     const rows = await paginatedSelect<any>(
       () => supabase.from('fna_budgets').select('*').eq('org_id', orgId),
       'getAllBudgets',
     );
-    return rows.map((r: any) => toCamel(r)) as BudgetLine[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as BudgetLine[];
   }
   async getBudgetsByYear(orgId: string, year: number) {
     const rows = await paginatedSelect<any>(
       () => supabase.from('fna_budgets').select('*').eq('org_id', orgId).eq('year', year),
       'getBudgetsByYear',
     );
-    return rows.map((r: any) => toCamel(r)) as BudgetLine[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as BudgetLine[];
   }
   async bulkUpsertBudgets(lines: BudgetLine[]) {
     const rows = lines.map(l => toSnake(l));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_budgets').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_budgets').upsert(rows.slice(i, i + 500)));
     }
   }
   async deleteBudgets(orgId: string, year: number, version: string) {
@@ -552,7 +602,7 @@ export class SupabaseProvider implements DataProvider {
   // Reports
   async getReports(orgId: string) {
     const { data } = await supabase.from('fna_reports').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as ReportDoc[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as ReportDoc[];
   }
   async getReport(id: number) {
     const { data } = await supabase.from('fna_reports').select('*').eq('id', id).single();
@@ -561,12 +611,12 @@ export class SupabaseProvider implements DataProvider {
   async upsertReport(doc: Omit<ReportDoc, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(doc);
     if (doc.id) {
-      check(await supabase.from('fna_reports').update(row).eq('id', doc.id));
+      check(await fromAny('fna_reports').update(row).eq('id', doc.id));
       return doc.id;
     }
     delete row.id;
-    const result = check(await supabase.from('fna_reports').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_reports').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async deleteReport(id: number) {
     check(await supabase.from('fna_reports').delete().eq('id', id));
@@ -575,17 +625,17 @@ export class SupabaseProvider implements DataProvider {
   // Templates
   async getTemplates(orgId: string) {
     const { data } = await supabase.from('fna_report_templates').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as ReportTemplate[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as ReportTemplate[];
   }
   async upsertTemplate(t: Omit<ReportTemplate, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(t);
     if (t.id) {
-      check(await supabase.from('fna_report_templates').update(row).eq('id', t.id));
+      check(await fromAny('fna_report_templates').update(row).eq('id', t.id));
       return t.id;
     }
     delete row.id;
-    const result = check(await supabase.from('fna_report_templates').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_report_templates').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async deleteTemplate(id: number) {
     check(await supabase.from('fna_report_templates').delete().eq('id', id));
@@ -598,17 +648,17 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_attention_points').select('*').eq('org_id', orgId),
       'getAttentionPoints',
     );
-    return (data ?? []).map((r: any) => toCamel(r)) as AttentionPoint[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as AttentionPoint[];
   }
   async upsertAttentionPoint(p: Omit<AttentionPoint, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(p);
     if (p.id) {
-      check(await supabase.from('fna_attention_points').update(row).eq('id', p.id));
+      check(await fromAny('fna_attention_points').update(row).eq('id', p.id));
       return p.id;
     }
     delete row.id;
-    const result = check(await supabase.from('fna_attention_points').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_attention_points').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async deleteAttentionPoint(id: number) {
     check(await supabase.from('fna_attention_points').delete().eq('id', id));
@@ -621,17 +671,17 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_action_plans').select('*').eq('org_id', orgId),
       'getActionPlans',
     );
-    return (data ?? []).map((r: any) => toCamel(r)) as ActionPlan[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as ActionPlan[];
   }
   async upsertActionPlan(p: Omit<ActionPlan, 'id'> & { id?: number }): Promise<number> {
     const row = toSnake(p);
     if (p.id) {
-      check(await supabase.from('fna_action_plans').update(row).eq('id', p.id));
+      check(await fromAny('fna_action_plans').update(row).eq('id', p.id));
       return p.id;
     }
     delete row.id;
-    const result = check(await supabase.from('fna_action_plans').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_action_plans').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async deleteActionPlan(id: number) {
     check(await supabase.from('fna_action_plans').delete().eq('id', id));
@@ -644,24 +694,24 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_account_mappings').select('*').eq('org_id', orgId),
       'getMappings',
     );
-    return (data ?? []).map((r: any) => toCamel(r)) as AccountMapping[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as AccountMapping[];
   }
   async upsertMapping(m: AccountMapping) {
-    check(await supabase.from('fna_account_mappings').upsert(toSnake(m)));
+    check(await fromAny('fna_account_mappings').upsert(toSnake(m)));
   }
 
   // ── Comptabilité analytique ────────────────────────────────────────
   async getAnalyticAxes(orgId: string) {
     const { data } = await supabase.from('fna_analytic_axes').select('*').eq('org_id', orgId).order('number');
-    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticAxis[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as AnalyticAxis[];
   }
   async upsertAnalyticAxis(axis: AnalyticAxis) {
-    check(await supabase.from('fna_analytic_axes').upsert(toSnake(axis)));
+    check(await fromAny('fna_analytic_axes').upsert(toSnake(axis)));
   }
   async deleteAnalyticAxis(id: string) {
     // Cascade : on charge d'abord les codes liés pour supprimer assignments + rules
     const { data: codes } = await supabase.from('fna_analytic_codes').select('id').eq('axis_id', id);
-    const codeIds = (codes ?? []).map((c: any) => c.id);
+    const codeIds = (codes ?? []).map((c) => (c as Pick<FnaAnalyticCodeRow, 'id'>).id);
     if (codeIds.length > 0) {
       check(await supabase.from('fna_analytic_assignments').delete().in('code_id', codeIds));
       check(await supabase.from('fna_analytic_rules').delete().in('analytic_code_id', codeIds));
@@ -677,16 +727,16 @@ export class SupabaseProvider implements DataProvider {
       if (axisId) q = q.eq('axis_id', axisId);
       return q;
     }, 'getAnalyticCodes');
-    return rows.map((r: any) => toCamel(r)) as AnalyticCode[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as AnalyticCode[];
   }
   async upsertAnalyticCode(code: AnalyticCode) {
-    check(await supabase.from('fna_analytic_codes').upsert(toSnake(code)));
+    check(await fromAny('fna_analytic_codes').upsert(toSnake(code)));
   }
   async bulkUpsertAnalyticCodes(codes: AnalyticCode[]) {
     if (codes.length === 0) return;
     const rows = codes.map((c) => toSnake(c));
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_analytic_codes').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_analytic_codes').upsert(rows.slice(i, i + 500)));
     }
   }
   async deleteAnalyticCode(id: string) {
@@ -694,21 +744,21 @@ export class SupabaseProvider implements DataProvider {
     check(await supabase.from('fna_analytic_codes').delete().eq('id', id));
   }
   async detachAnalyticChildren(parentId: string) {
-    check(await supabase.from('fna_analytic_codes').update({ parent_id: null }).eq('parent_id', parentId));
+    check(await fromAny('fna_analytic_codes').update({ parent_id: null }).eq('parent_id', parentId));
   }
 
   async getAnalyticRules(orgId: string) {
     const { data } = await supabase.from('fna_analytic_rules').select('*').eq('org_id', orgId).order('priority');
-    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticRule[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as AnalyticRule[];
   }
   async upsertAnalyticRule(rule: AnalyticRule) {
-    check(await supabase.from('fna_analytic_rules').upsert(toSnake(rule)));
+    check(await fromAny('fna_analytic_rules').upsert(toSnake(rule)));
   }
   async deleteAnalyticRule(id: string) {
     check(await supabase.from('fna_analytic_rules').delete().eq('id', id));
   }
   async updateAnalyticRulePriority(id: string, priority: number) {
-    check(await supabase.from('fna_analytic_rules').update({ priority }).eq('id', id));
+    check(await fromAny('fna_analytic_rules').update({ priority }).eq('id', id));
   }
 
   async getAnalyticAssignments(orgId: string) {
@@ -717,17 +767,17 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_analytic_assignments').select('*').eq('org_id', orgId),
       'getAnalyticAssignments',
     );
-    return (data ?? []).map((r: any) => toCamel(r)) as AnalyticAssignment[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as AnalyticAssignment[];
   }
   async bulkInsertAnalyticAssignments(assignments: AnalyticAssignment[]) {
     if (assignments.length === 0) return;
     const rows = assignments.map((a) => { const s = toSnake(a); delete s.id; return s; });
     for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from('fna_analytic_assignments').insert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_analytic_assignments').insert(rows.slice(i, i + 500)));
     }
   }
   async updateAnalyticAssignment(id: number, changes: Partial<AnalyticAssignment>) {
-    check(await supabase.from('fna_analytic_assignments').update(toSnake(changes)).eq('id', id));
+    check(await fromAny('fna_analytic_assignments').update(toSnake(changes)).eq('id', id));
   }
   async deleteAnalyticAssignmentsByOrgFilter(orgId: string, predicate: (a: AnalyticAssignment) => boolean) {
     // Supabase ne supporte pas les predicates JS — on charge puis filtre puis delete par ids.
@@ -748,7 +798,7 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_analytic_budgets').select('*').eq('org_id', orgId),
       'getAnalyticBudgets',
     );
-    return rows.map((r: any) => toCamel(r)) as AnalyticBudget[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as AnalyticBudget[];
   }
 
   // ── Activités ──────────────────────────────────────────────────────
@@ -759,7 +809,7 @@ export class SupabaseProvider implements DataProvider {
         .eq('org_id', orgId).order('created_at', { ascending: false }),
       'getActivities',
     );
-    return rows.map((r: any) => toCamel(r)) as Activity[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as Activity[];
   }
   async getActivity(id: number) {
     const { data } = await supabase.from('fna_activities').select('*').eq('id', id).maybeSingle();
@@ -767,11 +817,11 @@ export class SupabaseProvider implements DataProvider {
   }
   async addActivity(act: Omit<Activity, 'id'>) {
     const row = toSnake(act); delete row.id;
-    const result = check(await supabase.from('fna_activities').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_activities').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async updateActivity(id: number, changes: Partial<Activity>) {
-    check(await supabase.from('fna_activities').update(toSnake(changes)).eq('id', id));
+    check(await fromAny('fna_activities').update(toSnake(changes)).eq('id', id));
   }
   async deleteActivity(id: number) {
     check(await supabase.from('fna_activities').delete().eq('id', id));
@@ -780,14 +830,14 @@ export class SupabaseProvider implements DataProvider {
   // ── Chat ───────────────────────────────────────────────────────────
   async getChannels(orgId: string) {
     const { data } = await supabase.from('fna_channels').select('*').eq('org_id', orgId);
-    return (data ?? []).map((r: any) => toCamel(r)) as Channel[];
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as Channel[];
   }
   async getChannel(id: string) {
     const { data } = await supabase.from('fna_channels').select('*').eq('id', id).maybeSingle();
     return data ? toCamel(data) as Channel : undefined;
   }
   async upsertChannel(c: Channel) {
-    check(await supabase.from('fna_channels').upsert(toSnake(c)));
+    check(await fromAny('fna_channels').upsert(toSnake(c)));
   }
   async deleteChannel(id: string) {
     check(await supabase.from('fna_channels').delete().eq('id', id));
@@ -807,22 +857,22 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_chat_messages').select('*').eq('channel_id', channelId).order('created_at'),
       'getChatMessagesByChannel',
     );
-    return rows.map((r: any) => toCamel(r)) as ChatMessage[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as ChatMessage[];
   }
   async getChatMessagesByOrg(orgId: string) {
     const rows = await paginatedSelect<any>(
       () => supabase.from('fna_chat_messages').select('*').eq('org_id', orgId),
       'getChatMessagesByOrg',
     );
-    return rows.map((r: any) => toCamel(r)) as ChatMessage[];
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as ChatMessage[];
   }
   async addChatMessage(msg: Omit<ChatMessage, 'id'>) {
     const row = toSnake(msg); delete row.id;
-    const result = check(await supabase.from('fna_chat_messages').insert(row).select('id').single());
-    return (result as any).id;
+    const result = check(await fromAny('fna_chat_messages').insert(row).select('id').single());
+    return (result as unknown as WithId).id;
   }
   async updateChatMessage(id: number, changes: Partial<ChatMessage>) {
-    check(await supabase.from('fna_chat_messages').update(toSnake(changes)).eq('id', id));
+    check(await fromAny('fna_chat_messages').update(toSnake(changes)).eq('id', id));
   }
   async deleteChatMessage(id: number) {
     check(await supabase.from('fna_chat_messages').delete().eq('id', id));

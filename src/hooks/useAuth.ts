@@ -100,6 +100,12 @@ export function useAuth() {
       })
       .catch((e) => {
         console.error('[useAuth] getSession failed:', e);
+        // Si le refresh token est corrompu/expiré, on signe out explicitement
+        // pour purger les tokens stockés et éviter des erreurs en boucle.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/Refresh Token/i.test(msg)) {
+          supabase.auth.signOut().catch(() => {});
+        }
         // Ne reste PAS bloqué en loading — laisse l'app continuer en mode dégradé
         setState(s => ({ ...s, user: null, session: null, loading: false }));
       });

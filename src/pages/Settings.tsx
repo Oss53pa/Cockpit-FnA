@@ -1856,7 +1856,7 @@ function InvitePreviewModal({ open, onClose, user, orgs }: {
   );
 }
 
-// ─── IA & PROPH3T (Ollama local OU Cloud OpenAI-compatible) ────────
+// ─── IA & Proph3t (Ollama local OU Cloud OpenAI-compatible) ────────
 function TabAI() {
   const [cfg, setCfg] = useState(loadAIConfig());
   const [status, setStatus] = useState<AIStatus | null>(null);

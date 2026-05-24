@@ -24,7 +24,9 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   user: 'user_name',
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toSnake(obj: Record<string, any>): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(obj)) {
     const mapped = CAMEL_TO_SNAKE[k];
@@ -34,10 +36,11 @@ export function toSnake(obj: Record<string, any>): Record<string, any> {
   return out;
 }
 
-export function toCamel(obj: Record<string, any>): Record<string, any> {
-  const out: Record<string, any> = {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toCamel(obj: Record<string, any>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
-    const ck = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    const ck = k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
     if (k === 'user_name') out.user = v;
     else out[ck] = v;
   }

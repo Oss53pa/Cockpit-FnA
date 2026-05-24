@@ -22,7 +22,7 @@
  * Tous les appels ont une dégradation gracieuse : si le core est down, la
  * fonction renvoie `null` / `[]` sans bloquer la réponse Proph3 locale.
  *
- * Voir docs/PROPH3T_FEDERATION.md (repo SiteWeb Atlas Studio).
+ * Voir docs/Proph3t_FEDERATION.md (repo SiteWeb Atlas Studio).
  */
 
 import { Proph3tClient, Proph3tError } from "@atlas-studio/proph3t-client";

@@ -130,6 +130,25 @@ describe('auditHash — verifyChain', () => {
   });
 });
 
+describe('auditHash — S-03 : stabilité cross-import', () => {
+  it('changer l\'id auto-increment ne casse pas le hash (re-import safe)', async () => {
+    // Simule un re-import : même écriture comptable, nouvel id auto-increment
+    const entryBeforeImport = e(1, '411', 500);
+    const entryAfterImport  = { ...entryBeforeImport, id: 99 }; // nouvel id Dexie
+    const h1 = await hashEntry(entryBeforeImport, '');
+    const h2 = await hashEntry(entryAfterImport, '');
+    expect(h1).toBe(h2); // le hash ne dépend plus de l'id
+  });
+
+  it('deux écritures identiques sauf l\'id → même hash (clé naturelle)', async () => {
+    const a = e(1, '601', 1000, 0);
+    const b = { ...a, id: 42 };
+    const ha = await hashEntry(a, 'prevhash');
+    const hb = await hashEntry(b, 'prevhash');
+    expect(ha).toBe(hb);
+  });
+});
+
 describe('auditHash — résistance aux altérations', () => {
   it('toute modification d\'1 champ critique invalide la chaîne', async () => {
     const fields: Array<keyof HashableEntry> = ['date', 'journal', 'piece', 'account', 'label', 'debit', 'credit'];

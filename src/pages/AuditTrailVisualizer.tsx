@@ -33,7 +33,10 @@ export default function AuditTrailVisualizer() {
     setVerifying(true);
     try {
       const chain = entries.map((e) => ({
-        id: e.id ?? '', date: e.date, journal: e.journal, piece: e.piece,
+        // id transmis UNIQUEMENT pour l'affichage (brokenAt) — non inclus dans
+        // le hash canonique (S-03 : clé naturelle stable sans auto-increment).
+        id: e.id,
+        date: e.date, journal: e.journal, piece: e.piece,
         account: e.account, label: e.label, debit: e.debit, credit: e.credit,
         tiers: e.tiers, hash: e.hash, previousHash: e.previousHash,
       }));

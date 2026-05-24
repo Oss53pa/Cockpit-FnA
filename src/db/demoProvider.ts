@@ -17,7 +17,7 @@ import type {
   Organization, FiscalYear, Period, Account, GLEntry, ImportLog, BudgetLine,
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
-  Activity, Channel, ChatMessage, TiersUnmatched, TiersRule,
+  Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
 } from './schema';
 import {
   isDemoActive, DEMO_ORG, DEMO_BALANCE, DEMO_PERIODS, DEMO_IMPORTS,
@@ -263,11 +263,22 @@ export class DemoProvider implements DataProvider {
     if (isDemo(orgId)) return '';
     return this.inner.getLastGLAuditHash?.(orgId) ?? '';
   }
-  async bulkInsertGLAuditLog(rows: any[]) {
+  async bulkInsertGLAuditLog(rows: Omit<GLAuditLogEntry, 'id'>[]) {
     if (rows[0] && isDemo(rows[0].orgId)) return;
     return this.inner.bulkInsertGLAuditLog?.(rows);
   }
-  async appendGLAuditLogAtomic(orgId: string, changes: any[]) {
+  async appendGLAuditLogAtomic(
+    orgId: string,
+    changes: Array<{
+      glEntryId: number;
+      field: string;
+      oldValue?: string;
+      newValue?: string;
+      reason: string;
+      sourceKind?: string;
+      sourceId?: number;
+    }>,
+  ) {
     if (isDemo(orgId)) return changes.length;
     // Si l'inner ne supporte pas (Electron) → retourner null pour fallback
     return this.inner.appendGLAuditLogAtomic?.(orgId, changes) ?? null;

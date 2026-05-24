@@ -5,7 +5,8 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { useOrganizations } from '../hooks/useFinancials';
-import { db, type AccountingSystem } from '../db/schema';
+import { type AccountingSystem } from '../db/schema';
+import { dataProvider } from '../db/provider';
 import { useApp } from '../store/app';
 import { ACCOUNTING_SYSTEMS, SYSTEM_META } from '../syscohada/systems';
 
@@ -24,7 +25,7 @@ export default function Orgs() {
     setSaving(true);
     try {
       const id = 'org-' + Date.now();
-      await db.organizations.add({
+      await dataProvider.upsertOrganization({
         id,
         name: form.name.trim(),
         sector: form.sector,
@@ -36,7 +37,7 @@ export default function Orgs() {
       });
       // Exercice courant vide
       const year = new Date().getFullYear();
-      await db.fiscalYears.add({
+      await dataProvider.upsertFiscalYear({
         id: `${id}-${year}`, orgId: id, year,
         startDate: `${year}-01-01`, endDate: `${year}-12-31`, closed: false,
       });
@@ -46,7 +47,7 @@ export default function Orgs() {
         orgId: id, fiscalYearId: `${id}-${year}`,
         year, month: i + 1, label: `${monthLabels[i]} ${year}`, closed: false,
       }));
-      await db.periods.bulkPut(periods);
+      await dataProvider.bulkUpsertPeriods(periods);
       setOpenNew(false);
       setForm({ name: '', sector: 'Industrie', currency: 'XOF', rccm: '', ifu: '', accountingSystem: 'Normal' as AccountingSystem });
       setCurrentOrg(id);
@@ -57,16 +58,10 @@ export default function Orgs() {
 
   const remove = async (id: string) => {
     if (!confirm('Supprimer cette société ? Toutes les données associées seront effacées.')) return;
-    await db.transaction('rw', [db.organizations, db.fiscalYears, db.periods, db.accounts, db.gl, db.imports, db.budgets, db.mappings], async () => {
-      await db.gl.where('orgId').equals(id).delete();
-      await db.imports.where('orgId').equals(id).delete();
-      await db.budgets.where('orgId').equals(id).delete();
-      await db.accounts.where('orgId').equals(id).delete();
-      await db.mappings.where('orgId').equals(id).delete();
-      await db.periods.where('orgId').equals(id).delete();
-      await db.fiscalYears.where('orgId').equals(id).delete();
-      await db.organizations.delete(id);
-    });
+    // dataProvider.deleteOrganizationCascade effectue la suppression atomique de
+    // l'org + tous ses enfants (GL, budgets, périodes, comptes, mappings, imports).
+    // Interception DemoProvider pour les org demo-org-*.
+    await dataProvider.deleteOrganizationCascade(id);
     if (currentOrgId === id && orgs.length > 1) {
       const next = orgs.find((o) => o.id !== id);
       if (next) setCurrentOrg(next.id);
@@ -100,7 +95,7 @@ export default function Orgs() {
                   <select
                     className="text-[10px] py-0.5 px-1 rounded border border-primary-300 dark:border-primary-700 bg-primary-100 dark:bg-primary-900"
                     value={o.accountingSystem ?? 'Normal'}
-                    onChange={(e) => db.organizations.update(o.id, { accountingSystem: e.target.value as AccountingSystem })}
+                    onChange={(e) => void dataProvider.upsertOrganization({ ...o, accountingSystem: e.target.value as AccountingSystem })}
                     title="Système comptable OHADA"
                   >
                     {ACCOUNTING_SYSTEMS.map((s) => <option key={s} value={s}>{SYSTEM_META[s].label}</option>)}

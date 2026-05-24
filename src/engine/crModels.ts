@@ -13,6 +13,7 @@
  * getSectionDefs(orgId) (point pivot) lit le modèle actif depuis Dexie.
  */
 import { dataProvider } from '../db/provider';
+import { safeLocalStorage } from '../lib/safeStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -89,19 +90,18 @@ const KEY_HISTORY = 'cockpit-cr-history';    // CRModelHistoryEntry[]
 
 function loadAllModels(): Record<string, CRModel[]> {
   try {
-    const raw = localStorage.getItem(KEY_MODELS);
+    const raw = safeLocalStorage.getItem(KEY_MODELS);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
 
 function saveAllModels(data: Record<string, CRModel[]>) {
-  try { localStorage.setItem(KEY_MODELS, JSON.stringify(data)); }
-  catch (e) { console.warn('CR Models: quota localStorage atteint', e); }
+  safeLocalStorage.setItem(KEY_MODELS, JSON.stringify(data));
 }
 
 function loadHistory(): CRModelHistoryEntry[] {
   try {
-    const raw = localStorage.getItem(KEY_HISTORY);
+    const raw = safeLocalStorage.getItem(KEY_HISTORY);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
@@ -109,8 +109,7 @@ function loadHistory(): CRModelHistoryEntry[] {
 function saveHistory(entries: CRModelHistoryEntry[]) {
   // Limite à 500 entrées pour éviter explosion
   const trimmed = entries.slice(-500);
-  try { localStorage.setItem(KEY_HISTORY, JSON.stringify(trimmed)); }
-  catch { /* ignore */ }
+  safeLocalStorage.setItem(KEY_HISTORY, JSON.stringify(trimmed));
 }
 
 function logHistory(entry: Omit<CRModelHistoryEntry, 'id' | 'timestamp'>) {
@@ -418,7 +417,7 @@ export function evaluateFormula(expression: string, values: Record<string, numbe
     const t = consume();
     if (!t) return 0;
     if (t.type === 'num') return t.value as number;
-    if (t.type === 'id') return values[t.value as string] ?? 0;
+    if (t.type === 'id') { const v = values[t.value as string] ?? 0; return isFinite(v) ? v : 0; }
     if (t.type === 'op' && t.value === '-') return -parseFactor(); // unary minus
     if (t.type === 'op' && t.value === '+') return parseFactor();  // unary plus
     if (t.type === 'paren' && t.value === '(') {
@@ -447,7 +446,9 @@ export function evaluateFormula(expression: string, values: Record<string, numbe
     return left;
   }
 
-  return parseExpr();
+  const raw = parseExpr();
+  // Normalise NaN / ±Infinity (formule avec référence inconnue ou division par 0)
+  return isFinite(raw) ? raw : 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

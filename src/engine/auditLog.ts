@@ -10,6 +10,8 @@
  *   pour standardiser les appels depuis tout le code
  */
 
+import { safeLocalStorage } from '../lib/safeStorage';
+
 const KEY = 'audit-log';
 
 export type AuditAction =
@@ -39,12 +41,12 @@ export interface AuditEntry {
 }
 
 function loadLog(): AuditEntry[] {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; }
+  try { return JSON.parse(safeLocalStorage.getItem(KEY) ?? '[]'); } catch { return []; }
 }
 
 function saveLog(entries: AuditEntry[]) {
-  // Garde les 5000 dernieres
-  localStorage.setItem(KEY, JSON.stringify(entries.slice(0, 5000)));
+  // Garde les 5000 dernieres. Utilise safeLocalStorage pour éviter le crash Safari iOS / quota.
+  safeLocalStorage.setItem(KEY, JSON.stringify(entries.slice(0, 5000)));
 }
 
 /** Calcule SHA-256 hex sur une chaine. */
@@ -112,7 +114,7 @@ export function getAuditTrail(orgId?: string, limit = 200): AuditEntry[] {
 }
 
 export function clearAuditTrail(): void {
-  localStorage.removeItem(KEY);
+  safeLocalStorage.removeItem(KEY);
 }
 
 export function exportAuditTrailCSV(orgId?: string): string {

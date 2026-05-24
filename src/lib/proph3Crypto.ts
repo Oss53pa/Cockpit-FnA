@@ -25,9 +25,18 @@
  * contrainte de rétention légale sur la mémoire IA).
  */
 
-// Sel constant applicatif (pas un secret — visible dans le code).
-// Sa fonction est de séparer ce schéma de chiffrement de tout autre usage du user.id.
-const APP_SALT = new TextEncoder().encode('cockpit-fna-proph3:v1');
+// Sels applicatifs versionnés (pas des secrets — visibles dans le code).
+// Leur rôle : séparer ce schéma de tout autre usage du user.id ET permettre la
+// rotation de clé sans cassure des données existantes (SEC-03).
+// v1 = sel d'origine ; v2 = nouveau sel (rotation post-audit).
+const APP_SALTS: Record<number, Uint8Array> = {
+  1: new TextEncoder().encode('cockpit-fna-proph3:v1'),
+  2: new TextEncoder().encode('cockpit-fna-proph3:v2'),
+} as const;
+/** Sel courant pour les NOUVEAUX chiffrements. */
+const CURRENT_KEY_VERSION = 2;
+/** @deprecated Alias de compatibilité — utiliser APP_SALTS[1]. */
+const APP_SALT = APP_SALTS[1];
 
 const subtle = (): SubtleCrypto => {
   if (typeof window === 'undefined' || !window.crypto?.subtle) {
@@ -50,10 +59,11 @@ function b64ToBytes(b64: string): Uint8Array {
 }
 
 // ─── Dérivation de la clé maître AES-256 ─────────────────────────────────────
-let cachedKey: { userId: string; key: CryptoKey } | null = null;
+let cachedKey: { userId: string; version: number; key: CryptoKey } | null = null;
 
-async function deriveMasterKey(userId: string): Promise<CryptoKey> {
-  if (cachedKey && cachedKey.userId === userId) return cachedKey.key;
+async function deriveMasterKey(userId: string, version = CURRENT_KEY_VERSION): Promise<CryptoKey> {
+  if (cachedKey && cachedKey.userId === userId && cachedKey.version === version) return cachedKey.key;
+  const salt = APP_SALTS[version] ?? APP_SALTS[1];
   const enc = new TextEncoder();
   const baseKey = await subtle().importKey(
     'raw',
@@ -63,13 +73,13 @@ async function deriveMasterKey(userId: string): Promise<CryptoKey> {
     ['deriveKey'],
   );
   const key = await subtle().deriveKey(
-    { name: 'PBKDF2', salt: APP_SALT, iterations: 100000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
     baseKey,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt', 'decrypt'],
   );
-  cachedKey = { userId, key };
+  cachedKey = { userId, version, key };
   return key;
 }
 
@@ -77,14 +87,17 @@ async function deriveMasterKey(userId: string): Promise<CryptoKey> {
 export interface EncryptedPayload {
   data_encrypted: string; // base64 ciphertext
   iv: string;             // base64 IV (12 bytes)
+  /** Version de la clé utilisée (absent = 1 pour compatibilité). SEC-03. */
+  v?: number;
 }
 
 /**
  * Chiffre un objet JSON avec la clé maître dérivée du `userId`.
- * Renvoie un payload prêt à stocker (data_encrypted + iv).
+ * Renvoie un payload prêt à stocker (data_encrypted + iv + v).
+ * Utilise CURRENT_KEY_VERSION (v2 post-audit SEC-03).
  */
 export async function encryptJson(userId: string, payload: unknown): Promise<EncryptedPayload> {
-  const key = await deriveMasterKey(userId);
+  const key = await deriveMasterKey(userId, CURRENT_KEY_VERSION);
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const enc = new TextEncoder();
   const plaintext = enc.encode(JSON.stringify(payload));
@@ -92,23 +105,52 @@ export async function encryptJson(userId: string, payload: unknown): Promise<Enc
   return {
     data_encrypted: bytesToB64(new Uint8Array(ciphertext)),
     iv: bytesToB64(iv),
+    v: CURRENT_KEY_VERSION,
   };
 }
 
 /**
  * Déchiffre un payload AES-GCM avec la clé maître dérivée du `userId`.
+ * Gère automatiquement les deux versions de clé (v1 = ancien, v2 = post-audit).
  * Lève une exception si la clé est mauvaise ou si le ciphertext est corrompu.
  */
 export async function decryptJson<T = unknown>(
   userId: string,
-  encrypted: { data_encrypted: string; iv: string },
+  encrypted: { data_encrypted: string; iv: string; v?: number },
 ): Promise<T> {
-  const key = await deriveMasterKey(userId);
+  // Détermine la version de la clé à partir du payload (absent = v1 pour compat)
+  const keyVersion = encrypted.v ?? 1;
+  const key = await deriveMasterKey(userId, keyVersion);
   const iv = b64ToBytes(encrypted.iv);
   const ciphertext = b64ToBytes(encrypted.data_encrypted);
   const plaintext = await subtle().decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
   const text = new TextDecoder().decode(plaintext);
   return JSON.parse(text) as T;
+}
+
+/**
+ * Effectue la rotation d'un tableau de payloads de v1 → v2 (ou vers la version courante).
+ * Appeler après un changement de sel (bump CURRENT_KEY_VERSION).
+ *
+ * @example
+ *   const migrated = await rotateCryptoKey(userId, oldPayloads);
+ *   // Sauvegarder `migrated` en base pour remplacer les anciens payloads.
+ */
+export async function rotateCryptoKey(
+  userId: string,
+  payloads: EncryptedPayload[],
+  fromVersion = 1,
+): Promise<EncryptedPayload[]> {
+  const result: EncryptedPayload[] = [];
+  for (const p of payloads) {
+    const version = p.v ?? 1;
+    if (version === CURRENT_KEY_VERSION) { result.push(p); continue; }
+    // Déchiffre avec l'ancienne clé
+    const plainObj = await decryptJson(userId, { ...p, v: fromVersion });
+    // Rechiffre avec la clé courante
+    result.push(await encryptJson(userId, plainObj));
+  }
+  return result;
 }
 
 /**

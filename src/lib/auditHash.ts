@@ -22,9 +22,17 @@ import type { GLEntry } from '../db/schema';
 /**
  * Représentation hashable d'une ligne d'écriture.
  * Tous les champs critiques pour l'intégrité comptable sont inclus.
+ *
+ * NOTE S-03 : `id` est volontairement exclu du hash canonique depuis la v2 de ce module.
+ * L'id auto-incrémenté Dexie/Supabase change à chaque re-import (DELETE + INSERT),
+ * ce qui rendait la chaîne automatiquement invalide après tout import.
+ * Le hash est désormais calculé sur la clé naturelle comptable stable :
+ * (date, journal, pièce, compte, libellé, débit, crédit, tiers).
+ * Le champ `id` est conservé dans l'interface pour compatibilité des appelants.
  */
 export interface HashableEntry {
-  id: number | string;
+  /** @deprecated Non inclus dans le hash — conservé pour compatibilité des appelants. */
+  id?: number | string;
   date: string;
   journal: string;
   piece: string;
@@ -57,11 +65,11 @@ export interface VerifyResult {
  * identiques produisent toujours le même hash.
  */
 function canonicalize(entry: HashableEntry): string {
-  // Format pipe-séparé, champs dans un ordre stable.
+  // Format pipe-séparé, champs dans un ordre stable (clé naturelle comptable).
+  // `id` n'est PAS inclus : il change à chaque re-import (auto-increment Dexie/Supabase).
   // Les nombres sont représentés sans notation scientifique pour eviter les
   // variations selon le moteur JS.
   return [
-    String(entry.id),
     entry.date,
     entry.journal || '',
     entry.piece || '',
@@ -185,8 +193,8 @@ export async function signGLEntry(
   entry: GLEntry,
   previousHash: string,
 ): Promise<GLEntry & { hash: string; previousHash: string }> {
+  // id exclu du canonicalize (S-03) — on utilise directement les champs comptables stables.
   const hashable: HashableEntry = {
-    id: entry.id ?? `${entry.orgId}-${entry.date}-${entry.account}-${entry.piece}`,
     date: entry.date,
     journal: entry.journal,
     piece: entry.piece,

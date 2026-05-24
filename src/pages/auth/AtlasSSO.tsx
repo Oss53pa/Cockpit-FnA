@@ -49,7 +49,7 @@ export default function AtlasSSO() {
         // 1bis. Persister le JWT Atlas Studio pour la fédération Proph3t.
         // Ce token est signé par JWT_SECRET (HS256) et accepté par les Edge
         // Functions du core Atlas Studio (proph3t-tool-direct, ...).
-        // Voir docs/PROPH3T_FEDERATION.md.
+        // Voir docs/Proph3t_FEDERATION.md.
         try {
           localStorage.setItem('atlas_federation_token', token);
         } catch { /* localStorage indispo (Safari incognito) — la fédération sera désactivée. */ }

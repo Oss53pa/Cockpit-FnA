@@ -12,23 +12,28 @@
 import { db } from './schema';
 import { toSnake, toCamel } from './caseConvert';
 import { supabase as supabaseTyped, isSupabaseConfigured } from '../lib/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { FnaDatabase, PostgrestErrorWithCode } from './database.types';
 
-// Cast as any : les tables fna_* ne sont pas typees dans Database
-const supabase = supabaseTyped as any;
+// Re-cast vers FnaDatabase pour bénéficier du typage fna_* (les tables fna_*
+// ne sont pas dans le type Database original qui utilise des noms sans préfixe).
+const supabase = supabaseTyped as unknown as SupabaseClient<FnaDatabase>;
 
-async function fetchAll(table: string, orgId?: string) {
-  let q = supabase.from(table).select('*');
+async function fetchAll(table: keyof FnaDatabase['public']['Tables'], orgId?: string): Promise<Record<string, unknown>[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q = (supabase.from(table) as any).select('*');
   if (orgId) q = q.eq('org_id', orgId);
   // Supabase limite à 1000 par défaut — paginer
-  const all: any[] = [];
+  const all: Record<string, unknown>[] = [];
   let offset = 0;
   const PAGE = 1000;
   while (true) {
     const { data, error } = await q.range(offset, offset + PAGE - 1);
-    if (error) throw new Error(`Sync ${table}: ${error.message}`);
-    if (!data || data.length === 0) break;
-    all.push(...data);
-    if (data.length < PAGE) break;
+    if (error) throw new Error(`Sync ${table}: ${(error as { message: string }).message}`);
+    if (!data || (data as Record<string, unknown>[]).length === 0) break;
+    all.push(...(data as Record<string, unknown>[]));
+    if ((data as Record<string, unknown>[]).length < PAGE) break;
     offset += PAGE;
   }
   return all;
@@ -59,28 +64,28 @@ export async function pullFromSupabase(
   // 1. Organizations
   progress('Organisations');
   const orgs = await fetchAll('fna_organizations');
-  const myOrgs = orgIds.length > 0 ? orgs.filter((o: any) => orgIds.includes(o.id)) : orgs;
+  const myOrgs = orgIds.length > 0 ? orgs.filter((o) => orgIds.includes((o as { id: string }).id)) : orgs;
   if (myOrgs.length > 0) {
-    await db.organizations.bulkPut(myOrgs.map((o: any) => toCamel(o) as any));
+    await db.organizations.bulkPut(myOrgs.map((o) => toCamel(o as Record<string, unknown>) as import('./schema').Organization));
   }
 
   for (const org of myOrgs) {
-    const oid = org.id;
+    const oid = (org as { id: string }).id;
 
     // 2. Fiscal years
     progress('Exercices');
     const fys = await fetchAll('fna_fiscal_years', oid);
-    if (fys.length > 0) await db.fiscalYears.bulkPut(fys.map((r: any) => toCamel(r) as any));
+    if (fys.length > 0) await db.fiscalYears.bulkPut(fys.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').FiscalYear));
 
     // 3. Periods
     progress('Périodes');
     const periods = await fetchAll('fna_periods', oid);
-    if (periods.length > 0) await db.periods.bulkPut(periods.map((r: any) => toCamel(r) as any));
+    if (periods.length > 0) await db.periods.bulkPut(periods.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').Period));
 
     // 4. Accounts
     progress('Plan comptable');
     const accs = await fetchAll('fna_accounts', oid);
-    if (accs.length > 0) await db.accounts.bulkPut(accs.map((r: any) => toCamel(r) as any));
+    if (accs.length > 0) await db.accounts.bulkPut(accs.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').Account));
 
     // 5. GL entries (le plus volumineux — par chunks)
     // SAFETY : on NE supprime PAS les donnees locales si Supabase est VIDE
@@ -91,13 +96,14 @@ export async function pullFromSupabase(
     if (glRows.length > 0) {
       // Supabase a des donnees → on remplace en local.
       // Mapping (pur, hors Dexie) effectue AVANT la transaction.
-      const mapped = glRows.map((r: any) => {
-        const c = toCamel(r) as any;
-        c.importId = c.importId != null ? String(c.importId) : undefined;
-        delete c.id;
+      const mapped = glRows.map((r) => {
+        const c = toCamel(r as Record<string, unknown>) as import('./schema').GLEntry;
+        // importId est un number en DB mais string en schema local (historique)
+        (c as Record<string, unknown>).importId = c.importId != null ? String(c.importId) : undefined;
+        delete (c as Record<string, unknown>).id;
         // Supabase renvoie numeric(18,2) en string — forcer Number()
-        if (c.debit != null) c.debit = Number(c.debit);
-        if (c.credit != null) c.credit = Number(c.credit);
+        if (c.debit != null) (c as Record<string, unknown>).debit = Number(c.debit);
+        if (c.credit != null) (c as Record<string, unknown>).credit = Number(c.credit);
         return c;
       });
       // (S-01) ATOMICITE : suppression de l'ancien GL local + re-insertion dans
@@ -122,19 +128,19 @@ export async function pullFromSupabase(
     // 6. Imports
     progress('Imports');
     const imports = await fetchAll('fna_imports', oid);
-    if (imports.length > 0) await db.imports.bulkPut(imports.map((r: any) => toCamel(r) as any));
+    if (imports.length > 0) await db.imports.bulkPut(imports.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').ImportLog));
 
     // 7. Budgets — SAFETY : on NE vide pas le local si Supabase est vide
     progress('Budgets');
     const budgets = await fetchAll('fna_budgets', oid);
     if (budgets.length > 0) {
       // Supabase a des budgets → replace en local (mapping hors transaction).
-      const rows = budgets.map((r: any) => {
-        const c = toCamel(r) as any;
-        delete c.id;
-        if (c.amount != null) c.amount = Number(c.amount);
-        if (c.year != null) c.year = Number(c.year);
-        if (c.month != null) c.month = Number(c.month);
+      const rows = budgets.map((r) => {
+        const c = toCamel(r as Record<string, unknown>) as import('./schema').BudgetLine;
+        delete (c as Record<string, unknown>).id;
+        if (c.amount != null) (c as Record<string, unknown>).amount = Number(c.amount);
+        if (c.year != null) (c as Record<string, unknown>).year = Number(c.year);
+        if (c.month != null) (c as Record<string, unknown>).month = Number(c.month);
         return c;
       });
       // (S-01) ATOMICITE : delete + bulkAdd des budgets dans une seule transaction.
@@ -151,17 +157,17 @@ export async function pullFromSupabase(
     // 8. Reports
     progress('Rapports');
     const reports = await fetchAll('fna_reports', oid);
-    if (reports.length > 0) await db.reports.bulkPut(reports.map((r: any) => toCamel(r) as any));
+    if (reports.length > 0) await db.reports.bulkPut(reports.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').ReportDoc));
 
     // 9. Attention points
     progress('Points d\'attention');
     const aps = await fetchAll('fna_attention_points', oid);
-    if (aps.length > 0) await db.attentionPoints.bulkPut(aps.map((r: any) => toCamel(r) as any));
+    if (aps.length > 0) await db.attentionPoints.bulkPut(aps.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').AttentionPoint));
 
     // 10. Action plans
     progress('Plans d\'action');
     const plans = await fetchAll('fna_action_plans', oid);
-    if (plans.length > 0) await db.actionPlans.bulkPut(plans.map((r: any) => toCamel(r) as any));
+    if (plans.length > 0) await db.actionPlans.bulkPut(plans.map((r) => toCamel(r as Record<string, unknown>) as import('./schema').ActionPlan));
   }
 
   return { orgs: myOrgs.length, entries: totalEntries, duration: Date.now() - t0 };
@@ -185,25 +191,27 @@ export async function pushGLToSupabase(orgId: string): Promise<number> {
   // tout le GL cloud de l'org (la source de vérité). Fallback gracieux sur
   // l'ancienne voie si la RPC n'est pas (encore) déployée (migration 022).
   try {
-    const { error } = await supabase.rpc('fna_replace_gl', { p_org_id: orgId, p_rows: rows });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc('fna_replace_gl', { p_org_id: orgId, p_rows: rows });
     if (!error) return entries.length;
-    const code = (error as any).code as string | undefined;
+    const code = (error as PostgrestErrorWithCode).code;
     const msg = error.message || '';
     const missing = code === '42883' || code === 'PGRST202'
       || msg.includes('does not exist') || msg.includes('Could not find the function');
     if (!missing) throw new Error(`Push GL (RPC fna_replace_gl) : ${msg}`);
     console.warn('[pushGLToSupabase] RPC fna_replace_gl absente — fallback delete+insert (migration 022 ?).');
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Échec réseau/inattendu de la RPC : on tente le fallback (qui re-DELETE
     // d'abord, donc pas de doublon même si la RPC avait commité côté serveur).
-    console.warn('[pushGLToSupabase] RPC échouée, fallback delete+insert :', e?.message ?? e);
+    console.warn('[pushGLToSupabase] RPC échouée, fallback delete+insert :', (e as { message?: string })?.message ?? e);
   }
 
   // Voie LEGACY (non atomique) — conservée pour compat si la RPC est absente.
   await supabase.from('fna_gl_entries').delete().eq('org_id', orgId);
   for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await supabase.from('fna_gl_entries').insert(rows.slice(i, i + 500));
-    if (error) throw new Error(`Push GL chunk ${i}: ${error.message}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('fna_gl_entries') as any).insert(rows.slice(i, i + 500));
+    if (error) throw new Error(`Push GL chunk ${i}: ${(error as { message: string }).message}`);
   }
   return entries.length;
 }
@@ -211,41 +219,44 @@ export async function pushGLToSupabase(orgId: string): Promise<number> {
 export async function pushOrgToSupabase(orgId: string): Promise<void> {
   if (!isSupabaseConfigured) return;
 
-  const check = (res: { error: any }, label: string) => {
+  const check = (res: { error: { message: string } | null }, label: string) => {
     if (res.error) console.warn(`[Sync] Push ${label} failed:`, res.error.message);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any;
+
   const org = await db.organizations.get(orgId);
-  if (org) check(await supabase.from('fna_organizations').upsert(toSnake(org)), 'org');
+  if (org) check(await sb.from('fna_organizations').upsert(toSnake(org)), 'org');
 
   const fys = await db.fiscalYears.where('orgId').equals(orgId).toArray();
-  if (fys.length > 0) check(await supabase.from('fna_fiscal_years').upsert(fys.map((f) => toSnake(f))), 'fiscal_years');
+  if (fys.length > 0) check(await sb.from('fna_fiscal_years').upsert(fys.map((f) => toSnake(f))), 'fiscal_years');
 
   const periods = await db.periods.where('orgId').equals(orgId).toArray();
   if (periods.length > 0) {
     for (let i = 0; i < periods.length; i += 500) {
-      check(await supabase.from('fna_periods').upsert(periods.slice(i, i + 500).map((p) => toSnake(p))), 'periods');
+      check(await sb.from('fna_periods').upsert(periods.slice(i, i + 500).map((p) => toSnake(p))), 'periods');
     }
   }
 
   const accs = await db.accounts.where('orgId').equals(orgId).toArray();
   if (accs.length > 0) {
     for (let i = 0; i < accs.length; i += 500) {
-      check(await supabase.from('fna_accounts').upsert(accs.slice(i, i + 500).map((a) => toSnake(a))), 'accounts');
+      check(await sb.from('fna_accounts').upsert(accs.slice(i, i + 500).map((a) => toSnake(a))), 'accounts');
     }
   }
 
   const budgets = await db.budgets.where('orgId').equals(orgId).toArray();
   if (budgets.length > 0) {
     for (let i = 0; i < budgets.length; i += 500) {
-      check(await supabase.from('fna_budgets').upsert(budgets.slice(i, i + 500).map((b) => toSnake(b))), 'budgets');
+      check(await sb.from('fna_budgets').upsert(budgets.slice(i, i + 500).map((b) => toSnake(b))), 'budgets');
     }
   }
 
   const imports = await db.imports.where('orgId').equals(orgId).toArray();
   if (imports.length > 0) {
     for (let i = 0; i < imports.length; i += 500) {
-      await supabase.from('fna_imports').upsert(imports.slice(i, i + 500).map((im) => toSnake(im)));
+      await sb.from('fna_imports').upsert(imports.slice(i, i + 500).map((im) => toSnake(im)));
     }
   }
 }
@@ -304,7 +315,7 @@ export async function autoRecoverDexieToSupabase(
   let dexieOrgIds: string[] = [];
   try {
     const dexieOrgs = await db.organizations.toArray();
-    dexieOrgIds = dexieOrgs.map((o: any) => o.id);
+    dexieOrgIds = dexieOrgs.map((o) => o.id);
   } catch { /* Dexie inaccessible */ }
   const orgIdsToCheck = Array.from(new Set([...authOrgIds, ...dexieOrgIds]));
   console.info(`[autoRecovery] Vérification ${orgIdsToCheck.length} org(s) (auth: ${authOrgIds.length}, dexie: ${dexieOrgIds.length})`);
@@ -347,9 +358,9 @@ export async function autoRecoverDexieToSupabase(
       const totalRows = pushResult.totalRows;
       result.migrated.push({ orgId, rows: totalRows });
       console.info(`[autoRecovery] ${orgId} migré : ${totalRows} lignes`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(`[autoRecovery] Erreur pour ${orgId}:`, e);
-      result.errors.push({ orgId, error: e?.message ?? String(e) });
+      result.errors.push({ orgId, error: (e as { message?: string })?.message ?? String(e) });
     }
   }
 
@@ -418,14 +429,18 @@ const PUSH_STEPS: Array<{
   { step: 'Messages chat',      table: 'fna_chat_messages',        dexieKey: 'chatMessages',      stripId: true },
 ];
 
-async function getRowsForOrg(table: any, orgId: string): Promise<any[]> {
+async function getRowsForOrg(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  table: Record<string, any>,
+  orgId: string,
+): Promise<unknown[]> {
   // db.organizations.get(orgId) → single row → wrap as array
   if (table === db.organizations) {
     const o = await db.organizations.get(orgId);
     return o ? [o] : [];
   }
   // Toutes les autres ont un index orgId
-  return await table.where('orgId').equals(orgId).toArray();
+  return await (table as { where: (k: string) => { equals: (v: string) => { toArray: () => Promise<unknown[]> } } }).where('orgId').equals(orgId).toArray();
 }
 
 export async function pushAllToSupabase(
@@ -451,7 +466,8 @@ export async function pushAllToSupabase(
         user_id: userId, org_id: oid, role: 'admin' as const,
       }));
       // upsert sans écraser le rôle si déjà présent
-      await supabase.from('fna_user_orgs').upsert(userOrgsRows, { onConflict: 'user_id,org_id', ignoreDuplicates: true });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('fna_user_orgs') as any).upsert(userOrgsRows, { onConflict: 'user_id,org_id', ignoreDuplicates: true });
       console.info(`[pushAllToSupabase] Associé user ${userId} à ${orgIds.length} org(s) via fna_user_orgs`);
     }
   } catch (e) {
@@ -460,13 +476,14 @@ export async function pushAllToSupabase(
 
   for (let i = 0; i < PUSH_STEPS.length; i++) {
     const cfg = PUSH_STEPS[i];
-    const dexieTable = (db as any)[cfg.dexieKey];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dexieTable = (db as Record<string, any>)[cfg.dexieKey];
     let stepRows = 0;
     let stepError: string | undefined;
 
     try {
       // Collecte toutes les lignes (multi-org)
-      const allRows: any[] = [];
+      const allRows: unknown[] = [];
       for (const oid of orgIds) {
         const rows = await getRowsForOrg(dexieTable, oid);
         allRows.push(...rows);
@@ -487,7 +504,7 @@ export async function pushAllToSupabase(
 
       // Convert camelCase → snake_case ; strip auto-id si nécessaire
       const snakeRows = allRows.map((r) => {
-        const s = toSnake(r);
+        const s = toSnake(r as Record<string, unknown>);
         if (cfg.stripId) delete s.id;
         // Forcer Number() sur les colonnes numériques (Dexie peut avoir des string)
         if (s.debit != null) s.debit = Number(s.debit);
@@ -505,7 +522,10 @@ export async function pushAllToSupabase(
         // Pour les tables avec auto-id (gl, imports, etc.), insert simple.
         // Pour les tables avec id stable (organizations, periods, etc.), upsert.
         const useUpsert = !cfg.stripId;
-        const q = (supabase as any).from(cfg.table);
+        // cfg.table est une string dynamique (fna_*) — le type Supabase n'accepte
+        // que des littéraux stricts, on doit forcer le cast pour les tables dynamiques.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const q = (supabase as unknown as { from: (t: string) => any }).from(cfg.table);
         const { error } = useUpsert
           ? await q.upsert(slice)
           : await q.insert(slice);
@@ -531,12 +551,12 @@ export async function pushAllToSupabase(
         error: stepError,
       });
       totalRows += stepRows;
-    } catch (e: any) {
+    } catch (e: unknown) {
       details.push({
         table: cfg.table,
         rows: stepRows,
         ok: false,
-        error: e?.message ?? String(e),
+        error: (e as { message?: string })?.message ?? String(e),
       });
     }
   }

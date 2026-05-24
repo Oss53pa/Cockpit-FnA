@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, WifiOff, StopCircle, RefreshCw, Settings2 } from 'lucide-react';
+import { Send, Bot, WifiOff, StopCircle, RefreshCw, Settings2, Cloud, Cpu, Lock } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -10,6 +10,21 @@ import { useApp } from '../store/app';
 import { fmtMoney } from '../lib/format';
 import { saveOllamaConfig, getOllamaConfig } from '../lib/ollama';
 import type { FinancialContext } from '../engine/ai/contextBuilder';
+import { askProph3t, type Sensitivity } from '../lib/proph3t';
+
+/** Source du moteur : local (Ollama/heuristique) ou core Atlas hébergé. */
+type AISource = 'local' | 'core';
+
+const SENSITIVITY_LABEL: Record<Sensitivity, string> = {
+  internal: 'Interne',
+  confidential: 'Confidentiel',
+  public: 'Public',
+};
+const SENSITIVITY_HINT: Record<Sensitivity, string> = {
+  internal: 'Reporting et données de gestion non publiques.',
+  confidential: 'Paie, relevés bancaires, liasses, contrats — Ollama/Claude uniquement.',
+  public: 'Support, documentation publique, brouillons.',
+};
 
 const suggestions = [
   'Quels comptes présentent un solde anormal ?',
@@ -36,6 +51,11 @@ export default function AI() {
     text: "Bonjour, je suis votre analyste financier. Je travaille sur les données de votre société en toute confidentialité (aucune donnée ne sort de votre poste). Posez-moi une question sur vos états financiers, ratios ou demandez un commentaire d'analyse.",
   }]);
   const [showConfig, setShowConfig] = useState(false);
+  // Mode B — délégation au core Atlas hébergé (askProph3t)
+  const [source, setSource] = useState<AISource>('local');
+  const [sensitivity, setSensitivity] = useState<Sensitivity>('internal');
+  const [coreLoading, setCoreLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [history, streamedText]);
@@ -89,10 +109,44 @@ export default function AI() {
   // ── Send ──────────────────────────────────────────────────────
   const send = async (msg?: string) => {
     const text = (msg ?? input).trim();
-    if (!text || streaming) return;
+    if (!text || streaming || coreLoading) return;
     setInput('');
 
     setHistory(h => [...h, { role: 'user', text }]);
+
+    // ── Mode B : délégation complète au core Atlas hébergé (askProph3t) ──
+    if (source === 'core') {
+      setHistory(h => [...h, { role: 'assistant', text: 'Analyse via le core Atlas…' }]);
+      setCoreLoading(true);
+      try {
+        const r = await askProph3t({
+          message: text,
+          sensitivity,
+          conversationId,
+          societyId: orgId ?? undefined,
+        });
+        setConversationId(r.conversation_id);
+        const conf = Number.isFinite(r.confidence) ? ` (confiance ${(r.confidence * 100).toFixed(0)} %)` : '';
+        const disc = r.disclaimer ? `\n\n— ${r.disclaimer}` : '';
+        setHistory(h => {
+          const copy = [...h];
+          copy[copy.length - 1] = { role: 'assistant', text: `${r.answer}${conf}${disc}` };
+          return copy;
+        });
+      } catch (err: any) {
+        setHistory(h => {
+          const copy = [...h];
+          copy[copy.length - 1] = {
+            role: 'assistant',
+            text: `Le core Atlas n'a pas pu répondre (${err?.message ?? 'erreur réseau'}).${sensitivity === 'confidential' ? " En mode confidentiel, le core n'utilise qu'Ollama/Claude : aucune donnée n'a été routée vers un tiers." : ''}\n\nRéessayez, ou repassez en moteur local.`,
+          };
+          return copy;
+        });
+      } finally {
+        setCoreLoading(false);
+      }
+      return;
+    }
 
     if (status.available && status.selectedModel) {
       // Ollama streaming
@@ -121,14 +175,44 @@ export default function AI() {
     <div>
       <PageHeader
         title="Assistant IA financier"
-        subtitle={status.available ? `Ollama — ${status.selectedModel}` : 'Moteur local (Ollama non détecté)'}
+        subtitle={source === 'core'
+          ? `Core Atlas (hébergé) · sensibilité : ${SENSITIVITY_LABEL[sensitivity]}`
+          : status.available ? `Ollama — ${status.selectedModel}` : 'Moteur local (Ollama non détecté)'}
         action={
           <div className="flex items-center gap-2">
-            {status.available ? (
+            {/* Sélecteur de source : moteur local vs core Atlas hébergé */}
+            <div className="inline-flex rounded-lg border border-primary-200 dark:border-primary-800 overflow-hidden text-xs">
+              <button
+                onClick={() => setSource('local')}
+                className={`px-2.5 py-1.5 flex items-center gap-1.5 transition-colors ${source === 'local' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800'}`}
+              >
+                <Cpu className="w-3.5 h-3.5" /> Local
+              </button>
+              <button
+                onClick={() => setSource('core')}
+                className={`px-2.5 py-1.5 flex items-center gap-1.5 transition-colors ${source === 'core' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800'}`}
+              >
+                <Cloud className="w-3.5 h-3.5" /> Atlas Core
+              </button>
+            </div>
+
+            {source === 'core' ? (
+              <select
+                value={sensitivity}
+                onChange={(e) => setSensitivity(e.target.value as Sensitivity)}
+                title={SENSITIVITY_HINT[sensitivity]}
+                className="text-xs rounded-lg border border-primary-200 dark:border-primary-800 bg-transparent px-2 py-1.5"
+              >
+                {(['internal', 'confidential', 'public'] as Sensitivity[]).map((s) => (
+                  <option key={s} value={s}>{SENSITIVITY_LABEL[s]}</option>
+                ))}
+              </select>
+            ) : status.available ? (
               <Badge variant="success" showIcon>{status.selectedModel?.split(':')[0]}</Badge>
             ) : (
               <Badge variant="warning" showIcon>Mode local</Badge>
             )}
+
             <button onClick={() => setShowConfig(!showConfig)} className="btn-ghost p-1.5">
               <Settings2 className="w-4 h-4" />
             </button>
@@ -161,12 +245,12 @@ export default function AI() {
           <div className="border-t border-primary-200 dark:border-primary-800 p-3 flex gap-2">
             <input className="input flex-1" value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
-              placeholder={streaming ? 'Génération en cours...' : 'Posez votre question…'}
-              disabled={streaming} />
+              placeholder={coreLoading ? 'Le core Atlas analyse…' : streaming ? 'Génération en cours...' : 'Posez votre question…'}
+              disabled={streaming || coreLoading} />
             {streaming ? (
               <button className="btn-outline" onClick={cancelStream}><StopCircle className="w-4 h-4" /></button>
             ) : (
-              <button className="btn-primary" onClick={() => send()}><Send className="w-4 h-4" /></button>
+              <button className="btn-primary" onClick={() => send()} disabled={coreLoading}><Send className="w-4 h-4" /></button>
             )}
           </div>
         </Card>
@@ -176,7 +260,7 @@ export default function AI() {
             <ul className="space-y-2">
               {suggestions.map((s) => (
                 <li key={s}>
-                  <button onClick={() => send(s)} disabled={streaming}
+                  <button onClick={() => send(s)} disabled={streaming || coreLoading}
                     className="w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-primary-200 dark:hover:bg-primary-800 transition disabled:opacity-50">
                     {s}
                   </button>
@@ -215,11 +299,25 @@ export default function AI() {
           </Card>
 
           <Card title="Confidentialité">
-            <p className="text-xs text-primary-500 leading-relaxed">
-              Toutes les analyses sont effectuées <strong>localement</strong> sur votre poste.
-              Aucune donnée financière n'est transmise à un serveur externe.
-              {status.available ? ' Ollama tourne en local sur votre machine.' : ' Le moteur heuristique intégré est utilisé.'}
-            </p>
+            {source === 'core' ? (
+              <div className="text-xs text-primary-500 leading-relaxed space-y-2">
+                <p className="flex items-center gap-1.5 font-medium text-primary-700 dark:text-primary-300">
+                  <Lock className="w-3.5 h-3.5" /> Core Atlas hébergé — sensibilité « {SENSITIVITY_LABEL[sensitivity]} »
+                </p>
+                <p>{SENSITIVITY_HINT[sensitivity]}</p>
+                <p>
+                  La gouvernance par sensibilité est appliquée <strong>côté core</strong> : en mode
+                  « Confidentiel », seuls Ollama et Claude sont sollicités (aucune rétention),
+                  jamais un fournisseur gratuit.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-primary-500 leading-relaxed">
+                Toutes les analyses sont effectuées <strong>localement</strong> sur votre poste.
+                Aucune donnée financière n'est transmise à un serveur externe.
+                {status.available ? ' Ollama tourne en local sur votre machine.' : ' Le moteur heuristique intégré est utilisé.'}
+              </p>
+            )}
           </Card>
         </div>
       </div>

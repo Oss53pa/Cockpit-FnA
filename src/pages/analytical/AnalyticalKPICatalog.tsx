@@ -158,12 +158,12 @@ const KPIS: KpiDef[] = [
   { category: 'Budgétaires', name: 'Codes en dépassement', formula: 'Count où Réalisé > Budget' },
   { category: 'Budgétaires', name: 'Codes proches alerte', formula: 'Count où Réalisé > 80% × Budget' },
 
-  // 🟢 IA PROPH3T
+  // 🟢 IA Proph3t
   { category: 'IA Proph3t', name: 'Trend marge (3 mois glissants)', formula: 'Régression linéaire sur 3 mois' },
   { category: 'IA Proph3t', name: 'Saisonnalité détectée', formula: 'Coefficient saisonnier par axe' },
-  { category: 'IA Proph3t', name: 'Anomalies détectées (IA)', formula: 'Écritures atypiques par PROPH3T' },
+  { category: 'IA Proph3t', name: 'Anomalies détectées (IA)', formula: 'Écritures atypiques par Proph3t' },
   { category: 'IA Proph3t', name: 'Probabilité dépassement budget', formula: 'Score IA basé historique' },
-  { category: 'IA Proph3t', name: 'Recommandations IA', formula: 'Suggestions PROPH3T (top 5)' },
+  { category: 'IA Proph3t', name: 'Recommandations IA', formula: 'Suggestions Proph3t (top 5)' },
 ];
 
 const CATEGORIES = Array.from(new Set(KPIS.map((k) => k.category)));
