@@ -930,6 +930,107 @@ function TiersTree({ rows, accountName, onDrill }: { rows: TiersTreeRow[]; accou
   );
 }
 
+// Arborescence du GRAND LIVRE TIERS : compte collectif → tiers → ÉCRITURES.
+// (Le GL Tiers est un LIVRE : on descend jusqu'au détail des écritures. La
+// Balance auxiliaire, elle, s'arrête au solde par tiers — cf. TiersTree.)
+function TiersLedgerTree({ entries, accountName, onDrill }: { entries: GLTiersEntry[]; accountName: (c: string) => string; onDrill: (d: GLDrillFilter) => void }) {
+  const groups = useMemo(() => {
+    const accMap = new Map<string, { account: string; debit: number; credit: number; tiers: Map<string, { codeTiers: string; labelTiers: string; debit: number; credit: number; entries: GLTiersEntry[] }> }>();
+    for (const e of entries) {
+      let a = accMap.get(e.account);
+      if (!a) { a = { account: e.account, debit: 0, credit: 0, tiers: new Map() }; accMap.set(e.account, a); }
+      a.debit += e.debit; a.credit += e.credit;
+      let t = a.tiers.get(e.codeTiers);
+      if (!t) { t = { codeTiers: e.codeTiers, labelTiers: e.labelTiers || '', debit: 0, credit: 0, entries: [] }; a.tiers.set(e.codeTiers, t); }
+      t.debit += e.debit; t.credit += e.credit; t.entries.push(e);
+      if (!t.labelTiers && e.labelTiers) t.labelTiers = e.labelTiers;
+    }
+    return Array.from(accMap.values())
+      .map((a) => ({
+        account: a.account, debit: a.debit, credit: a.credit, solde: a.debit - a.credit,
+        tiersList: Array.from(a.tiers.values())
+          .map((t) => ({ ...t, solde: t.debit - t.credit, entries: [...t.entries].sort((x, y) => x.date.localeCompare(y.date)) }))
+          .sort((x, y) => Math.abs(y.solde) - Math.abs(x.solde)),
+      }))
+      .sort((x, y) => x.account.localeCompare(y.account));
+  }, [entries]);
+
+  // Comptes dépliés par défaut, tiers repliés (on déplie un tiers pour ses écritures).
+  const [openAcc, setOpenAcc] = useState<Set<string>>(new Set());
+  const [openTiers, setOpenTiers] = useState<Set<string>>(new Set());
+  useEffect(() => { setOpenAcc(new Set(groups.map((g) => g.account))); }, [groups]);
+  const toggleAcc = (a: string) => setOpenAcc((s) => { const n = new Set(s); if (n.has(a)) n.delete(a); else n.add(a); return n; });
+  const toggleTiers = (k: string) => setOpenTiers((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+
+  const totD = groups.reduce((s, g) => s + g.debit, 0);
+  const totC = groups.reduce((s, g) => s + g.credit, 0);
+
+  return (
+    <div className="overflow-auto max-h-[560px]">
+      <table className="w-full text-sm">
+        <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800 sticky top-0 bg-surface z-10">
+          <tr>
+            <th className="text-left py-2 px-3">Compte / Tiers / Écriture</th>
+            <th className="text-left py-2 px-3">Libellé</th>
+            <th className="text-right py-2 px-3">Débit</th>
+            <th className="text-right py-2 px-3">Crédit</th>
+            <th className="text-right py-2 px-3">Solde</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+          {groups.map((g) => {
+            const aOpen = openAcc.has(g.account);
+            return (
+              <Fragment key={g.account}>
+                <tr className="bg-primary-50 dark:bg-primary-900/40 font-semibold cursor-pointer hover:bg-primary-100 dark:hover:bg-primary-900/70" onClick={() => toggleAcc(g.account)}>
+                  <td className="py-1.5 px-3 font-mono"><span className="inline-block w-4 text-primary-400">{aOpen ? '▾' : '▸'}</span>{g.account} <span className="text-[10px] text-primary-400">({g.tiersList.length})</span></td>
+                  <td className="py-1.5 px-3 text-xs">{accountName(g.account)}</td>
+                  <td className="py-1.5 px-3 text-right num">{fmtFull(g.debit)}</td>
+                  <td className="py-1.5 px-3 text-right num">{fmtFull(g.credit)}</td>
+                  <td className={clsx('py-1.5 px-3 text-right num', g.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(g.solde)}</td>
+                </tr>
+                {aOpen && g.tiersList.map((t) => {
+                  const key = `${g.account}|${t.codeTiers}`;
+                  const tOpen = openTiers.has(key);
+                  return (
+                    <Fragment key={key}>
+                      <tr className="cursor-pointer hover:bg-primary-50 dark:hover:bg-primary-900/50" onClick={() => toggleTiers(key)}>
+                        <td className="py-1 px-3 pl-7 font-mono text-xs"><span className="inline-block w-4 text-primary-400">{tOpen ? '▾' : '▸'}</span>{t.codeTiers} <span className="text-[10px] text-primary-400">({t.entries.length})</span></td>
+                        <td className="py-1 px-3 text-xs font-medium">{tiersLibelle({ codeTiers: t.codeTiers, labelTiers: t.labelTiers, account: g.account }, accountName)}</td>
+                        <td className="py-1 px-3 text-right num text-xs">{fmtFull(t.debit)}</td>
+                        <td className="py-1 px-3 text-right num text-xs">{fmtFull(t.credit)}</td>
+                        <td className={clsx('py-1 px-3 text-right num text-xs', t.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(t.solde)}</td>
+                      </tr>
+                      {tOpen && t.entries.map((e, i) => (
+                        <tr key={`${key}-${e.id ?? i}`} className="text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/40 cursor-pointer" onClick={() => onDrill({ tiers: t.codeTiers, account: g.account })}>
+                          <td className="py-1 px-3 pl-14 num text-[11px]">{e.date}</td>
+                          <td className="py-1 px-3 text-[11px]">{[e.journal, e.piece].filter(Boolean).join(' · ') || '—'}</td>
+                          <td className="py-1 px-3 text-right num text-[11px]">{e.debit > 0 ? fmtFull(e.debit) : ''}</td>
+                          <td className="py-1 px-3 text-right num text-[11px]">{e.credit > 0 ? fmtFull(e.credit) : ''}</td>
+                          <td className="py-1 px-3"></td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </Fragment>
+            );
+          })}
+          {groups.length === 0 && (<tr><td colSpan={5} className="py-8 text-center text-sm text-primary-400">Aucune écriture.</td></tr>)}
+        </tbody>
+        <tfoot className="border-t-2 border-primary-300 dark:border-primary-700 bg-primary-100 dark:bg-primary-900 sticky bottom-0">
+          <tr className="font-bold">
+            <td className="py-2 px-3" colSpan={2}>TOTAUX</td>
+            <td className="py-2 px-3 text-right num">{fmtFull(totD)}</td>
+            <td className="py-2 px-3 text-right num">{fmtFull(totC)}</td>
+            <td className="py-2 px-3 text-right num">{fmtFull(totD - totC)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // Petit toggle Liste / Arborescence réutilisé par les vues tiers.
 function ViewToggle({ view, onChange }: { view: 'list' | 'tree'; onChange: (v: 'list' | 'tree') => void }) {
   return (
@@ -1168,11 +1269,7 @@ function TiersLedgerView({ orgId, onDrill }: { orgId: string; onDrill: (d: GLDri
       </Card>
       <Card padded={false}>
         {view === 'tree' ? (
-          <TiersTree
-            rows={auxFromLedger(filtered).map((r) => ({ codeTiers: r.codeTiers, labelTiers: r.labelTiers, account: r.account, debit: r.debit, credit: r.credit, solde: r.solde, drill: { tiers: r.codeTiers, account: r.account } }))}
-            accountName={accountName}
-            onDrill={onDrill}
-          />
+          <TiersLedgerTree entries={filtered} accountName={accountName} onDrill={onDrill} />
         ) : (
           <VirtualTable
             rows={filtered}
