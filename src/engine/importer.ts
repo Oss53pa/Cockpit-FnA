@@ -13,6 +13,8 @@ import { getClassifier } from './accountingSystems';
 import { hungarianMaximize } from './hungarian';
 import { logGLChanges, type AuditChange } from '../lib/glAuditLog';
 import { applyTiersRules } from './tiersRules';
+import { categorizeTiersAccount } from './tiersCategory';
+import type { GLTiersEntry } from '../db/schema';
 
 /**
  * Debug helper — log uniquement en développement (strip en prod).
@@ -1580,7 +1582,12 @@ export async function importGLTiers(
   const scoreCandidate = (tl: TiersLine, c: GLEntry): number => {
     let s = 0;
     if (c.account === tl.account) s += 100;
-    else if (c.account.startsWith(tl.account)) s += 70;
+    // Préfixe symétrique : couvre collectif↔individuel dans les DEUX sens.
+    //   - GL collectif "411100" vs tiers préfixe "411"      → c.startsWith(tl)
+    //   - GL collectif "411100" vs tiers individuel "411100X" → tl.startsWith(c)
+    // Sans la 2e branche, un auxiliaire exporté avec le compte tiers individuel
+    // (ex. SAGE "411DUPONT") retombait sur "même classe" (+40 < MIN_SCORE) → rejet.
+    else if (c.account.startsWith(tl.account) || tl.account.startsWith(c.account)) s += 70;
     else if (classifier.classRoot(c.account) === classifier.classRoot(tl.account)) s += 40;
     else return -1;
     if (tl.journal && c.journal) {
@@ -1826,6 +1833,45 @@ export async function importGLTiers(
         // eslint-disable-next-line no-console
         console.warn('[import-tiers] persistance unmatched échouée (non bloquant):', e);
       }
+    }
+  }
+
+  // 4bis) STOCKER LE GRAND LIVRE TIERS comme livre auxiliaire — TOUTES les lignes,
+  // indépendamment du matching avec le GL général. C'est désormais la source des
+  // balances auxiliaires (groupées par compte collectif + code tiers), donc elles
+  // fonctionnent même quand l'enrichissement du GL échoue (GL centralisé, écart de
+  // date/pièce…). L'enrichissement du GL ci-dessus reste un "bonus" best-effort.
+  // Non bloquant : si la migration 023 n'est pas appliquée, on continue (le report
+  // reste exact). Journalisation : on rattache chaque ligne à sa période.
+  if (dataProvider.bulkInsertGLTiers && tiersLines.length > 0) {
+    try {
+      let periods: Array<{ id: string; year: number; month: number }> = [];
+      try { periods = await dataProvider.getPeriods(opts.orgId); } catch { /* périodes optionnelles */ }
+      const periodByYM = new Map(periods.map((p) => [`${p.year}-${p.month}`, p.id]));
+      const glTiersRows: Omit<GLTiersEntry, 'id'>[] = tiersLines.map((tl) => {
+        const y = Number(tl.date.slice(0, 4));
+        const m = Number(tl.date.slice(5, 7));
+        return {
+          orgId: opts.orgId,
+          importId: Number(importId),
+          periodId: periodByYM.get(`${y}-${m}`),
+          date: tl.date,
+          account: tl.account,
+          codeTiers: tl.codeTiers,
+          labelTiers: tl.labelTiers || undefined,
+          label: tl.label || tl.labelTiers || undefined,
+          debit: tl.debit,
+          credit: tl.credit,
+          journal: tl.journal || undefined,
+          piece: tl.piece || undefined,
+          category: categorizeTiersAccount(tl.account),
+          createdAt: Date.now(),
+        };
+      });
+      await dataProvider.bulkInsertGLTiers(glTiersRows);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[import-tiers] persistance GL Tiers échouée (non bloquant):', e);
     }
   }
 

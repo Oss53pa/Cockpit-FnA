@@ -303,7 +303,7 @@ export default function ImportTiers() {
       <PageHeader
         title="Grand Livre Tiers"
         subtitle={`Import auxiliaire clients/fournisseurs — ${org?.name ?? '—'} · Exercice ${currentYear}`}
-        action={
+        action={tiersTab === 'all' ? (
           <div className="flex gap-2 flex-wrap">
             <button className="btn-outline" onClick={async () => {
               if (!confirm('Recalculer les périodes de toutes les écritures tiers selon leurs dates ?')) return;
@@ -377,10 +377,32 @@ export default function ImportTiers() {
               <RefreshCw className="w-4 h-4" /> Stats tiers
             </button>
           </div>
-        }
+        ) : undefined}
       />
 
       <div className="space-y-6">
+        {/* Onglets type de tiers SYSCOHADA classe 4 — le module d'import n'apparaît
+            que sous "Tous les tiers" ; les autres onglets ne montrent que le détail
+            des tiers par nature (clients, fournisseurs, personnel, état, autres). */}
+        <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 overflow-x-auto">
+          {([
+            { key: 'all' as const, label: 'Tous les tiers' },
+            { key: 'clients' as const, label: 'Clients (411)' },
+            { key: 'fournisseurs' as const, label: 'Fournisseurs (401)' },
+            { key: 'personnel' as const, label: 'Personnel (42)' },
+            { key: 'etat' as const, label: 'État & Org. (43-44)' },
+            { key: 'autres' as const, label: 'Autres tiers (45-48)' },
+          ]).map((t) => (
+            <button key={t.key}
+              className={`px-3 py-2 text-xs font-medium border-b-2 transition whitespace-nowrap ${tiersTab === t.key ? 'border-accent text-accent' : 'border-transparent text-primary-500 hover:text-primary-700'}`}
+              onClick={() => setTiersTab(t.key)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Contexte d'import — uniquement sous "Tous les tiers" */}
+        {tiersTab === 'all' && (<>
         {/* Rappel de l'org cible */}
         {org && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 text-xs">
@@ -400,6 +422,7 @@ export default function ImportTiers() {
             </p>
           </div>
         )}
+        </>)}
 
         {/* Stats tiers actuelles — filtrage par tabKey (1:1 avec les onglets) */}
         {tiersStats && (() => {
@@ -445,24 +468,8 @@ export default function ImportTiers() {
           );
         })()}
 
-        {/* Onglets type de tiers SYSCOHADA classe 4 */}
-        <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 overflow-x-auto">
-          {([
-            { key: 'all' as const, label: 'Tous les tiers' },
-            { key: 'clients' as const, label: 'Clients (411)' },
-            { key: 'fournisseurs' as const, label: 'Fournisseurs (401)' },
-            { key: 'personnel' as const, label: 'Personnel (42)' },
-            { key: 'etat' as const, label: 'État & Org. (43-44)' },
-            { key: 'autres' as const, label: 'Autres tiers (45-48)' },
-          ]).map((t) => (
-            <button key={t.key}
-              className={`px-3 py-2 text-xs font-medium border-b-2 transition whitespace-nowrap ${tiersTab === t.key ? 'border-accent text-accent' : 'border-transparent text-primary-500 hover:text-primary-700'}`}
-              onClick={() => setTiersTab(t.key)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-
+        {/* Module d'import — uniquement sous "Tous les tiers" */}
+        {tiersTab === 'all' && (<>
         {/* Guide */}
         <div className="p-4 rounded-lg bg-primary-100/60 dark:bg-primary-800/40 text-xs text-primary-600 dark:text-primary-300 space-y-1">
           <p><strong>Comment ça fonctionne :</strong></p>
@@ -754,6 +761,7 @@ export default function ImportTiers() {
             </table>
           </div>
         </Card>
+        </>)}
       </div>
 
       {/* Modal de rattachement manuel */}

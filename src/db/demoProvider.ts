@@ -19,10 +19,11 @@ import type {
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
+  GLTiersEntry, TiersCategory,
 } from './schema';
 import {
   isDemoActive, DEMO_ORG, DEMO_BALANCE, DEMO_PERIODS, DEMO_IMPORTS,
-  DEMO_ACCOUNTS, DEMO_ATTENTION_POINTS, DEMO_ACTION_PLANS,
+  DEMO_ACCOUNTS, DEMO_ATTENTION_POINTS, DEMO_ACTION_PLANS, DEMO_GL_TIERS,
 } from '../engine/demoFixtures';
 
 const Y = new Date().getFullYear();
@@ -243,6 +244,27 @@ export class DemoProvider implements DataProvider {
   }
   deleteTiersUnmatched(id: number) { return this.inner.deleteTiersUnmatched(id); }
   deleteTiersUnmatchedByImport(importId: number) { return this.inner.deleteTiersUnmatchedByImport(importId); }
+
+  // ── Grand Livre Tiers (livre auxiliaire stocké) ──
+  async getGLTiers(orgId: string, opts?: { importId?: number; category?: TiersCategory; fromDate?: string; toDate?: string }): Promise<GLTiersEntry[]> {
+    if (isDemo(orgId)) {
+      let rows = DEMO_GL_TIERS.map((r) => ({ ...r, orgId })) as GLTiersEntry[];
+      if (opts?.category) rows = rows.filter((r) => r.category === opts.category);
+      return rows;
+    }
+    return this.inner.getGLTiers?.(orgId, opts) ?? Promise.resolve([]);
+  }
+  bulkInsertGLTiers(rows: Omit<GLTiersEntry, 'id'>[]) {
+    if (rows[0] && isDemo(rows[0].orgId)) return Promise.resolve();
+    return this.inner.bulkInsertGLTiers?.(rows) ?? Promise.resolve();
+  }
+  deleteGLTiersByImport(importId: number) {
+    return this.inner.deleteGLTiersByImport?.(importId) ?? Promise.resolve();
+  }
+  deleteGLTiers(orgId: string) {
+    if (isDemo(orgId)) return Promise.resolve();
+    return this.inner.deleteGLTiers?.(orgId) ?? Promise.resolve();
+  }
 
   // ── Tiers rules (règles de correction mémorisées) ──
   async getTiersRules(orgId: string): Promise<TiersRule[]> {

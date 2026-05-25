@@ -173,6 +173,37 @@ export type TiersUnmatched = {
 };
 
 /**
+ * Catégorie de tiers SYSCOHADA (classe 4), dérivée du compte collectif.
+ *   client (41) · fournisseur (40) · personnel (42) · etat (43-44) · autres (45-48)
+ */
+export type TiersCategory = 'client' | 'fournisseur' | 'personnel' | 'etat' | 'autres';
+
+/**
+ * Écriture du GRAND LIVRE TIERS (livre auxiliaire) — détail par tiers individuel
+ * du compte collectif (411/401/42…). Stockée comme un VRAI livre, indépendant du
+ * GL général : c'est la source des balances auxiliaires (groupées par compte +
+ * code tiers). Le rapprochement Σ(auxiliaire par collectif) = solde GL collectif
+ * sert de contrôle de cohérence (la « communion »), pas de prérequis.
+ */
+export type GLTiersEntry = {
+  id?: number;
+  orgId: string;
+  importId?: number;        // import TIERS source (fna_imports.id)
+  periodId?: string;        // journalisation : période rattachée (déduite de la date)
+  date: string;             // YYYY-MM-DD
+  account: string;          // compte collectif (411100, 401000…)
+  codeTiers: string;        // code tiers individuel (CLI001, FRN042…)
+  labelTiers?: string;      // nom du tiers
+  label?: string;           // libellé écriture
+  debit: number;
+  credit: number;
+  journal?: string;
+  piece?: string;
+  category: TiersCategory;  // dérivée du compte (filtrage rapide par nature)
+  createdAt: number;
+};
+
+/**
  * Règle de correction tiers MÉMORISÉE. Issue d'une correction manuelle d'une
  * incohérence du rapprochement (écriture de classe 4 sans code tiers) :
  *   • action 'assign' : « compte (+ libellé contient) → poser le code tiers X ».
@@ -450,6 +481,7 @@ class CockpitDB extends Dexie {
   chatMessages!: Table<ChatMessage, number>;
   tiersUnmatched!: Table<TiersUnmatched, number>;
   tiersRules!: Table<TiersRule, number>;
+  glTiers!: Table<GLTiersEntry, number>;
 
   constructor() {
     super('CockpitFA');
@@ -499,6 +531,10 @@ class CockpitDB extends Dexie {
     // v9 : règles de correction tiers mémorisées (réappliquées aux imports)
     this.version(9).stores({
       tiersRules: '++id, orgId, account, [orgId+account]',
+    });
+    // v10 : grand livre tiers (livre auxiliaire stocké, source des balances aux.)
+    this.version(10).stores({
+      glTiers: '++id, orgId, importId, account, codeTiers, category, date, [orgId+category], [orgId+importId]',
     });
   }
 }

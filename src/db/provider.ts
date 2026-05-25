@@ -47,6 +47,7 @@ import type {
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
+  GLTiersEntry, TiersCategory,
 } from './schema';
 import { withCache } from './cachedProvider';
 
@@ -116,6 +117,15 @@ export interface DataProvider {
   getTiersRules(orgId: string): Promise<TiersRule[]>;
   upsertTiersRule(rule: Omit<TiersRule, 'id'> & { id?: number }): Promise<number>;
   deleteTiersRule(id: number): Promise<void>;
+
+  // ── Grand Livre Tiers (livre auxiliaire stocké) ───────────────────
+  // Optionnel : implémenté par Supabase + Demo. ElectronProvider peut l'omettre.
+  // Les appelants utilisent l'optional chaining (`dataProvider.getGLTiers?.(...)`).
+  getGLTiers?(orgId: string, opts?: { importId?: number; category?: TiersCategory; fromDate?: string; toDate?: string }): Promise<GLTiersEntry[]>;
+  bulkInsertGLTiers?(rows: Omit<GLTiersEntry, 'id'>[]): Promise<void>;
+  deleteGLTiersByImport?(importId: number): Promise<void>;
+  /** Purge tout le GL Tiers d'une org (réimport complet). */
+  deleteGLTiers?(orgId: string): Promise<void>;
   // GL Audit log — modifications a posteriori (post-insertion) sur les écritures GL.
   // Chaîne SHA-256 par org, immuable (pas de UPDATE/DELETE policies en DB).
   getGLAuditLog?(orgId: string, opts?: { glEntryId?: number; limit?: number }): Promise<GLAuditLogEntry[]>;

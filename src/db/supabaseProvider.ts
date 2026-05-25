@@ -8,6 +8,7 @@ import type {
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
+  GLTiersEntry, TiersCategory,
 } from './schema';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
@@ -407,6 +408,32 @@ export class SupabaseProvider implements DataProvider {
   }
   async deleteTiersRule(id: number) {
     check(await supabase.from('fna_tiers_rules').delete().eq('id', id));
+  }
+
+  // ── Grand Livre Tiers (livre auxiliaire stocké) ───────────────────
+  async getGLTiers(orgId: string, opts?: { importId?: number; category?: TiersCategory; fromDate?: string; toDate?: string }) {
+    const rows = await paginatedSelect<any>(() => {
+      let q = supabase.from('fna_gl_tiers').select('*').eq('org_id', orgId).order('date', { ascending: true });
+      if (opts?.importId !== undefined) q = q.eq('import_id', opts.importId);
+      if (opts?.category) q = q.eq('category', opts.category);
+      if (opts?.fromDate) q = q.gte('date', opts.fromDate);
+      if (opts?.toDate) q = q.lte('date', opts.toDate);
+      return q;
+    }, 'getGLTiers');
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as GLTiersEntry[];
+  }
+  async bulkInsertGLTiers(rows: Omit<GLTiersEntry, 'id'>[]) {
+    if (rows.length === 0) return;
+    const snakes = rows.map((r) => normalizeTsFields(toSnake(r)));
+    for (let i = 0; i < snakes.length; i += 500) {
+      check(await fromAny('fna_gl_tiers').insert(snakes.slice(i, i + 500)));
+    }
+  }
+  async deleteGLTiersByImport(importId: number) {
+    check(await supabase.from('fna_gl_tiers').delete().eq('import_id', importId));
+  }
+  async deleteGLTiers(orgId: string) {
+    check(await supabase.from('fna_gl_tiers').delete().eq('org_id', orgId));
   }
 
   // GL Audit log

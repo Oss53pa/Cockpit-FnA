@@ -17,7 +17,7 @@ import { safeLocalStorage } from '../lib/safeStorage';
 import type { BalanceRow } from './balance';
 import type { SIG, Line } from './statements';
 import type { Ratio } from './ratios';
-import type { AttentionPoint, ActionPlan, Organization, Account } from '../db/schema';
+import type { AttentionPoint, ActionPlan, Organization, Account, GLTiersEntry } from '../db/schema';
 
 const Y = new Date().getFullYear();
 
@@ -337,6 +337,42 @@ export const DEMO_IMPORTS = [
     count: 2_534, rejected: 0, status: 'success' as const,
     report: '{"source":"demoSeed"}',
   },
+  {
+    id: 2, orgId: 'demo-org', date: NOW - 86_400_000 * 2, user: 'DEMO',
+    fileName: 'gl-tiers-demo.csv', source: 'Démo intégrée', kind: 'TIERS' as const,
+    count: 9, rejected: 0, status: 'success' as const,
+    report: '{"source":"demoSeed"}',
+  },
+];
+
+// ────────────────────────────────────────────────────────────────────
+// Grand Livre Tiers (livre auxiliaire) — échantillon : clients & fournisseurs
+// Alimente directement la balance auxiliaire en mode démo.
+// ────────────────────────────────────────────────────────────────────
+const tiersRow = (
+  account: string, codeTiers: string, labelTiers: string,
+  debit: number, credit: number, category: GLTiersEntry['category'],
+  m = 3, piece = '',
+): Omit<GLTiersEntry, 'id'> => ({
+  orgId: 'demo-org', importId: 2,
+  date: `${Y}-${String(m).padStart(2, '0')}-15`,
+  account, codeTiers, labelTiers, label: labelTiers,
+  debit, credit, journal: category === 'client' ? 'VT' : 'AC', piece,
+  category, createdAt: NOW,
+});
+
+export const DEMO_GL_TIERS: Omit<GLTiersEntry, 'id'>[] = [
+  // Clients (411) — soldes débiteurs
+  tiersRow('411100', 'CLI001', 'SONABEL SA', 18_500_000, 6_000_000, 'client', 2, 'FV-1042'),
+  tiersRow('411100', 'CLI002', 'ONEA', 12_300_000, 4_500_000, 'client', 3, 'FV-1067'),
+  tiersRow('411100', 'CLI003', 'Groupe Bolloré', 9_800_000, 9_800_000, 'client', 3, 'FV-1071'),
+  tiersRow('411100', 'CLI004', 'CFAO Motors', 7_200_000, 2_000_000, 'client', 4, 'FV-1090'),
+  tiersRow('411100', 'CLI005', 'Brakina', 4_600_000, 4_600_000, 'client', 4, 'FV-1101'),
+  // Fournisseurs (401) — soldes créditeurs
+  tiersRow('401100', 'FRN042', 'Total Energies', 1_500_000, 8_900_000, 'fournisseur', 2, 'FA-3301'),
+  tiersRow('401100', 'FRN043', 'Orange Burkina', 800_000, 5_400_000, 'fournisseur', 3, 'FA-3312'),
+  tiersRow('401100', 'FRN044', 'SODIGAZ', 0, 3_200_000, 'fournisseur', 3, 'FA-3320'),
+  tiersRow('401100', 'FRN045', 'Maersk Line', 1_200_000, 2_700_000, 'fournisseur', 4, 'FA-3340'),
 ];
 
 // ────────────────────────────────────────────────────────────────────
