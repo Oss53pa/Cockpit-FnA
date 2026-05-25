@@ -232,10 +232,12 @@ function App() {
         <Route path="/alerts" element={<Navigate to="/dashboard/home?tab=alertes" replace />} />
         <Route path="/actions" element={<ProtectedRoute><AppLayout><Actions /></AppLayout></ProtectedRoute>} />
         <Route path="/imports" element={<ProtectedRoute><AppLayout><Imports /></AppLayout></ProtectedRoute>} />
-        <Route path="/import-tiers" element={<ProtectedRoute><AppLayout><ImportTiers /></AppLayout></ProtectedRoute>} />
+        {/* GL Tiers consolidé dans le module Grand Livre (onglet Import). Ancienne route redirigée. */}
+        <Route path="/import-tiers" element={<Navigate to="/grand-livre" replace />} />
         <Route path="/budget" element={<ProtectedRoute><AppLayout><Budget /></AppLayout></ProtectedRoute>} />
         <Route path="/coa" element={<ProtectedRoute><AppLayout><COA /></AppLayout></ProtectedRoute>} />
         <Route path="/grand-livre" element={<ProtectedRoute><AppLayout><GrandLivre /></AppLayout></ProtectedRoute>} />
+        <Route path="/balance" element={<ProtectedRoute><AppLayout><GrandLivre /></AppLayout></ProtectedRoute>} />
         <Route path="/states" element={<ProtectedRoute><AppLayout><States /></AppLayout></ProtectedRoute>} />
         <Route path="/ratios" element={<ProtectedRoute><AppLayout><Ratios /></AppLayout></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />

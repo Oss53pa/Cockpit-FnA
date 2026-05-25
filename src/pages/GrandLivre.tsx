@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Search, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -22,18 +22,23 @@ import { verifyChain } from '../lib/auditHash';
 import Imports from './Imports';
 import ImportTiers from './ImportTiers';
 
-type Tab = 'import' | 'gl' | 'glt' | 'bg' | 'baC' | 'baF' | 'recon' | 'ageeC' | 'ageeF';
+type Tab = 'import' | 'gl' | 'glt' | 'bg' | 'aux' | 'recon' | 'ageeC' | 'ageeF';
+export type GrandLivreModule = 'ledger' | 'balance';
 
-const TABS: { key: Tab; label: string }[] = [
+// Module « Grand Livre » : les livres (import, GL général, GL tiers, rapprochement).
+const LEDGER_TABS: { key: Tab; label: string }[] = [
   { key: 'import', label: 'Import' },
   { key: 'gl',     label: 'Grand Livre général' },
   { key: 'glt',    label: 'Grand Livre Tiers' },
-  { key: 'bg',     label: 'Balance générale' },
-  { key: 'baC',    label: 'Bal. aux. Clients' },
-  { key: 'baF',    label: 'Bal. aux. Fournisseurs' },
   { key: 'recon',  label: 'Rapprochement tiers' },
-  { key: 'ageeC',  label: 'Bal. âgée Clients' },
-  { key: 'ageeF',  label: 'Bal. âgée Fournisseurs' },
+];
+
+// Module « Balance » : les balances calculées sur le Grand Livre en vigueur.
+const BALANCE_TABS: { key: Tab; label: string }[] = [
+  { key: 'bg',    label: 'Balance générale' },
+  { key: 'aux',   label: 'Balance auxiliaire' },
+  { key: 'ageeC', label: 'Bal. âgée Clients' },
+  { key: 'ageeF', label: 'Bal. âgée Fournisseurs' },
 ];
 
 // Décrit un filtre de drill-down GL en texte court (pour la puce retirable).
@@ -51,9 +56,14 @@ function describeDrill(d: GLDrillFilter): string {
 // ─── Page racine ──────────────────────────────────────────────────
 export default function GrandLivre() {
   const { currentOrgId, currentYear } = useApp();
-  // Si on arrive via "?account=XXX" (depuis le modal d'écart de balance), on
-  // ouvre directement l'onglet Grand Livre. Sinon, onglet Import par défaut.
+  const navigate = useNavigate();
+  // Module dérivé de la route : /balance → balances, sinon les livres.
+  const module: GrandLivreModule = useLocation().pathname.startsWith('/balance') ? 'balance' : 'ledger';
+  const TABS = module === 'balance' ? BALANCE_TABS : LEDGER_TABS;
+  // Onglet par défaut : Balance générale (module Balance) ; sinon Grand Livre si
+  // on arrive via "?account=XXX" (drill depuis un écart), sinon Import.
   const initialTab: Tab = (() => {
+    if (module === 'balance') return 'bg';
     if (typeof window === 'undefined') return 'import';
     const params = new URLSearchParams(window.location.search);
     return params.has('account') ? 'gl' : 'import';
@@ -65,7 +75,15 @@ export default function GrandLivre() {
   // Drill-down : filtre GL posé en cliquant un tiers dans une balance auxiliaire
   // ou la vue de rapprochement. Bascule automatiquement sur l'onglet Grand Livre.
   const [drill, setDrill] = useState<GLDrillFilter | null>(null);
-  const drillToGL = (d: GLDrillFilter) => { setDrill(d); setTab('gl'); };
+  const drillToGL = (d: GLDrillFilter) => {
+    if (module === 'balance') {
+      // Drill cross-module : ouvrir le module Grand Livre filtré sur le compte.
+      navigate(`/grand-livre?account=${encodeURIComponent(d.account || d.accountPrefix || '')}`);
+      return;
+    }
+    setDrill(d);
+    setTab('gl');
+  };
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any | null>(null);
   const [auditing, setAuditing] = useState(false);
@@ -138,8 +156,10 @@ export default function GrandLivre() {
   return (
     <div>
       <PageHeader
-        title="Grand Livre"
-        subtitle="Source unique : le Grand Livre — toutes les balances en sont calculées automatiquement"
+        title={module === 'balance' ? 'Balance' : 'Grand Livre'}
+        subtitle={module === 'balance'
+          ? 'Balance générale, auxiliaire (par tiers) et âgée — calculées sur le Grand Livre en vigueur'
+          : 'Import, Grand Livre général & tiers, rapprochement — source des balances'}
         action={
           <div className="flex items-center gap-2 flex-wrap">
             {imports.length > 0 && (
@@ -174,7 +194,7 @@ export default function GrandLivre() {
 
       <TabSwitch tabs={TABS} value={tab} onChange={setTab} />
 
-      {tab !== 'import' && tab !== 'glt' && imports.length === 0 && (
+      {tab !== 'import' && tab !== 'glt' && tab !== 'aux' && imports.length === 0 && (
         <Card>
           <p className="text-sm text-primary-500 text-center py-6">
             Aucun Grand Livre importé — bascule sur l'onglet <strong>Import</strong> pour charger un fichier.
@@ -200,8 +220,7 @@ export default function GrandLivre() {
       {tab === 'gl'     && imports.length > 0 && <GLView      orgId={currentOrgId} year={currentYear} importId={importId} drill={drill} onClearDrill={() => setDrill(null)} />}
       {tab === 'glt'    && <TiersLedgerView orgId={currentOrgId} onDrill={drillToGL} />}
       {tab === 'bg'     && imports.length > 0 && <BGView      orgId={currentOrgId} year={currentYear} importId={importId} />}
-      {tab === 'baC'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="client" onDrill={drillToGL} />}
-      {tab === 'baF'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" onDrill={drillToGL} />}
+      {tab === 'aux'    && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} onDrill={drillToGL} />}
       {tab === 'recon'  && imports.length > 0 && <ReconView   orgId={currentOrgId} year={currentYear} importId={importId} onDrill={drillToGL} />}
       {tab === 'ageeC'  && imports.length > 0 && <AgedView    orgId={currentOrgId} year={currentYear} importId={importId} kind="client" />}
       {tab === 'ageeF'  && imports.length > 0 && <AgedView    orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" />}
@@ -814,25 +833,24 @@ const auxColumns: Column<AuxBalanceRow>[] = [
   { header: 'Solde',   width: '150px', align: 'right', cell: (r) => <span className={clsx('num font-semibold', r.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(r.solde)}</span> },
 ];
 
-function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year: number; importId: string; kind: 'client' | 'fournisseur'; onDrill: (d: GLDrillFilter) => void }) {
+function AuxView({ orgId, year, importId, onDrill }: { orgId: string; year: number; importId: string; onDrill: (d: GLDrillFilter) => void }) {
+  // Filtre par nature de tiers (Clients/Fournisseurs/Personnel/État/Autres).
+  const [cat, setCat] = useState<TiersCategory>('client');
   const [rows, setRows] = useState<AuxBalanceRow[]>([]);
   const [search, setSearch] = useState('');
-  // Source effective des soldes : 'ledger' = livre GL Tiers (fna_gl_tiers),
-  // 'gl' = fallback dérivé des écritures GL enrichies.
+  // Source effective : 'ledger' = livre GL Tiers (fna_gl_tiers), 'gl' = fallback
+  // dérivé des écritures GL enrichies (uniquement clients/fournisseurs).
   const [source, setSource] = useState<'ledger' | 'gl'>('gl');
-  // Diagnostic data quality : pour détecter "0 tier renseigné" et afficher
-  // une bannière "Import GL Tiers requis" au lieu d'une ligne aggrégée mystérieuse.
-  const [diag, setDiag] = useState<{ totalEntries: number; withTiers: number; distinctAccounts: number } | null>(null);
+  const [diag, setDiag] = useState<{ totalEntries: number; withTiers: number } | null>(null);
 
   useEffect(() => {
     if (!orgId) return;
-    const category: TiersCategory = kind === 'client' ? 'client' : 'fournisseur';
     let cancelled = false;
     void (async () => {
       // 1) Source PRIORITAIRE : le livre GL Tiers stocké (fonctionne toujours,
       //    indépendamment du matching avec le GL général).
       let ledger: GLTiersEntry[] = [];
-      try { ledger = (await dataProvider.getGLTiers?.(orgId, { category })) ?? []; } catch { ledger = []; }
+      try { ledger = (await dataProvider.getGLTiers?.(orgId, { category: cat })) ?? []; } catch { ledger = []; }
       if (cancelled) return;
       if (ledger.length > 0) {
         const aux = auxFromLedger(ledger);
@@ -846,44 +864,53 @@ function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year
           drill: { tiers: r.codeTiers, account: r.account },
         })));
         setSource('ledger');
-      } else {
-        // 2) Fallback : balance dérivée des écritures GL enrichies.
-        const aux = await computeAuxBalance({ orgId, year, kind, importId });
+      } else if (cat === 'client' || cat === 'fournisseur') {
+        // 2) Fallback : balance dérivée des écritures GL enrichies (clients/fourn.).
+        const aux = await computeAuxBalance({ orgId, year, kind: cat, importId });
         if (!cancelled) { setRows(aux); setSource('gl'); }
+      } else {
+        if (!cancelled) { setRows([]); setSource('ledger'); }
       }
     })();
-    // Diagnostic indépendant pour la bannière info
-    const prefix = kind === 'client' ? '411' : '401';
-    void dataProvider.getGLEntries({ orgId }).then((entries) => {
-      if (cancelled) return;
-      const sub = entries.filter((e) => e.account.startsWith(prefix));
-      const withTiers = sub.filter((e) => !!e.tiers).length;
-      const distinctAccounts = new Set(sub.map((e) => e.account)).size;
-      setDiag({ totalEntries: sub.length, withTiers, distinctAccounts });
-    });
+    // Diagnostic bannière (clients/fournisseurs uniquement — comptes 411/401).
+    const prefix = cat === 'client' ? '411' : cat === 'fournisseur' ? '401' : null;
+    if (prefix) {
+      void dataProvider.getGLEntries({ orgId }).then((entries) => {
+        if (cancelled) return;
+        const sub = entries.filter((e) => e.account.startsWith(prefix));
+        setDiag({ totalEntries: sub.length, withTiers: sub.filter((e) => !!e.tiers).length });
+      });
+    } else {
+      setDiag(null);
+    }
     return () => { cancelled = true; };
-  }, [orgId, year, kind, importId]);
+  }, [orgId, year, cat, importId]);
 
+  const catLabel = TIERS_CATEGORIES.find((c) => c.key === cat)?.label ?? cat;
   const filtered = rows.filter((r) => !search || r.tier.toLowerCase().includes(search.toLowerCase()) || r.label.toLowerCase().includes(search.toLowerCase()) || r.account.includes(search));
   const totD = filtered.reduce((s, r) => s + r.debit, 0);
   const totC = filtered.reduce((s, r) => s + r.credit, 0);
   const totS = filtered.reduce((s, r) => s + r.solde, 0);
   const balanced = Math.abs(totD - totC - totS) < 1;
 
-  // Détection : aucun tier code n'est renseigné dans le GL pour ces comptes.
-  // C'est le cas typique où :
-  //   - L'import GL est OK (entries > 0)
-  //   - Mais l'import GL Tiers n'a pas été lancé (ou ses enrichissements
-  //     ont été perdus suite à un cleanup / re-import GL).
-  // Dans ce cas, la balance auxiliaire fallback sur "agrégation par libellé"
-  // (1 seule ligne "CLIENTS" pour 2930 écritures) — pas utile pour l'utilisateur.
-  // Bannière uniquement si on est en fallback GL (pas de livre GL Tiers) ET
-  // qu'aucune écriture GL n'est enrichie. Si le livre GL Tiers alimente la
-  // balance, le détail par tier s'affiche → pas de bannière.
+  // Bannière uniquement en fallback GL (livre GL Tiers vide) ET aucune écriture
+  // GL enrichie. Si le livre GL Tiers alimente la balance → détail affiché, pas
+  // de bannière.
   const noTiersEnriched = source === 'gl' && diag !== null && diag.totalEntries > 0 && diag.withTiers === 0;
 
   return (
     <div className="space-y-4">
+      <Card>
+        <div className="flex gap-1 p-0.5 w-fit rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 overflow-x-auto">
+          {TIERS_CATEGORIES.map((c) => (
+            <button key={c.key} onClick={() => setCat(c.key)}
+              className={clsx('px-3 py-1 text-[11px] rounded font-medium whitespace-nowrap', cat === c.key ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+              {c.label} ({c.accountRanges})
+            </button>
+          ))}
+        </div>
+      </Card>
+
       {noTiersEnriched && (
         <Card>
           <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10 border-l-4 border-warning">
@@ -891,16 +918,15 @@ function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <div className="flex-1 text-xs">
-              <p className="font-semibold text-warning-dark">Import GL Tiers requis pour le détail par {kind === 'client' ? 'client' : 'fournisseur'}</p>
+              <p className="font-semibold text-warning-dark">Import GL Tiers requis pour le détail {catLabel.toLowerCase()}</p>
               <p className="mt-1 text-primary-700 dark:text-primary-300 leading-relaxed">
                 Votre Grand Livre contient <strong className="num">{diag.totalEntries.toLocaleString('fr-FR')}</strong> écritures
-                sur les comptes {kind === 'client' ? '411' : '401'}, mais <strong>aucune n'a de code tiers renseigné</strong>.
-                La balance ne peut donc afficher qu'une ligne agrégée par compte parent.
+                sur les comptes {cat === 'client' ? '411' : '401'}, mais <strong>aucune n'a de code tiers renseigné</strong>,
+                et aucun Grand Livre Tiers n'a été importé.
               </p>
               <p className="mt-2 text-primary-600 dark:text-primary-400">
-                → Allez sur <strong>Imports Tiers</strong> et déposez votre fichier GL Tiers. L'algorithme va enrichir
-                automatiquement les écritures GL existantes avec le code tiers individuel
-                (CLI001, CLI002, FRN042…), et cette balance affichera enfin le détail par tier.
+                → Onglet <strong>Import → Grand Livre Tiers</strong> (module Grand Livre) : déposez votre fichier.
+                Cette balance affichera alors le détail par tier (CLI001, FRN042…).
               </p>
             </div>
           </div>
@@ -909,7 +935,7 @@ function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year
 
       <Card>
         <div className="flex gap-2 items-center">
-          <input className="input !py-1.5 max-w-xs" placeholder={`Tiers / libellé ${kind === 'client' ? 'client' : 'fournisseur'}…`}
+          <input className="input !py-1.5 max-w-xs" placeholder={`Tiers / libellé ${catLabel.toLowerCase()}…`}
             value={search} onChange={(e) => setSearch(e.target.value)} />
           <span className="ml-auto text-xs text-primary-500">
             <span className="num font-semibold">{filtered.length}</span> tiers sur <span className="num">{rows.length}</span>
@@ -920,9 +946,9 @@ function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year
       </Card>
       <Card padded={false}>
         <VirtualTable
-          rows={filtered} rowKey={(r) => r.tier} rowHeight={30} height={560}
+          rows={filtered} rowKey={(r) => r.tier} rowHeight={30} height={520}
           onRowClick={(r) => onDrill(r.drill)}
-          empty={`Aucun tiers ${kind} avec un solde non nul — vérifie que des écritures ${kind === 'client' ? '411' : '401'} existent.`}
+          empty={`Aucun tiers « ${catLabel} » avec un solde non nul.`}
           columns={auxColumns}
           footer={<>
             <div className="py-2 px-3 col-span-3">TOTAUX</div>

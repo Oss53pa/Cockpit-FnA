@@ -3,7 +3,7 @@ import { useState } from 'react';
 import {
   Home, LayoutDashboard, FileSpreadsheet, Calculator, BarChart3,
   FileText, Wallet, Settings, Sparkles, FolderTree, Target, BookOpen,
-  X, ChevronsLeft, ChevronsRight, ChevronRight, PieChart, ClipboardList, Search, Users, FileEdit,
+  X, ChevronsLeft, ChevronsRight, ChevronRight, PieChart, ClipboardList, Search, Scale, FileEdit,
   HelpCircle, MessageCircle,
 } from 'lucide-react';
 import { useCloudData } from '../../hooks/useCloudData';
@@ -30,7 +30,7 @@ const sections = [
       { to: '/coa', icon: FolderTree, label: 'Plan comptable' },
       { to: '/budget', icon: Wallet, label: 'Budget' },
       { to: '/grand-livre', icon: BookOpen, label: 'Grand Livre' },
-      { to: '/import-tiers', icon: Users, label: 'GL Tiers' },
+      { to: '/balance', icon: Scale, label: 'Balance' },
       { to: '/import-analytical', icon: PieChart, label: 'Plan analytique' },
     ],
   },
