@@ -37,7 +37,7 @@ const tiersFieldLabels: Record<string, string> = {
   label: 'Libellé écriture',
 };
 
-export default function ImportTiers() {
+export default function ImportTiers({ embedded = false }: { embedded?: boolean } = {}) {
   const { currentOrgId, currentYear } = useApp();
   const org = useCurrentOrg();
   const history = useImportsHistory(currentOrgId, 'TIERS');
@@ -300,7 +300,7 @@ export default function ImportTiers() {
 
   return (
     <div>
-      <PageHeader
+      {!embedded && <PageHeader
         title="Grand Livre Tiers"
         subtitle={`Import auxiliaire clients/fournisseurs — ${org?.name ?? '—'} · Exercice ${currentYear}`}
         action={tiersTab === 'all' ? (
@@ -378,12 +378,13 @@ export default function ImportTiers() {
             </button>
           </div>
         ) : undefined}
-      />
+      />}
 
       <div className="space-y-6">
-        {/* Onglets type de tiers SYSCOHADA classe 4 — le module d'import n'apparaît
-            que sous "Tous les tiers" ; les autres onglets ne montrent que le détail
-            des tiers par nature (clients, fournisseurs, personnel, état, autres). */}
+        {/* Onglets type de tiers SYSCOHADA classe 4 — masqués en mode embarqué
+            (la navigation par nature appartient à l'onglet « Grand Livre Tiers » du
+            module Grand Livre ; ici on ne garde QUE le workflow d'import). */}
+        {!embedded && (
         <div className="flex gap-1 border-b border-primary-200 dark:border-primary-800 overflow-x-auto">
           {([
             { key: 'all' as const, label: 'Tous les tiers' },
@@ -400,6 +401,7 @@ export default function ImportTiers() {
             </button>
           ))}
         </div>
+        )}
 
         {/* Contexte d'import — uniquement sous "Tous les tiers" */}
         {tiersTab === 'all' && (<>
@@ -424,8 +426,9 @@ export default function ImportTiers() {
         )}
         </>)}
 
-        {/* Stats tiers actuelles — filtrage par tabKey (1:1 avec les onglets) */}
-        {tiersStats && (() => {
+        {/* Stats tiers actuelles — masquées en mode embarqué (doublon avec l'onglet
+            « Grand Livre Tiers » du module). */}
+        {!embedded && tiersStats && (() => {
           // L'onglet "all" affiche toutes les catégories. Sinon on filtre par tabKey
           // qui matche exactement la valeur de l'onglet (clients/fournisseurs/...).
           const visibleCats = tiersTab === 'all'

@@ -34,7 +34,6 @@ const AtlasSSO       = lazyWithRetry(() => import('./pages/auth/AtlasSSO'));
 const Landing        = lazyWithRetry(() => import('./pages/Landing'));
 const Demo           = lazyWithRetry(() => import('./pages/Demo'));
 const Imports        = lazyWithRetry(() => import('./pages/Imports'));
-const ImportTiers    = lazyWithRetry(() => import('./pages/ImportTiers'));
 const States         = lazyWithRetry(() => import('./pages/States'));
 const Ratios         = lazyWithRetry(() => import('./pages/Ratios'));
 const Dashboards     = lazyWithRetry(() => import('./pages/Dashboards'));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Search, ShieldCheck } from 'lucide-react';
@@ -214,7 +214,7 @@ export default function GrandLivre() {
               Grand Livre Tiers
             </button>
           </div>
-          {importKind === 'general' ? <Imports /> : <ImportTiers />}
+          {importKind === 'general' ? <Imports /> : <ImportTiers embedded />}
         </div>
       )}
       {tab === 'gl'     && imports.length > 0 && <GLView      orgId={currentOrgId} year={currentYear} importId={importId} drill={drill} onClearDrill={() => setDrill(null)} />}
@@ -823,7 +823,130 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
   );
 }
 
-// ─── 3. BALANCE AUXILIAIRE (Clients ou Fournisseurs) ──────────────
+// ─── Helpers tiers : nom de compte + libellé + vue arborescente ──────────────
+// Résout le nom (intitulé) d'un compte depuis le plan comptable (COA).
+function useAccountNames(orgId: string): (code: string) => string {
+  const [map, setMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    void dataProvider.getAccounts(orgId)
+      .then((accs) => { if (!cancelled) setMap(new Map(accs.map((a) => [a.code, a.label]))); })
+      .catch(() => { /* COA optionnelle */ });
+    return () => { cancelled = true; };
+  }, [orgId]);
+  return (code: string) => {
+    if (map.has(code)) return map.get(code) || '';
+    for (let len = code.length - 1; len >= 2; len--) {
+      const p = code.slice(0, len);
+      if (map.has(p)) return map.get(p) || '';
+    }
+    return '';
+  };
+}
+
+// Libellé d'une ligne tiers = nom du tiers ; repli sur le nom du compte collectif.
+function tiersLibelle(r: { codeTiers: string; labelTiers?: string; account: string }, accountName: (c: string) => string): string {
+  if (r.labelTiers && r.labelTiers !== r.codeTiers) return r.labelTiers;
+  return accountName(r.account) || r.codeTiers;
+}
+
+type TiersTreeRow = { codeTiers: string; labelTiers?: string; account: string; debit: number; credit: number; solde: number; drill: GLDrillFilter };
+
+// Vue arborescente : compte collectif (parent dépliable) → tiers individuels.
+function TiersTree({ rows, accountName, onDrill }: { rows: TiersTreeRow[]; accountName: (c: string) => string; onDrill: (d: GLDrillFilter) => void }) {
+  const groups = useMemo(() => {
+    const m = new Map<string, { account: string; tiers: TiersTreeRow[]; debit: number; credit: number; solde: number }>();
+    for (const r of rows) {
+      let g = m.get(r.account);
+      if (!g) { g = { account: r.account, tiers: [], debit: 0, credit: 0, solde: 0 }; m.set(r.account, g); }
+      g.tiers.push(r); g.debit += r.debit; g.credit += r.credit; g.solde += r.solde;
+    }
+    return Array.from(m.values())
+      .map((g) => ({ ...g, tiers: g.tiers.sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde)) }))
+      .sort((a, b) => a.account.localeCompare(b.account));
+  }, [rows]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  useEffect(() => { setExpanded(new Set(groups.map((g) => g.account))); }, [groups]);
+  const toggle = (acc: string) => setExpanded((s) => { const n = new Set(s); if (n.has(acc)) n.delete(acc); else n.add(acc); return n; });
+
+  const totD = groups.reduce((s, g) => s + g.debit, 0);
+  const totC = groups.reduce((s, g) => s + g.credit, 0);
+  const totS = groups.reduce((s, g) => s + g.solde, 0);
+
+  return (
+    <div className="overflow-auto max-h-[560px]">
+      <table className="w-full text-sm">
+        <thead className="text-[10px] uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800 sticky top-0 bg-surface z-10">
+          <tr>
+            <th className="text-left py-2 px-3">Compte / Tiers</th>
+            <th className="text-left py-2 px-3">Libellé</th>
+            <th className="text-right py-2 px-3">Débit</th>
+            <th className="text-right py-2 px-3">Crédit</th>
+            <th className="text-right py-2 px-3">Solde</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+          {groups.map((g) => {
+            const open = expanded.has(g.account);
+            return (
+              <Fragment key={g.account}>
+                <tr className="bg-primary-50 dark:bg-primary-900/40 font-semibold cursor-pointer hover:bg-primary-100 dark:hover:bg-primary-900/70" onClick={() => toggle(g.account)}>
+                  <td className="py-1.5 px-3 font-mono">
+                    <span className="inline-block w-4 text-primary-400">{open ? '▾' : '▸'}</span>
+                    {g.account} <span className="text-[10px] text-primary-400">({g.tiers.length})</span>
+                  </td>
+                  <td className="py-1.5 px-3 text-xs">{accountName(g.account)}</td>
+                  <td className="py-1.5 px-3 text-right num">{fmtFull(g.debit)}</td>
+                  <td className="py-1.5 px-3 text-right num">{fmtFull(g.credit)}</td>
+                  <td className={clsx('py-1.5 px-3 text-right num', g.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(g.solde)}</td>
+                </tr>
+                {open && g.tiers.map((t) => (
+                  <tr key={`${g.account}-${t.codeTiers}`} className="hover:bg-primary-50 dark:hover:bg-primary-900/50 cursor-pointer" onClick={() => onDrill(t.drill)}>
+                    <td className="py-1 px-3 pl-9 font-mono text-xs">{t.codeTiers}</td>
+                    <td className="py-1 px-3 text-xs">{tiersLibelle(t, accountName)}</td>
+                    <td className="py-1 px-3 text-right num text-xs">{t.debit > 0 ? fmtFull(t.debit) : ''}</td>
+                    <td className="py-1 px-3 text-right num text-xs">{t.credit > 0 ? fmtFull(t.credit) : ''}</td>
+                    <td className={clsx('py-1 px-3 text-right num text-xs', t.solde < 0 ? 'text-error' : 'text-success')}>{fmtFull(t.solde)}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            );
+          })}
+          {groups.length === 0 && (
+            <tr><td colSpan={5} className="py-8 text-center text-sm text-primary-400">Aucun tiers.</td></tr>
+          )}
+        </tbody>
+        <tfoot className="border-t-2 border-primary-300 dark:border-primary-700 bg-primary-100 dark:bg-primary-900 sticky bottom-0">
+          <tr className="font-bold">
+            <td className="py-2 px-3" colSpan={2}>TOTAUX</td>
+            <td className="py-2 px-3 text-right num">{fmtFull(totD)}</td>
+            <td className="py-2 px-3 text-right num">{fmtFull(totC)}</td>
+            <td className="py-2 px-3 text-right num">{fmtFull(totS)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// Petit toggle Liste / Arborescence réutilisé par les vues tiers.
+function ViewToggle({ view, onChange }: { view: 'list' | 'tree'; onChange: (v: 'list' | 'tree') => void }) {
+  return (
+    <div className="flex gap-1 p-0.5 rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800">
+      <button onClick={() => onChange('list')}
+        className={clsx('px-3 py-1 text-[11px] rounded font-medium', view === 'list' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+        Liste
+      </button>
+      <button onClick={() => onChange('tree')}
+        className={clsx('px-3 py-1 text-[11px] rounded font-medium', view === 'tree' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+        Arborescence
+      </button>
+    </div>
+  );
+}
+
+// ─── 3. BALANCE AUXILIAIRE (filtre par catégorie + liste/arborescence) ──────────────
 const auxColumns: Column<AuxBalanceRow>[] = [
   { header: 'Tiers',   width: '140px', cell: (r) => <span className="num font-mono">{r.tier}</span> },
   { header: 'Libellé', width: '1fr',   cell: (r) => <span className="text-xs">{r.label}</span> },
@@ -842,6 +965,8 @@ function AuxView({ orgId, year, importId, onDrill }: { orgId: string; year: numb
   // dérivé des écritures GL enrichies (uniquement clients/fournisseurs).
   const [source, setSource] = useState<'ledger' | 'gl'>('gl');
   const [diag, setDiag] = useState<{ totalEntries: number; withTiers: number } | null>(null);
+  const [view, setView] = useState<'list' | 'tree'>('tree');
+  const accountName = useAccountNames(orgId);
 
   useEffect(() => {
     if (!orgId) return;
@@ -934,7 +1059,8 @@ function AuxView({ orgId, year, importId, onDrill }: { orgId: string; year: numb
       )}
 
       <Card>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
+          <ViewToggle view={view} onChange={setView} />
           <input className="input !py-1.5 max-w-xs" placeholder={`Tiers / libellé ${catLabel.toLowerCase()}…`}
             value={search} onChange={(e) => setSearch(e.target.value)} />
           <span className="ml-auto text-xs text-primary-500">
@@ -945,18 +1071,27 @@ function AuxView({ orgId, year, importId, onDrill }: { orgId: string; year: numb
         <p className="mt-2 text-[11px] text-primary-400">💡 Cliquez une ligne pour ouvrir le Grand Livre filtré sur ce tiers.</p>
       </Card>
       <Card padded={false}>
-        <VirtualTable
-          rows={filtered} rowKey={(r) => r.tier} rowHeight={30} height={520}
-          onRowClick={(r) => onDrill(r.drill)}
-          empty={`Aucun tiers « ${catLabel} » avec un solde non nul.`}
-          columns={auxColumns}
-          footer={<>
-            <div className="py-2 px-3 col-span-3">TOTAUX</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totS)}</div>
-          </>}
-        />
+        {view === 'tree' ? (
+          <TiersTree
+            rows={filtered.map((r) => ({ codeTiers: r.tier, labelTiers: r.label, account: r.account, debit: r.debit, credit: r.credit, solde: r.solde, drill: r.drill }))}
+            accountName={accountName}
+            onDrill={onDrill}
+          />
+        ) : (
+          <VirtualTable
+            rows={filtered.map((r) => ({ ...r, label: tiersLibelle({ codeTiers: r.tier, labelTiers: r.label, account: r.account }, accountName) }))}
+            rowKey={(r) => r.tier} rowHeight={30} height={520}
+            onRowClick={(r) => onDrill(r.drill)}
+            empty={`Aucun tiers « ${catLabel} » avec un solde non nul.`}
+            columns={auxColumns}
+            footer={<>
+              <div className="py-2 px-3 col-span-3">TOTAUX</div>
+              <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
+              <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
+              <div className="py-2 px-3 text-right num">{fmtFull(totS)}</div>
+            </>}
+          />
+        )}
       </Card>
     </div>
   );
@@ -967,7 +1102,7 @@ const tiersLedgerColumns: Column<GLTiersEntry>[] = [
   { header: 'Date',    width: '100px', cell: (r) => <span className="num text-xs">{r.date}</span> },
   { header: 'Compte',  width: '90px',  cell: (r) => <span className="num font-mono text-xs">{r.account}</span> },
   { header: 'Tiers',   width: '110px', cell: (r) => <span className="num font-mono text-xs">{r.codeTiers}</span> },
-  { header: 'Libellé', width: '1fr',   cell: (r) => <span className="text-xs">{r.labelTiers || r.label || ''}</span> },
+  { header: 'Libellé', width: '1fr',   cell: (r) => <span className="text-xs">{r.labelTiers || ''}</span> },
   { header: 'Journal', width: '70px',  cell: (r) => <span className="font-mono text-xs text-primary-500">{r.journal || ''}</span> },
   { header: 'Pièce',   width: '90px',  cell: (r) => <span className="font-mono text-xs text-primary-500">{r.piece || ''}</span> },
   { header: 'Débit',   width: '130px', align: 'right', cell: (r) => <span className="num">{r.debit > 0 ? fmtFull(r.debit) : ''}</span> },
@@ -979,6 +1114,8 @@ function TiersLedgerView({ orgId, onDrill }: { orgId: string; onDrill: (d: GLDri
   const [cat, setCat] = useState<TiersCategory | 'all'>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<'list' | 'tree'>('list');
+  const accountName = useAccountNames(orgId);
 
   useEffect(() => {
     if (!orgId) return;
@@ -1010,6 +1147,7 @@ function TiersLedgerView({ orgId, onDrill }: { orgId: string; onDrill: (d: GLDri
     <div className="space-y-4">
       <Card>
         <div className="flex flex-wrap gap-2 items-center">
+          <ViewToggle view={view} onChange={setView} />
           <div className="flex gap-1 p-0.5 rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 overflow-x-auto">
             <button onClick={() => setCat('all')}
               className={clsx('px-3 py-1 text-[11px] rounded font-medium whitespace-nowrap', cat === 'all' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
@@ -1029,20 +1167,28 @@ function TiersLedgerView({ orgId, onDrill }: { orgId: string; onDrill: (d: GLDri
         <p className="mt-2 text-[11px] text-primary-400">💡 Cliquez une ligne pour ouvrir le Grand Livre filtré sur ce tiers.</p>
       </Card>
       <Card padded={false}>
-        <VirtualTable
-          rows={filtered}
-          rowKey={(r) => String(r.id ?? `${r.account}-${r.codeTiers}-${r.date}-${r.debit}-${r.credit}-${r.piece ?? ''}`)}
-          rowHeight={30}
-          height={560}
-          onRowClick={(r) => onDrill({ tiers: r.codeTiers, account: r.account })}
-          empty={loading ? 'Chargement…' : "Aucune écriture dans le Grand Livre Tiers — importez un fichier GL Tiers (onglet Import)."}
-          columns={tiersLedgerColumns}
-          footer={<>
-            <div className="py-2 px-3 col-span-6">TOTAUX</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
-            <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
-          </>}
-        />
+        {view === 'tree' ? (
+          <TiersTree
+            rows={auxFromLedger(filtered).map((r) => ({ codeTiers: r.codeTiers, labelTiers: r.labelTiers, account: r.account, debit: r.debit, credit: r.credit, solde: r.solde, drill: { tiers: r.codeTiers, account: r.account } }))}
+            accountName={accountName}
+            onDrill={onDrill}
+          />
+        ) : (
+          <VirtualTable
+            rows={filtered}
+            rowKey={(r) => String(r.id ?? `${r.account}-${r.codeTiers}-${r.date}-${r.debit}-${r.credit}-${r.piece ?? ''}`)}
+            rowHeight={30}
+            height={560}
+            onRowClick={(r) => onDrill({ tiers: r.codeTiers, account: r.account })}
+            empty={loading ? 'Chargement…' : "Aucune écriture dans le Grand Livre Tiers — importez un fichier GL Tiers (onglet Import)."}
+            columns={tiersLedgerColumns}
+            footer={<>
+              <div className="py-2 px-3 col-span-6">TOTAUX</div>
+              <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
+              <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
+            </>}
+          />
+        )}
       </Card>
     </div>
   );
