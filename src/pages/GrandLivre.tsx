@@ -12,17 +12,22 @@ import type { GLEntry, ImportLog, TiersRule } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { computeBalance, computeAuxBalance, computeTiersReconciliation, matchesDrill, type BalanceRow, type AuxBalanceRow, type GLDrillFilter, type TiersReconRow } from '../engine/balance';
+import { computeBalanceAuxiliaire as auxFromLedger } from '../engine/balanceAuxiliaire';
+import { TIERS_CATEGORIES, type TiersCategory } from '../engine/tiersCategory';
+import type { GLTiersEntry } from '../db/schema';
 import { applyTiersRules, loadTiersRules } from '../engine/tiersRules';
 import { agedBalance, type AgedTier } from '../engine/analytics';
 import { fmtFull } from '../lib/format';
 import { verifyChain } from '../lib/auditHash';
 import Imports from './Imports';
+import ImportTiers from './ImportTiers';
 
-type Tab = 'import' | 'gl' | 'bg' | 'baC' | 'baF' | 'recon' | 'ageeC' | 'ageeF';
+type Tab = 'import' | 'gl' | 'glt' | 'bg' | 'baC' | 'baF' | 'recon' | 'ageeC' | 'ageeF';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'import', label: 'Import' },
-  { key: 'gl',     label: 'Grand Livre' },
+  { key: 'gl',     label: 'Grand Livre général' },
+  { key: 'glt',    label: 'Grand Livre Tiers' },
   { key: 'bg',     label: 'Balance générale' },
   { key: 'baC',    label: 'Bal. aux. Clients' },
   { key: 'baF',    label: 'Bal. aux. Fournisseurs' },
@@ -55,6 +60,8 @@ export default function GrandLivre() {
   })();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [importId, setImportId] = useState<string>('all');
+  // Sous-mode de l'onglet Import : grand livre général ou grand livre tiers.
+  const [importKind, setImportKind] = useState<'general' | 'tiers'>('general');
   // Drill-down : filtre GL posé en cliquant un tiers dans une balance auxiliaire
   // ou la vue de rapprochement. Bascule automatiquement sur l'onglet Grand Livre.
   const [drill, setDrill] = useState<GLDrillFilter | null>(null);
@@ -167,7 +174,7 @@ export default function GrandLivre() {
 
       <TabSwitch tabs={TABS} value={tab} onChange={setTab} />
 
-      {tab !== 'import' && imports.length === 0 && (
+      {tab !== 'import' && tab !== 'glt' && imports.length === 0 && (
         <Card>
           <p className="text-sm text-primary-500 text-center py-6">
             Aucun Grand Livre importé — bascule sur l'onglet <strong>Import</strong> pour charger un fichier.
@@ -175,8 +182,23 @@ export default function GrandLivre() {
         </Card>
       )}
 
-      {tab === 'import' && <Imports />}
+      {tab === 'import' && (
+        <div className="space-y-4">
+          <div className="flex gap-1 p-0.5 w-fit rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800">
+            <button onClick={() => setImportKind('general')}
+              className={clsx('px-4 py-1.5 text-xs rounded font-medium', importKind === 'general' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+              Grand Livre général
+            </button>
+            <button onClick={() => setImportKind('tiers')}
+              className={clsx('px-4 py-1.5 text-xs rounded font-medium', importKind === 'tiers' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+              Grand Livre Tiers
+            </button>
+          </div>
+          {importKind === 'general' ? <Imports /> : <ImportTiers />}
+        </div>
+      )}
       {tab === 'gl'     && imports.length > 0 && <GLView      orgId={currentOrgId} year={currentYear} importId={importId} drill={drill} onClearDrill={() => setDrill(null)} />}
+      {tab === 'glt'    && <TiersLedgerView orgId={currentOrgId} onDrill={drillToGL} />}
       {tab === 'bg'     && imports.length > 0 && <BGView      orgId={currentOrgId} year={currentYear} importId={importId} />}
       {tab === 'baC'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="client" onDrill={drillToGL} />}
       {tab === 'baF'    && imports.length > 0 && <AuxView     orgId={currentOrgId} year={currentYear} importId={importId} kind="fournisseur" onDrill={drillToGL} />}
@@ -795,21 +817,51 @@ const auxColumns: Column<AuxBalanceRow>[] = [
 function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year: number; importId: string; kind: 'client' | 'fournisseur'; onDrill: (d: GLDrillFilter) => void }) {
   const [rows, setRows] = useState<AuxBalanceRow[]>([]);
   const [search, setSearch] = useState('');
+  // Source effective des soldes : 'ledger' = livre GL Tiers (fna_gl_tiers),
+  // 'gl' = fallback dérivé des écritures GL enrichies.
+  const [source, setSource] = useState<'ledger' | 'gl'>('gl');
   // Diagnostic data quality : pour détecter "0 tier renseigné" et afficher
   // une bannière "Import GL Tiers requis" au lieu d'une ligne aggrégée mystérieuse.
   const [diag, setDiag] = useState<{ totalEntries: number; withTiers: number; distinctAccounts: number } | null>(null);
 
   useEffect(() => {
     if (!orgId) return;
-    void computeAuxBalance({ orgId, year, kind, importId }).then(setRows);
+    const category: TiersCategory = kind === 'client' ? 'client' : 'fournisseur';
+    let cancelled = false;
+    void (async () => {
+      // 1) Source PRIORITAIRE : le livre GL Tiers stocké (fonctionne toujours,
+      //    indépendamment du matching avec le GL général).
+      let ledger: GLTiersEntry[] = [];
+      try { ledger = (await dataProvider.getGLTiers?.(orgId, { category })) ?? []; } catch { ledger = []; }
+      if (cancelled) return;
+      if (ledger.length > 0) {
+        const aux = auxFromLedger(ledger);
+        setRows(aux.map((r) => ({
+          tier: r.codeTiers,
+          label: r.labelTiers,
+          account: r.account,
+          debit: r.debit,
+          credit: r.credit,
+          solde: r.solde,
+          drill: { tiers: r.codeTiers, account: r.account },
+        })));
+        setSource('ledger');
+      } else {
+        // 2) Fallback : balance dérivée des écritures GL enrichies.
+        const aux = await computeAuxBalance({ orgId, year, kind, importId });
+        if (!cancelled) { setRows(aux); setSource('gl'); }
+      }
+    })();
     // Diagnostic indépendant pour la bannière info
     const prefix = kind === 'client' ? '411' : '401';
     void dataProvider.getGLEntries({ orgId }).then((entries) => {
+      if (cancelled) return;
       const sub = entries.filter((e) => e.account.startsWith(prefix));
       const withTiers = sub.filter((e) => !!e.tiers).length;
       const distinctAccounts = new Set(sub.map((e) => e.account)).size;
       setDiag({ totalEntries: sub.length, withTiers, distinctAccounts });
     });
+    return () => { cancelled = true; };
   }, [orgId, year, kind, importId]);
 
   const filtered = rows.filter((r) => !search || r.tier.toLowerCase().includes(search.toLowerCase()) || r.label.toLowerCase().includes(search.toLowerCase()) || r.account.includes(search));
@@ -825,7 +877,10 @@ function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year
   //     ont été perdus suite à un cleanup / re-import GL).
   // Dans ce cas, la balance auxiliaire fallback sur "agrégation par libellé"
   // (1 seule ligne "CLIENTS" pour 2930 écritures) — pas utile pour l'utilisateur.
-  const noTiersEnriched = diag !== null && diag.totalEntries > 0 && diag.withTiers === 0;
+  // Bannière uniquement si on est en fallback GL (pas de livre GL Tiers) ET
+  // qu'aucune écriture GL n'est enrichie. Si le livre GL Tiers alimente la
+  // balance, le détail par tier s'affiche → pas de bannière.
+  const noTiersEnriched = source === 'gl' && diag !== null && diag.totalEntries > 0 && diag.withTiers === 0;
 
   return (
     <div className="space-y-4">
@@ -874,6 +929,92 @@ function AuxView({ orgId, year, importId, kind, onDrill }: { orgId: string; year
             <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
             <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
             <div className="py-2 px-3 text-right num">{fmtFull(totS)}</div>
+          </>}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── 3bis. GRAND LIVRE TIERS — table du livre auxiliaire (filtre catégorie) ──
+const tiersLedgerColumns: Column<GLTiersEntry>[] = [
+  { header: 'Date',    width: '100px', cell: (r) => <span className="num text-xs">{r.date}</span> },
+  { header: 'Compte',  width: '90px',  cell: (r) => <span className="num font-mono text-xs">{r.account}</span> },
+  { header: 'Tiers',   width: '110px', cell: (r) => <span className="num font-mono text-xs">{r.codeTiers}</span> },
+  { header: 'Libellé', width: '1fr',   cell: (r) => <span className="text-xs">{r.labelTiers || r.label || ''}</span> },
+  { header: 'Journal', width: '70px',  cell: (r) => <span className="font-mono text-xs text-primary-500">{r.journal || ''}</span> },
+  { header: 'Pièce',   width: '90px',  cell: (r) => <span className="font-mono text-xs text-primary-500">{r.piece || ''}</span> },
+  { header: 'Débit',   width: '130px', align: 'right', cell: (r) => <span className="num">{r.debit > 0 ? fmtFull(r.debit) : ''}</span> },
+  { header: 'Crédit',  width: '130px', align: 'right', cell: (r) => <span className="num">{r.credit > 0 ? fmtFull(r.credit) : ''}</span> },
+];
+
+function TiersLedgerView({ orgId, onDrill }: { orgId: string; onDrill: (d: GLDrillFilter) => void }) {
+  const [all, setAll] = useState<GLTiersEntry[]>([]);
+  const [cat, setCat] = useState<TiersCategory | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      let rows: GLTiersEntry[] = [];
+      try { rows = (await dataProvider.getGLTiers?.(orgId)) ?? []; } catch { rows = []; }
+      if (!cancelled) { setAll(rows); setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [orgId]);
+
+  const filtered = all.filter((r) => {
+    if (cat !== 'all' && r.category !== cat) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return r.codeTiers.toLowerCase().includes(q)
+        || (r.labelTiers || '').toLowerCase().includes(q)
+        || r.account.includes(search)
+        || (r.piece || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+  const totD = filtered.reduce((s, r) => s + r.debit, 0);
+  const totC = filtered.reduce((s, r) => s + r.credit, 0);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex gap-1 p-0.5 rounded-lg bg-primary-100 dark:bg-primary-900 border border-primary-200 dark:border-primary-800 overflow-x-auto">
+            <button onClick={() => setCat('all')}
+              className={clsx('px-3 py-1 text-[11px] rounded font-medium whitespace-nowrap', cat === 'all' ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+              Tous
+            </button>
+            {TIERS_CATEGORIES.map((c) => (
+              <button key={c.key} onClick={() => setCat(c.key)}
+                className={clsx('px-3 py-1 text-[11px] rounded font-medium whitespace-nowrap', cat === c.key ? 'bg-primary-900 text-primary-50 dark:bg-primary-100 dark:text-primary-900' : 'text-primary-600')}>
+                {c.label} ({c.accountRanges})
+              </button>
+            ))}
+          </div>
+          <input className="input !py-1.5 max-w-xs" placeholder="Tiers / compte / libellé / pièce…"
+            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <span className="ml-auto text-xs text-primary-500"><span className="num font-semibold">{filtered.length}</span> écritures</span>
+        </div>
+        <p className="mt-2 text-[11px] text-primary-400">💡 Cliquez une ligne pour ouvrir le Grand Livre filtré sur ce tiers.</p>
+      </Card>
+      <Card padded={false}>
+        <VirtualTable
+          rows={filtered}
+          rowKey={(r) => String(r.id ?? `${r.account}-${r.codeTiers}-${r.date}-${r.debit}-${r.credit}-${r.piece ?? ''}`)}
+          rowHeight={30}
+          height={560}
+          onRowClick={(r) => onDrill({ tiers: r.codeTiers, account: r.account })}
+          empty={loading ? 'Chargement…' : "Aucune écriture dans le Grand Livre Tiers — importez un fichier GL Tiers (onglet Import)."}
+          columns={tiersLedgerColumns}
+          footer={<>
+            <div className="py-2 px-3 col-span-6">TOTAUX</div>
+            <div className="py-2 px-3 text-right num">{fmtFull(totD)}</div>
+            <div className="py-2 px-3 text-right num">{fmtFull(totC)}</div>
           </>}
         />
       </Card>
