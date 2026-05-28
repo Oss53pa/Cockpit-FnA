@@ -241,7 +241,7 @@ export default function DashboardHome() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
-          <ChartCard title="Chiffre d'Affaires" subtitle="Réalisé · Budget · N-1 (mensuel)" className="lg:col-span-2" accent={ct.at(0)}>
+          <ChartCard title="Chiffre d'Affaires" subtitle="Réalisé · Budget N · Budget N-1 (mensuel)" className="lg:col-span-2" accent={ct.at(0)}>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={caData} barGap={2} barCategoryGap="30%">
                 <ChartGradients />
@@ -251,8 +251,8 @@ export default function DashboardHome() {
                 <Tooltip formatter={(v: any) => fmtFull(v)} contentStyle={ct.tooltipStyle} itemStyle={ct.tooltipItemStyle} labelStyle={ct.tooltipLabelStyle} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
                 <Bar dataKey="realise" name="Réalisé" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="budget" name="Budget" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="n1" name="N-1" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="budget" name="Budget N" fill={`url(#${barGradId(2)})`} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="n1" name="Budget N-1" fill={`url(#${barGradId(4)})`} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>

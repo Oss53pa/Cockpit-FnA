@@ -427,15 +427,15 @@ export function useMonthlyCA() {
         budgetByMonth.set(m, (budgetByMonth.get(m) ?? 0) + Number(b.amount));
       }
 
-      // CA N-1
-      const prevPeriods = periods.filter((p) => p.year === currentYear - 1 && p.month >= fromMonth && p.month <= toMonth);
-      const prevPeriodIds = new Set(prevPeriods.map((p) => p.id));
+      // Budget CA N-1 = BUDGET de l'année précédente (classes 70-73) par mois.
+      // Le graphe CA du dashboard compare Réalisé N · Budget N · Budget N-1 :
+      // le N-1 est donc le budget de l'exercice précédent, pas le réalisé GL N-1.
       const n1ByMonth = new Map<number, number>();
-      for (const e of allEntries) {
-        if (!prevPeriodIds.has(e.periodId)) continue;
-        if (!/^7[0-3]/.test(e.account)) continue;
-        const period = prevPeriods.find((p) => p.id === e.periodId);
-        if (period) n1ByMonth.set(period.month, (n1ByMonth.get(period.month) ?? 0) + (e.credit - e.debit));
+      for (const b of allBudgets) {
+        if (b.year !== currentYear - 1) continue;
+        if (!/^7[0-3]/.test(b.account)) continue;
+        const m = b.month ?? 0;
+        n1ByMonth.set(m, (n1ByMonth.get(m) ?? 0) + Number(b.amount));
       }
 
       // Réalisé année courante
