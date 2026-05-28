@@ -612,8 +612,12 @@ export class SupabaseProvider implements DataProvider {
   }
   async bulkUpsertBudgets(lines: BudgetLine[]) {
     const rows = lines.map(l => toSnake(l));
+    // onConflict obligatoire : sans cible de conflit, l'upsert se comporte
+    // comme un INSERT pur (les lignes n'ont pas d'`id`) et empile des
+    // doublons que loadBudget additionne → montants gonflés ×N.
+    // Cf. migration 024 (index unique fna_budgets_unique_line).
     for (let i = 0; i < rows.length; i += 500) {
-      check(await fromAny('fna_budgets').upsert(rows.slice(i, i + 500)));
+      check(await fromAny('fna_budgets').upsert(rows.slice(i, i + 500), { onConflict: 'org_id,year,version,account,month' }));
     }
   }
   async deleteBudgets(orgId: string, year: number, version: string) {
