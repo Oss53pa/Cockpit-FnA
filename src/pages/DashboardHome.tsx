@@ -13,7 +13,6 @@ import { inferBranch } from '../engine/analyticBranch';
 import { PageHeader } from '../components/layout/PageHeader';
 import { DataIntegrityBanner } from '../components/ui/DataIntegrityBanner';
 import { SyncStatusPanel } from '../components/ui/SyncStatusPanel';
-import { KPICard } from '../components/ui/KPICardV2';
 import { KpiCockpit } from '../components/ui/KpiCockpit';
 import { ChartCard } from '../components/ui/ChartCard';
 import { TabSwitch } from '../components/ui/TabSwitch';
@@ -117,7 +116,6 @@ export default function DashboardHome() {
 
   const caN1 = caData.reduce((s, m) => s + m.n1, 0);
   const caBudget = caData.reduce((s, m) => s + m.budget, 0);
-  const variationCA = caN1 ? ((ca - caN1) / Math.abs(caN1)) * 100 : 0;
   const budgetExec = ca && caBudget ? (ca / caBudget) * 100 : 0;
   const marge = ca ? (sig.resultat / ca) * 100 : 0;
   const currency = org?.currency ?? 'XOF';

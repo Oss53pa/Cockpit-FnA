@@ -201,7 +201,7 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['action_plans']['Row'], 'id'>;
         Update: Partial<Database['public']['Tables']['action_plans']['Insert']>;
       };
-      email_logs: {
+      fna_email_logs: {
         Row: {
           id: number;
           org_id: string;
@@ -212,10 +212,10 @@ export interface Database {
           sent_at: string;
           error: string | null;
         };
-        Insert: Omit<Database['public']['Tables']['email_logs']['Row'], 'id'>;
-        Update: Partial<Database['public']['Tables']['email_logs']['Insert']>;
+        Insert: Omit<Database['public']['Tables']['fna_email_logs']['Row'], 'id'>;
+        Update: Partial<Database['public']['Tables']['fna_email_logs']['Insert']>;
       };
-      email_schedules: {
+      fna_email_schedules: {
         Row: {
           id: number;
           org_id: string;
@@ -229,8 +229,8 @@ export interface Database {
           last_sent_at: string | null;
           next_run_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['email_schedules']['Row'], 'id'>;
-        Update: Partial<Database['public']['Tables']['email_schedules']['Insert']>;
+        Insert: Omit<Database['public']['Tables']['fna_email_schedules']['Row'], 'id'>;
+        Update: Partial<Database['public']['Tables']['fna_email_schedules']['Insert']>;
       };
     };
   };

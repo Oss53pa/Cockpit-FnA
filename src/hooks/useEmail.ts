@@ -1,8 +1,59 @@
 import { useState, useCallback } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
-// Helper: les tables fna_* ne sont pas typees dans Database — bypass via cast
-const fromAny = (table: string) => (supabase as any).from(table);
+// Schéma typé précis pour les tables email. Le type global `Database`
+// (supabaseTypes.ts) est un stub incomplet (sans Views/Functions ni
+// Relationships) que supabase-js ne reconnaît pas → `.from()` typé ressort
+// `never`. On fournit ici un schéma conforme à GenericSchema, restreint aux
+// deux tables email, et on caste le client une seule fois (au lieu d'un
+// `as any` par appel). Toutes les requêtes ci-dessous sont ainsi typées.
+type EmailLogRow = {
+  id: number;
+  org_id: string;
+  report_id: number | null;
+  recipients: string[];
+  subject: string;
+  status: string;
+  sent_at: string;
+  error: string | null;
+};
+type EmailScheduleRow = {
+  id: number;
+  org_id: string;
+  report_type: string;
+  frequency: string;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  hour: number;
+  recipients: string[];
+  enabled: boolean;
+  last_sent_at: string | null;
+  next_run_at: string;
+};
+type EmailDatabase = {
+  public: {
+    Tables: {
+      fna_email_logs: {
+        Row: EmailLogRow;
+        Insert: Omit<EmailLogRow, 'id'>;
+        Update: Partial<Omit<EmailLogRow, 'id'>>;
+        Relationships: [];
+      };
+      fna_email_schedules: {
+        Row: EmailScheduleRow;
+        Insert: Omit<EmailScheduleRow, 'id'>;
+        Update: Partial<Omit<EmailScheduleRow, 'id'>>;
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};
+const emailClient = supabase as unknown as SupabaseClient<EmailDatabase>;
 
 interface SendReportParams {
   reportId: number;
@@ -59,12 +110,13 @@ export function useEmail() {
   /** Récupérer l'historique des envois */
   const getEmailLogs = useCallback(async (orgId: string): Promise<EmailLog[]> => {
     if (!isSupabaseConfigured) return [];
-    const { data } = await fromAny('fna_email_logs')
+    const { data } = await emailClient
+      .from('fna_email_logs')
       .select('*')
       .eq('org_id', orgId)
       .order('sent_at', { ascending: false })
       .limit(100);
-    return (data ?? []).map((r: any) => ({
+    return (data ?? []).map((r) => ({
       id: r.id,
       orgId: r.org_id,
       reportId: r.report_id,
@@ -79,20 +131,21 @@ export function useEmail() {
   /** Récupérer les programmations */
   const getSchedules = useCallback(async (orgId: string): Promise<EmailSchedule[]> => {
     if (!isSupabaseConfigured) return [];
-    const { data } = await fromAny('fna_email_schedules')
+    const { data } = await emailClient
+      .from('fna_email_schedules')
       .select('*')
       .eq('org_id', orgId);
-    return (data ?? []).map((r: any) => ({
+    return (data ?? []).map((r) => ({
       id: r.id,
       orgId: r.org_id,
       reportType: r.report_type,
       frequency: r.frequency as 'weekly' | 'monthly' | 'quarterly',
-      dayOfWeek: r.day_of_week,
-      dayOfMonth: r.day_of_month,
+      dayOfWeek: r.day_of_week ?? undefined,
+      dayOfMonth: r.day_of_month ?? undefined,
       hour: r.hour,
       recipients: r.recipients,
       enabled: r.enabled,
-      lastSentAt: r.last_sent_at,
+      lastSentAt: r.last_sent_at ?? undefined,
       nextRunAt: r.next_run_at,
     }));
   }, []);
@@ -100,7 +153,7 @@ export function useEmail() {
   /** Créer / mettre à jour une programmation */
   const upsertSchedule = useCallback(async (schedule: EmailSchedule) => {
     if (!isSupabaseConfigured) return;
-    const row: any = {
+    const row = {
       org_id: schedule.orgId,
       report_type: schedule.reportType,
       frequency: schedule.frequency,
@@ -109,19 +162,20 @@ export function useEmail() {
       hour: schedule.hour,
       recipients: schedule.recipients,
       enabled: schedule.enabled,
+      last_sent_at: schedule.lastSentAt ?? null,
       next_run_at: schedule.nextRunAt,
     };
     if (schedule.id) {
-      await fromAny('fna_email_schedules').update(row).eq('id', schedule.id);
+      await emailClient.from('fna_email_schedules').update(row).eq('id', schedule.id);
     } else {
-      await fromAny('fna_email_schedules').insert(row);
+      await emailClient.from('fna_email_schedules').insert(row);
     }
   }, []);
 
   /** Supprimer une programmation */
   const deleteSchedule = useCallback(async (id: number) => {
     if (!isSupabaseConfigured) return;
-    await fromAny('fna_email_schedules').delete().eq('id', id);
+    await emailClient.from('fna_email_schedules').delete().eq('id', id);
   }, []);
 
   return { sendReport, sending, getEmailLogs, getSchedules, upsertSchedule, deleteSchedule };
