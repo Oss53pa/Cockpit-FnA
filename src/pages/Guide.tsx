@@ -8,9 +8,9 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  HelpCircle, Search, ChevronRight, Rocket, Database, LayoutDashboard,
-  FileText, Sparkles, Users as UsersIcon, Shield, MessageCircle,
-  CheckCircle2, AlertTriangle, Lightbulb, Keyboard,
+  Search, ChevronRight, Rocket, Database, LayoutDashboard,
+  FileText, Sparkles, Shield, MessageCircle,
+  CheckCircle2, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';

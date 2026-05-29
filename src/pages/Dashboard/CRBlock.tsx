@@ -6,8 +6,7 @@ import {
 import clsx from 'clsx';
 import { KPICard } from '../../components/ui/KPICardV2';
 import { ChartCard } from '../../components/ui/ChartCard';
-import { useStatements, useBudgetActual } from '../../hooks/useFinancials';
-import { useChartTheme } from '../../lib/chartTheme';
+import { useBudgetActual } from '../../hooks/useFinancials';
 import { ChartGradients, barGradId } from '../../components/charts/ChartGradients';
 import { bySection, loadLabels } from '../../engine/budgetActual';
 import { useApp } from '../../store/app';
@@ -19,7 +18,6 @@ export function CRBlock() {
   const { currentOrgId, currentYear } = useApp();
   const sections = bySection(rows, currentOrgId);
   const labels = loadLabels(currentOrgId);
-  const ct = useChartTheme();
   const [zoom, setZoom] = useState<string | null>(null);
 
   const [n1Data, setN1Data] = useState<Map<string, number>>(new Map());

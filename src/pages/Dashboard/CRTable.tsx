@@ -7,7 +7,7 @@ import {
 import clsx from 'clsx';
 import { KPICard } from '../../components/ui/KPICardV2';
 import { ChartCard } from '../../components/ui/ChartCard';
-import { useStatements, useBudgetActual } from '../../hooks/useFinancials';
+import { useBudgetActual } from '../../hooks/useFinancials';
 import { useChartTheme } from '../../lib/chartTheme';
 import { ChartGradients, barGradId } from '../../components/charts/ChartGradients';
 import { bySection, loadLabels } from '../../engine/budgetActual';

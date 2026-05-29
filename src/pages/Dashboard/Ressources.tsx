@@ -13,7 +13,6 @@ import { ChartGradients, barGradId } from '../../components/charts/ChartGradient
 import { useApp } from '../../store/app';
 import { fmtFull, fmtK } from '../../lib/format';
 import { masseSalariale, fiscalite, immobilisationsDetail } from '../../engine/analytics';
-import { Target } from 'lucide-react';
 
 // ── MasseSalariale ────────────────────────────────────────────────────
 export function MasseSalariale() {

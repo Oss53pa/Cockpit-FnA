@@ -11,8 +11,7 @@
 // L'objectif est de servir de référence pour la refonte progressive de
 // tous les autres dashboards.
 import { useMemo } from 'react';
-import { ArrowLeft, Download, ShieldAlert, ShieldCheck, TrendingUp, Wallet, Scale, Target, Activity, AlertTriangle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Download, ShieldAlert, ShieldCheck, TrendingUp, Wallet, Scale, Target, Activity, AlertTriangle } from 'lucide-react';
 import { ResponsiveRadar } from '@nivo/radar';
 import { ResponsiveBar } from '@nivo/bar';
 import { ResponsiveLine } from '@nivo/line';
@@ -22,7 +21,7 @@ import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';
 import { useApp } from '../store/app';
-import { useBalance, useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
+import { useCurrentOrg, useMonthlyCA, useRatios, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
 import { fmtFull, fmtK } from '../lib/format';
 import { SEMANTIC } from '../lib/semantic';
@@ -56,7 +55,6 @@ export default function ExecutiveSummary() {
   const { currentYear } = useApp();
   const org = useCurrentOrg();
   const { sig, bilan } = useStatements();
-  const balance = useBalance();
   const ratios = useRatios();
   const monthly = useMonthlyCA();
   const ct = useChartTheme();

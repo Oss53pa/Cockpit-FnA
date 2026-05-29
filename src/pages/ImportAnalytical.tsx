@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowRight, CheckCircle2, Download, FileSpreadsheet, FileWarning, Layers, Plus,
+  ArrowRight, CheckCircle2, Download, FileWarning, Layers, Plus,
   Upload, Wand2, Trash2, FolderTree, XCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -35,7 +35,7 @@ import {
   type AnalyticAxisImportReport, type AnalyticCodeImportReport,
 } from '../engine/analyticalEngine';
 import type { ImportLog, AnalyticAxis, AnalyticCode, AnalyticBranch } from '../db/schema';
-import { BRANCH_LABELS, BRANCH_COLORS } from '../engine/analyticBranch';
+import { BRANCH_COLORS } from '../engine/analyticBranch';
 
 type Tab = 'axes' | 'codes';
 

@@ -16,8 +16,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Send, Hash, Lock, MessageCircle, Users, Plus, X, Search,
-  Smile, Reply, Pin, Settings as SettingsIcon, AtSign, ChevronDown,
+  Send, Hash, Lock, MessageCircle, Plus, X, Search,
+  Reply, Settings as SettingsIcon,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { dataProvider } from '../db/provider';

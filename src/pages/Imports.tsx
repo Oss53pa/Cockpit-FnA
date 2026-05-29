@@ -4,7 +4,6 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { toast } from '../components/ui/Toast';
 import { useApp } from '../store/app';
-import { db } from '../db/schema';
 import { dataProvider } from '../db/provider';
 import { invalidateCloudData } from '../hooks/useCloudData';
 import { useCurrentOrg, useImportsHistory, usePeriods } from '../hooks/useFinancials';

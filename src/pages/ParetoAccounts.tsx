@@ -1,8 +1,7 @@
 // Analyse ABC / Pareto des comptes
 // Identifie les 20 % de comptes qui portent 80 % du CA / des charges.
 import { useMemo, useState } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, Target, Activity } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { TrendingUp, TrendingDown, Target, Activity } from 'lucide-react';
 import { ResponsiveBar } from '@nivo/bar';
 import { ResponsiveLine } from '@nivo/line';
 import { ChartCard } from '../components/ui/ChartCard';

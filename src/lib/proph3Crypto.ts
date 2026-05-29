@@ -35,8 +35,6 @@ const APP_SALTS: Record<number, Uint8Array> = {
 } as const;
 /** Sel courant pour les NOUVEAUX chiffrements. */
 const CURRENT_KEY_VERSION = 2;
-/** @deprecated Alias de compatibilité — utiliser APP_SALTS[1]. */
-const APP_SALT = APP_SALTS[1];
 
 const subtle = (): SubtleCrypto => {
   if (typeof window === 'undefined' || !window.crypto?.subtle) {

@@ -1,8 +1,7 @@
 // Seuil de rentabilité — Point mort visuel
 // Décompose le CR en coûts fixes vs variables et calcule le point mort.
 import { useMemo, useState } from 'react';
-import { ArrowLeft, TrendingUp, Target, Activity, AlertTriangle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { TrendingUp, Target, Activity, AlertTriangle } from 'lucide-react';
 import { ResponsiveLine } from '@nivo/line';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';

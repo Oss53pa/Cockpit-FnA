@@ -5,7 +5,6 @@ import {
   PieChart, Pie, Cell, ComposedChart, Line,
 } from 'recharts';
 import clsx from 'clsx';
-import { ChartCard } from '../../components/ui/ChartCard';
 import { useStatements, useBudgetActual } from '../../hooks/useFinancials';
 import { useChartTheme } from '../../lib/chartTheme';
 import { ChartGradients, barGradId } from '../../components/charts/ChartGradients';

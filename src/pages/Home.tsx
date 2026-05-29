@@ -1,9 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, Bot, ExternalLink, LayoutDashboard, FileSpreadsheet, FileText,
-  Upload, Wallet, LogIn, ArrowUpRight, ArrowDownRight, Calendar, Building2, Sparkles, Target,
+  Upload, Wallet, LogIn, ArrowUpRight, ArrowDownRight, Calendar, Sparkles,
 } from 'lucide-react';
-import { useBalance, useCurrentOrg, useRatios, useStatements, useMonthlyCA } from '../hooks/useFinancials';
+import { useCurrentOrg, useRatios, useStatements, useMonthlyCA } from '../hooks/useFinancials';
 import { useApp } from '../store/app';
 import { fmtMoney, fmtPct } from '../lib/format';
 
@@ -16,7 +16,6 @@ import { fmtMoney, fmtPct } from '../lib/format';
 export default function Home() {
   const { sig, bilan } = useStatements();
   const ratios = useRatios();
-  const balance = useBalance();
   const monthly = useMonthlyCA();
   const org = useCurrentOrg();
   const { currentYear } = useApp();
@@ -249,16 +248,6 @@ const TONE_TEXT: Record<string, string> = {
   blue:    'text-blue-600',
   violet:  'text-violet-600',
   neutral: 'text-primary-700',
-};
-
-const TONE_BORDER: Record<string, string> = {
-  orange:  'before:bg-orange-500',
-  red:     'before:bg-red-500',
-  amber:   'before:bg-amber-500',
-  green:   'before:bg-emerald-500',
-  blue:    'before:bg-blue-500',
-  violet:  'before:bg-violet-500',
-  neutral: 'before:bg-primary-400',
 };
 
 /**

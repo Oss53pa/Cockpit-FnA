@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Line, ComposedChart } from 'recharts';
-import { Activity, AlertCircle, ArrowRight, BarChart2, CheckCircle2, FileText, Gauge, Layers, ListChecks, Play, Plus, Printer, Settings, Target, TrendingDown, TrendingUp, Trash2, Wand2, Wallet, Zap } from 'lucide-react';
+import { AlertCircle, ArrowRight, BarChart2, CheckCircle2, FileText, Gauge, Layers, ListChecks, Play, Plus, Printer, Settings, Target, TrendingDown, TrendingUp, Trash2, Wand2, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -1226,7 +1226,7 @@ type OverviewStats = {
 };
 
 function OverviewTab({
-  orgId, year, axes, ct, setTab,
+  orgId, year, axes, setTab,
 }: {
   orgId: string; year: number; axes: AnalyticAxis[];
   ct: ReturnType<typeof useChartTheme>;

@@ -38,10 +38,8 @@ const States         = lazyWithRetry(() => import('./pages/States'));
 const Ratios         = lazyWithRetry(() => import('./pages/Ratios'));
 const Dashboards     = lazyWithRetry(() => import('./pages/Dashboards'));
 const Dashboard      = lazyWithRetry(() => import('./pages/Dashboard'));
-const DashboardHome  = lazyWithRetry(() => import('./pages/DashboardHome'));
 const Reports        = lazyWithRetry(() => import('./pages/Reports'));
 const AI             = lazyWithRetry(() => import('./pages/AI'));
-const Alerts         = lazyWithRetry(() => import('./pages/Alerts'));
 const Actions        = lazyWithRetry(() => import('./pages/Actions'));
 const Budget         = lazyWithRetry(() => import('./pages/Budget'));
 const COA            = lazyWithRetry(() => import('./pages/COA'));
@@ -86,7 +84,6 @@ const BoardPack = lazyWithRetry(() => import('./pages/BoardPack'));
 const SectorBenchmark = lazyWithRetry(() => import('./pages/SectorBenchmark'));
 const Proph3tIntelligence = lazyWithRetry(() => import('./pages/Proph3tIntelligence'));
 const CREditor = lazyWithRetry(() => import('./pages/CREditor'));
-const CompanyDiagnostic = lazyWithRetry(() => import('./pages/CompanyDiagnostic'));
 const SyntheseHub      = lazyWithRetry(() => import('./pages/SyntheseHub'));
 const ImportAnalytical = lazyWithRetry(() => import('./pages/ImportAnalytical'));
 // Dashboards analytiques dédiés (D03 / D04 / D05 / D06 / D09 / D10)

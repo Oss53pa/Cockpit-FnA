@@ -1,8 +1,7 @@
 // Compliance SYSCOHADA — check-list de conformité comptable
 // Vérifie les invariants que tout GL SYSCOHADA doit satisfaire.
 import { useMemo } from 'react';
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Shield } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { CheckCircle2, XCircle, AlertTriangle, Shield } from 'lucide-react';
 import { ChartCard } from '../components/ui/ChartCard';
 import { DashHeader } from '../components/ui/DashHeader';
 import { DashboardTopBar } from '../components/ui/DashboardTopBar';

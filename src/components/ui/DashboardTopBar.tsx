@@ -15,7 +15,7 @@
  *   <DashboardTopBar currentRoute="/dashboard/pareto" />
  */
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, ChevronLeft, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronLeft } from 'lucide-react';
 
 // Liste partagée — duplique l'ordre du catalogue (src/pages/Dashboards.tsx).
 // Synchroniser avec DashboardNav.tsx.

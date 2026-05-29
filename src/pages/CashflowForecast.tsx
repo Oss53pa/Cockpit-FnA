@@ -2,8 +2,7 @@
 // Classique treasurer view : projection semaine par semaine de la trésorerie
 // à partir des échéances clients, fournisseurs, salaires, impôts.
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, Wallet, AlertTriangle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { TrendingUp, TrendingDown, Wallet, AlertTriangle } from 'lucide-react';
 import { ResponsiveBar } from '@nivo/bar';
 import { ResponsiveLine } from '@nivo/line';
 import { ChartCard } from '../components/ui/ChartCard';
