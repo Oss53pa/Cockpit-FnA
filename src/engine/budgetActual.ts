@@ -172,6 +172,16 @@ export function getSectionOrder(orgId?: string): string[] {
 // Compat : utilisation directe des defaults
 export const CR_SECTIONS = DEFAULT_SECTION_DEFS;
 
+// SYSCOHADA : 7069xx et 709 sont des **contre-produits** (RRR accordés aux
+// clients) avec solde DÉBITEUR normal — ils RÉDUISENT le CA. Le réalisé
+// utilise `credit - debit` qui donne un nombre négatif (cohérent). Mais le
+// budget est saisi en valeur absolue positive ; il faut donc le stocker en
+// négatif pour que les totaux par section ne comptabilisent pas les RRR
+// comme des produits supplémentaires.
+function isContraRevenue(code: string): boolean {
+  return code.startsWith('7069') || code.startsWith('709');
+}
+
 // Calcul Budget vs Réalisé sur tout le CR (classes 6 et 7)
 export async function computeBudgetActual(
   orgId: string,
@@ -249,7 +259,10 @@ export async function computeBudgetActual(
       // Filtrer le budget mensuel sur l'intervalle sélectionné
       if (l.month < fm || l.month > tm) continue;
       // Number() : Supabase renvoie numeric(18,2) en string — évite la concaténation
-      budgetMap.set(l.account, (budgetMap.get(l.account) ?? 0) + Number(l.amount));
+      let amt = Number(l.amount);
+      // RRR accordés : normalisation en NÉGATIF (cohérence avec le réalisé).
+      if (isContraRevenue(l.account)) amt = -Math.abs(amt);
+      budgetMap.set(l.account, (budgetMap.get(l.account) ?? 0) + amt);
     }
   }
 
@@ -452,7 +465,9 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
     const lines = await dataProvider.getBudgets(orgId, year, resolvedVersion);
     for (const l of lines) {
       const arr = budgetMonthly.get(l.account) ?? Array(12).fill(0);
-      arr[l.month - 1] += l.amount;
+      // RRR accordés : normalisation en NÉGATIF (cf. computeBudgetActual).
+      const amt = isContraRevenue(l.account) ? -Math.abs(l.amount) : l.amount;
+      arr[l.month - 1] += amt;
       budgetMonthly.set(l.account, arr);
     }
   }

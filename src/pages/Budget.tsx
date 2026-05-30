@@ -133,7 +133,12 @@ export default function Budget() {
   };
 
   const totalBudget = items.reduce((s, i) => s + i.total, 0);
-  const totalProd = items.filter((i) => i.account.startsWith('7')).reduce((s, i) => s + i.total, 0);
+  // SYSCOHADA : 7069xx et 709 (RRR accordés) sont des contre-produits — leur
+  // montant saisi (positif) doit être DÉDUIT du total produits, pas additionné.
+  const totalProd = items.filter((i) => i.account.startsWith('7')).reduce((s, i) => {
+    const contra = i.account.startsWith('7069') || i.account.startsWith('709');
+    return s + (contra ? -Math.abs(i.total) : i.total);
+  }, 0);
   const totalCharge = items.filter((i) => i.account.startsWith('6')).reduce((s, i) => s + i.total, 0);
 
   return (
