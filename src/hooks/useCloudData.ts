@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * useCloudData — remplace `useLiveQuery` de Dexie par un fetch async/await
  * sur le DataProvider (Supabase obligatoire).

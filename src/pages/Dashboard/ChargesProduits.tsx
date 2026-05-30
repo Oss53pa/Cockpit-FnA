@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ── ChargesProduits dashboard (Charges & Produits, 3 tabs) ──────────
 import { useEffect, useState } from 'react';
 import {

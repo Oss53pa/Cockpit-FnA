@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Lettrage automatique — taux de lettrage par compte tiers, lignes non lettrées par âge.
  * Indicateur de qualité de l'équipe compta.

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ── TresorerieBFR (3 tabs: tresorerie / bfr / previsionnel) ─────────
 import { useEffect, useState } from 'react';
 import {

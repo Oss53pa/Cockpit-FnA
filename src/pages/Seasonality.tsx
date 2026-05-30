@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Saisonnalité CA / charges — détection auto des cycles + index mensuel.
  * Utile pour commerce, agriculture, hôtellerie.

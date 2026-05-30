@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Modèle bloc-à-bloc pour le constructeur de rapport
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';

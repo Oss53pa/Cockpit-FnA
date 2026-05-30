@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Calculs mensuels — CR et Bilan sur 12 mois
 //
 // Source de données : Supabase via dataProvider (obligatoire).

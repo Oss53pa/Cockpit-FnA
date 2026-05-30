@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { describe, it, expect } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { hashEntry, hashChain, verifyChain, type HashableEntry } from './auditHash';

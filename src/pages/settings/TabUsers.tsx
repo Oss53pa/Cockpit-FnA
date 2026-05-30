@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /* eslint-disable react-refresh/only-export-components -- helpers et types co-localisés avec TabUsers */
 import { useState, useEffect } from 'react';
 import { safeLocalStorage } from '../../lib/safeStorage';

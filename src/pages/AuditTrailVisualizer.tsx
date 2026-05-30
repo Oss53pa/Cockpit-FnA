@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Audit Trail Visuel — liste GL avec hash chain SHA-256 et statut intégrité.
  * Branche le verifyChain() existant pour visualiser la chaîne d'audit.

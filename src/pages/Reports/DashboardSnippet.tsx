@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ─── DASHBOARD SNIPPET — mini-rendu enrichi par type ─────────────
 import React, { useMemo, useState } from 'react';
 import clsx from 'clsx';

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ─── DONNÉES ET CONSTANTES DU MODULE REPORTS ─────────────────────
 // Contient : TABLE_CATALOG, DASHBOARD_CATALOG, computeKPIs,
 //            TEMPLATE_DEFAULTS, QUICK_TEMPLATES, uid, filterConditionalBlocks

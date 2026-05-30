@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Cashflow prévisionnel 13 semaines
 // Classique treasurer view : projection semaine par semaine de la trésorerie
 // à partir des échéances clients, fournisseurs, salaires, impôts.

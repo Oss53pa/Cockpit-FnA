@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Bank Reconciliation — réconciliation bancaire mensuelle.
  * Compare le solde GL banque (compte 521) vs le solde du relevé bancaire saisi

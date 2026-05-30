@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * AcceptInvite — Page de définition du mot de passe pour un nouvel utilisateur invité.
  *
@@ -127,7 +128,6 @@ export default function AcceptInvite() {
         const { data: sessionData } = await supabase.auth.getSession();
         const uid = sessionData?.session?.user?.id;
         if (uid) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: userOrgs } = await (supabase as any)
             .from('fna_user_orgs')
             .select('org_id')

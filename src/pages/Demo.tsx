@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Page DEMO — porte d'entrée vers l'application en mode démonstration
 // Charge un jeu de données SYSCOHADA réaliste (DEMO INDUSTRIES SA),
 // bascule l'org courante sur 'demo-org' et propose un parcours guidé.

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Constructeur de rapport PDF multi-sections avec couverture, sommaire, pagination
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';

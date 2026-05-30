@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Closing Pack — synthèse 1 page A4 print-ready pour fin de mois.
  * Format livrable Direction / Expert-comptable : KPIs, mini-charts, alertes,

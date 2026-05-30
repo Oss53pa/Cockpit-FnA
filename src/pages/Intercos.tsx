@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Intercos / Comptes courants associés — opérations entre sociétés du groupe.
  * Comptes 462/463 + 4561 + 167 (intra-groupe).

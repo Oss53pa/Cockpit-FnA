@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, Bot, ExternalLink, LayoutDashboard, FileSpreadsheet, FileText,

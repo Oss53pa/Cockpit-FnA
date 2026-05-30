@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Comparatif multi-exercices N / N-1 / N-2 / N-3.
  * Vue stratégique des tendances pluriannuelles.

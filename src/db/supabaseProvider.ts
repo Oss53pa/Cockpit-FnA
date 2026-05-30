@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * SupabaseProvider — implémentation cloud PostgreSQL.
  * Utilisée quand VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY sont configurés.
@@ -38,9 +39,7 @@ const supabase = supabaseTyped as unknown as SupabaseClient<FnaDatabase>;
  * On caste le builder (pas l'argument) pour que toutes les méthodes chaînées
  * (eq, order, select…) restent accessibles.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function fromAny(table: string): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (supabase as any).from(table);
 }
 
@@ -106,7 +105,6 @@ function normalizeTsFields<T extends Record<string, unknown>>(row: T): T {
  * accepte l'appel `.range(...).then()` sans erreur de surcharge.
  */
 async function paginatedSelect<T = Record<string, unknown>>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   buildQuery: () => any,
   label = 'paginatedSelect',
 ): Promise<T[]> {
@@ -114,7 +112,6 @@ async function paginatedSelect<T = Record<string, unknown>>(
   const all: T[] = [];
   let offset = 0;
   while (true) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (buildQuery().range(offset, offset + PAGE - 1) as any);
     if (error) throw new Error(`${label}: ${(error as { message: string }).message}`);
     if (!data || (data as T[]).length === 0) break;
@@ -221,7 +218,6 @@ export class SupabaseProvider implements DataProvider {
     ];
     for (const t of tables) {
       // On ignore les erreurs (table sans la colonne org_id ou rangée déjà absente)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from(t) as any).delete().eq('org_id', id);
     }
     check(await supabase.from('fna_organizations').delete().eq('id', id));
@@ -461,7 +457,6 @@ export class SupabaseProvider implements DataProvider {
   }
   async getLastGLAuditHash(orgId: string): Promise<string> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await supabase.rpc('fna_get_last_audit_hash', { p_org_id: orgId } as any);
       if (error) return '';
       return typeof data === 'string' ? data : '';

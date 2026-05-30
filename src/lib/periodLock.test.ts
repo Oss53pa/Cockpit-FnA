@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock du module db AVANT l'import des fonctions à tester

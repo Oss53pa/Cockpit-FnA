@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * OnboardingModal — wizard OBLIGATOIRE en 4 étapes au premier login.
  *
@@ -77,7 +78,6 @@ export function OnboardingModal() {
         if (isDemoMode) return;
 
         // Vérifie si user a au moins 1 org mappée
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table fna_user_orgs non typée dans le schéma généré
         const { data: userOrgs } = await (supabase as any)
           .from('fna_user_orgs')
           .select('org_id')
@@ -129,11 +129,9 @@ export function OnboardingModal() {
         coaSystem: 'SYSCOHADA',
         createdAt: Date.now(),
         // Champs additionnels (régime fiscal stocké comme tag sur address pour rétro-compat)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 
       // 2) Mapping fna_user_orgs (CRITIQUE pour RLS)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: mapErr } = await (supabase as any).from('fna_user_orgs').upsert(
         { user_id: userId, org_id: orgId, role: 'admin' },
         { onConflict: 'user_id,org_id', ignoreDuplicates: true },

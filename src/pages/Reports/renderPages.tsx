@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ─── RENDU DES PAGES (simulation A4) ─────────────────────────────
 import React from 'react';
 import type { Block, ReportConfig } from '../../engine/reportBlocks';

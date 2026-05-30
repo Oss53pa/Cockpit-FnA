@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * TFT mensuel SYSCOHADA — Tableau des Flux de Trésorerie ventilé sur 12 mois.
  * Design dernière génération : KPI hero, charts élégants, hiérarchie forte.

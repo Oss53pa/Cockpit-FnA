@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, FileWarning, FolderTree, Search, Trash2, XCircle } from 'lucide-react';
 import { downloadCOATemplate } from '../engine/templates';

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { useState, useEffect, useCallback } from 'react';
 import { CheckCircle2, Download, FileWarning, Link2, RefreshCw, Trash2, XCircle, Users, Search, AlertTriangle, X } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -340,7 +341,6 @@ export default function ImportTiers({ embedded = false }: { embedded?: boolean }
                 const entries = await dataProvider.getGLEntries({ orgId: currentOrgId });
                 const tiersEntries = entries.filter((e) => !!e.tiers);
                 if (tiersEntries.length === 0) { toast.info('Aucune écriture tiers', 'Importez d\'abord un GL Tiers'); return; }
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- verifyChain accepte HashableEntry[], GLEntry est compatible mais le TS lib n'expose pas la conversion
                 const result = await verifyChain(tiersEntries as any);
                 if (result.valid) {
                   toast.success('Intégrité vérifiée', `${tiersEntries.length} écritures tiers — chaîne SHA-256 intacte`);
@@ -357,7 +357,6 @@ export default function ImportTiers({ embedded = false }: { embedded?: boolean }
               try {
                 const { auditGL } = await import('../engine/glAudit');
                 const result = await auditGL(currentOrgId, currentYear);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AuditFinding non exporté par glAudit.ts
                 const tiersFindings = result.findings.filter((f: any) =>
                   f.category === 'clients_crediteurs' || f.category === 'fournisseurs_debiteurs' ||
                   f.accounts?.some((a: string) => a.startsWith('41') || a.startsWith('40'))

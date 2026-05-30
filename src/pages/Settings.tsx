@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { Building2, Calendar, CheckCircle2, Cloud, Lock, LogOut, Moon, Pencil, Plus, Sun, Trash2, Unlock } from 'lucide-react';
@@ -323,7 +324,6 @@ function TabSocietes() {
         alert('Vous devez être connecté pour quitter une société.');
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('fna_user_orgs')
         .delete()

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Analyse ABC / Pareto des comptes
 // Identifie les 20 % de comptes qui portent 80 % du CA / des charges.
 import { useMemo, useState } from 'react';

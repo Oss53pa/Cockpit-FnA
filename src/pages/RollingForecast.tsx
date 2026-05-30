@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Rolling Forecast — projection trésorerie 30/60/90 jours basée sur les flux historiques.
  * Modèle Prophet-like avec tendance + saisonnalité + bandes de confiance.

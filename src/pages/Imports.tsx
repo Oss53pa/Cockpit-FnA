@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { useState } from 'react';
 import { CheckCircle2, Download, FileWarning, RefreshCw, Trash2, UploadCloud, XCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';

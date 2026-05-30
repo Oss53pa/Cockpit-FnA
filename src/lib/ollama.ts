@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Ollama client — LLM local pour analyse financière confidentielle.
  * Aucune donnée ne quitte le poste de l'utilisateur.

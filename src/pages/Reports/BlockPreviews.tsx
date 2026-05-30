@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ─── BLOCK PREVIEWS — aperçus inline tableau et dashboard ────────
 // TablePreview : rendu tabulaire d'une source de données comptable.
 // DashboardSnippet : re-exporté depuis son propre module (P-01 split).

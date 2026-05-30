@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import React, { useEffect, useState } from 'react';
 import { safeLocalStorage } from '../lib/safeStorage';
 import { Download, FileSpreadsheet, Printer, Sparkles, ArrowRight } from 'lucide-react';

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Dashboard Executive Summary — NEW GENERATION
 // Conçu en mode « one-pager » pour un DAF / CEO : en un seul scroll,
 // toutes les métriques clés, ratios, tendances et alertes.

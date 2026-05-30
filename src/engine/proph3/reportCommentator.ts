@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Auto-commentaire intelligent du rapport — Proph3t parcourt les blocs et
 // génère pour chaque section H1/H2/H3 un commentaire d'expert : analyse des
 // chiffres, comparaison aux normes sectorielles, identification des risques,

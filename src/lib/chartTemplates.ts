@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Builders d'option ECharts réutilisables — 3 modèles "infographie" themables.
 //
 // Chaque fonction renvoie un objet `option` à passer tel quel au wrapper

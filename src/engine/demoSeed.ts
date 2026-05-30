@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Seed de données DEMO — entreprise fictive SYSCOHADA réaliste
 // Charge un GL + Plan Comptable + Budget complet + Alertes + Plan d'action
 // + Mémoire Proph3t pour démo immédiate de bout en bout

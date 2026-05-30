@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Hooks qui calculent balance / états / ratios à la volée depuis Supabase.
 //
 // Source de données : Supabase via dataProvider (obligatoire).

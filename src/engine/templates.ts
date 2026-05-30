@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Génération de templates Excel pré-formatés pour les imports
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';

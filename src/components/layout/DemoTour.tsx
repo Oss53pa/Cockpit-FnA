@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Visite guidée flottante — accompagne l'utilisateur de page en page
 // pendant le mode démo. Persistant, repositionnable, escapable.
 import { useEffect, useRef, useState } from 'react';

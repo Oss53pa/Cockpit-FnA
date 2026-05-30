@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Variation des capitaux propres — état SYSCOHADA obligatoire système Normal.
  * Design dernière génération : KPI hero, donut composition + table.

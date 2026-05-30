@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { Download } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { DashHeader } from '../components/ui/DashHeader';

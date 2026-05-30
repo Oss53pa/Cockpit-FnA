@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * TAFIRE — Tableau Financier des Ressources et Emplois.
  * État SYSCOHADA officiel obligatoire en système Normal.

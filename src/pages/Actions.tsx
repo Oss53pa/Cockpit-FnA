@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Link2, Plus, Target, Trash2, Zap, LayoutGrid, Rows3, LayoutDashboard } from 'lucide-react';
 import clsx from 'clsx';

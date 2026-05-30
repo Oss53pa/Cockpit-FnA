@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Cockpit FnA — cockpit-invite-user (v3 : token_hash anti-prefetch)
 //
 // FIX BUG "lien expire immediatement" :

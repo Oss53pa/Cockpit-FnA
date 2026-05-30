@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // Comptabilité Analytique — Plan multi-axes, règles de mapping, affectation, dashboard
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -501,7 +502,6 @@ function CodesTab({ orgId, axes, onUpdate }: { orgId: string; axes: AnalyticAxis
                   <td className="px-3 py-2 text-primary-500">{c.longLabel}</td>
                   <td className="px-3 py-2 text-center">
                     {c.branch ? (
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       <Badge variant={BRANCH_COLORS[c.branch] as any}>{BRANCH_LABELS[c.branch]}</Badge>
                     ) : <span className="text-[10px] text-primary-400">Universel</span>}
                   </td>

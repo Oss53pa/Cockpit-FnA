@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 // ─── REPORTS — éditeur de rapports par blocs ─────────────────────
 // Ce fichier est le point d'entrée routé. La logique est découpée en
 // sous-modules dans src/pages/Reports/ conformément à la règle <500 LOC.

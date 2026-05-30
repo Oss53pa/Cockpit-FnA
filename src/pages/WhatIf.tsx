@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Sensibilité (What-if) — sliders sur CA, marge, coûts fixes → impact résultat.
  * Outil de pilotage : "Que se passe-t-il si... ?"

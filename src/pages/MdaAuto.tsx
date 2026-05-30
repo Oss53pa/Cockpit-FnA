@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * MD&A — Management Discussion & Analysis (auto-généré par Proph3t).
  * Narratif synthétique du mois.

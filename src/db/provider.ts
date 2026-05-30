@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * DataProvider — couche d'abstraction entre l'app et le stockage.
  *
@@ -281,7 +282,6 @@ function createStubProvider(): DataProvider {
   const fail = () => {
     throw new Error('Supabase non configuré. Connectez-vous ou activez le mode démo.');
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return new Proxy({} as any, {
     get: (_, prop) => {
       if (prop === 'then') return undefined;

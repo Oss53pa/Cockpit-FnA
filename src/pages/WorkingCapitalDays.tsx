@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- interop dynamique (parsers, payloads Supabase/Edge Functions, helpers Recharts). À typer finement au cas par cas. */
 /**
  * Working Capital Days — synthèse DSO + DIO + DPO + Cash Conversion Cycle.
  * Le triplet qui résume l'efficacité du cycle d'exploitation.
