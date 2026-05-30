@@ -37,7 +37,6 @@ describe('Money — performance', () => {
     // En valeur absolue : cumul de 10k EUR en < 1s (largement OK pour batch).
     expect(Math.abs(money - native)).toBeLessThan(1); // tolérance arrondi
     expect(tMoney).toBeLessThan(1000); // 10k Money EUR en moins de 1 seconde
-    // eslint-disable-next-line no-console
     console.log(`[bench] reduce natif: ${tNative.toFixed(2)}ms · Money: ${tMoney.toFixed(2)}ms (overhead ${(tMoney / Math.max(tNative, 0.01)).toFixed(1)}x)`);
   });
 

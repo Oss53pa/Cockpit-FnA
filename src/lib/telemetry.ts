@@ -92,7 +92,6 @@ export async function track(
     // Edge Function Supabase recommandée : POST /functions/v1/telemetry
     // En attendant, on log juste en console pendant la beta.
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
       console.log('[telemetry]', payload);
     } else {
       // En prod, on tente l'envoi (best-effort)

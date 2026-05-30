@@ -148,7 +148,7 @@ function SendPreviewLoader({ recipient, buildContent, mode, onClose, onNext, isL
   mode: 'review' | 'report'; onClose: () => void; onNext: () => void; isLast: boolean;
 }) {
   const [content, setContent] = useState<any>(null);
-  useEffect(() => { setContent(null); buildContent(recipient).then(setContent); }, [recipient]);
+  useEffect(() => { setContent(null); buildContent(recipient).then(setContent); }, [recipient]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!content) return null;
   const recipientName = recipient.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   return (

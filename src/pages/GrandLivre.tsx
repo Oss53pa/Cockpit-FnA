@@ -609,7 +609,7 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
       problematicAccounts: suspects,
       fallbackAccounts: fallback,
     };
-  }, [diagEntries, rows]);
+  }, [diagEntries, rows, totC, totD]);
 
   // Groupement par classe
   const byClass = new Map<string, BalanceRow[]>();
@@ -1806,7 +1806,7 @@ function CorrectionModal({ orgId, year, importId, row, onClose, onApplied }: {
       }
     })();
     return () => { alive = false; };
-  }, [orgId, year, importId, row.collective]);
+  }, [orgId, year, importId, row.collective, row.ecartDrill]);
 
   const keyOf = (g: Grp) => `${g.account}||${g.label}`;
   const getDraft = (g: Grp) => draft[keyOf(g)] ?? { action: 'assign' as const, tiers: '', reason: '', scope: 'label' as const, memorize: true };

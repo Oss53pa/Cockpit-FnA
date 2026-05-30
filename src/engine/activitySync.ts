@@ -66,7 +66,6 @@ export async function pushActivityToCloud(activity: Activity): Promise<number | 
     if (error) throw error;
     return data?.id ? Number(data.id) : null;
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('[activitySync] pushActivity failed (non-bloquant):', e);
     return null;
   }

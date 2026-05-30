@@ -70,7 +70,8 @@ export default function AuditTrail() {
   const [chainStatus, setChainStatus] = useState<{ valid: boolean; brokenAt: number | null; total: number } | null>(null);
   const [verifying, setVerifying] = useState(false);
 
-  const entries = useMemo(() => getAuditTrail(currentOrgId, 5000), [currentOrgId, refreshKey]);
+  // refreshKey = trigger volontaire pour forcer le re-fetch après mutation.
+  const entries = useMemo(() => getAuditTrail(currentOrgId, 5000), [currentOrgId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Genere des entrees demo si journal vide (uniquement la 1ere fois pour montrer le format)
   useEffect(() => {

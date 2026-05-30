@@ -24,7 +24,6 @@ ensureSeeded().catch((e) => console.error('Seed failed', e));
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
-      // eslint-disable-next-line no-console
       console.warn('[sw] enregistrement échoué (non bloquant):', err);
     });
   });

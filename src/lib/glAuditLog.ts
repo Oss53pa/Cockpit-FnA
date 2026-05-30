@@ -70,7 +70,6 @@ export async function logGLChanges(
       if (n !== null) return n;
       // n=null = RPC non déployée → tomber vers la voie 2
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[glAuditLog] RPC échec, fallback client-side:', e);
     }
   }
@@ -108,7 +107,6 @@ export async function logGLChanges(
     }
     return rows.length;
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('[glAuditLog] logging non bloquant a échoué :', e);
     return 0;
   }

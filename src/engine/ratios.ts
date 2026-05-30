@@ -39,7 +39,6 @@ function ratioVal(n: number, d: number): number {
 function clampVatRate(rate: number, fallback: number): number {
   if (!Number.isFinite(rate) || rate < 0 || rate > 0.30) {
     if (Number.isFinite(rate) && rate !== 0) {
-      // eslint-disable-next-line no-console
       console.warn(`[ratios] Taux TVA hors plage (${(rate * 100).toFixed(1)}%) — fallback ${(fallback * 100).toFixed(2)}%`);
     }
     return fallback;

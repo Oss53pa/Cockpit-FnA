@@ -60,9 +60,14 @@ export default function COA() {
     [currentOrgId],
     { initial: new Set<string>(), tag: 'gl' },
   );
-  const mouvementes = isDemoActive(currentOrgId) && mouvementesRaw.size === 0
-    ? new Set(DEMO_BALANCE.map((b) => b.account))
-    : mouvementesRaw;
+  // Mémoïsé : sans cela, le `new Set(...)` se recrée à chaque render et casse
+  // la stabilité des useMemo en aval qui en dépendent.
+  const mouvementes = useMemo(
+    () => (isDemoActive(currentOrgId) && mouvementesRaw.size === 0
+      ? new Set(DEMO_BALANCE.map((b) => b.account))
+      : mouvementesRaw),
+    [currentOrgId, mouvementesRaw],
+  );
 
   const filteredSysco = useMemo(() => {
     return SYSCOHADA_COA.filter((a) => {
@@ -303,7 +308,10 @@ function SyscoTree({ items, mouvementes, activeClass, onSelect }: { items: Sysco
 
   // Tous dépliés par défaut
   const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(classes.map((c) => [c, true])));
-  useEffect(() => { setOpen((o) => ({ ...Object.fromEntries(classes.map((c) => [c, true])), ...o })); }, [classes.join(',')]);
+  // classesKey extrait pour ESLint (expression complexe interdite en deps).
+  // L'effet ne dépend que de la signature des classes, pas de l'array elle-même.
+  const classesKey = classes.join(',');
+  useEffect(() => { setOpen((o) => ({ ...Object.fromEntries(classes.map((c) => [c, true])), ...o })); }, [classesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>
@@ -365,7 +373,10 @@ function ImportedTree({ items, mouvementes, activeClass, onSelect }: { items: Ac
   }
   const classes = activeClass === 'all' ? Array.from(byClass.keys()).sort() : [activeClass].filter((c) => byClass.has(c));
   const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(classes.map((c) => [c, true])));
-  useEffect(() => { setOpen((o) => ({ ...Object.fromEntries(classes.map((c) => [c, true])), ...o })); }, [classes.join(',')]);
+  // classesKey extrait pour ESLint (expression complexe interdite en deps).
+  // L'effet ne dépend que de la signature des classes, pas de l'array elle-même.
+  const classesKey = classes.join(',');
+  useEffect(() => { setOpen((o) => ({ ...Object.fromEntries(classes.map((c) => [c, true])), ...o })); }, [classesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>

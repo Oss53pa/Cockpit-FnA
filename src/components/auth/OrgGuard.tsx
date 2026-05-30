@@ -50,7 +50,6 @@ export function OrgGuard({ children }: { children: React.ReactNode }) {
         const hasOrg = (userOrgs?.length ?? 0) > 0;
         if (!cancelled) setState(hasOrg ? 'has-org' : 'no-org');
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn('[OrgGuard] détection échouée:', e);
         if (!cancelled) setState('has-org'); // fail-open : ne bloque pas en cas d'erreur réseau
       }

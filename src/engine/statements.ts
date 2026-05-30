@@ -379,7 +379,6 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const sd709 = soldeD('709'); const sc709 = soldeC('709');
   const sd7069 = soldeD('7069'); const sc7069 = soldeC('7069');
   if (sc709 > sd709 || sc7069 > sd7069) {
-    // eslint-disable-next-line no-console
     console.warn('[statements] RRR accordés (709/7069) en solde créditeur — sens inversé probable. Vérifier les écritures.', { sd709, sc709, sd7069, sc7069 });
   }
   const rrrAccordes = (sd709 - sc709) + (sd7069 - sc7069);

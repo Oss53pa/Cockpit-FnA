@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- API toast() co-localisée avec le ToastViewport */
 import { create } from 'zustand';
 import { CheckCircle2, AlertCircle, Info, X, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';

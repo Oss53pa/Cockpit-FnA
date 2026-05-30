@@ -21,9 +21,7 @@ import type { GLTiersEntry } from '../db/schema';
  * Vite remplace `import.meta.env.DEV` par `false` au build prod, ce qui
  * permet au tree-shaker d'éliminer ces appels du bundle.
  */
-// eslint-disable-next-line no-console
 const debug = (...args: unknown[]): void => {
-  // eslint-disable-next-line no-console
   if (import.meta.env.DEV) console.log(...args);
 };
 
@@ -1032,7 +1030,6 @@ export async function importGL(
       await applyTiersRules(opts.orgId);
     } catch (err) {
       if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
         console.warn('[importGL] applyTiersRules a échoué (non bloquant) :', err);
       }
     }
@@ -1830,7 +1827,6 @@ export async function importGLTiers(
       } catch (e) {
         // Non bloquant : table fna_tiers_unmatched peut ne pas exister (migration 016
         // non appliquée). Le compteur unmatched reste exact dans le report.
-        // eslint-disable-next-line no-console
         console.warn('[import-tiers] persistance unmatched échouée (non bloquant):', e);
       }
     }
@@ -1870,7 +1866,6 @@ export async function importGLTiers(
       });
       await dataProvider.bulkInsertGLTiers(glTiersRows);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[import-tiers] persistance GL Tiers échouée (non bloquant):', e);
     }
   }

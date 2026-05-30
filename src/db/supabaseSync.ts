@@ -22,7 +22,6 @@ const supabase = supabaseTyped as unknown as SupabaseClient<FnaDatabase>;
 
 async function fetchAll(table: keyof FnaDatabase['public']['Tables'], orgId?: string): Promise<Record<string, unknown>[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q = (supabase.from(table) as any).select('*');
   if (orgId) q = q.eq('org_id', orgId);
   // Supabase limite à 1000 par défaut — paginer

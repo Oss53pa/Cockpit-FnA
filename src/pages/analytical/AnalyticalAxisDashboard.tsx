@@ -68,6 +68,7 @@ export default function AnalyticalAxisDashboard({
   const [total, setTotal] = useState(0);
   const [monthlyTotal, setMonthlyTotal] = useState<number[]>(Array(13).fill(0));
 
+  const branchFilterKey = JSON.stringify(branchFilter);
   useEffect(() => {
     if (!currentOrgId) return;
     setLoading(true);
@@ -102,7 +103,8 @@ export default function AnalyticalAxisDashboard({
         setLoading(false);
       }
     })();
-  }, [currentOrgId, currentYear, axisNumber, JSON.stringify(branchFilter)]);
+    // branchFilterKey extrait (ESLint refuse les expressions complexes en deps).
+  }, [currentOrgId, currentYear, axisNumber, branchFilterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const top = rows.slice(0, 10);
   const pieData = top.filter((r) => r.amount !== 0).map((r, i) => ({

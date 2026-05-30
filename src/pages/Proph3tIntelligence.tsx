@@ -49,7 +49,7 @@ export default function Proph3tIntelligencePage() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { run(); /* eslint-disable-next-line */ }, [currentOrgId, currentYear]);
+  useEffect(() => { run(); }, [currentOrgId, currentYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => {
     if (!report) return { p0: 0, p1: 0, p2: 0, critiques: 0, warnings: 0 };

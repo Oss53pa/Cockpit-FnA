@@ -84,7 +84,7 @@ export function MasseSalariale() {
       }));
     };
     run();
-  }, [currentOrgId, currentYear]);
+  }, [currentOrgId, currentYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>

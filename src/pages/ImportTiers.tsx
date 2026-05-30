@@ -66,7 +66,6 @@ export default function ImportTiers({ embedded = false }: { embedded?: boolean }
       const rows = await dataProvider.getTiersUnmatched(currentOrgId, { onlyPending: true });
       setUnmatchedRows(rows);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[ImportTiers] getTiersUnmatched failed:', e);
     }
   }, [currentOrgId]);
@@ -974,7 +973,6 @@ function MatchModal({ orgId, unmatched, onClose, onMatched }: {
         try {
           await dataProvider.updateGLEntry(glEntry.id, { tiers: oldTiers, label: oldLabel });
         } catch (rollbackErr) {
-          // eslint-disable-next-line no-console
           console.error('[confirmMatch] rollback GL échoué — état partiel possible :', rollbackErr);
         }
       }

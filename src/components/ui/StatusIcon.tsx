@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- helpers co-localisés avec le composant StatusIcon */
 import { CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
 import clsx from 'clsx';
 

@@ -38,7 +38,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary]', error, info.componentStack);
     // Les erreurs de chargement de chunk (redéploiement) sont bénignes et
     // auto-réparées par un reload → on ne les remonte pas à Sentry.

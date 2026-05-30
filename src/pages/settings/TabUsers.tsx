@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- helpers et types co-localisés avec TabUsers */
 import { useState, useEffect } from 'react';
 import { safeLocalStorage } from '../../lib/safeStorage';
 import clsx from 'clsx';
@@ -67,7 +68,6 @@ async function loadUsersFromCloud(currentOrgId: string | undefined): Promise<App
     if (currentOrgId) query = query.eq('org_id', currentOrgId);
     const { data, error } = await query;
     if (error) {
-      // eslint-disable-next-line no-console
       console.warn('[users] Pull fna_org_members error:', error.message);
       return [];
     }
@@ -213,7 +213,6 @@ export function TabUsers() {
               parts.push(`Supabase : ${se.message ?? '?'}${se.code ? ` (code=${se.code})` : ''}${se.status ? ` [HTTP ${se.status}]` : ''}`);
             }
             if (data.details && typeof data.details === 'string') parts.push(data.details);
-            // eslint-disable-next-line no-console
             console.error('[invite-user] Echec :', data);
             throw new Error(parts.join(' — '));
           }
@@ -267,7 +266,6 @@ export function TabUsers() {
         }
         if (data.resendStatus) parts.push(`Resend HTTP ${data.resendStatus}`);
         if (data.details && typeof data.details === 'string') parts.push(data.details);
-        // eslint-disable-next-line no-console
         console.error('[resendInvite] Echec:', data);
         if (data.magicLink) {
           const ok = window.confirm(

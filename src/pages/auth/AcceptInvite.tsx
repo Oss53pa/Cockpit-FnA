@@ -139,7 +139,6 @@ export default function AcceptInvite() {
           }
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn('[AcceptInvite] résolution org échouée (non bloquant):', e);
       }
 

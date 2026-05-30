@@ -89,7 +89,6 @@ export async function pushChannelToCloud(channel: Channel): Promise<void> {
   try {
     await fromAny('fna_channels').upsert(channelToRow(channel), { onConflict: 'id' });
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('[chatSync] pushChannel failed (non-bloquant):', e);
   }
 }

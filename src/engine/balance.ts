@@ -469,7 +469,6 @@ export function aggregateBySyscoRoot(rows: BalanceRow[]): Map<string, BalanceRow
     m.set(root, cur);
   }
   if (unmapped.length > 0) {
-    // eslint-disable-next-line no-console
     console.warn(`[balance] ${unmapped.length} comptes non mappés au plan SYSCOHADA :`, unmapped.slice(0, 10), unmapped.length > 10 ? `... (+${unmapped.length - 10})` : '');
   }
   return m;

@@ -31,7 +31,6 @@ export async function loadTiersRules(orgId: string): Promise<TiersRule[]> {
     return await dataProvider.getTiersRules(orgId);
   } catch (e) {
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
       console.warn('[tiersRules] getTiersRules indisponible (migration 021 non appliquée ?) :', e);
     }
     return [];
@@ -64,7 +63,6 @@ export async function applyTiersRules(orgId: string): Promise<{ updated: number 
       await dataProvider.updateGLEntry(e.id, { tiers: rule.tiers, label: newLabel });
     } catch (err) {
       if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
         console.warn('[tiersRules] updateGLEntry échec', e.id, err);
       }
       continue;

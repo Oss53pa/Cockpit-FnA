@@ -10,7 +10,6 @@ import { findSyscoAccount } from '../syscohada/coa';
 // Log diagnostique strippé en production (Vite remplace import.meta.env.DEV par
 // false au build). Évite de divulguer orgId / montants budget dans la console
 // prod (T-02) tout en gardant les traces utiles en développement.
-// eslint-disable-next-line no-console
 const debug = (...args: unknown[]): void => { if (import.meta.env.DEV) console.warn(...args); };
 
 export type MonthlyLine = {

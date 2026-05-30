@@ -127,7 +127,6 @@ export function useCloudData<T>(
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Re-fetch quand deps changent

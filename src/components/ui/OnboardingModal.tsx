@@ -89,7 +89,6 @@ export function OnboardingModal() {
           setTimeout(() => { if (!cancelled) setShouldShow(true); }, 800);
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn('[OnboardingModal] détection échouée:', e);
       }
     })();
@@ -175,7 +174,6 @@ export function OnboardingModal() {
       setStatus('idle');
       setStep(2);
     } catch (err: any) {
-      // eslint-disable-next-line no-console
       console.error('[OnboardingModal] création échouée:', err);
       setError(err?.message || 'Erreur lors de la création de la société.');
       setStatus('error');

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- helpers de chart co-localisés avec le composant ChartGradients */
 // Dégradés SVG réutilisables pour les charts Recharts — identité de marque
 // (sauge/terracotta) en version moderne : barres avec fondu vertical, areas
 // avec remplissage dégradé → transparent.

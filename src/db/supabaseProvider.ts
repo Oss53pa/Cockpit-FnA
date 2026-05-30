@@ -494,7 +494,6 @@ export class SupabaseProvider implements DataProvider {
         source_kind: c.sourceKind ?? '',
         source_id: c.sourceId ?? '',
       }));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await supabase.rpc('fna_append_audit_log', {
         p_org_id: orgId,
         p_changes: payload,
@@ -510,7 +509,6 @@ export class SupabaseProvider implements DataProvider {
       }
       return typeof data === 'number' ? data : changes.length;
     } catch (e: unknown) {
-      // eslint-disable-next-line no-console
       console.warn('[appendGLAuditLogAtomic] échec, retour null pour fallback:', (e as { message?: string })?.message ?? e);
       return null;
     }
@@ -524,7 +522,6 @@ export class SupabaseProvider implements DataProvider {
       }
     } catch (e) {
       // Migration 019 pas appliquée → non bloquant
-      // eslint-disable-next-line no-console
       console.warn('[bulkInsertGLAuditLog] échec (migration 019 ?):', e);
     }
   }
@@ -549,7 +546,6 @@ export class SupabaseProvider implements DataProvider {
       // Conversion camelCase → snake_case pour les unmatched (la RPC attend
       // les clés en snake_case, comme les colonnes Postgres).
       const unmatchedSnake = payload.unmatched.map((u) => toSnake(u));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await supabase.rpc('fna_import_tiers', {
         p_org_id:    payload.orgId,
         p_user:      payload.user,
@@ -568,7 +564,6 @@ export class SupabaseProvider implements DataProvider {
         // PGRST202 = "Could not find the function" → idem côté PostgREST
         const code = (error as PostgrestErrorWithCode).code;
         if (code === '42883' || code === 'PGRST202' || (error.message || '').includes('does not exist')) {
-          // eslint-disable-next-line no-console
           console.warn('[importTiersAtomic] RPC non déployée — fallback sur séquentiel.');
           return null;
         }
@@ -581,7 +576,6 @@ export class SupabaseProvider implements DataProvider {
       return { importId: rpcResult.import_id };
     } catch (e: unknown) {
       // Tout autre échec : ne pas casser l'import — fallback séquentiel
-      // eslint-disable-next-line no-console
       console.warn('[importTiersAtomic] échec, fallback séquentiel:', (e as { message?: string })?.message ?? e);
       return null;
     }

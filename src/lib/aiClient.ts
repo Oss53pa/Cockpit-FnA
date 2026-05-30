@@ -86,7 +86,6 @@ export function loadConfig(): AIConfig {
     if (parsed.openaiModel && DEPRECATED_MODELS[parsed.openaiModel]) {
       const oldModel = parsed.openaiModel;
       parsed.openaiModel = DEPRECATED_MODELS[oldModel];
-      // eslint-disable-next-line no-console
       console.info(`[AI] Migration auto modèle décommissionné : ${oldModel} → ${parsed.openaiModel}`);
       safeLocalStorage.setItem(CFG_KEY, JSON.stringify(parsed));
     }

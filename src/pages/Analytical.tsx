@@ -785,7 +785,7 @@ function AssignTab({ orgId, axes, year, onUpdate }: { orgId: string; axes: Analy
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { if (axes.length > 0) setAxisNum(axes[0].number); }, [axes]);
-  useEffect(() => { reload(); }, [orgId, year, axisNum]);
+  useEffect(() => { reload(); }, [orgId, year, axisNum]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = async () => {
     setLoading(true);
