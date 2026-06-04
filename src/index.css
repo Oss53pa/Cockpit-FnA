@@ -61,7 +61,9 @@
     font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-weight: 400;
+    /* Dosis rend fin : graisse de base relevée à 500 pour une meilleure
+       lisibilité du texte courant (les titres/emphases restent à 600). */
+    font-weight: 500;
     font-style: normal;
     letter-spacing: 0;
     text-rendering: optimizeLegibility;
@@ -70,7 +72,7 @@
     /* Texte body en p-700 — lisible mais doux (Linear/Stripe pattern).
        Les titres explicites (h1-h4) gardent p-900 pour le contraste. */
     @apply bg-bgpage text-primary-700 dark:bg-primary-950 dark:text-primary-200;
-    font-weight: 400;
+    font-weight: 500;
   }
   /* Hierarchie typographique stricte (international standard).
      Important : on NE FORCE PAS la couleur ici — elle reste heritee du parent
@@ -80,10 +82,14 @@
   h2, .h2 { @apply text-2xl font-semibold tracking-tight; }
   h3, .h3 { @apply text-xl font-semibold tracking-tight; }
   h4, .h4 { @apply text-lg font-medium tracking-tight; }
-  /* Poids semantiques (Inter rend mieux a 500/600/700) */
+  /* Poids semantiques (Dosis rend fin → on relève les graisses basses) */
   .font-bold     { font-weight: 600 !important; }
   .font-semibold { font-weight: 600 !important; }
   .font-medium   { font-weight: 500 !important; }
+  /* Texte « léger »/normal relevé à 500 pour rester visible avec Dosis.
+     (Les très grands titres display restent fins par choix esthétique.) */
+  .font-normal   { font-weight: 500 !important; }
+  .font-light    { font-weight: 500 !important; }
   * {
     @apply border-primary-200 dark:border-primary-800;
   }
