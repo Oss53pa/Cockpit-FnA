@@ -191,8 +191,16 @@ export async function auditGL(
     });
   }
 
+  // Comptes "contra" à sens normalement inversé — exclus des contrôles de sens.
+  // Contre-charges classe 6 (solde/crédit normal) : 603 (var. stocks), 609
+  // (RRR obtenus achats), 619/629 (RRR obtenus services), 639.
+  const isContraCharge = (a?: string) => !!a && (a.startsWith('603') || a.startsWith('609') || a.startsWith('619') || a.startsWith('629') || a.startsWith('639'));
+  // Contre-produits classe 7 (solde/débit normal) : 709 (RRR accordés) et
+  // ventilations 70x9 (7019, 7029…706900, 7079). Ce ne sont PAS des erreurs.
+  const isContraProduit = (a?: string) => !!a && (a.startsWith('709') || /^70[1-7]9/.test(a));
+
   // ─── 8. CLASSE 6 EN CRÉDIT ANORMAL ───
-  const c6Cred = filtered.filter((e) => e.account?.startsWith('6') && e.credit > minAmount && e.debit === 0);
+  const c6Cred = filtered.filter((e) => e.account?.startsWith('6') && !isContraCharge(e.account) && e.credit > minAmount && e.debit === 0);
   if (c6Cred.length > 0) {
     const total = c6Cred.reduce((s, e) => s + e.credit, 0);
     findings.push({
@@ -206,7 +214,7 @@ export async function auditGL(
   }
 
   // ─── 9. CLASSE 7 EN DÉBIT ANORMAL ───
-  const c7Deb = filtered.filter((e) => e.account?.startsWith('7') && e.debit > minAmount && e.credit === 0);
+  const c7Deb = filtered.filter((e) => e.account?.startsWith('7') && !isContraProduit(e.account) && e.debit > minAmount && e.credit === 0);
   if (c7Deb.length > 0) {
     const total = c7Deb.reduce((s, e) => s + e.debit, 0);
     findings.push({

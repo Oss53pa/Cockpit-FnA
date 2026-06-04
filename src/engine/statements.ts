@@ -367,22 +367,33 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
     );
 
   // Produits d'exploitation
-  const venteMarch = soldeC('701');
-  // Ventes de produits/services HORS RRR accordés (7069xx exclus de 706)
-  const venteProd = soldeCExcl(['7069'], '702', '703', '704', '705', '706', '707');
-  // RRR accordés (709 + sous-comptes 7069xx) : réduction du CA
-  // Ces comptes sont des contre-produits avec solde DÉBITEUR normal.
-  // (P2-3) Détection du sens anormal : si solde créditeur > débiteur sur 709/7069,
+  // RRR accordés = contre-produits à solde DÉBITEUR normal (réduction du CA) :
+  //   709  : RRR accordés global (réparti au prorata marchandises / production)
+  //   70x9 : RRR accordés VENTILÉS par nature de vente — 7019 (marchandises),
+  //          7029, 7039, 7049, 7059, 7069 (ex. 706900), 7079.
+  // On les EXCLUT systématiquement des ventes brutes, puis on les soustrait du
+  // CA. La marge brute est ensuite calculée sur le CA net (pas de double compte).
+  const RRR_VENTIL = ['7019', '7029', '7039', '7049', '7059', '7069', '7079'];
+  const RRR_ALL = ['709', ...RRR_VENTIL];
+  const venteMarch = soldeCExcl(['7019'], '701');
+  const venteProd = soldeCExcl(RRR_VENTIL, '702', '703', '704', '705', '706', '707');
+
+  // (P2-3) Détection du sens anormal : si solde créditeur > débiteur sur les RRR,
   // on logue un warning au lieu d'augmenter le CA en silence (saisie inversée
   // probable). Le calcul reste correct mathématiquement (D−C donne un négatif
   // qui se soustrait, ce qui revient à AJOUTER un montant au CA — anomalie).
-  const sd709 = soldeD('709'); const sc709 = soldeC('709');
-  const sd7069 = soldeD('7069'); const sc7069 = soldeC('7069');
-  if (sc709 > sd709 || sc7069 > sd7069) {
+  const sdRRR = soldeD(...RRR_ALL); const scRRR = soldeC(...RRR_ALL);
+  if (scRRR > sdRRR) {
     // eslint-disable-next-line no-console
-    console.warn('[statements] RRR accordés (709/7069) en solde créditeur — sens inversé probable. Vérifier les écritures.', { sd709, sc709, sd7069, sc7069 });
+    console.warn('[statements] RRR accordés (709/70x9) en solde créditeur — sens inversé probable. Vérifier les écritures.', { sdRRR, scRRR });
   }
-  const rrrAccordes = (sd709 - sc709) + (sd7069 - sc7069);
+  // Composantes : global 709 (à répartir) + ventilé marchandises (7019) + ventilé
+  // production/services (7029..7079). rrrMarch + rrrProd === rrrAccordes (cf. SIG).
+  const rrr709   = soldeD('709') - soldeC('709');
+  const rrrMarchD = soldeD('7019') - soldeC('7019');
+  const rrrProdD  = soldeD('7029', '7039', '7049', '7059', '7069', '7079')
+                  - soldeC('7029', '7039', '7049', '7059', '7069', '7079');
+  const rrrAccordes = rrr709 + rrrMarchD + rrrProdD;
   const ca = venteMarch + venteProd + soldeC('708') - rrrAccordes;
   const prodStockee = soldeC('73') - soldeD('73');
   const prodImmob = soldeC('72');
@@ -432,11 +443,11 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   // Convention SYSCOHADA :
   //   Marge sur marchandises = (Ventes march − RRR sur march) − Coût d'achat march
   //   Marge sur matières     = (Ventes prod − RRR sur prod) + Var prod stockée − Coût matières
-  // On répartit le rrrAccordes proportionnellement aux ventes (approximation
-  // raisonnable quand le découpage 7019/7029... n'est pas dispo).
+  // RRR ventilés affectés DIRECTEMENT à leur nature (précis) ; le RRR global 709
+  // est réparti au prorata des ventes. Invariant : rrrMarch + rrrProd === rrrAccordes.
   const totalVentesBrut = venteMarch + venteProd;
-  const rrrMarch = totalVentesBrut > 0 ? rrrAccordes * (venteMarch / totalVentesBrut) : 0;
-  const rrrProd  = totalVentesBrut > 0 ? rrrAccordes * (venteProd / totalVentesBrut) : 0;
+  const rrrMarch = rrrMarchD + (totalVentesBrut > 0 ? rrr709 * (venteMarch / totalVentesBrut) : 0);
+  const rrrProd  = rrrProdD  + (totalVentesBrut > 0 ? rrr709 * (venteProd  / totalVentesBrut) : 0);
   const margeMarch = (venteMarch - rrrMarch) - (achatMarch + varStockMarch);
   const margeMP    = (venteProd  - rrrProd ) + prodStockee - (achatMP + varStockMP);
   const margeBrute = margeMarch + margeMP;
@@ -467,8 +478,8 @@ export function computeSIG(rows: BalanceRow[]): { sig: SIG; cr: Line[] } {
   const cr: Line[] = [
     { code: 'TA', label: 'Ventes de marchandises', value: venteMarch, indent: 1, accountCodes: '701' },
     { code: 'TB', label: 'Ventes de produits / services', value: venteProd + soldeC('708'), indent: 1, accountCodes: '702-707, 708' },
-    { code: 'TC_RRR', label: 'RRR accordés (−)', value: -rrrAccordes, indent: 1, accountCodes: '709, 7069' },
-    { code: '_XB', label: 'CHIFFRE D\'AFFAIRES', value: ca, total: true, accountCodes: '70 − 709' },
+    { code: 'TC_RRR', label: 'RRR accordés (−)', value: -rrrAccordes, indent: 1, accountCodes: '709, 70x9' },
+    { code: '_XB', label: 'CHIFFRE D\'AFFAIRES', value: ca, total: true, accountCodes: '70 − 709/70x9' },
     { code: 'TC', label: 'Production stockée', value: prodStockee, indent: 1, accountCodes: '73' },
     { code: 'TD', label: 'Production immobilisée', value: prodImmob, indent: 1, accountCodes: '72' },
     { code: 'TE', label: 'Subventions d\'exploitation', value: subvExpl, indent: 1, accountCodes: '71' },

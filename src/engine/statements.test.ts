@@ -118,6 +118,35 @@ describe('SIG — classification des dotations financières / HAO (B-1)', () => 
   });
 });
 
+describe('RRR accordés ventilés — réduction du CA (70x9)', () => {
+  // Les RRR accordés sont des contre-produits à solde DÉBITEUR normal. Ils
+  // peuvent être imputés sur le compte global 709 OU ventilés par nature de
+  // vente : 7019 (marchandises), 7029..7079, dont 706900 (services).
+  // RÉGRESSION : l'ancien code ne capturait que 709 + 7069 → les RRR sur
+  // marchandises (7019) et autres natures étaient IGNORÉS → CA surévalué.
+  it('soustrait du CA les RRR ventilés sur TOUTES les natures (701900, 706900, 709)', () => {
+    const rows = [
+      row('701', 0, 10000),    // Ventes de marchandises 10 000
+      row('7019', 500, 0),     // RRR accordés sur marchandises 500 (ex-IGNORÉ)
+      row('706', 0, 4000),     // Services vendus 4 000
+      row('706900', 300, 0),   // RRR accordés sur services 300
+      row('709', 200, 0),      // RRR accordés global 200
+    ];
+    const { sig } = computeSIG(rows);
+    // CA = (10 000 + 4 000) − (500 + 300 + 200) = 13 000
+    expect(sig.ca).toBe(13000);
+  });
+
+  it('ne compte pas un sous-compte RRR ventilé comme une vente', () => {
+    const rows = [
+      row('706', 0, 5000),     // Services 5 000
+      row('706900', 1000, 0),  // RRR services 1 000
+    ];
+    const { sig } = computeSIG(rows);
+    expect(sig.ca).toBe(4000); // 5 000 − 1 000, et NON 5 000 + 1 000
+  });
+});
+
 describe('cohérence Bilan vs SIG', () => {
   it('le résultat du Bilan et le résultat net du SIG sont identiques sur un dataset balanced', () => {
     const rows = [

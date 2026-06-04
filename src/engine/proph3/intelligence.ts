@@ -255,9 +255,21 @@ export async function detectCorrections(orgId: string, year: number): Promise<Co
 
   // 3c. Comptes en classe 6 avec solde créditeur anormal (signe inversé probable)
   const balance = await computeBalance({ orgId, year });
+  // ─── Comptes "contra" à sens NORMALEMENT inversé — NE PAS flagger ───
+  // Contre-produits (classe 7) à solde DÉBITEUR normal : RRR accordés.
+  //   709 (RRR accordés global) + ventilations 70x9 (7019, 7029…7069, 7079).
+  //   Ex. 706900 « RRR accordés » est un contre-produit, son solde débiteur
+  //   est CONFORME — ce n'est pas une anomalie de sens.
+  const isContraProduit = (a: string) => a.startsWith('709') || /^70[1-7]9/.test(a);
+  // Contre-charges (classe 6) à solde CRÉDITEUR normal :
+  //   609 (RRR obtenus sur achats), 619/629 (RRR obtenus sur services),
+  //   603 (variation de stocks), 639 (RRR obtenus / charges transférées).
+  const isContraCharge = (a: string) =>
+    a.startsWith('603') || a.startsWith('609') || a.startsWith('619') ||
+    a.startsWith('629') || a.startsWith('639');
   for (const r of balance) {
     const acc = r.account;
-    if (acc.startsWith('6') && (r as any).soldeC > (r as any).soldeD * 1.5) {
+    if (acc.startsWith('6') && !isContraCharge(acc) && (r as any).soldeC > (r as any).soldeD * 1.5) {
       corrections.push({
         id: `sign-${acc}`,
         severity: 'warn',
@@ -268,8 +280,9 @@ export async function detectCorrections(orgId: string, year: number): Promise<Co
         proposal: `Si c'est un Rabais/Remise (RRR) : utiliser plutôt 609x. Sinon vérifier la saisie des écritures.`,
       });
     }
-    // Classe 7 avec solde débiteur anormal
-    if (acc.startsWith('7') && (r as any).soldeD > (r as any).soldeC * 1.5) {
+    // Classe 7 avec solde débiteur anormal — hors contre-produits (RRR accordés
+    // 709 / 70x9 dont 706900), dont le solde débiteur est NORMAL.
+    if (acc.startsWith('7') && !isContraProduit(acc) && (r as any).soldeD > (r as any).soldeC * 1.5) {
       corrections.push({
         id: `sign-${acc}`,
         severity: 'warn',

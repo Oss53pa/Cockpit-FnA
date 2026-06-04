@@ -230,7 +230,7 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
     mk('CAP_REMB', 'Capacité de remboursement', 'Structure', caf > 0 ? ratioVal(dettesFin, caf) : NaN, 'x', 'Dettes financières / CAF', 4, true),
     { code: 'FR', label: 'Fonds de roulement (FR)', family: 'Structure', value: fr, unit: 'ratio', formula: 'Ressources stables − Actif immobilisé', target: 0, status: fr >= 0 ? 'good' : 'alert' },
     { code: 'BFR', label: 'Besoin en FR (BFR)', family: 'Structure', value: bfr, unit: 'ratio', formula: 'Stocks + Créances − Dettes exploitation', target: 0, status: 'good' },
-    { code: 'TN', label: 'Trésorerie nette', family: 'Structure', value: tn, unit: 'ratio', formula: 'FR − BFR', target: 0, status: tn >= 0 ? 'good' : 'alert' },
+    { code: 'TN', label: 'Trésorerie nette', family: 'Structure', value: tn, unit: 'ratio', formula: 'Trésorerie active − Trésorerie passive', target: 0, status: tn >= 0 ? 'good' : 'alert' },
     mk('DSO', 'DSO — délai clients (jours)', 'Activité', dsoV, 'j', '(Créances clients / CA TTC) × 360', 60, true),
     mk('DPO', 'DPO — délai fournisseurs (jours)', 'Activité', dpoV, 'j', '(Dettes fournisseurs / Achats TTC) × 360', 60),
   ];

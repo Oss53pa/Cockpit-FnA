@@ -178,8 +178,14 @@ export async function detectAnomalies(
   }
 
   // (f) Soldes anormaux (sur la balance, pas sur entries — pas de doublonnage)
+  // Comptes "contra" à sens normalement inversé — exclus (ce ne sont pas des
+  // anomalies). Contre-charges classe 6 (603/609/619/629/639) à solde créditeur
+  // normal ; contre-produits classe 7 (709 + 70x9 dont 706900 RRR accordés) à
+  // solde débiteur normal.
+  const isContraCharge = (a: string) => a.startsWith('603') || a.startsWith('609') || a.startsWith('619') || a.startsWith('629') || a.startsWith('639');
+  const isContraProduit = (a: string) => a.startsWith('709') || /^70[1-7]9/.test(a);
   for (const r of balance) {
-    if (r.account[0] === '6' && r.soldeC > SOLDE_ANORMAL_THRESHOLD) {
+    if (r.account[0] === '6' && !isContraCharge(r.account) && r.soldeC > SOLDE_ANORMAL_THRESHOLD) {
       anomalies.push({
         type: 'SOLDE_ANORMAL',
         severity: 'high',
@@ -189,7 +195,7 @@ export async function detectAnomalies(
         value: r.soldeC,
       });
     }
-    if (r.account[0] === '7' && r.soldeD > SOLDE_ANORMAL_THRESHOLD) {
+    if (r.account[0] === '7' && !isContraProduit(r.account) && r.soldeD > SOLDE_ANORMAL_THRESHOLD) {
       anomalies.push({
         type: 'SOLDE_ANORMAL',
         severity: 'high',
