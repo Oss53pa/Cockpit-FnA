@@ -1,5 +1,9 @@
 // Génération de templates Excel pré-formatés pour les imports
-import ExcelJS from 'exceljs';
+// Perf : exceljs (~938 Ko) importé DYNAMIQUEMENT au clic « Télécharger le
+// modèle » (pas à l'ouverture des routes Imports/COA/Budget/Analytical).
+// `import type` conserve les types (effacés au build) ; le runtime vient des
+// await import('exceljs') dans chaque fonction.
+import type ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { SYSCOHADA_COA } from '../syscohada/coa';
 
@@ -9,6 +13,7 @@ const ALT_FILL: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgCol
 
 // ─── TEMPLATE GRAND LIVRE ───────────────────────────────────────────
 export async function downloadGLTemplate(orgName?: string, year?: number) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -115,6 +120,7 @@ export async function downloadGLTemplate(orgName?: string, year?: number) {
 
 // ─── TEMPLATE GRAND LIVRE TIERS ─────────────────────────────────────
 export async function downloadTiersTemplate(orgName?: string, year?: number) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -163,6 +169,7 @@ export async function downloadTiersTemplate(orgName?: string, year?: number) {
 
 // ─── TEMPLATE BALANCE GÉNÉRALE ──────────────────────────────────────
 export async function downloadBalanceGeneraleTemplate(orgName?: string, year?: number) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -215,6 +222,7 @@ export async function downloadBalanceGeneraleTemplate(orgName?: string, year?: n
 
 // ─── TEMPLATE BALANCE AUXILIAIRE ────────────────────────────────────
 export async function downloadBalanceAuxiliaireTemplate(orgName?: string, year?: number, kind: 'clients' | 'fournisseurs' = 'clients') {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -269,6 +277,7 @@ export async function downloadBalanceAuxiliaireTemplate(orgName?: string, year?:
 
 // ─── TEMPLATE BALANCE ÂGÉE ──────────────────────────────────────────
 export async function downloadBalanceAgeeTemplate(orgName?: string, year?: number, kind: 'clients' | 'fournisseurs' = 'clients') {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -318,6 +327,7 @@ export async function downloadBalanceAgeeTemplate(orgName?: string, year?: numbe
 
 // ─── TEMPLATE PLAN COMPTABLE ───────────────────────────────────────
 export async function downloadCOATemplate(orgName?: string) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -389,6 +399,7 @@ export async function downloadCOATemplate(orgName?: string) {
 
 // ─── TEMPLATE AXES ANALYTIQUES ─────────────────────────────────────
 export async function downloadAnalyticAxesTemplate(orgName?: string) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -442,6 +453,7 @@ export async function downloadAnalyticAxesTemplate(orgName?: string) {
 
 // ─── TEMPLATE CODES ANALYTIQUES (WBS) ──────────────────────────────
 export async function downloadAnalyticCodesTemplate(orgName?: string) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -526,6 +538,7 @@ export async function downloadAnalyticCodesTemplate(orgName?: string) {
 // ─── TEMPLATE BUDGET ──────────────────────────────────────────────
 export async function downloadBudgetTemplate(orgName?: string, year?: number, version: string = 'V1_initial') {
   const yyyy = year ?? new Date().getFullYear();
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();

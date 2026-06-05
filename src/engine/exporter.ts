@@ -1,8 +1,10 @@
 // Exports — Excel (ExcelJS) et PDF (jsPDF)
-import ExcelJS from 'exceljs';
+// Perf : exceljs (~938 Ko) et jspdf/autotable (~447 Ko) sont importés
+// DYNAMIQUEMENT (au clic « Exporter »), pas à l'ouverture de la route, pour
+// alléger le chargement des pages States/DashboardHome. `import type` conserve
+// les types (effacés au build) ; le runtime vient des await import() ci-dessous.
+import type ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Line } from './statements';
 import { BalanceRow } from './balance';
 import { Ratio } from './ratios';
@@ -23,6 +25,7 @@ export async function exportStatementsXLSX(params: {
   cr: Line[];
   ratios: Ratio[];
 }) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Cockpit FnA';
   wb.created = new Date();
@@ -96,7 +99,7 @@ export async function exportStatementsXLSX(params: {
 }
 
 // ─── PDF ────────────────────────────────────────────────────────────────────
-export function exportStatementsPDF(params: {
+export async function exportStatementsPDF(params: {
   org: string;
   period: string;
   bilanActif: Line[];
@@ -104,6 +107,8 @@ export function exportStatementsPDF(params: {
   cr: Line[];
   ratios: Ratio[];
 }) {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const margin = 40;
 
