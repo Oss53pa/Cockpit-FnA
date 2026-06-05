@@ -195,11 +195,17 @@ Deno.serve(async (req: Request) => {
   if (userId && orgIds && Array.isArray(orgIds) && orgIds.length > 0) {
     for (const orgId of orgIds) {
       try {
-        await (supabase as any).from('fna_user_orgs').upsert({
-          user_id: userId, org_id: orgId, role: role ?? 'viewer',
+        // CRITIQUE : fna_user_orgs.role est contraint à ('admin','editor','viewer').
+        // Le rôle d'invitation peut être un libellé métier (daf, comptable,
+        // contrôleur…) qui violerait la contrainte CHECK → l'upsert échouait
+        // silencieusement et l'invité se retrouvait dans le roster MAIS sans
+        // aucun accès RLS. On mappe donc vers le rôle autoritaire.
+        const { error: uoErr } = await (supabase as any).from('fna_user_orgs').upsert({
+          user_id: userId, org_id: orgId, role: mapToAuthRole(role),
         }, { onConflict: 'user_id,org_id' });
+        if (uoErr) console.error('[invite] fna_user_orgs upsert ERROR (acces RLS non accorde):', JSON.stringify(uoErr));
       } catch (e) {
-        console.warn('[invite] fna_user_orgs upsert failed (non-bloquant):', e);
+        console.error('[invite] fna_user_orgs upsert exception (acces RLS non accorde):', e);
       }
       try {
         await (supabase as any).from('fna_org_members').upsert({
@@ -278,6 +284,18 @@ function buildSafeLink(redirectTo: string, properties: any): string | undefined 
     return properties?.action_link;
   }
   return `${redirectTo}?token_hash=${encodeURIComponent(hashed)}&type=${encodeURIComponent(type)}`;
+}
+
+// Mappe un rôle d'invitation (potentiellement un libellé métier) vers le rôle
+// autoritaire accepté par la contrainte CHECK de fna_user_orgs.
+// - admin/administrateur/owner            → admin
+// - viewer/lecteur/consultation/lecture   → viewer (lecture seule)
+// - tout le reste (daf, comptable, etc.)  → editor (accès données en écriture)
+function mapToAuthRole(r?: string): 'admin' | 'editor' | 'viewer' {
+  const s = (r ?? '').toString().trim().toLowerCase();
+  if (['admin', 'administrateur', 'owner', 'propriétaire', 'proprietaire'].includes(s)) return 'admin';
+  if (['viewer', 'lecteur', 'lecture', 'consultation', 'readonly', 'read-only', 'invité', 'invite'].includes(s)) return 'viewer';
+  return 'editor';
 }
 
 function identifyHint(error: any): string {
