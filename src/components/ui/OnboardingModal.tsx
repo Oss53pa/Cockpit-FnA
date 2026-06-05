@@ -118,28 +118,34 @@ export function OnboardingModal() {
       // Extrait l'année de clôture pour l'exercice fiscal
       const closeYear = parseInt(clotureDate.substring(0, 4), 10);
 
-      // 1) Crée l'organisation
-      await dataProvider.upsertOrganization({
-        id: orgId,
-        name: name.trim(),
-        sector: 'Services',
-        rccm: rccm.trim() || undefined,
-        ifu: ncc.trim() || undefined,
-        accountingSystem: 'Normal',
-        currency: 'XOF',
-        coaSystem: 'SYSCOHADA',
-        createdAt: Date.now(),
-        // Champs additionnels (régime fiscal stocké comme tag sur address pour rétro-compat)
+      // 1+2) Crée l'organisation ET le mapping admin fna_user_orgs.
+      // Via RPC SECURITY DEFINER quand Supabase est configuré : indispensable
+      // pour la TOUTE PREMIÈRE org, car un utilisateur sans aucun mapping ne
+      // peut pas INSERT en direct dans fna_organizations (catch-22 RLS). Le RPC
+      // contourne la RLS, valide auth.uid() et garde anti-escalade (admin
+      // uniquement sur une org réellement créée par cet appel).
+      if (isSupabaseConfigured) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
-
-      // 2) Mapping fna_user_orgs (CRITIQUE pour RLS)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: mapErr } = await (supabase as any).from('fna_user_orgs').upsert(
-        { user_id: userId, org_id: orgId, role: 'admin' },
-        { onConflict: 'user_id,org_id', ignoreDuplicates: true },
-      );
-      if (mapErr) throw mapErr;
+        const { error: rpcErr } = await (supabase as any).rpc('fna_create_org_with_admin', {
+          p_id: orgId, p_name: name.trim(), p_sector: 'Services',
+          p_currency: 'XOF', p_coa_system: 'SYSCOHADA',
+          p_rccm: rccm.trim() || null, p_ifu: ncc.trim() || null,
+        });
+        if (rpcErr) throw rpcErr;
+      } else {
+        await dataProvider.upsertOrganization({
+          id: orgId,
+          name: name.trim(),
+          sector: 'Services',
+          rccm: rccm.trim() || undefined,
+          ifu: ncc.trim() || undefined,
+          accountingSystem: 'Normal',
+          currency: 'XOF',
+          coaSystem: 'SYSCOHADA',
+          createdAt: Date.now(),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+      }
 
       // 3) Crée l'exercice fiscal selon la date de clôture choisie
       const fyId = `${orgId}-${closeYear}`;

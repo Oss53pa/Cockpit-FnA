@@ -265,23 +265,27 @@ function TabSocietes() {
     setSaving(true);
     try {
       const id = 'org-' + Date.now();
-      await dataProvider.upsertOrganization({
-        id, name: form.name.trim(), sector: form.sector, currency: form.currency,
-        coaSystem: form.coaSystem as any,
-        rccm: form.rccm || undefined, ifu: form.ifu || undefined, createdAt: Date.now(),
-      });
       if (isSupabaseConfigured) {
-        try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const userId = sessionData.session?.user?.id;
-          if (userId) {
-            await (supabase as any)
-              .from('fna_user_orgs')
-              .upsert({ user_id: userId, org_id: id, role: 'admin' }, { onConflict: 'user_id,org_id' });
-          }
-        } catch (e) {
-          console.warn('[Settings] fna_user_orgs upsert failed (non bloquant):', e);
-        }
+        // Bootstrap via RPC SECURITY DEFINER : crée l'org + le mapping admin
+        // atomiquement en contournant le catch-22 RLS — un utilisateur SANS
+        // aucune org ne peut pas INSERT en direct dans fna_organizations
+        // (policy RESTRICTIVE : can_write_for_fna/service_role/has_any_org tous
+        // faux pour une 1re org). La fonction valide auth.uid() et garde
+        // anti-escalade (n'attache admin qu'à une org réellement créée ici).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).rpc('fna_create_org_with_admin', {
+          p_id: id, p_name: form.name.trim(), p_sector: form.sector,
+          p_currency: form.currency, p_coa_system: form.coaSystem,
+          p_rccm: form.rccm || null, p_ifu: form.ifu || null,
+        });
+        if (error) throw error;
+      } else {
+        // Mode démo / local (sans Supabase) : voie dataProvider classique.
+        await dataProvider.upsertOrganization({
+          id, name: form.name.trim(), sector: form.sector, currency: form.currency,
+          coaSystem: form.coaSystem as any,
+          rccm: form.rccm || undefined, ifu: form.ifu || undefined, createdAt: Date.now(),
+        });
       }
       const year = new Date().getFullYear();
       await dataProvider.upsertFiscalYear({ id: `${id}-${year}`, orgId: id, year, startDate: `${year}-01-01`, endDate: `${year}-12-31`, closed: false });
@@ -297,6 +301,11 @@ function TabSocietes() {
       setOpenNew(false);
       setForm({ name: '', sector: 'Industrie', currency: 'XOF', coaSystem: 'SYSCOHADA', rccm: '', ifu: '', address: '', phone: '', email: '', website: '' });
       setCurrentOrg(id);
+      toast.success('Société créée', 'La société a été créée et activée.');
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[Settings] création société échouée:', e);
+      toast.error('Création impossible', e?.message ?? 'Erreur inconnue — réessayez ou reconnectez-vous.');
     } finally { setSaving(false); }
   };
 
