@@ -6,7 +6,7 @@ Structure : **arc42** · Modèle de vues : **C4** · Conforme à l'esprit **ISO/
 | | |
 |---|---|
 | **Produit** | Cockpit FnA — plateforme de pilotage financier OHADA/SYSCOHADA |
-| **Version du document** | 2.0 |
+| **Version du document** | 2.1 |
 | **Statut** | Baseline |
 | **Audience** | Architectes, développeurs (humains & IA), DevOps, QA, sécurité, auditeurs |
 | **Documents liés** | [`CLAUDE.md`](CLAUDE.md) · [`REPORTING_STANDARD.md`](REPORTING_STANDARD.md) |
@@ -34,6 +34,8 @@ Structure : **arc42** · Modèle de vues : **C4** · Conforme à l'esprit **ISO/
 - [Annexe D — Référence des modules moteur](#annexe-d--référence-des-modules-moteur)
 - [Annexe E — Configuration & variables d'environnement](#annexe-e--configuration--variables-denvironnement)
 - [Annexe F — Inventaire des migrations](#annexe-f--inventaire-des-migrations)
+- [Annexe G — Politiques RLS, table par table](#annexe-g--politiques-rls-table-par-table)
+- [Annexe H — Formules SIG & ratios (ligne à ligne)](#annexe-h--formules-sig--ratios-ligne-à-ligne)
 
 ---
 
@@ -445,7 +447,7 @@ Qualité
 
 | # | Risque / dette | Impact | Mitigation / recommandation |
 |---|---|---|---|
-| R1 | **Deux conventions de tenant** : `org_id text` (cœur) vs `tenant_id uuid` (modules allocation/capex/asset/inventory) | Confusion, requêtes croisées | Documenter la frontière ; converger à terme |
+| ~~R1~~ | ~~Deux conventions de tenant~~ | — | ✅ **RÉSOLU** (migration 027) : convergence `tenant_id uuid → org_id text` + policies standard sur les 14 tables concernées |
 | R2 | **Trois librairies de graphes** (Recharts + Nivo + ECharts) | Poids bundle | Consolidation dédiée (chantier isolé) |
 | R3 | Migrations **non re-jouables** à l'identique vs prod (objets appliqués à la main) | Reproductibilité | Capturer toute DDL prod en migration versionnée |
 | R4 | Déploiement Edge Functions / migrations **hors git** | Écart code/prod | Pipeline CI dédié (Supabase CLI) |
@@ -476,8 +478,10 @@ Qualité
 ## Annexe A — Dictionnaire de données
 
 **44 tables `fna_*`** (schéma `public`). Légende : `*` = NOT NULL · `=…` = valeur par défaut.
-⚠️ Deux conventions de tenant coexistent : la plupart utilisent `org_id text` ; les modules
-**allocation / capex / asset / inventory** utilisent `tenant_id uuid` (cf. R1).
+✅ **Convention de tenant unifiée** (migration 027) : **toutes** les tables `fna_*` utilisent
+désormais **`org_id text`** + policies RLS standard `fna_auth_org_ids()`. Les modules
+allocation / capex / asset / inventory (anciennement `tenant_id uuid` + `get_user_company_id()`)
+ont été convergés.
 
 ### A.1 Cœur multi-tenant & référentiel
 | Table | Colonnes clés |
@@ -510,7 +514,7 @@ Qualité
 | `fna_analytic_assignments` | id* · org_id* · gl_entry_id* · axis_number* · code_id* · branch · method · rule_id · assigned_at |
 | `fna_analytic_budgets` | id* · org_id* · code_id* · period* · amount*(=0) |
 
-### A.4 Ventilation analytique (allocation) — `tenant_id uuid`
+### A.4 Ventilation analytique (allocation) — `org_id text` (convergé, migr. 027)
 | Table | Rôle |
 |---|---|
 | `fna_allocation_key` | Clés de répartition (code, libellé, unité, actif) |
@@ -519,7 +523,7 @@ Qualité
 | `fna_allocation_run` | Exécutions (exercice, couverture %, montants GL/ventilé, réconcilié, hash audit) |
 | `fna_secondary_transfer` | Transferts secondaires entre sections |
 
-### A.5 Immobilisations & inventaire physique — `tenant_id uuid`
+### A.5 Immobilisations & inventaire physique — `org_id text` (convergé, migr. 027)
 | Table | Rôle |
 |---|---|
 | `fna_asset_disposal` | Cessions d'immobilisations (type, date, valeur, VNC, +/- value, écriture liée) |
@@ -527,7 +531,7 @@ Qualité
 | `fna_inventory_session` | Sessions de comptage (période, responsable, statut) |
 | `fna_inventory_count` | Lignes de comptage (statut, localisation réelle, résolution) |
 
-### A.6 CAPEX (workflow d'investissement) — `tenant_id uuid`
+### A.6 CAPEX (workflow d'investissement) — `org_id text` (convergé, migr. 027)
 | Table | Rôle |
 |---|---|
 | `fna_capex_approval` | Circuit d'approbation (niveau, rôle, statut, décideur, hash) |
@@ -667,6 +671,151 @@ Scripts : `npm run typecheck | lint | test | build`.
 | 024 | Contrainte unicité dédup budget |
 | 025 | **Durcissement** `SECURITY DEFINER` (révocation `anon` hors RLS) |
 | 026 | **RPC `fna_create_org_with_admin`** (bootstrap 1re org) |
+| 027 | **Convergence tenant** : `tenant_id uuid → org_id text` + policies standard (14 tables) |
+
+---
+
+## Annexe G — Politiques RLS, table par table
+
+### G.1 Modèle de sécurité (deux couches)
+
+Chaque table `fna_*` a la **RLS activée**. Une requête passe si :
+
+> **(au moins une policy PERMISSIVE vraie) ET (toutes les policies RESTRICTIVE vraies)**
+
+- **Couche PERMISSIVE** (accès nominal, par `org_id`) — abréviations :
+  - `MEMBRE` ≡ `org_id IN (SELECT fna_auth_org_ids())` — tout membre de l'org
+  - `EDITOR` ≡ `org_id IN (SELECT fna_auth_org_ids('editor'))` — editor **ou** admin
+  - `ADMIN`  ≡ `org_id IN (SELECT fna_auth_org_ids('admin'))` — admin uniquement
+- **Couche RESTRICTIVE** (garde d'entitlement, défense en profondeur) :
+  - `G_WRITE` ≡ `can_write_for_fna() OR auth.role()='service_role' OR EXISTS(fna_user_orgs WHERE user_id=auth.uid() AND role IN ('admin','editor'))`
+  - `G_ADMIN` ≡ `can_admin_for_fna() OR service_role OR EXISTS(… role='admin')`
+
+`fna_auth_org_ids()`, `can_write_for_fna()`, etc. sont `SECURITY DEFINER` (cf. Annexe B).
+
+### G.2 Profil standard (appliqué à la majorité des tables)
+
+| Opération | Condition effective |
+|---|---|
+| SELECT | `MEMBRE` |
+| INSERT | `EDITOR` ∧ `G_WRITE` |
+| UPDATE | `EDITOR` ∧ `G_WRITE` |
+| DELETE | `EDITOR` ∧ `G_ADMIN` (⇒ **admin** en pratique) |
+
+**Tables au profil standard** : `fna_accounts`, `fna_account_mappings`, `fna_action_plans`,
+`fna_analytic_assignments`, `fna_analytic_axes`, `fna_analytic_budgets`, `fna_analytic_codes`,
+`fna_analytic_rules`, `fna_attention_points`, `fna_budgets`, `fna_cr_models`, `fna_fiscal_years`,
+`fna_imports`, `fna_periods`, `fna_report_templates`, `fna_reports`, `fna_proph3_memory`,
+`fna_proph3_learning`.
+
+### G.3 Tables au profil spécifique
+
+| Table | SELECT | INSERT | UPDATE | DELETE | Particularité |
+|---|---|---|---|---|---|
+| **`fna_organizations`** | `id∈MEMBRE` | `TRUE` (perm.) ∧ `G_WRITE OR fna_user_has_any_org()` | `id∈ADMIN` ∧ `G_WRITE(editor)` | `G_ADMIN OR id∈ADMIN` | INSERT permissif `true` **encadré** par la garde restrictive → bootstrap 1re org via RPC (§6.2) |
+| **`fna_user_orgs`** | `user_id = auth.uid()` (**ses lignes seulement**) | `fna_uo_self_admin_insert` : `user_id=uid AND role='admin' AND NOT fna_org_has_other_admin(org,uid)` ∧ `G_WRITE(self-admin)` | `G_ADMIN` | `G_ADMIN` | Écriture réservée service-role / RPC ; self-admin seulement si aucun autre admin |
+| **`fna_org_members`** | `MEMBRE` | `ADMIN` (via `_all`) ∧ `G_WRITE` | `ADMIN` ∧ `G_WRITE` | `ADMIN` ∧ `G_ADMIN` | Gestion réservée aux admins ; roster d'affichage |
+| **`fna_gl_entries`** | `MEMBRE` | `EDITOR` **ET période non `closed`/`archived`** ∧ `G_WRITE` | `EDITOR` ∧ `G_WRITE` | `EDITOR` **ET période non verrouillée** ∧ `G_ADMIN` | **Verrou de période** intégré à la policy |
+| **`fna_gl_tiers`** | `MEMBRE` | `EDITOR` ∧ `G_WRITE(editor)` | `EDITOR` ∧ `G_WRITE(editor)` | `EDITOR` ∧ `G_WRITE(editor)` | Garde restrictive à base d'`org_id` (pas d'EXISTS) |
+| **`fna_tiers_rules`** | `MEMBRE` | `EDITOR` | `EDITOR` | `EDITOR` | idem tiers |
+| **`fna_tiers_unmatched`** | `MEMBRE` | `EDITOR` | `EDITOR` | `EDITOR` | idem tiers |
+| **`fna_gl_audit_log`** | `MEMBRE` | `EDITOR` | — | — | **Immuable** : pas d'UPDATE/DELETE (intégrité de la piste d'audit) |
+| **`fna_period_audit_log`** | `MEMBRE` | `ADMIN` ∧ `G_WRITE` | (restrictive) | `G_ADMIN` | Journal de clôture réservé admin |
+| **`fna_channels`** | `MEMBRE` | `MEMBRE` ∧ `G_WRITE` | `MEMBRE` ∧ `G_WRITE` | `MEMBRE` ∧ `G_ADMIN` | **Collaboration** : écriture par tout membre |
+| **`fna_chat_messages`** | `MEMBRE` | `MEMBRE` ∧ `G_WRITE` | `MEMBRE` ∧ `G_WRITE` | `MEMBRE` ∧ `G_ADMIN` | idem collaboration |
+| **`fna_activities`** | `MEMBRE` | `MEMBRE` ∧ `G_WRITE` | `MEMBRE` ∧ `G_WRITE` | `MEMBRE` ∧ `G_ADMIN` | idem collaboration |
+| **Tables convergées** (migr. 027) : `fna_allocation_*`, `fna_asset_*`, `fna_capex_*`, `fna_car`, `fna_inventory_*`, `fna_secondary_transfer` | `MEMBRE` | `EDITOR` | `EDITOR` | `ADMIN` | Policies `_org_sel/_ins/_upd/_del` (100 % PERMISSIVE, sans garde restrictive) |
+
+> **Note d'audit** : la policy PERMISSIVE INSERT `fna_org_insert` (`WITH CHECK true`) sur
+> `fna_organizations` est **neutralisée** par la policy RESTRICTIVE compagnon — ce n'est **pas** une
+> faille (cf. advisor « rls_policy_always_true », mitigé).
+
+---
+
+## Annexe H — Formules SIG & ratios (ligne à ligne)
+
+Source : `src/engine/statements.ts` (`computeSIG`) & `src/engine/ratios.ts` (`computeRatios`).
+**Notation** : `ΣC(p…)` = somme des **soldes créditeurs** des comptes de préfixe `p` ;
+`ΣD(p…)` = soldes **débiteurs** ; `net(p…)` = `ΣD − ΣC` (solde net débiteur).
+Toutes les sommes sont **déterministes** (`Money`, cf. §8.3).
+
+### H.1 Produits & charges d'exploitation
+
+| Agrégat | Formule (comptes SYSCOHADA) |
+|---|---|
+| Ventes de marchandises | `venteMarch = ΣC(701) hors 7019` |
+| Ventes de produits/services | `venteProd = ΣC(702,703,704,705,706,707) hors 70x9` |
+| **RRR accordés** (contre-produits) | `rrr709 = net(709)` · `rrrMarchD = net(7019)` · `rrrProdD = net(7029,7039,7049,7059,7069,7079)` · `rrrAccordes = rrr709 + rrrMarchD + rrrProdD` |
+| **Chiffre d'affaires (net)** | `CA = venteMarch + venteProd + ΣC(708) − rrrAccordes` |
+| Production stockée | `prodStockee = ΣC(73) − ΣD(73)` |
+| Production immobilisée | `prodImmob = ΣC(72)` |
+| Subventions d'exploitation | `subvExpl = ΣC(71)` |
+| Autres produits | `autresProd = ΣC(75,78) − ΣD(75,78)` |
+| Achats de marchandises | `achatMarch = net(601)` · `varStockMarch = net(6031)` |
+| Achats MP & fournitures | `achatMP = net(602)+net(604)+net(605)+net(608)` · `varStockMP = net(6032,6033)` |
+| Transports | `transport = net(61)` |
+| Services extérieurs | `servExt = net(62,63)` |
+| Impôts et taxes | `impotsTaxes = net(64)` |
+| Autres charges | `autresCharges = net(65)` |
+| Charges de personnel | `personnel = net(66)` |
+| Dotations (répartition) | `dotFin = net(686,696)` · `dotHAO = net(687,697)` · `dotExpl = net(68,69) − dotFin − dotHAO` · `dotations = dotExpl − (ΣC(79) − ΣD(79))` |
+
+### H.2 Soldes intermédiaires de gestion (SIG)
+
+Répartition des RRR pour la marge (invariant `rrrMarch + rrrProd = rrrAccordes`) :
+`totalVentesBrut = venteMarch + venteProd` ·
+`rrrMarch = rrrMarchD + rrr709 × (venteMarch / totalVentesBrut)` ·
+`rrrProd = rrrProdD + rrr709 × (venteProd / totalVentesBrut)`
+
+| Solde | Formule |
+|---|---|
+| Marge sur marchandises | `margeMarch = (venteMarch − rrrMarch) − (achatMarch + varStockMarch)` |
+| Marge sur matières | `margeMP = (venteProd − rrrProd) + prodStockee − (achatMP + varStockMP)` |
+| **Marge brute** | `margeBrute = margeMarch + margeMP` |
+| **Valeur ajoutée** | `VA = margeBrute + prodImmob + subvExpl + autresProd − transport − servExt − impotsTaxes − autresCharges` |
+| **EBE** | `ebe = VA − personnel` |
+| **Résultat d'exploitation** | `re = ebe − dotations` |
+| Résultat financier | `prodFin = ΣC(77)−ΣD(77)` · `chargeFin = net(67) + dotFin` · `rf = prodFin − chargeFin` |
+| Résultat HAO | `prodHAO = ΣC(82,84,86,88)−ΣD(…)` · `chargeHAO = net(81,83,85) + dotHAO` · `rhao = prodHAO − chargeHAO` |
+| Résultat des activités ordinaires | `rao = re + rf` |
+| Participation / Impôt | `participation = net(87)` · `impot = net(89)` |
+| **Résultat net** | `resultat = computeNetResult(rows)` — **source unique** (Σ produits − Σ charges) ⇒ bouclage Bilan = CR ; algébriquement = `rao + rhao − participation − impot` |
+
+### H.3 Ratios financiers
+
+Fonctions robustes : `pct(n,d) = (d≠0 ∧ fini) ? n/d×100 : NaN` · `ratioVal(n,d) = (d≠0 ∧ fini) ? n/d : NaN`.
+Postes de bilan : `capPropres(_CP)`, `ressStables(_DF)`, `actifImmo(_AZ)`, `stocks(BB)`,
+`creancesClients(BH)`, `autresCreances(BI)`, `tresoActive(_BT)`, `actifCirc(_BK)`, `passifCirc(_DP)`,
+`tresoPass(DV)`, `dettesFin(DA)`, `dettesFourn(DJ)`.
+
+| Code | Libellé | Formule | Unité | Cible | Sens |
+|---|---|---|---|---|---|
+| MB | Taux de marge brute | `pct(margeBrute, CA)` | % | 30 | ↑ |
+| TVA | Taux de valeur ajoutée | `pct(VA, CA)` | % | 35 | ↑ |
+| EBE | Taux d'EBE | `pct(ebe, CA)` | % | 15 | ↑ |
+| TRE | Rentabilité d'exploitation | `pct(re, CA)` | % | 10 | ↑ |
+| TRN | Rentabilité nette | `pct(resultat, CA)` | % | 8 | ↑ |
+| ROE | Rentabilité des CP | `roeDenom>0 ? pct(resultat, roeDenom) : NaN` ; `roeDenom = (CP_N-1 + CP)/2` **ou** `CP − resultat` | % | 12 | ↑ |
+| ROA | Rentabilité de l'actif | `roaDenom>0 ? pct(resultat, roaDenom) : NaN` ; `roaDenom = (Actif_N-1 + Actif)/2` **ou** `Actif − resultat` | % | 6 | ↑ |
+| LG | Liquidité générale | `ratioVal(actifCirc + tresoActive, passifCirc + tresoPass)` | × | 1.5 | ↑ |
+| LR | Liquidité réduite | `ratioVal(actifCirc + tresoActive − stocks, passifCirc + tresoPass)` | × | 1.0 | ↑ |
+| LI | Liquidité immédiate | `ratioVal(tresoActive, passifCirc + tresoPass)` | × | 0.3 | ↑ |
+| AF | Autonomie financière | `ratioVal(capPropres, totalActif)` | ratio | 0.5 | ↑ |
+| END | Endettement | `ratioVal(dettesFin, capPropres)` | ratio | 1.0 | ↓ |
+| CAP_REMB | Capacité de remboursement | `caf>0 ? ratioVal(dettesFin, caf) : NaN` | × | 4 | ↓ |
+| FR | Fonds de roulement | `ressStables − actifImmo` (bon si ≥ 0) | montant | 0 | — |
+| BFR | Besoin en FR | `stocks + creancesClients + autresCreances − passifCirc` | montant | 0 | — |
+| TN | Trésorerie nette | `tresoActive − tresoPass` (bon si ≥ 0) | montant | 0 | — |
+| DSO | Délai clients | `caTTC>0 ? (creancesClients / caTTC) × periodDays : NaN` | j | 60 | ↓ |
+| DPO | Délai fournisseurs | `achatsTTC>0 ? (dettesFourn / achatsTTC) × periodDays : NaN` | j | 60 | ↑ |
+
+**TVA & TTC** (pour DSO/DPO) : `tauxTvaSortie = clamp(ΣC(443)−ΣD(443)) / CA, [0 %, 30 %], fallback 18 %)` ;
+`caTTC = CA × (1 + tauxTvaSortie)`. Côté achats : `achatsHT = net(60) hors 603` ;
+`tauxTvaEntree = clamp(net(445)/achatsHT, [0 %,30 %], fallback 18 %)` ; `achatsTTC = achatsHT × (1 + tauxTvaEntree)`.
+`periodDays` défaut = 360.
+
+**CAF** (méthode additive) : `caf = resultat + dotN − repN` ; `dotN = net(68,69)` ;
+`repN = ΣC(78,79) − ΣD(78,79)`.
 
 ---
 
