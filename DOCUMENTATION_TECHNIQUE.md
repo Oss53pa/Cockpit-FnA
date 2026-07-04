@@ -1,430 +1,675 @@
-# Documentation technique — Cockpit FnA
+# Cockpit FnA — Documentation d'architecture logicielle
 
-> **Public visé :** développeurs (humains & IA), DevOps, auditeurs techniques.
-> **Documents liés :** [`CLAUDE.md`](CLAUDE.md) (onboarding & règles d'or),
-> [`REPORTING_STANDARD.md`](REPORTING_STANDARD.md) (standard du module Reporting).
-> Ce document est la **référence d'architecture globale**. Version 1.0.
+**Software Architecture Document (SAD)**
+Structure : **arc42** · Modèle de vues : **C4** · Conforme à l'esprit **ISO/IEC/IEEE 42010** & **IEEE 1016**.
+
+| | |
+|---|---|
+| **Produit** | Cockpit FnA — plateforme de pilotage financier OHADA/SYSCOHADA |
+| **Version du document** | 2.0 |
+| **Statut** | Baseline |
+| **Audience** | Architectes, développeurs (humains & IA), DevOps, QA, sécurité, auditeurs |
+| **Documents liés** | [`CLAUDE.md`](CLAUDE.md) · [`REPORTING_STANDARD.md`](REPORTING_STANDARD.md) |
+| **Convention normative** | Mots-clés **DOIT / NE DOIT PAS / DEVRAIT / PEUT** au sens RFC 2119 |
 
 ---
 
 ## Table des matières
 
-1. [Présentation](#1-présentation)
-2. [Stack technique](#2-stack-technique)
-3. [Vue d'architecture](#3-vue-darchitecture)
-4. [Structure du dépôt](#4-structure-du-dépôt)
-5. [Frontend & routage](#5-frontend--routage)
-6. [State management (Zustand) & hooks](#6-state-management-zustand--hooks)
-7. [Couche d'accès aux données (`dataProvider`)](#7-couche-daccès-aux-données-dataprovider)
-8. [Backend Supabase & modèle de données](#8-backend-supabase--modèle-de-données)
-9. [Multi-tenant, RLS & sécurité](#9-multi-tenant-rls--sécurité)
-10. [Authentification & invitations](#10-authentification--invitations)
-11. [Moteur financier SYSCOHADA](#11-moteur-financier-syscohada)
-12. [Module Reporting](#12-module-reporting)
-13. [Proph3t — couche d'intelligence](#13-proph3t--couche-dintelligence)
-14. [Import / Export](#14-import--export)
-15. [Mode démo](#15-mode-démo)
-16. [Piste d'audit & intégrité](#16-piste-daudit--intégrité)
-17. [Performance](#17-performance)
-18. [Sécurité — synthèse](#18-sécurité--synthèse)
-19. [Build, tests & déploiement](#19-build-tests--déploiement)
-20. [Conventions & anti-patterns](#20-conventions--anti-patterns)
+1. [Introduction et objectifs](#1-introduction-et-objectifs)
+2. [Contraintes d'architecture](#2-contraintes-darchitecture)
+3. [Contexte et périmètre du système](#3-contexte-et-périmètre-du-système)
+4. [Stratégie de solution](#4-stratégie-de-solution)
+5. [Vue des blocs de construction (C4)](#5-vue-des-blocs-de-construction-c4)
+6. [Vue d'exécution (scénarios runtime)](#6-vue-dexécution-scénarios-runtime)
+7. [Vue de déploiement](#7-vue-de-déploiement)
+8. [Concepts transverses](#8-concepts-transverses)
+9. [Décisions d'architecture (ADR)](#9-décisions-darchitecture-adr)
+10. [Exigences qualité](#10-exigences-qualité)
+11. [Risques et dette technique](#11-risques-et-dette-technique)
+12. [Glossaire](#12-glossaire)
+- [Annexe A — Dictionnaire de données (44 tables)](#annexe-a--dictionnaire-de-données)
+- [Annexe B — Catalogue des fonctions serveur (RPC)](#annexe-b--catalogue-des-fonctions-serveur-rpc)
+- [Annexe C — Carte des routes](#annexe-c--carte-des-routes)
+- [Annexe D — Référence des modules moteur](#annexe-d--référence-des-modules-moteur)
+- [Annexe E — Configuration & variables d'environnement](#annexe-e--configuration--variables-denvironnement)
+- [Annexe F — Inventaire des migrations](#annexe-f--inventaire-des-migrations)
 
 ---
 
-## 1. Présentation
+## 1. Introduction et objectifs
 
-**Cockpit FnA** est une application SaaS de **pilotage financier et comptable** aux normes
-**OHADA / SYSCOHADA révisé 2017** (zone UEMOA, franc CFA XOF par défaut). Elle transforme un
-Grand Livre importé en états financiers, ratios, dashboards, rapports professionnels (PDF/PPTX)
-et analyses assistées par IA (Proph3t).
+### 1.1 Aperçu des exigences
 
-Caractéristiques structurantes :
-- **Multi-tenant** : plusieurs sociétés (org) par utilisateur, cloisonnées par `org_id` + RLS.
-- **Offline-first / cloud** : couche d'accès abstraite (`dataProvider`) commutant Supabase,
-  mode démo et Electron.
-- **Écosystème Atlas Studio** : partage un projet Supabase avec d'autres applications ; Cockpit
-  isole ses tables sous le préfixe **`fna_*`**.
+Cockpit FnA est une application web **SaaS multi-tenant** de pilotage financier et comptable
+conforme au référentiel **OHADA / SYSCOHADA révisé 2017** (zone UEMOA, devise XOF par défaut).
+À partir d'un **Grand Livre** importé, le système produit :
 
----
+- les **états financiers** légaux (Bilan, Compte de Résultat, SIG, TFT, TAFIRE, variation des
+  capitaux propres) ;
+- des **ratios** financiers et un **score de santé** (Z-Score Altman + score propriétaire) ;
+- ~50 **dashboards** analytiques et sectoriels ;
+- des **rapports** professionnels multi-format (PDF A4, PowerPoint) ;
+- une **comptabilité analytique** (ventilation par axes, centres de coûts/profit) ;
+- des **analyses assistées par IA** (Proph3t : anomalies, prédictions, commentaires d'expert) ;
+- une **piste d'audit** inviolable (chaîne de hachage SHA-256).
 
-## 2. Stack technique
+### 1.2 Objectifs qualité (Quality Goals)
 
-| Couche | Technologie |
+| # | Attribut qualité | Objectif | Priorité |
+|---|---|---|---|
+| Q1 | **Exactitude comptable** | Conformité stricte SYSCOHADA ; bouclage Bilan = CR garanti ; déterminisme monétaire | ⭐⭐⭐ |
+| Q2 | **Isolation multi-tenant** | Aucune fuite inter-société ; RLS défense en profondeur | ⭐⭐⭐ |
+| Q3 | **Intégrité & auditabilité** | Écritures scellées par chaîne de hachage ; traçabilité complète | ⭐⭐⭐ |
+| Q4 | **Robustesse** | Dégradation gracieuse (offline, quota storage, session expirée) | ⭐⭐ |
+| Q5 | **Performance de chargement** | Premier rendu léger ; libs lourdes différées par route/action | ⭐⭐ |
+| Q6 | **Portabilité de la couche d'accès** | Commutation Supabase / démo / Electron sans toucher l'UI | ⭐⭐ |
+| Q7 | **Maintenabilité** | Engine pur testé ; fichiers < 500 LOC ; conventions strictes | ⭐⭐ |
+
+### 1.3 Parties prenantes (Stakeholders)
+
+| Rôle | Attente vis-à-vis de l'architecture |
 |---|---|
-| UI | React 18 + TypeScript strict + Vite 5 + Tailwind 3 |
-| State | Zustand (`src/store/`) + hooks custom (`src/hooks/`) |
-| Charts | Recharts (principal) · Nivo (parts) · ECharts (heatmaps) · Tremor (KPI) |
-| Backend | Supabase — Postgres + Auth + Realtime + Edge Functions (Deno) |
-| Cache local | Dexie (IndexedDB) |
-| Documents | jsPDF + jspdf-autotable (PDF) · pptxgenjs (PPTX) · ExcelJS / xlsx (Excel) |
-| E-mails | Resend (via Edge Functions) |
-| Monitoring | Sentry (source maps « hidden ») + Atlas Error Monitor |
-| Tests | Vitest |
-| Icônes / utils | lucide-react · clsx · file-saver · papaparse |
+| Directeur financier / DAF / comptable (utilisateur) | États justes, imports simples, rapports exportables |
+| Administrateur de société | Gestion des membres, rôles, clôtures de période |
+| Développeur | Onboarding rapide, conventions claires, engine testable |
+| DevOps | Déploiements reproductibles (front, migrations, Edge Functions) |
+| RSSI / auditeur | RLS, secrets, piste d'audit, conformité |
 
 ---
 
-## 3. Vue d'architecture
+## 2. Contraintes d'architecture
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  NAVIGATEUR (React SPA, Vite)                                  │
-│                                                                │
-│  Pages routées (lazy)  ──►  Hooks (useFinancials, useCloud…)   │
-│        │                          │                            │
-│        ▼                          ▼                            │
-│  Stores Zustand            Engine (src/engine/*)               │
-│  (app/settings/theme)      SYSCOHADA + Proph3t (calcul pur)    │
-│        │                          │                            │
-│        └────────────►  dataProvider (abstraction) ◄────────────┤
-└────────────────────────────────│──────────────────────────────┘
-                                  │ (getXxx / upsertXxx)
-        ┌─────────────────────────┼───────────────────────────┐
-        ▼                         ▼                            ▼
-  SupabaseProvider          DemoProvider                ElectronProvider
-   (Postgres+RLS)         (demo-org-*, no-op)            (SQLite local)
-        │
-        ▼
-  Supabase : tables fna_*, RLS, RPC SECURITY DEFINER, Edge Functions
-```
+### 2.1 Contraintes techniques
+- **Stack imposée** : React 18 + TypeScript strict + Vite 5 + Tailwind 3 ; Zustand ; Supabase.
+- **Projet Supabase partagé** avec d'autres applications Atlas Studio → **isolation par préfixe
+  `fna_*`** obligatoire ; interdiction absolue de modifier les objets non préfixés (autres apps).
+- **Devise & référentiel** : XOF / SYSCOHADA révisé 2017 par défaut.
+- **Navigateur** cible : evergreen ; support Safari iOS (contrainte `localStorage`).
 
-Principe cardinal : **l'engine est pur** (aucun accès réseau/base), il ne consomme que des
-données déjà chargées. Toute I/O passe par `dataProvider`.
+### 2.2 Contraintes organisationnelles & conventions
+- **Règles d'or** (cf. `CLAUDE.md`) : accès données via `dataProvider` uniquement ; `org_id`
+  jamais codé en dur ; `safeLocalStorage` obligatoire ; tables backend préfixées `fna_*` ;
+  fichiers de page < 500 LOC ; pas de `dangerouslySetInnerHTML` ; pas de `console.log` en `engine/`.
+- **Format de commit** : `type(domaine): description` (feat/fix/refactor/perf/docs/chore).
+- **Portes de qualité** avant commit : `typecheck` (0 err), `lint` (0 err), `test` (vert), `build` (OK).
 
 ---
 
-## 4. Structure du dépôt
+## 3. Contexte et périmètre du système
 
-```
-src/
-├── pages/            # 1 fichier = 1 route (lazy). Sous-dossiers : auth/, settings/,
-│                     #   analytical/, Dashboard/, Reports/
-├── components/       # ui/ (réutilisables), layout/ (Sidebar, Header…), auth/ (guards)
-├── engine/           # LOGIQUE MÉTIER PURE (calculs SYSCOHADA + Proph3t)
-│   └── proph3/       # Couche IA (intelligence, anomalies, prédictions, mémoire)
-├── hooks/            # Hooks custom (données, auth, permissions, IA)
-├── store/            # Zustand : app.ts, settings.ts, theme.ts
-├── db/               # Couche d'accès : provider.ts + implémentations + schema.ts
-├── lib/              # Utilitaires transverses (Money, format, supabase, safeStorage…)
-└── syscohada/        # Référentiel comptable (plan de comptes, règles, systèmes)
+### 3.1 Contexte métier (Business Context)
 
-supabase/
-├── migrations/       # 27 migrations SQL versionnées (001 → 026)
-└── functions/        # Edge Functions Deno (cockpit-invite-user, cockpit-send-email…)
+```mermaid
+graph LR
+  U[Utilisateur finance<br/>DAF / comptable / admin] -->|utilise| SYS((Cockpit FnA))
+  ADM[Admin société] -->|invite, clôture| SYS
+  ATLAS[Atlas Studio<br/>portail SSO] -->|JWT SSO| SYS
+  SYS -->|états, rapports| U
+  SYS -->|e-mails invitation/rapport| MAIL[Destinataires e-mail]
 ```
 
----
+Le système reçoit un **Grand Livre** (import Excel/CSV) et des **paramètres société**, et restitue
+états, dashboards, rapports et alertes.
 
-## 5. Frontend & routage
+### 3.2 Contexte technique (Technical Context) — interfaces externes
 
-- **Point d'entrée** : `src/App.tsx`. Routage `react-router-dom`.
-- **Lazy loading** : toutes les pages via `lazyWithRetry` (`src/lib/lazyWithRetry.ts`) —
-  sauf `Home` (chargée en eager pour un affichage instantané post-login).
-- **Layout** : `AppLayout` = `Sidebar` + `Header` + `<main>` (avec `Suspense` + transition
-  animée). Bandeaux `DemoBanner` / `ReadOnlyBanner`. Widgets flottants (`FloatingAI`,
-  `ActivitySidebar`, `OnboardingModal`, `CommandPalette`).
-- **Gardes** : `ProtectedRoute` (session requise) + `OrgGuard` (org résolue).
-- **Familles de routes** :
-  - **Publiques** : `/`, `/demo`, `/login`, `/signup`, `/auth/accept-invite`, `/auth` (SSO Atlas).
-  - **États & données** : `/states`, `/ratios`, `/grand-livre`, `/balance`, `/coa`, `/imports`, `/budget`.
-  - **Dashboards** : `/dashboards` (catalogue) + `/dashboard/:id` + ~40 dashboards dédiés
-    (`/dashboard/exec`, `/dashboard/waterfall`, `/dashboard/zscore`, `/dashboard/tafire`…).
-  - **Analytique** : `/analytical/*` (coverage, cost-centers, revenue-centers, pivot, journal…).
-  - **Reporting & IA** : `/reports`, `/cr-editor`, `/builder`, `/ai`, `/dashboard/proph3t`.
-  - **Paramètres** : `/settings`, `/settings/team`, `/audit`, `/guide`.
-
----
-
-## 6. State management (Zustand) & hooks
-
-### Stores (`src/store/`)
-- **`app.ts`** — état global : `currentOrgId`, `currentYear`, `amountMode` (Entier ↔ Abrégé), etc.
-  L'org courante (`useApp((s) => s.currentOrgId)`) est la **source unique** du tenant actif.
-- **`settings.ts`** — préférences tenant : cibles de ratios (`ratioTargets`), etc.
-- **`theme.ts`** — palettes de couleurs (CSS custom properties `--p-*` injectées dynamiquement),
-  mode clair/sombre.
-
-### Hooks (`src/hooks/`)
-| Hook | Rôle |
-|---|---|
-| `useFinancials` | Expose bilan, CR, SIG, ratios, TFT, capital, budget/réalisé, balances mensuelles… |
-| `useCloudData` | Fetch mémoïsé + invalidation par **tag** (`invalidateCloudData('gl')`) |
-| `useOrgResolver` | Au login : lit `fna_user_orgs`, bascule sur la 1re org de l'utilisateur |
-| `useAuth` | Session Supabase, login/logout |
-| `useOrgPermissions` | Rôle courant (admin/editor/viewer) → capacités UI |
-| `useAI` / `useProph3` / `useOllama` | Intégrations IA (cloud + local Ollama) |
-| `useRealtime` | Abonnements Supabase Realtime |
-| `useEmail` | Envoi via Edge Functions |
-
----
-
-## 7. Couche d'accès aux données (`dataProvider`)
-
-Interface unique : `src/db/provider.ts`. **Règle d'or n°1 : jamais `supabase.from(...)` dans une
-page/composant** — toujours `dataProvider.getXxx()` / `upsertXxx()`.
-
-Implémentations :
-- **`supabaseProvider.ts`** — cloud Postgres (actif si `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`).
-  Toutes les tables `fna_*` ; conversion camelCase ↔ snake_case via `caseConvert.ts`.
-  Surface les erreurs RLS (code `42501` → message « session expirée / permissions »).
-- **`demoProvider.ts`** — intercepte les `org_id` commençant par `demo-org-*` → **writes no-op**.
-- **`electronProvider.ts`** — SQLite local (build desktop Electron).
-- **`cachedProvider.ts`** — cache par-dessus.
-- **`supabaseSync.ts`** — synchronisation Realtime → Dexie local.
-
-Types de données : `src/db/schema.ts` — `Organization`, `FiscalYear`, `Period`, `Account`,
-`GLEntry`, `ImportLog`, `BudgetLine`, `AccountMapping`, `GLAuditLogEntry`, `TiersUnmatched`,
-`GLTiersEntry`, `TiersRule`, `ReportDoc`, `ReportTemplate`, `AttentionPoint`, `ActionPlan`,
-`AnalyticAxis`, `AnalyticCode`, `AnalyticRule`, `AnalyticAssignment`, `AnalyticBudget`,
-`Activity`, `Channel`, `ChatMessage`.
-
----
-
-## 8. Backend Supabase & modèle de données
-
-- **Projet partagé** avec d'autres applications Atlas Studio. Cockpit isole **toutes** ses tables
-  sous le préfixe **`fna_*`** (règle d'or n°4). Les tables non préfixées (`organizations`,
-  `user_orgs`…) appartiennent à d'autres apps du projet — **ne jamais y toucher**.
-- **Migrations** : `supabase/migrations/0XX_*.sql` (27 fichiers). Jalons notables :
-  - `012_production_ready` — renomme les tables en `fna_*`, crée `fna_org_members`, active RLS.
-  - `013–015` — corrigent le catch-22 RLS de bootstrap d'org (policies self-admin, récursion).
-  - `018` — plan de comptes par org. `019/020` — piste d'audit GL + RPC append.
-  - `022` — remplacement atomique du GL. `023` — GL Tiers.
-  - `025` — durcissement `SECURITY DEFINER` (retrait exec `anon`).
-  - `026` — RPC `fna_create_org_with_admin` (bootstrap 1re org).
-- **Tables applicatives clés** (préfixe `fna_`) : `organizations`, `user_orgs`, `org_members`,
-  `fiscal_years`, `periods`, `accounts`, `gl_entries`, `budgets`, `reports`, `templates`,
-  `attention_points`, `action_plans`, `analytic_*`, `gl_audit_log`, `gl_tiers`, `tiers_rules`,
-  `channels`, `chat_messages`, `activities`.
-
----
-
-## 9. Multi-tenant, RLS & sécurité
-
-Deux tables structurent l'appartenance :
-
-| Table | Rôle | Écrite par |
+| Système externe | Rôle | Protocole / Interface |
 |---|---|---|
-| **`fna_user_orgs`** | **Source de vérité** lue par la RLS. `(user_id, org_id, role)` avec `role ∈ {admin, editor, viewer}` (contrainte CHECK). | service-role (Edge Function) **ou** RPC `SECURITY DEFINER` |
-| **`fna_org_members`** | **Roster d'affichage** indexé par email (libellé métier libre : « daf », « comptable »…). Permet de lister un invité avant acceptation. | idem |
+| **Supabase** (Postgres, Auth, Realtime, Edge, Storage) | Persistance, authentification, temps réel | HTTPS / PostgREST / WebSocket ; clé anon (client), service-role (Edge only) |
+| **Resend** | Envoi d'e-mails (invitations, rapports) | API REST (depuis Edge Functions) |
+| **Sentry** | Monitoring d'erreurs + source maps « hidden » | SDK + upload build |
+| **Atlas Error Monitor** | Console d'erreurs interne écosystème | HTTP |
+| **Ollama** (optionnel) | LLM local pour Proph3t | HTTP localhost |
+| **Atlas Studio SSO** | Authentification fédérée | JWT signé (app-token) |
 
-### Fonctions helper RLS (`SECURITY DEFINER`)
-- **`fna_auth_org_ids(required_role)`** → `SETOF text` : les `org_id` du user courant (option. filtrés par rôle). Utilisée dans ~78 policies.
-- **`can_write_for_fna()` / `can_admin_for_fna()`** : délèguent aux entitlements applicatifs (`can_write_for_app('cockpit-fa')`).
-- **`fna_user_has_any_org()`** : booléen d'appartenance (fallback anti-catch-22).
+---
 
-### Patron de policy par table métier
-```sql
--- SELECT : tout membre de l'org
-using (org_id in (select fna_auth_org_ids()))
--- INSERT/UPDATE/DELETE : editor/admin
-with check (org_id in (select fna_auth_org_ids('editor')))
+## 4. Stratégie de solution
+
+| Objectif qualité | Approche architecturale |
+|---|---|
+| Q1 Exactitude | **Engine pur** (aucune I/O) testé unitairement ; **source unique** `computeNetResult` pour le résultat net → bouclage Bilan = CR ; arithmétique **`Money`** déterministe (pas de flottants bruts) |
+| Q2 Isolation | Filtrage `org_id` systématique **+** RLS Postgres via `fna_auth_org_ids()` ; écritures d'appartenance réservées à la service-role / RPC `SECURITY DEFINER` |
+| Q3 Auditabilité | **Chaîne de hachage** SHA-256 par écriture ; RPC `fna_append_audit_log` scellée ; verrouillage de période |
+| Q4 Robustesse | **Abstraction `dataProvider`** (fallback démo/local) ; `safeLocalStorage` ; erreurs RLS traduites |
+| Q5 Performance | **Routes lazy** ; `manualChunks` vendors ; **imports dynamiques** des libs lourdes |
+| Q6 Portabilité | Interface `DataProvider` unique + implémentations interchangeables |
+| Q7 Maintenabilité | Séparation `pages` / `engine` / `hooks` ; conventions + portes CI |
+
+---
+
+## 5. Vue des blocs de construction (C4)
+
+### 5.1 Niveau 1 — Diagramme de conteneurs (Container)
+
+```mermaid
+graph TD
+  subgraph Client [Navigateur — SPA React/Vite]
+    UI[Pages & Composants]
+    ST[Stores Zustand]
+    HK[Hooks]
+    EN[Engine SYSCOHADA + Proph3t<br/>calcul PUR]
+    DP[dataProvider<br/>abstraction]
+    DX[(Dexie / IndexedDB<br/>cache local)]
+  end
+  subgraph Supabase [Supabase Cloud]
+    PG[(PostgreSQL<br/>tables fna_*, RLS)]
+    AU[Auth / GoTrue]
+    RT[Realtime]
+    EF[Edge Functions Deno]
+    ST2[Storage]
+  end
+  RESEND[Resend API]
+  UI-->ST-->HK-->EN
+  HK-->DP
+  EN-->DP
+  DP-->|SupabaseProvider|PG
+  DP-->|cache|DX
+  DP-->AU
+  HK-->RT
+  UI-->EF
+  EF-->PG
+  EF-->RESEND
 ```
 
-### Bootstrap de la 1re org (fix catch-22)
-Un utilisateur **sans aucune org** ne peut pas faire d'INSERT direct dans `fna_organizations`
-(policy RESTRICTIVE). La RPC **`fna_create_org_with_admin(p_id, p_name, …)`** (migration 026,
-`SECURITY DEFINER`) crée l'org + le mapping admin atomiquement en contournant la RLS, avec :
-1. `auth.uid()` obligatoire ;
-2. **garde anti-escalade** : admin uniquement sur une org réellement créée par l'appel
-   (`GET DIAGNOSTICS … ROW_COUNT`), pas de rattachement à une org existante.
-Appelée par `Settings` (« Sociétés ») et `OnboardingModal` quand Supabase est configuré.
+### 5.2 Niveau 2 — Décomposition interne
 
-### Rôles
-`admin` (tout + gestion des membres) · `editor` (lecture/écriture données) · `viewer` (lecture seule).
-Un libellé d'invitation métier est **mappé** vers ce triplet côté Edge Function (voir §10).
+| Bloc | Répertoire | Responsabilité |
+|---|---|---|
+| **Présentation** | `src/pages/`, `src/components/` | Rendu, routage, interactions ; **aucun calcul métier** |
+| **État** | `src/store/` | `app` (tenant/année/mode), `settings` (cibles), `theme` (palettes) |
+| **Orchestration** | `src/hooks/` | Chargement mémoïsé, permissions, IA, realtime |
+| **Domaine (Engine)** | `src/engine/` | Calculs SYSCOHADA + Proph3t (**purs**) |
+| **Accès données** | `src/db/` | `dataProvider` + 5 implémentations + `schema.ts` |
+| **Utilitaires** | `src/lib/` | `Money`, `format`, `safeStorage`, `supabase`, crypto, telemetry |
+| **Référentiel** | `src/syscohada/` | Plan de comptes, règles, systèmes comptables |
+| **Backend** | `supabase/` | Migrations SQL + Edge Functions |
 
----
+### 5.3 Niveau 3 — Modules moteur clés
 
-## 10. Authentification & invitations
+- **`statements.ts`** — `computeBilan()`, `computeSIG()` (Bilan/CR/SIG), `computeNetResult()`.
+- **`balance.ts`** / `balanceAuxiliaire.ts` — balance générale & auxiliaires (agrégation racine SYSCOHADA).
+- **`ratios.ts`** — `computeRatios()`, `computeVatRate()` (gardes ÷0, clamp TVA).
+- **`budgetActual.ts`** / `monthly.ts` — Réalisé/Budget/N-1, mensualisation.
+- **`analytical.ts`** / `analyticalEngine.ts` / `analyticBranch.ts` — comptabilité analytique.
+- **`reportBlocks.ts`** — modèle par blocs + builders PDF/PPTX (cf. §12).
+- **`glAudit.ts`** — contrôles de cohérence GL.
+- **`proph3/*`** — intelligence, anomalies, prédictions, mémoire, commentateur.
 
-### Auth
-Supabase Auth (email/mot de passe). Pages : `auth/Login`, `Signup`, `ForgotPassword`,
-`ResetPassword`, `Callback`, `AtlasSSO` (SSO depuis Atlas Studio via JWT signé).
-`useOrgResolver` bascule sur la 1re org au login.
-
-### Flux d'invitation (multi-tenant)
-1. Un **admin** invite (Settings → Utilisateurs). Appel de l'Edge Function **`cockpit-invite-user`** :
-   - **Auth appelant** validée (`getUser(token)`) + **autorisation** (admin de chaque org ciblée).
-   - Génère un lien **anti-prefetch** (`token_hash` + `type`, consommé client-side par
-     `verifyOtp`) → les scanners e-mail (SafeLinks/Proofpoint) ne « brûlent » plus le lien.
-   - **ÉTAPE 2** : écrit `fna_user_orgs` (rôle **mappé** via `mapToAuthRole` → admin/editor/viewer)
-     **et** `fna_org_members` (libellé d'affichage conservé). Envoi e-mail via **Resend**.
-2. L'invité arrive sur **`/auth/accept-invite`** (`AcceptInvite.tsx`) → `verifyOtp` crée la
-   session → il définit son mot de passe → l'org est résolue depuis `fna_user_orgs`.
-
-> **Point de vigilance historique :** `fna_user_orgs.role` est contraint à `admin/editor/viewer`.
-> Un libellé métier brut (« daf ») y était rejeté → l'invité restait dans le roster **sans accès**.
-> Corrigé par `mapToAuthRole()` (daf/comptable → `editor`, lecteur → `viewer`, admin → `admin`).
-
-### Edge Functions (`supabase/functions/`)
-`cockpit-invite-user` (invitations, `verify_jwt:false`, auth applicative interne) ·
-`cockpit-send-email` / `send-email` · `send-report` · `start-trial` · `invite-user` (générique).
+Détail complet : **Annexe D**.
 
 ---
 
-## 11. Moteur financier SYSCOHADA
+## 6. Vue d'exécution (scénarios runtime)
 
-Cœur métier, **pur et testé** (Vitest). Modules `src/engine/` :
+### 6.1 Résolution du tenant au login
 
-| Module | Rôle |
-|---|---|
-| **`statements.ts`** | Bilan (actif/passif), Compte de Résultat, **SIG**, résultat net. Source unique `computeNetResult` ⇒ **bouclage Bilan = CR** garanti. |
-| **`balance.ts`** / `balanceAuxiliaire.ts` | Balance générale + agrégation par racine SYSCOHADA ; balances auxiliaires (clients/fournisseurs). |
-| **`ratios.ts`** | Ratios rentabilité / liquidité / structure / activité (DSO, DPO, ROE/ROA…). Gardes division par zéro (→ `NaN`), clamp TVA. |
-| **`budgetActual.ts`** / `monthly.ts` | Réalisé / Budget / N-1, mensualisation. |
-| **`analytical.ts`** / `analyticBranch.ts` / `analyticDashboards.ts` | Comptabilité analytique (branches `revenue` / `project_cost` / `overhead`). |
-| **`glAudit.ts`** | Contrôles de cohérence GL (sens des classes, écritures anormales). |
-| **`currency.ts`**, `accountingSystems.ts`, `crModels.ts` | Devises, systèmes comptables, modèles de CR. |
-
-### Conventions comptables clés (vérifiées)
-- **SIG complet** : Marge brute → Valeur ajoutée → EBE → Résultat d'exploitation → financier →
-  HAO → Résultat net. HAO (comptes 82/84/86/88 produits, 81/83/85 charges) isolé.
-- **RRR accordés** (contre-produits à solde **débiteur** normal) : le CA est calculé **net** des
-  RRR, en capturant **tous** les sous-comptes ventilés **`70x9`** (7019 marchandises … 706900
-  services … 7079) **plus** le global `709`. Invariant `rrrMarch + rrrProd === rrrAccordes`.
-- **Contre-comptes normaux** exclus des détecteurs d'anomalies : classe 7 débit `709/70x9`,
-  classe 6 crédit `603/609/619/629/639`.
-- **Déterminisme monétaire** : sommes via `src/lib/Money.ts` + `moneySum.ts`
-  (voir `src/lib/MONEY_GUIDE.md`) — jamais d'addition de flottants bruts.
-
-Référentiel : `src/syscohada/` (`coa.ts` plan de comptes, `syscohada-referentiel.ts`, `rules.ts`,
-`systems.ts`, `atlas.ts`).
-
----
-
-## 12. Module Reporting
-
-Éditeur de rapports **par blocs** (le « gold standard » de l'écosystème — cf.
-[`REPORTING_STANDARD.md`](REPORTING_STANDARD.md)).
-
-- **Contrats** (`src/engine/reportBlocks.ts`) : union `Block` (h1/h2/h3, paragraph, kpi, table,
-  dashboard, pageBreak, image, spacer), `ReportConfig` (100 % sérialisable JSON), `PALETTES`,
-  `ReportData`.
-- **Moteur** : `buildPDFFromBlocks` (jsPDF + autotable) & `buildPPTXFromBlocks` (pptxgenjs) —
-  fonctions **pures**. Couverture, sommaire auto, en-têtes/pieds, confidentialité, pagination.
-- **UI** (`src/pages/Reports.tsx` + `Reports/`) : éditeur 3 colonnes (blocs · visualiseur A4 ·
-  récapitulatif), catalogue de tables/dashboards, 13 modèles rapides (`QUICK_TEMPLATES`),
-  modèles personnels, journal, export PDF (via `window.print()` + CSS `@page`) / PPTX.
-- **Persistance** : `ReportDoc.content` = `JSON.stringify(ReportConfig)` via `dataProvider`.
-- **IA** : `proph3/reportCommentator.ts` — auto-commentaire des sections (marqué, effaçable).
-
----
-
-## 13. Proph3t — couche d'intelligence
-
-`src/engine/proph3/` — moteur d'analyse et de commentaire assisté (branding : **Proph3t**,
-première lettre seule en majuscule).
-
-| Module | Rôle |
-|---|---|
-| `intelligence.ts` | Détection d'anomalies & incohérences (signes, doublons, comptes inconnus). |
-| `anomalies.ts` | Anomalies sur soldes/écritures (seuils, sens des classes). |
-| `predictions.ts` | Projections par régression linéaire sur l'historique mémorisé. |
-| `memory.ts` / `learning.ts` | Mémoire permanente chiffrée (snapshots KPI) + apprentissage. |
-| `commentator.ts` / `reportCommentator.ts` | Génération de commentaires d'expert. |
-| `syscohada-knowledge.ts` / `knowledge/` | Base de connaissances SYSCOHADA + recherche. |
-| `benchmark.ts` / `scoring.ts` | Normes sectorielles, Z-Score / score de santé. |
-| `ollama.ts` | LLM local (Ollama) en complément du cloud. |
-
-Chiffrement : `src/lib/proph3Crypto.ts`. Fédération : `proph3tFederation.ts`.
-
----
-
-## 14. Import / Export
-
-- **Import** (`src/engine/importer.ts`) : parsing GL / balances / tiers (xlsx via `xlsx` &
-  `exceljs`, CSV via `papaparse`), détection de colonnes, dédoublonnage (hash de fichier),
-  migration de périodes, resync des libellés. RPC atomique `fna_replace_gl` / `fna_import_tiers`.
-- **Modèles** (`src/engine/templates.ts`) : génération de fichiers Excel pré-formatés (GL, balance,
-  tiers, COA, axes/codes analytiques, budget). **ExcelJS importé dynamiquement** (au clic).
-- **Export** (`src/engine/exporter.ts`) : Excel (ExcelJS) & PDF (jsPDF). **Imports dynamiques**
-  (au clic « Exporter ») pour alléger les routes.
-
----
-
-## 15. Mode démo
-
-- Activé via `localStorage['demo-mode']` / `org_id` en `demo-org-*` (`src/lib/demoMode.ts`).
-- **`DemoProvider`** intercepte les writes → **no-op** : la démo **ne pollue jamais** Supabase.
-- Données fictives : `src/engine/demoSeed.ts` + `demoFixtures.ts`.
-- **Toute fonctionnalité DOIT être testée avec ET sans mode démo** (règle d'or n°6).
-
----
-
-## 16. Piste d'audit & intégrité
-
-- **Chaîne de hash** SHA-256 des écritures GL (`src/lib/auditHash.ts`, `glAuditLog.ts`,
-  `engine/auditLog.ts`). Table `fna_gl_audit_log`.
-- RPC serveur : **`fna_append_audit_log`** (ajout scellé) et **`fna_get_last_audit_hash`**
-  (dernier maillon — `SECURITY DEFINER`, exécution `anon` révoquée en migration 025).
-- Visualiseur : `/dashboard/audit-trail` (`AuditTrailVisualizer`) vérifie l'intégrité de la chaîne.
-- **Verrouillage de période** : `src/lib/periodLock.ts`.
-
----
-
-## 17. Performance
-
-- **Routes lazy** (`lazyWithRetry`) — seule `Home` est eager.
-- **Découpage vendor** (`vite.config.ts` → `manualChunks`) : `vendor-react`, `vendor-recharts`,
-  `vendor-echarts`, `vendor-nivo`, `vendor-xlsx`, `vendor-exceljs`, `vendor-pdf`, `vendor-pptx`,
-  `vendor-db`, `vendor-utils`. Ces libs lourdes ne se chargent qu'avec la route qui les utilise.
-- **Imports dynamiques** des libs doc (exceljs/jspdf/pptx) → chargées **à l'action**, pas à
-  l'ouverture de la route.
-- **Mémoïsation** : `useMemo`/`useCallback` sur les agrégats ; `useCloudData` avec invalidation
-  par tag (pas de boucle sur 50k écritures dans le render).
-
----
-
-## 18. Sécurité — synthèse
-
-- **RLS stricte** multi-tenant sur toutes les tables `fna_*` (via `fna_auth_org_ids`).
-- **Anti-escalade** : écritures de `fna_user_orgs` réservées à la service-role / aux RPC
-  `SECURITY DEFINER` contrôlées (pas d'INSERT client arbitraire).
-- **Fonctions `SECURITY DEFINER`** durcies (exécution `anon` révoquée quand hors RLS — migration 025).
-- **Secrets** : aucun dans `src/` ; uniquement `import.meta.env.VITE_*`. `SUPABASE_SERVICE_ROLE_KEY`
-  **jamais** côté client (Edge Functions uniquement).
-- **`safeLocalStorage`** obligatoire (crash Safari iOS / quota).
-- **Pas de `dangerouslySetInnerHTML`** — markdown parsé en éléments React (`StreamingText.tsx`).
-- **Monitoring** : Sentry (source maps « hidden », supprimées après upload) + Atlas Error Monitor.
-
----
-
-## 19. Build, tests & déploiement
-
-```bash
-npm run typecheck   # tsc --noEmit (0 erreur exigée)
-npm run lint        # eslint (0 erreur ; warnings tolérés)
-npm test            # vitest run
-npm run build       # bundle Vite (dist/)
+```mermaid
+sequenceDiagram
+  participant U as Utilisateur
+  participant App
+  participant Auth as Supabase Auth
+  participant DP as dataProvider
+  participant PG as fna_user_orgs (RLS)
+  U->>App: Connexion (email/mdp | SSO)
+  App->>Auth: signIn / verify
+  Auth-->>App: session (user_id)
+  App->>DP: useOrgResolver()
+  DP->>PG: select org_id where user_id = auth.uid()
+  PG-->>DP: orgs de l'utilisateur
+  DP->>App: setCurrentOrg(1re org)
+  Note over App: si 0 org → OnboardingModal
 ```
 
-- **Frontend** : déployé sur **Vercel** (build depuis `main`).
-- **Base de données** : migrations `supabase/migrations/*.sql` (appliquées via Supabase).
-- **Edge Functions** : déployées séparément (Supabase). ⚠️ Un `git push` ne redéploie **pas** les
-  Edge Functions ni n'applique les migrations — étapes distinctes.
-- **Variables d'env** : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (client) ;
-  `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY` (Edge Functions only).
+### 6.2 Création de la première société (bootstrap anti catch-22)
+
+```mermaid
+sequenceDiagram
+  participant UI as Settings / Onboarding
+  participant RPC as fna_create_org_with_admin (SECURITY DEFINER)
+  participant ORG as fna_organizations
+  participant UO as fna_user_orgs
+  UI->>RPC: rpc(p_id, p_name, sector, currency, coa, rccm, ifu)
+  RPC->>RPC: vérifie auth.uid() ≠ null
+  RPC->>ORG: INSERT ... ON CONFLICT DO NOTHING
+  RPC->>RPC: GET DIAGNOSTICS row_count (garde anti-escalade)
+  alt org déjà existante
+    RPC-->>UI: EXCEPTION (refus)
+  else org créée
+    RPC->>UO: INSERT (auth.uid(), org, 'admin')
+    RPC-->>UI: void (succès)
+  end
+  UI->>UI: upsertFiscalYear + 12 périodes ; toast succès
+```
+
+> Contourne le catch-22 : la policy RESTRICTIVE d'INSERT sur `fna_organizations` bloque un
+> utilisateur sans org (aucun des prédicats `can_write_for_fna` / `service_role` /
+> `fna_user_has_any_org` n'est vrai). La RPC `SECURITY DEFINER` contourne la RLS de façon contrôlée.
+
+### 6.3 Invitation d'un utilisateur
+
+```mermaid
+sequenceDiagram
+  participant ADM as Admin (Settings→Users)
+  participant EF as Edge Function cockpit-invite-user
+  participant GT as GoTrue admin
+  participant UO as fna_user_orgs
+  participant RM as fna_org_members
+  participant RS as Resend
+  ADM->>EF: {email, name, role, orgIds, appUrl, html}
+  EF->>EF: getUser(token) + AUTORISATION (admin de chaque org)
+  EF->>GT: generateLink(type=invite|recovery)
+  GT-->>EF: hashed_token (lien anti-prefetch)
+  EF->>UO: upsert (role = mapToAuthRole(role)) 
+  EF->>RM: upsert (libellé métier conservé, ex "daf")
+  EF->>RS: envoi e-mail (lien /auth/accept-invite)
+  RS-->>ADM: success
+  Note over UO: mapToAuthRole : daf→editor, lecteur→viewer, admin→admin
+```
+
+L'invité : `/auth/accept-invite` → `verifyOtp(token_hash)` → session → définit mot de passe →
+org résolue depuis `fna_user_orgs`.
+
+### 6.4 Import du Grand Livre
+
+```mermaid
+sequenceDiagram
+  participant P as Page Imports
+  participant IMP as engine/importer.ts
+  participant RPC as fna_replace_gl (atomique)
+  participant GL as fna_gl_entries
+  participant AUD as fna_gl_audit_log
+  P->>IMP: parseFile (xlsx/csv) + detectColumns
+  IMP->>IMP: normalisation, hash de fichier, dédoublonnage
+  IMP->>RPC: replace GL (org, rows)
+  RPC->>GL: remplacement transactionnel
+  RPC->>AUD: scelle le hash (chaîne)
+  RPC-->>P: rapport (count, rejected)
+  P->>P: invalidateCloudData('gl')
+```
+
+### 6.5 Calcul des états (pipeline pur)
+
+```mermaid
+graph LR
+  GL[fna_gl_entries] -->|computeBalance| BAL[BalanceRow]
+  BAL -->|computeBilan| BILAN[Actif/Passif + totaux]
+  BAL -->|computeSIG| SIG[SIG + CR]
+  BAL -->|computeRatios| RAT[Ratios]
+  SIG -->|computeNetResult| RN[Résultat net]
+  RN -.bouclage.-> BILAN
+```
+
+### 6.6 Génération d'un rapport
+
+`Reports.tsx` → `ReportConfig` (blocs) → `buildPDFFromBlocks` (impression A4) **ou**
+`buildPPTXFromBlocks` (pptxgenjs) → `saveAs`. Persistance : `JSON.stringify(config)` dans
+`fna_reports.content`. (Détail : `REPORTING_STANDARD.md`.)
 
 ---
 
-## 20. Conventions & anti-patterns
+## 7. Vue de déploiement
 
-Voir [`CLAUDE.md`](CLAUDE.md) pour le détail. Rappels essentiels :
+```mermaid
+graph TD
+  DEV[Dépôt Git — main] -->|push| VERCEL[Vercel<br/>build Vite → CDN]
+  DEV -->|supabase db push| MIG[Migrations SQL]
+  DEV -->|deploy_edge_function| EFN[Edge Functions Deno]
+  VERCEL --> BROWSER[Navigateur utilisateur]
+  BROWSER --> SUPA[(Supabase projet vgtml…)]
+  MIG --> SUPA
+  EFN --> SUPA
+```
 
-| ❌ NE PAS | ✅ FAIRE |
+| Artefact | Cible | Déclencheur | ⚠️ |
+|---|---|---|---|
+| Frontend (SPA) | Vercel (CDN) | `git push main` | auto-déploie |
+| Migrations SQL | Supabase Postgres | commande Supabase séparée | **PAS** via git |
+| Edge Functions | Supabase Deno | déploiement séparé | **PAS** via git |
+
+**Environnements** : Preview (Vercel par PR) · Production. Secrets côté serveur en Edge Functions
+uniquement. Source maps Sentry générées « hidden » puis supprimées de `dist/`.
+
+---
+
+## 8. Concepts transverses
+
+### 8.1 Modèle de domaine (extrait)
+
+```mermaid
+erDiagram
+  ORGANIZATION ||--o{ USER_ORG : "appartenance (RLS)"
+  ORGANIZATION ||--o{ ORG_MEMBER : "roster affichage"
+  ORGANIZATION ||--o{ FISCAL_YEAR : ""
+  FISCAL_YEAR ||--o{ PERIOD : "12 périodes"
+  ORGANIZATION ||--o{ ACCOUNT : "plan de comptes"
+  ORGANIZATION ||--o{ GL_ENTRY : "grand livre"
+  PERIOD ||--o{ GL_ENTRY : ""
+  GL_ENTRY ||--o{ GL_AUDIT_LOG : "hash chain"
+  ORGANIZATION ||--o{ BUDGET : ""
+  ORGANIZATION ||--o{ REPORT : ""
+  ORGANIZATION ||--o{ ANALYTIC_AXIS : ""
+  ANALYTIC_AXIS ||--o{ ANALYTIC_CODE : ""
+  GL_ENTRY ||--o{ ANALYTIC_ASSIGNMENT : "ventilation"
+```
+
+### 8.2 Multi-tenant & sécurité RLS
+Deux tables d'appartenance : **`fna_user_orgs`** (autoritaire, `role ∈ {admin,editor,viewer}`,
+lue par la RLS) et **`fna_org_members`** (roster d'affichage, libellé métier libre).
+Helpers `SECURITY DEFINER` : `fna_auth_org_ids(role)` (~78 policies), `can_write_for_fna()`,
+`can_admin_for_fna()`, `fna_user_has_any_org()`, `fna_org_has_other_admin()`. Patron de policy :
+lecture = tout membre, écriture = `editor/admin`. Bootstrap : `fna_create_org_with_admin`.
+
+### 8.3 Déterminisme monétaire
+`src/lib/Money.ts` + `moneySum.ts` (guide : `MONEY_GUIDE.md`) : toutes les agrégations financières
+passent par une somme déterministe (évite les erreurs d'arrondi flottant sur des dizaines de
+milliers de lignes). **NE JAMAIS** additionner des `number` bruts pour des montants.
+
+### 8.4 Piste d'audit & intégrité
+Chaîne de hachage SHA-256 par écriture GL (`lib/auditHash.ts`, `glAuditLog.ts`,
+`engine/auditLog.ts`, table `fna_gl_audit_log` avec `audit_hash` + `previous_audit_hash`).
+RPC serveur : `fna_append_audit_log(org, changes)`, `fna_get_last_audit_hash(org)`.
+Verrouillage de période : `lib/periodLock.ts` + `fna_period_audit_log`.
+
+### 8.5 Gestion des erreurs
+- Provider : erreur RLS `42501` → message actionnable (« session expirée / reconnectez-vous »).
+- UI : `ErrorBoundary` global + `toast` (succès/erreur) ; échecs de write **jamais silencieux**.
+- Monitoring : Sentry (`lib/sentry.ts`) + Atlas Error Monitor (`lib/atlasErrorMonitor.ts`).
+
+### 8.6 Persistance & synchronisation
+Cloud (Supabase) source de vérité ; cache local Dexie (`supabaseSync.ts`) ; invalidation par tag
+(`useCloudData` / `invalidateCloudData`). Realtime pour chat/activités/collaboration.
+
+### 8.7 Internationalisation & format
+Formatage FR (`lib/format.ts`) : `fmtMoney`, `fmtFull`, mode **Entier ↔ Abrégé** (`amountMode`).
+Devise société paramétrable (`fna_organizations.currency`, défaut XOF).
+
+### 8.8 Thème & accessibilité
+Palettes pilotées par CSS custom properties (`--p-*`) injectées par `store/theme.ts` ; mode
+clair/sombre (`darkMode: 'class'`). Police de base relevée (Dosis à `font-weight: 500`).
+
+### 8.9 Mode démo
+`org_id` en `demo-org-*` (`lib/demoMode.ts`) → `DemoProvider` **no-op** sur les writes ; données
+`engine/demoSeed.ts` + `demoFixtures.ts`. **Toute fonctionnalité DOIT être testée avec ET sans démo.**
+
+### 8.10 Intelligence (Proph3t)
+Mémoire chiffrée (`fna_proph3_memory` / `fna_proph3_learning`, AES via `proph3Crypto.ts`) ;
+prédictions par régression ; normes sectorielles ; LLM cloud + local (Ollama). Voir §13 doc précédente / Annexe D.
+
+---
+
+## 9. Décisions d'architecture (ADR)
+
+| ADR | Décision | Statut | Justification / Conséquence |
+|---|---|---|---|
+| **ADR-01** | Abstraction `dataProvider` plutôt qu'appels Supabase directs | Accepté | Testabilité, mode démo, portabilité Electron. Contrainte : jamais `supabase.from()` en UI |
+| **ADR-02** | Isolation par préfixe `fna_*` sur projet Supabase partagé | Accepté | Cohabitation multi-apps ; interdit de toucher les tables non préfixées |
+| **ADR-03** | Résultat net via **source unique** `computeNetResult` | Accepté | Garantit le bouclage Bilan = CR quelles que soient les reclassements SIG |
+| **ADR-04** | Arithmétique `Money` déterministe | Accepté | Évite dérives d'arrondi ; léger surcoût CPU accepté |
+| **ADR-05** | Bootstrap d'org via RPC `SECURITY DEFINER` (vs INSERT client) | Accepté | Résout le catch-22 RLS sans ouvrir d'INSERT client ; garde anti-escalade |
+| **ADR-06** | Lien d'invitation **anti-prefetch** (`token_hash` + `verifyOtp`) | Accepté | Neutralise les scanners e-mail qui « brûlaient » les liens |
+| **ADR-07** | Rapports **par blocs** sérialisables (JSON) + builders purs | Accepté | Portabilité, multi-format, réutilisable (cf. `REPORTING_STANDARD.md`) |
+| **ADR-08** | Routes **lazy** + libs lourdes en **import dynamique** | Accepté | Réduit le premier chargement ; complexité async assumée |
+| **ADR-09** | Durcissement `SECURITY DEFINER` (révocation `anon` hors RLS) | Accepté | Défense en profondeur ; ne pas révoquer les helpers utilisés en RLS |
+
+---
+
+## 10. Exigences qualité
+
+### 10.1 Arbre de qualité (Quality Tree)
+```
+Qualité
+├── Exactitude (Q1)  ── Correctness ── Determinism
+├── Sécurité (Q2,Q3) ── Tenant isolation ── Auditability ── Least privilege
+├── Fiabilité (Q4)   ── Fault tolerance ── Graceful degradation
+├── Performance (Q5) ── Load time ── Bundle size
+└── Évolutivité (Q7) ── Modularity ── Testability
+```
+
+### 10.2 Scénarios qualité (échantillon)
+
+| ID | Scénario | Réponse attendue |
+|---|---|---|
+| S1 | Un compte 706900 (RRR accordés) au débit est importé | Traité comme contre-produit ; CA net ; **pas** d'alerte d'anomalie |
+| S2 | Utilisateur A ouvre une donnée de la société B | RLS refuse (0 ligne) ; aucune fuite |
+| S3 | Session expirée pendant un write | Erreur 42501 traduite ; invite à se reconnecter |
+| S4 | Utilisateur sans org clique « Créer une société » | RPC bootstrap crée org + admin ; succès |
+| S5 | Invitation avec rôle « daf » | Mappé en `editor` ; accès effectif à la connexion |
+| S6 | Ouverture de `/states` sans exporter | exceljs/pdf **non** chargés (import dynamique) |
+| S7 | 50 000 écritures GL agrégées | Somme déterministe `Money` ; pas de dérive d'arrondi |
+
+---
+
+## 11. Risques et dette technique
+
+| # | Risque / dette | Impact | Mitigation / recommandation |
+|---|---|---|---|
+| R1 | **Deux conventions de tenant** : `org_id text` (cœur) vs `tenant_id uuid` (modules allocation/capex/asset/inventory) | Confusion, requêtes croisées | Documenter la frontière ; converger à terme |
+| R2 | **Trois librairies de graphes** (Recharts + Nivo + ECharts) | Poids bundle | Consolidation dédiée (chantier isolé) |
+| R3 | Migrations **non re-jouables** à l'identique vs prod (objets appliqués à la main) | Reproductibilité | Capturer toute DDL prod en migration versionnée |
+| R4 | Déploiement Edge Functions / migrations **hors git** | Écart code/prod | Pipeline CI dédié (Supabase CLI) |
+| R5 | Chunks volumineux (`Dashboards`, `index`) | Perf 1er chargement de certaines routes | Découpe fine / préchargement ciblé |
+| R6 | `fna_org_members.role` libre vs `fna_user_orgs.role` contraint | Incohérence d'accès (déjà survenue) | `mapToAuthRole` (fait) ; surveiller |
+
+---
+
+## 12. Glossaire
+
+| Terme | Définition |
 |---|---|
-| `supabase.from('fna_xx')` dans une page/composant | `dataProvider.getXx(orgId)` |
-| `localStorage.setItem(...)` | `safeLocalStorage.setItem(...)` |
-| `org_id` hardcodé (`'sa-001'`) | `useApp((s) => s.currentOrgId)` |
-| `dangerouslySetInnerHTML` | Parsing markdown → React |
-| `console.log` dans `engine/` | `debug()` wrappé `import.meta.env.DEV` |
-| Composant > 500 LOC dans `pages/` | Split en sous-modules |
-| Table backend sans préfixe `fna_` | Toujours `fna_*` + RLS |
-| Addition de flottants monétaires | `Money` / `moneySum` (déterministe) |
+| **SYSCOHADA** | Système comptable OHADA (révisé 2017) — référentiel des états et du plan de comptes |
+| **SIG** | Soldes Intermédiaires de Gestion (marge brute, VA, EBE, RE, RF, RHAO, RN) |
+| **RRR** | Rabais, Remises, Ristournes ; **accordés** = contre-produits (comptes 709 / 70x9) |
+| **HAO** | Hors Activités Ordinaires (produits 82/84/86/88 ; charges 81/83/85) |
+| **TFT / TAFIRE** | Tableau des Flux de Trésorerie / Tableau Financier des Ressources & Emplois |
+| **Org / tenant** | Société ; unité d'isolation multi-tenant (`org_id`) |
+| **RLS** | Row-Level Security (Postgres) |
+| **`SECURITY DEFINER`** | Fonction s'exécutant avec les privilèges de son propriétaire (contourne la RLS) |
+| **Roster** | Annuaire d'affichage des membres (`fna_org_members`), indexé par email |
+| **Proph3t** | Moteur d'intelligence propriétaire (anomalies, prédictions, commentaires) |
+| **DSO / DPO / DIO** | Délais clients / fournisseurs / stocks (jours) |
+| **`dataProvider`** | Couche d'accès abstraite (Supabase / Démo / Electron) |
 
 ---
 
-*Fin de la documentation technique. Toute évolution structurante DOIT être répercutée ici et
-dans `CLAUDE.md`.*
+## Annexe A — Dictionnaire de données
+
+**44 tables `fna_*`** (schéma `public`). Légende : `*` = NOT NULL · `=…` = valeur par défaut.
+⚠️ Deux conventions de tenant coexistent : la plupart utilisent `org_id text` ; les modules
+**allocation / capex / asset / inventory** utilisent `tenant_id uuid` (cf. R1).
+
+### A.1 Cœur multi-tenant & référentiel
+| Table | Colonnes clés |
+|---|---|
+| `fna_organizations` | id* · name* · currency*(=XOF) · sector*(='') · accounting_system*(=Normal) · coa_system(=SYSCOHADA) · rccm · ifu · address · created_at* |
+| `fna_user_orgs` | id*(uuid) · **user_id*(uuid)** · **org_id*** · **role***(=viewer, CHECK admin/editor/viewer) · created_at* |
+| `fna_org_members` | id*(uuid) · org_id* · email* · name* · role*(=viewer, libre) · active*(=true) · invited_at* · invited_by · last_login_at |
+| `fna_accounts` | org_id* · code* · label* · sysco_code · class* · type* |
+| `fna_account_mappings` | org_id* · source_code* · target_code* |
+| `fna_cr_models` | id* · org_id* · name* · is_default* · is_active* · sections/intermediates/formulas (jsonb) · version* · author |
+
+### A.2 Comptabilité — exercices, périodes, Grand Livre
+| Table | Colonnes clés |
+|---|---|
+| `fna_fiscal_years` | id* · org_id* · year* · start_date* · end_date* · closed* · status*(=open) · closed_at/by/reason |
+| `fna_periods` | id* · org_id* · fiscal_year_id* · year* · month* · label* · closed* · status* · closed_at/by/reason |
+| `fna_gl_entries` | id* · org_id* · period_id* · date* · journal* · piece* · account* · label* · debit*(=0) · credit*(=0) · tiers · analytical_axis · analytical_section · lettrage · import_id · hash · previous_hash |
+| `fna_gl_tiers` | id* · org_id* · import_id · period_id · date* · account* · code_tiers* · label_tiers · debit* · credit* · journal · piece · category* |
+| `fna_tiers_unmatched` | id* · org_id* · import_id · row_index* · date* · account* · code_tiers* · debit* · credit* · reason* · candidate_ids(array) · resolved_at/by/to · resolution |
+| `fna_tiers_rules` | id* · org_id* · account* · label_contains · action* · tiers · tiers_label · reason · created_by |
+| `fna_imports` | id* · org_id* · date* · user_name* · file_name* · file_hash · source* · kind* · year · version · count* · rejected* · status*(=success) · report · storage_path |
+
+### A.3 Budget & analytique
+| Table | Colonnes clés |
+|---|---|
+| `fna_budgets` | id* · org_id* · year* · version*(=V1) · account* · month* · amount*(=0) · analytical_axis · analytical_section |
+| `fna_analytic_axes` | id* · org_id* · number* · code · label · active* · name · code_name · required* |
+| `fna_analytic_codes` | id* · org_id* · axis_id* · code* · label · parent_id · active* · branch · short/long_label · sort_order* |
+| `fna_analytic_rules` | id* · org_id* · priority* · active* · conditions/assignments(jsonb) · condition_type/value · target_axis · analytic_code_id |
+| `fna_analytic_assignments` | id* · org_id* · gl_entry_id* · axis_number* · code_id* · branch · method · rule_id · assigned_at |
+| `fna_analytic_budgets` | id* · org_id* · code_id* · period* · amount*(=0) |
+
+### A.4 Ventilation analytique (allocation) — `tenant_id uuid`
+| Table | Rôle |
+|---|---|
+| `fna_allocation_key` | Clés de répartition (code, libellé, unité, actif) |
+| `fna_allocation_key_value` | Valeurs de clé par section |
+| `fna_allocation_rule` | Règles de ventilation (DIRECT/…, patterns compte/journal/libellé/tiers, ordre) |
+| `fna_allocation_run` | Exécutions (exercice, couverture %, montants GL/ventilé, réconcilié, hash audit) |
+| `fna_secondary_transfer` | Transferts secondaires entre sections |
+
+### A.5 Immobilisations & inventaire physique — `tenant_id uuid`
+| Table | Rôle |
+|---|---|
+| `fna_asset_disposal` | Cessions d'immobilisations (type, date, valeur, VNC, +/- value, écriture liée) |
+| `fna_asset_maintenance` | Maintenance (préventive/…, planif, coût, technicien, statut) |
+| `fna_inventory_session` | Sessions de comptage (période, responsable, statut) |
+| `fna_inventory_count` | Lignes de comptage (statut, localisation réelle, résolution) |
+
+### A.6 CAPEX (workflow d'investissement) — `tenant_id uuid`
+| Table | Rôle |
+|---|---|
+| `fna_capex_approval` | Circuit d'approbation (niveau, rôle, statut, décideur, hash) |
+| `fna_capex_approval_matrix` | Matrice de seuils → niveau/rôle requis |
+| `fna_capex_note` | Notes/pièces jointes d'une demande |
+| `fna_capex_pir` | Post-Implementation Review (coût final, écart budget, VAN ex-post, leçons) |
+| `fna_car` | Capital Appropriation Request (référence, montant, justification, statut) |
+
+### A.7 Pilotage — attention & plans d'action
+| Table | Colonnes clés |
+|---|---|
+| `fna_attention_points` | severity/probability/category · source · owner · target_resolution_date · estimated_financial_impact · root_cause · recommendation · tags · status · journal |
+| `fna_action_plans` | attention_point_id · title · owner · team · sponsor · dates · priority · status · progress · budget_allocated · deliverables · success_criteria · dependencies · blockers |
+
+### A.8 Reporting & collaboration
+| Table | Colonnes clés |
+|---|---|
+| `fna_reports` | id* · org_id* · title* · type* · author* · status*(=draft) · content (JSON ReportConfig) |
+| `fna_report_templates` | id* · org_id* · name* · description · config*(=`{}`) |
+| `fna_channels` | id* · org_id* · kind* · name* · members(jsonb) · created_by* · is_pinned |
+| `fna_chat_messages` | id* · org_id* · channel_id* · user_id* · content* · mentions/reactions/attachment(jsonb) · reply_to · read_by |
+| `fna_activities` | id* · org_id* · kind* · status* · context · author_id/name* · content* · metadata · resolved_at/by |
+
+### A.9 Audit & IA
+| Table | Colonnes clés |
+|---|---|
+| `fna_gl_audit_log` | id* · org_id* · gl_entry_id* · changed_at* · changed_by · field* · old/new_value · reason* · **audit_hash*** · **previous_audit_hash*** |
+| `fna_period_audit_log` | id* · org_id* · period_id · fiscal_year_id · action* · reason · user_id/email |
+| `fna_proph3_memory` | org_id* · data(jsonb) · **data_encrypted** · iv · updated_at* |
+| `fna_proph3_learning` | org_id* · data(jsonb) · **data_encrypted** · iv · updated_at* |
+
+---
+
+## Annexe B — Catalogue des fonctions serveur (RPC)
+
+Toutes en `SECURITY DEFINER` sauf trigger. Schéma `public`.
+
+| Fonction | Signature | Retour | Rôle |
+|---|---|---|---|
+| `fna_create_org_with_admin` | `(p_id text, p_name text, p_sector text, p_currency text, p_coa_system text, p_rccm text, p_ifu text)` | void | Bootstrap org + mapping admin (anti catch-22, garde anti-escalade) |
+| `fna_auth_org_ids` | `(required_role text)` | setof text | Org_ids du user courant (helper RLS, ~78 policies) |
+| `can_write_for_fna` | `()` | bool | Entitlement écriture applicatif |
+| `can_admin_for_fna` | `()` | bool | Entitlement admin applicatif |
+| `fna_user_has_any_org` | `()` | bool | L'utilisateur a-t-il ≥ 1 org (fallback bootstrap) |
+| `fna_org_has_other_admin` | `(p_org_id text, p_user uuid)` | bool | Garde « ne pas retirer le dernier admin » |
+| `fna_append_audit_log` | `(p_org_id text, p_changes jsonb)` | int | Ajoute un maillon scellé à la chaîne d'audit |
+| `fna_get_last_audit_hash` | `(p_org_id text)` | text | Dernier hash de la chaîne (exec `anon` révoquée) |
+| `fna_import_tiers` | `(p_org_id, p_user, p_file_name, p_source, p_count, p_rejected, p_status, p_report, p_enriched jsonb, p_unmatched jsonb, p_file_hash)` | jsonb | Import atomique GL Tiers |
+| `fna_proph3_set_updated_at` | `()` | trigger | Horodatage mémoire Proph3t |
+| `fna_replace_gl` | *(RPC d'import GL atomique — cf. migration 022)* | — | Remplacement transactionnel du Grand Livre |
+
+---
+
+## Annexe C — Carte des routes
+
+**Publiques** : `/` (Landing) · `/demo` · `/login` · `/signup` · `/forgot-password` ·
+`/reset-password` · `/auth/callback` · `/auth/accept-invite` · `/auth` (SSO Atlas).
+
+**Protégées (ProtectedRoute + AppLayout)** :
+- **Accueil / synthèse** : `/home` · `/dashboards` · `/dashboard/home` (SyntheseHub)
+- **Données** : `/imports` · `/grand-livre` · `/balance` · `/coa` · `/states` · `/ratios` · `/budget`
+- **Analytique** : `/analytical/{coverage,cost-centers,revenue-centers,resources,overhead,fg-allocation,journal,balance,pivot,anomalies,audit-trail,kpis}` · `/import-analytical`
+- **Dashboards dédiés** : `/dashboard/{exec,compliance,breakeven,pareto,cashforecast,waterfall,chart-gallery,tft-monthly,capital-variation,closing-pack,zscore,forecast,wcd,tafire,bilan-monthly,caf,multi-year,bank-reconciliation,closing-justification,audit-trail,anomalies,lettrage,seasonality,whatif,provisions,intercos,weekly,mda,board-pack,sector-benchmark,proph3t}` · `/dashboard/:id`
+- **Reporting & IA** : `/reports` · `/cr-editor` · `/builder`(+`/:id`) · `/ai` · `/chat`
+- **Paramètres & audit** : `/settings` · `/settings/team` · `/audit` · `/guide` · `/actions`
+
+Toutes lazy (`lazyWithRetry`) sauf `Home`.
+
+---
+
+## Annexe D — Référence des modules moteur
+
+`src/engine/` (calcul pur) :
+
+| Module | Exports notables |
+|---|---|
+| `statements.ts` | `computeBilan`, `computeSIG`, `computeNetResult`, types `Line`, `SIG` |
+| `balance.ts` | `computeBalance`, `computeAuxBalance`, `aggregateBySyscoRoot`, `BalanceRow` |
+| `balanceAuxiliaire.ts` | Balances auxiliaires clients/fournisseurs |
+| `ratios.ts` | `computeRatios`, `computeVatRate`, type `Ratio` |
+| `budget.ts` / `budgetActual.ts` | Budgets, écarts Réalisé/Budget/N-1 |
+| `monthly.ts` | Agrégats mensuels (CR/Bilan) |
+| `analytical.ts` / `analyticalEngine.ts` | `computeAnalyticalPL`, CRUD axes/codes/règles |
+| `analyticBranch.ts` | `inferBranch` (revenue/project_cost/overhead) |
+| `analyticDashboards.ts` | `loadAnalyticContext`, `viewEntries` |
+| `analytics.ts` | `agedBalance`, `tresorerieMonthly`, séries temporelles |
+| `glAudit.ts` | Contrôles de cohérence GL (sens des classes, écritures anormales) |
+| `auditLog.ts` | Journalisation scellée (hash) |
+| `reportBlocks.ts` | Modèle par blocs + `buildPDFFromBlocks` / `buildPPTXFromBlocks` |
+| `reportBuilder.ts` | Rapport PDF multi-sections (couverture/sommaire/pagination) |
+| `exporter.ts` | `exportStatementsXLSX` / `exportStatementsPDF` (imports dynamiques) |
+| `importer.ts` | `parseFile`, `importGL`, `importGLTiers`, `detectColumns`, `computeFileHash` |
+| `templates.ts` | Génération de modèles Excel (GL, balance, tiers, COA, analytique, budget) |
+| `currency.ts` / `accountingSystems.ts` / `crModels.ts` | Devises, systèmes, modèles de CR |
+| `tiersCategory.ts` / `tiersRules.ts` | Catégorisation & règles de tiers |
+| `hungarian.ts` | Algorithme hongrois (affectation optimale — lettrage/rapprochement) |
+| `flows.ts` / `synthese.ts` | Flux de trésorerie, synthèses |
+| `demoSeed.ts` / `demoFixtures.ts` | Données de démonstration |
+
+`src/engine/proph3/` (IA) : `intelligence.ts`, `anomalies.ts`, `predictions.ts`, `memory.ts`,
+`learning.ts`, `commentator.ts`, `reportCommentator.ts`, `scoring.ts`, `benchmark.ts`,
+`syscohada-knowledge.ts`, `knowledge/`, `ollama.ts`.
+
+---
+
+## Annexe E — Configuration & variables d'environnement
+
+| Variable | Portée | Rôle |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Client | URL du projet Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Client | Clé publique anon (soumise à la RLS) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Edge only** | Contourne la RLS — **jamais** côté client |
+| `RESEND_API_KEY` / `RESEND_FROM_COCKPIT` | Edge | Envoi d'e-mails |
+| `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_URL` | CI/build | Upload source maps (sinon no-op) |
+
+Build (`vite.config.ts`) : `manualChunks` (vendor-react/recharts/echarts/nivo/xlsx/exceljs/pdf/pptx/db/utils),
+source maps « hidden » si Sentry actif, `chunkSizeWarningLimit: 1200`.
+Scripts : `npm run typecheck | lint | test | build`.
+
+---
+
+## Annexe F — Inventaire des migrations
+
+`supabase/migrations/` — 27 fichiers (001 → 026). Jalons :
+
+| # | Objet |
+|---|---|
+| 001–011 | Schéma initial : organisations, exercices/périodes, comptes, GL, imports, budgets, reports/templates, attention/actions, analytics, email, audit trail + verrou période |
+| 012 | **Production-ready** : renommage `fna_*`, `fna_org_members`, RLS |
+| 013–015 | Correctifs RLS bootstrap (self-admin insert, récursion, fallback RESTRICTIVE) |
+| 016–017 | Tiers non appariés + RPC import tiers |
+| 018 | Plan de comptes par org |
+| 019–020 | Journal d'audit GL + RPC append |
+| 021 | FK GL→imports (cascade) · règles tiers |
+| 022 | Remplacement GL atomique (`fna_replace_gl`) |
+| 023 | GL Tiers |
+| 024 | Contrainte unicité dédup budget |
+| 025 | **Durcissement** `SECURITY DEFINER` (révocation `anon` hors RLS) |
+| 026 | **RPC `fna_create_org_with_admin`** (bootstrap 1re org) |
+
+---
+
+*Fin du document. Toute évolution structurante DOIT incrémenter la version en en-tête et être
+répercutée dans `CLAUDE.md`. Ce document adopte la structure arc42 ; les diagrammes sont en
+syntaxe Mermaid (rendus par GitHub / IDE compatibles).*
