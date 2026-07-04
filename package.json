@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install chromium",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "doc:pdf": "node scripts/md2pdf.mjs DOCUMENTATION_TECHNIQUE.md DOCUMENTATION_TECHNIQUE.pdf \"Cockpit FnA — Documentation d'architecture (SAD)\""
   },
   "dependencies": {
     "@atlas-studio/proph3t-client": "file:../SiteWeb Atlas Studio/proph3t-client",
