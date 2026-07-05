@@ -46,6 +46,7 @@ const dashboards = [
   { id: 'business_plan', route: '/dashboard/business-plan', name: 'Business Plan 3 ans ★', desc: 'Prévisionnel pluriannuel CA / EBE / résultat / cash — scénarios prudent / central / optimiste', icon: 'LineChart', cat: 'Pilotage' },
   { id: 'echeancier_fiscal', route: '/dashboard/echeancier-fiscal', name: 'Échéancier fiscal & social ★', desc: 'Calendrier des obligations OHADA (TVA, IS, ITS, CNPS, patente) — montants estimés & statut', icon: 'CalendarClock', cat: 'Pilotage' },
   { id: 'consolidation', route: '/dashboard/consolidation', name: 'Consolidation groupe ★', desc: 'Agrégation multi-entités (intégration globale) : CA/résultat/bilan consolidés, contribution par entité, comptes courants intra-groupe à éliminer', icon: 'Network', cat: 'Direction' },
+  { id: 'ifrs', route: '/ifrs', name: 'Reporting IFRS ★', desc: 'Conversion SYSCOHADA révisé → IFRS : états reclassés (IAS 1), retraitements auto (IAS 38/21/20/12), ponts de réconciliation capitaux propres/résultat, bilingue FR/EN', icon: 'Globe', cat: 'Reporting' },
   { id: 'sal', route: '/dashboard/sal', name: 'Masse salariale', desc: 'Salaires directs, charges, ratio masse/CA, évolution', icon: 'UserCog', cat: 'Standard' },
   { id: 'fis', route: '/dashboard/fis', name: 'Fiscalité', desc: 'TVA collectée/déductible/nette, IS, pression fiscale', icon: 'Receipt', cat: 'Standard' },
   { id: 'ind', route: '/dashboard/ind', name: 'Industrie', desc: 'Production, coût MP, marge industrielle, taux de marge', icon: 'Factory', cat: 'Sectoriel' },

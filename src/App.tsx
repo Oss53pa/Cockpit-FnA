@@ -65,6 +65,7 @@ const DuPont = lazyWithRetry(() => import('./pages/DuPont'));
 const BusinessPlan = lazyWithRetry(() => import('./pages/BusinessPlan'));
 const StructureCouts = lazyWithRetry(() => import('./pages/StructureCouts'));
 const Consolidation = lazyWithRetry(() => import('./pages/Consolidation'));
+const IfrsReporting = lazyWithRetry(() => import('./pages/IfrsReporting'));
 const ChartGallery = lazyWithRetry(() => import('./pages/ChartGallery'));
 const TFTMonthly = lazyWithRetry(() => import('./pages/TFTMonthly'));
 const CapitalVariationPage = lazyWithRetry(() => import('./pages/CapitalVariationPage'));
@@ -267,6 +268,7 @@ function App() {
         <Route path="/dashboard/business-plan" element={<ProtectedRoute><AppLayout><BusinessPlan /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/structure-couts" element={<ProtectedRoute><AppLayout><StructureCouts /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/consolidation" element={<ProtectedRoute><AppLayout><Consolidation /></AppLayout></ProtectedRoute>} />
+        <Route path="/ifrs" element={<ProtectedRoute><AppLayout><IfrsReporting /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/chart-gallery" element={<ProtectedRoute><AppLayout><ChartGallery /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/tft-monthly" element={<ProtectedRoute><AppLayout><TFTMonthly /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/capital-variation" element={<ProtectedRoute><AppLayout><CapitalVariationPage /></AppLayout></ProtectedRoute>} />
