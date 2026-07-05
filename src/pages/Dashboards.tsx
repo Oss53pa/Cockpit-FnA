@@ -45,6 +45,7 @@ const dashboards = [
   { id: 'structure_couts', route: '/dashboard/structure-couts', name: 'Structure des coûts ★', desc: 'Charges par nature (classe 6), variables vs fixes, poids sur le CA, point mort par nature', icon: 'Layers3', cat: 'Standard' },
   { id: 'business_plan', route: '/dashboard/business-plan', name: 'Business Plan 3 ans ★', desc: 'Prévisionnel pluriannuel CA / EBE / résultat / cash — scénarios prudent / central / optimiste', icon: 'LineChart', cat: 'Pilotage' },
   { id: 'echeancier_fiscal', route: '/dashboard/echeancier-fiscal', name: 'Échéancier fiscal & social ★', desc: 'Calendrier des obligations OHADA (TVA, IS, ITS, CNPS, patente) — montants estimés & statut', icon: 'CalendarClock', cat: 'Pilotage' },
+  { id: 'consolidation', route: '/dashboard/consolidation', name: 'Consolidation groupe ★', desc: 'Agrégation multi-entités (intégration globale) : CA/résultat/bilan consolidés, contribution par entité, comptes courants intra-groupe à éliminer', icon: 'Network', cat: 'Direction' },
   { id: 'sal', route: '/dashboard/sal', name: 'Masse salariale', desc: 'Salaires directs, charges, ratio masse/CA, évolution', icon: 'UserCog', cat: 'Standard' },
   { id: 'fis', route: '/dashboard/fis', name: 'Fiscalité', desc: 'TVA collectée/déductible/nette, IS, pression fiscale', icon: 'Receipt', cat: 'Standard' },
   { id: 'ind', route: '/dashboard/ind', name: 'Industrie', desc: 'Production, coût MP, marge industrielle, taux de marge', icon: 'Factory', cat: 'Sectoriel' },
