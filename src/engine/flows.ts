@@ -384,11 +384,13 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
   const cafg = sig.resultat + dotations - reprises - plusValueCession;
 
   // Ressources stables
-  const capO = get(bilanO.passif, 'CA');
-  const capC = get(bilanC.passif, 'CA');
-  const primO = get(bilanO.passif, 'CD');
-  const primC = get(bilanC.passif, 'CD');
-  const augCapital = (capC + primC) - (capO + primO);
+  // Augmentation de capital = APPORTS NOUVEAUX = mouvements bruts (crédit − débit)
+  // sur les comptes de capital appelé 101-105 + 108 (exploitant). On N'utilise
+  // PAS la variation nette du bilan CA+CD : elle inclut l'affectation INTERNE du
+  // résultat N-1 aux réserves (CD), qui n'est pas une ressource externe nouvelle
+  // et ferait double emploi avec la CAFG. Cohérent avec computeTFT annuel.
+  const movCapital = await getMovementsByPrefix(orgId, year, ['101', '102', '103', '104', '105', '108']);
+  const augCapital = movCapital.credit - movCapital.debit;
   const subvO = get(bilanO.passif, 'CL');
   const subvC = get(bilanC.passif, 'CL');
   const augSubv = subvC - subvO;

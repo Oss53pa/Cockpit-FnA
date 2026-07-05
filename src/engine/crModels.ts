@@ -136,10 +136,12 @@ export function buildDefaultModel(orgId: string): CRModel {
     sections: [
       { id: 'produits_expl', label: "Produits d'exploitation",  prefixes: ['70','71','72','73','74','75','781','791'], isCharge: false, order: 0 },
       { id: 'charges_expl',  label: "Charges d'exploitation",   prefixes: ['60','61','62','63','64','65','66','681','691'], isCharge: true,  order: 1 },
-      { id: 'produits_fin',  label: 'Produits financiers',       prefixes: ['77','786','797'], isCharge: false, order: 2 },
-      { id: 'charges_fin',   label: 'Charges financières',       prefixes: ['67','687','697'], isCharge: true,  order: 3 },
-      { id: 'produits_hao',  label: 'Produits exceptionnels',    prefixes: ['82','84','86','88'], isCharge: false, order: 4 },
-      { id: 'charges_hao',   label: 'Charges exceptionnelles',   prefixes: ['81','83','85'], isCharge: true,  order: 5 },
+      // SYSCOHADA révisé 2017 : 686/696 = fin, 687/697 = HAO ; reprises 796 = fin,
+      // 797 = HAO ; transferts 786 = fin, 787 = HAO (cf. statements.ts).
+      { id: 'produits_fin',  label: 'Produits financiers',       prefixes: ['77','786','796'], isCharge: false, order: 2 },
+      { id: 'charges_fin',   label: 'Charges financières',       prefixes: ['67','686','696'], isCharge: true,  order: 3 },
+      { id: 'produits_hao',  label: 'Produits exceptionnels',    prefixes: ['82','84','86','88','787','797'], isCharge: false, order: 4 },
+      { id: 'charges_hao',   label: 'Charges exceptionnelles',   prefixes: ['81','83','85','687','697'], isCharge: true,  order: 5 },
       { id: 'impots',        label: 'Impôts sur les bénéfices',  prefixes: ['87','89'], isCharge: true,  order: 6 },
     ],
     intermediates: [

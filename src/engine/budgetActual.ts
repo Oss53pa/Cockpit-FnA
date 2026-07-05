@@ -39,10 +39,12 @@ export type CustomSection = { id: string; label: string; prefixes: string[]; isC
 const DEFAULT_SECTION_DEFS: Record<CRDefaultSection, { label: string; prefixes: string[]; isCharge: boolean }> = {
   produits_expl: { label: "Produits d'exploitation",  prefixes: ['70','71','72','73','74','75','781','791'], isCharge: false },
   charges_expl:  { label: "Charges d'exploitation",   prefixes: ['60','61','62','63','64','65','66','681','691'], isCharge: true },
-  produits_fin:  { label: 'Produits financiers',       prefixes: ['77','786','797'], isCharge: false },
-  charges_fin:   { label: 'Charges financières',       prefixes: ['67','687','697'], isCharge: true },
-  produits_hao:  { label: 'Produits exceptionnels',    prefixes: ['82','84','86','88'], isCharge: false },
-  charges_hao:   { label: 'Charges exceptionnelles',   prefixes: ['81','83','85'], isCharge: true },
+  // SYSCOHADA révisé 2017 : 686/696 = dot. financières, 687/697 = dot. HAO ;
+  // reprises 796 = financières, 797 = HAO ; transferts 786 = fin, 787 = HAO.
+  produits_fin:  { label: 'Produits financiers',       prefixes: ['77','786','796'], isCharge: false },
+  charges_fin:   { label: 'Charges financières',       prefixes: ['67','686','696'], isCharge: true },
+  produits_hao:  { label: 'Produits exceptionnels',    prefixes: ['82','84','86','88','787','797'], isCharge: false },
+  charges_hao:   { label: 'Charges exceptionnelles',   prefixes: ['81','83','85','687','697'], isCharge: true },
   impots:        { label: 'Impôts sur les bénéfices',  prefixes: ['87','89'], isCharge: true },
 };
 

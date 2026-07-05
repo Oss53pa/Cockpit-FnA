@@ -494,7 +494,11 @@ export function DashboardSnippet({ id, data, palette }: any) {
       const dettes = sumC('40');
       const achats = balance.filter((r: any) => /^(60|61|62|63)/.test(r.account) && !r.account?.startsWith('603')).reduce((s: number, r: any) => s + (r.soldeD - r.soldeC), 0);
       const dso = ca > 0 ? Math.round((creances / (ca * (1 + vatRate))) * periodDays) : 0;
-      const dio = ca > 0 ? Math.round((stocks / ca) * periodDays) : 0;
+      // DIO — dénominateur = COÛT DES VENTES (achats consommés = net classe 60,
+      // variations de stocks 603 incluses) et non le CA (qui inclut la marge →
+      // sous-estime le DIO). Décision expert SYSCOHADA.
+      const coutVentes = sumD('60');
+      const dio = coutVentes > 0 ? Math.round((stocks / coutVentes) * periodDays) : 0;
       const dpo = achats > 0 ? Math.round((dettes / (achats * (1 + vatRate))) * periodDays) : 0;
       return [
         { label: 'DSO', value: `${dso} j`, subValue: 'Délai clients' },

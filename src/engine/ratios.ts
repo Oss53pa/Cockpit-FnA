@@ -182,16 +182,16 @@ export function computeRatios(rows: BalanceRow[], customTargets?: Record<string,
   const caTTC = sig.ca * (1 + tauxTvaSortie);
   const dsoV = caTTC > 0 ? (creancesClients / caTTC) * periodDays : NaN;
 
-  // ── DPO : (Dettes fournisseurs TTC / Achats TTC) × periodDays ──
-  // BUG FIX (audit) : achats STRICTS = compte 60 (achats consommés) hors 603
-  // (variations stocks). Les 61/62/63 sont des SERVICES extérieurs, pas des achats —
-  // les inclure gonflait le dénominateur et sous-estimait artificiellement le DPO.
-  // Pour DPO matière, on s'aligne sur les comptes fournisseurs (40x) qui ne
-  // matchent que les achats de biens consommés.
+  // ── DPO : (Dettes fournisseurs TTC / Achats de biens et services TTC) × periodDays ──
+  // DÉCISION EXPERT SYSCOHADA : le dénominateur = ACHATS DE BIENS ET SERVICES
+  // (60 + 61 + 62 + 63) hors 603 (variations de stocks). Les dettes fournisseurs
+  // (40x, numérateur) couvrent aussi bien les biens que les services extérieurs
+  // facturés par des tiers → le dénominateur doit avoir le MÊME périmètre pour un
+  // ratio cohérent. (Aligne ratios.ts sur les dashboards fr/wcd.)
   const achatsHT = sumMoneyWhere(
     rows,
     (r) => r.soldeD - r.soldeC,
-    (r) => r.account.startsWith('60') && !r.account.startsWith('603'),
+    (r) => /^(60|61|62|63)/.test(r.account) && !r.account.startsWith('603'),
   );
   const tvaDeductible = sumMoneyWhere(rows, (r) => r.soldeD - r.soldeC, (r) => r.account.startsWith('445'));
   const tauxTvaEntreeRaw = achatsHT > 0 && tvaDeductible > 0 ? tvaDeductible / achatsHT : fallbackVat;
