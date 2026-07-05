@@ -16,18 +16,11 @@ import { tresorerieMonthly, monthlyByPrefix } from '../../engine/analytics';
 
 // ── ISBudgetVsActual ──────────────────────────────────────────────────
 export function ISBudgetVsActual() {
+  // Tous les hooks AVANT tout `return` (React rules-of-hooks) : sinon, quand
+  // `rows` se charge en async, le render passe de N à N+2 hooks → React #310.
   const rows = useBudgetActual();
-  const { currentOrgId } = useApp();
-  const sections = bySection(rows, currentOrgId);
-  const labels = loadLabels(currentOrgId);
-
-  if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { currentYear } = useApp();
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { currentOrgId, currentYear } = useApp();
   const [n1Map, setN1Map] = useState<Map<string, number>>(new Map());
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (!currentOrgId) return;
     computeBudgetActual(currentOrgId, currentYear - 1).then((prev) => {
@@ -36,6 +29,11 @@ export function ISBudgetVsActual() {
       setN1Map(m);
     });
   }, [currentOrgId, currentYear]);
+
+  const sections = bySection(rows, currentOrgId);
+  const labels = loadLabels(currentOrgId);
+
+  if (!rows.length) return <div className="py-12 text-center text-primary-500">Chargement…</div>;
 
   const buildRow = (r: any) => {
     const realise = r.realise;

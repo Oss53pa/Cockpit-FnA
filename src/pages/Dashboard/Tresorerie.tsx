@@ -27,6 +27,39 @@ export function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr'
     tresorerieMonthly(currentOrgId, currentYear).then(setTre);
   }, [currentOrgId, currentYear]);
 
+  // IMPORTANT : tous les hooks DOIVENT être appelés inconditionnellement, avant
+  // tout `return`. Ces trois-là étaient placés APRÈS le garde `if (!bilan…) return`
+  // ci-dessous → au chargement async des données, le render passait de N à N+3
+  // hooks → React #310 (« Rendered more hooks than during the previous render »),
+  // crash attrapé par l'ErrorBoundary. Remontés ici + eslint-disable retirés.
+  const [fluxData, setFluxData] = useState<Array<{ mois: string; exploitation: number; investissement: number; financement: number }>>([]);
+  useEffect(() => {
+    if (!currentOrgId) return;
+    import('../../engine/flows').then(({ computeMonthlyTFT }) =>
+      computeMonthlyTFT(currentOrgId, currentYear).then((tft) => {
+        const find = (code: string) => tft.lines.find((l) => l.code === code)?.values ?? Array(12).fill(0);
+        const op = find('_ZC'), inv = find('_ZD'), fin = find('_ZE');
+        setFluxData(tft.months.map((m, i) => ({ mois: m, exploitation: op[i], investissement: inv[i], financement: fin[i] })));
+      })
+    );
+  }, [currentOrgId, currentYear]);
+
+  const [frBfrTn, setFrBfrTn] = useState<Array<{ mois: string; fr: number; bfr: number; tn: number }>>([]);
+  useEffect(() => {
+    if (!currentOrgId) return;
+    Promise.all([
+      import('../../engine/monthly'),
+      import('../../engine/synthese'),
+    ]).then(([{ computeMonthlyBilan }, { computeFRBFRMonthly }]) =>
+      computeMonthlyBilan(currentOrgId, currentYear).then((mb) => {
+        const rows = computeFRBFRMonthly(mb);
+        setFrBfrTn(rows.map((r: any) => ({ mois: r.mois, fr: r.fr, bfr: r.bfr, tn: r.tn })));
+      })
+    );
+  }, [currentOrgId, currentYear]);
+
+  const ratiosData = useRatios();
+
   if (!bilan || !sig) return null;
   const g = (lines: any[], code: string) => lines.find((l) => l.code === code)?.value ?? 0;
   const actifImmo = g(bilan.actif, '_AZ');
@@ -44,35 +77,6 @@ export function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr'
   const tn = fr - bfr;
 
   const tresorerieEvol = tre.labels.map((m, i) => ({ mois: m, encaissements: tre.encaissements[i], decaissements: tre.decaissements[i], solde: tre.cumul[i] }));
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const [fluxData, setFluxData] = useState(tre.labels.map((m) => ({ mois: m, exploitation: 0, investissement: 0, financement: 0 })));
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!currentOrgId) return;
-    import('../../engine/flows').then(({ computeMonthlyTFT }) =>
-      computeMonthlyTFT(currentOrgId, currentYear).then((tft) => {
-        const find = (code: string) => tft.lines.find((l) => l.code === code)?.values ?? Array(12).fill(0);
-        const op = find('_ZC'), inv = find('_ZD'), fin = find('_ZE');
-        setFluxData(tft.months.map((m, i) => ({ mois: m, exploitation: op[i], investissement: inv[i], financement: fin[i] })));
-      })
-    );
-  }, [currentOrgId, currentYear]);
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const [frBfrTn, setFrBfrTn] = useState(tre.labels.map((m) => ({ mois: m, fr: 0, bfr: 0, tn: 0 })));
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!currentOrgId) return;
-    Promise.all([
-      import('../../engine/monthly'),
-      import('../../engine/synthese'),
-    ]).then(([{ computeMonthlyBilan }, { computeFRBFRMonthly }]) =>
-      computeMonthlyBilan(currentOrgId, currentYear).then((mb) => {
-        const rows = computeFRBFRMonthly(mb);
-        setFrBfrTn(rows.map((r: any) => ({ mois: r.mois, fr: r.fr, bfr: r.bfr, tn: r.tn })));
-      })
-    );
-  }, [currentOrgId, currentYear]);
 
   const decomposition = [
     { name: 'Stocks', value: stocks, color: ct.at(0) },
@@ -83,8 +87,6 @@ export function TresorerieBFR({ initialTab }: { initialTab: 'tresorerie' | 'bfr'
     { name: 'Autres dettes', value: -autresD, color: ct.at(1) },
   ];
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const ratiosData = useRatios();
   const dsoRatio = ratiosData.find((r) => r.code === 'DSO');
   const dpoRatio = ratiosData.find((r) => r.code === 'DPO');
   const dso = dsoRatio?.value ?? (sig.ca ? (creances / (sig.ca * 1.18)) * 360 : 0);
