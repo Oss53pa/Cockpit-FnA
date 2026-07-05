@@ -383,7 +383,7 @@ export function DashboardSnippet({ id, data, palette }: any) {
     ];
     if (id === 'tafire') {
       const treso = data.bilanActif?.find((l: any) => l.code === '_BT')?.value ?? 0;
-      const caf = (data.sig?.resultat ?? 0) + sumD('68') - sumC('78');
+      const caf = (data.sig?.resultat ?? 0) + sumD('68', '69') - sumC('78', '79');
       return [
         { label: 'CAF', value: fmtMoney(caf), subValue: 'RN + dotations - reprises' },
         { label: 'Résultat net', value: fmtMoney(rn) },
@@ -403,7 +403,7 @@ export function DashboardSnippet({ id, data, palette }: any) {
       ];
     }
     if (id === 'caf') {
-      const caf = (data.sig?.resultat ?? 0) + sumD('68') - sumC('78');
+      const caf = (data.sig?.resultat ?? 0) + sumD('68', '69') - sumC('78', '79');
       const tauxCAF = ca > 0 ? (caf/ca)*100 : 0;
       return [
         { label: 'CAF exercice', value: fmtMoney(caf), subValue: 'RN + dotations - reprises' },
