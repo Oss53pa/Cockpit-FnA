@@ -383,15 +383,27 @@ export async function computeMonthlyBilan(orgId: string, year: number) {
     ]);
     snapshots.push(computeBilan(rows, movements));
   }
-  const templateA = snapshots[0]?.actif ?? [];
-  const templateP = snapshots[0]?.passif ?? [];
-  const actif = templateA.map((t, idx) => ({
-    ...t, values: snapshots.map((s) => s.actif[idx]?.value ?? 0),
-    ytd: snapshots[11]?.actif[idx]?.value ?? 0,
-  }));
-  const passif = templateP.map((t, idx) => ({
-    ...t, values: snapshots.map((s) => s.passif[idx]?.value ?? 0),
-    ytd: snapshots[11]?.passif[idx]?.value ?? 0,
-  }));
+  // Récupération des valeurs mensuelles PAR CODE (et non par index).
+  // computeBilan ajoute la ligne d'écart de balance CONDITIONNELLEMENT et sur
+  // l'ACTIF (_EC, si Passif > Actif) OU le PASSIF (_ECP, sinon) selon le sens du
+  // déséquilibre — la structure des lignes varie donc d'un mois à l'autre. Un
+  // mapping par index désalignait tout dès qu'un mois basculait de côté : le
+  // TOTAL GÉNÉRAL tombait sur une case vide et la ligne d'écart affichait le
+  // total. On prend comme gabarit le snapshot le PLUS COMPLET (celui qui porte
+  // la ligne d'écart) puis on résout chaque valeur par code (0 si absente).
+  const templateOf = (pick: (s: { actif: Line[]; passif: Line[] }) => Line[]): Line[] => {
+    let tpl: Line[] = pick(snapshots[0] ?? { actif: [], passif: [] });
+    for (const s of snapshots) { const arr = pick(s); if (arr.length > tpl.length) tpl = arr; }
+    return tpl;
+  };
+  const last = snapshots[snapshots.length - 1] ?? snapshots[0] ?? { actif: [], passif: [] };
+  const buildSide = (pick: (s: { actif: Line[]; passif: Line[] }) => Line[]) =>
+    templateOf(pick).map((t) => ({
+      ...t,
+      values: snapshots.map((s) => pick(s).find((l) => l.code === t.code)?.value ?? 0),
+      ytd: pick(last).find((l) => l.code === t.code)?.value ?? 0,
+    }));
+  const actif = buildSide((s) => s.actif);
+  const passif = buildSide((s) => s.passif);
   return { months: MONTHS, actif, passif };
 }
