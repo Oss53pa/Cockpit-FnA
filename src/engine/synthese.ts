@@ -82,8 +82,13 @@ export function computeAlerts(ratios: Ratio[], balance: BalanceRow[], limit = 6)
     else if (r.status === 'warn')
       list.push({ severity: 'medium', type: r.family, message: `${r.label} en zone de vigilance (${r.value.toFixed(2)} ${r.unit})` });
   });
+  // Contre-charges classe 6 à solde CRÉDITEUR normal — exclues (ce ne sont pas
+  // des anomalies) : 603 (var. stocks), 609 (RRR obtenus achats), 619/629
+  // (RRR obtenus services), 639. Cohérent avec les détecteurs Proph3t/glAudit.
+  const isContraCharge = (a: string) => a.startsWith('603') || a.startsWith('609')
+    || a.startsWith('619') || a.startsWith('629') || a.startsWith('639');
   balance.forEach((r) => {
-    if (r.account.startsWith('6') && r.soldeC > 1000)
+    if (r.account.startsWith('6') && !isContraCharge(r.account) && r.soldeC > 1000)
       list.push({ severity: 'high', type: 'Anomalie', message: `Compte ${r.account} en solde créditeur anormal` });
   });
   return list.slice(0, limit);

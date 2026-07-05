@@ -78,8 +78,14 @@ function evaluateCondition(entry: GLEntry, rule: AnalyticRule): boolean {
     case 'label_contains':
       return entry.label.toLowerCase().includes(rule.conditionValue.toLowerCase());
     case 'account_range': {
-      const [min, max] = rule.conditionValue.split('-');
-      return entry.account >= min && entry.account <= (max ?? min);
+      const [min, max] = rule.conditionValue.split('-').map((s) => s.trim());
+      const hi = max || min;
+      // Comparaison par PRÉFIXE tronqué à la longueur des bornes. Sinon la
+      // comparaison lexicographique des codes complets exclut à tort les
+      // sous-comptes plus longs : '660000' > '66' → la plage '60-66' raterait
+      // TOUS les comptes 66x (personnel). On compare donc account[0..len(borne)].
+      return entry.account.slice(0, min.length) >= min
+        && entry.account.slice(0, hi.length) <= hi;
     }
     case 'journal_eq':
       return entry.journal.toLowerCase() === rule.conditionValue.toLowerCase();
