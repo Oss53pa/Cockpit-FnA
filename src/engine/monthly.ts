@@ -110,7 +110,9 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
       debug('[monthly] Aucun budget charge pour orgId=' + orgId + '. Allez dans Budget pour en charger un.');
     }
   }
-  const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
+  // Tri sémantique (numeric) : 'V2' < 'V10' (sinon alphabétique → mauvaise version).
+  const versions = Array.from(new Set(allBudgets.map((b) => b.version)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   const lastVersion = versions[versions.length - 1];
   if (lastVersion) {
     const lines = allBudgets.filter((b) => b.version === lastVersion);
@@ -134,7 +136,8 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   const allBudgetsN1 = await dataProvider.getBudgetsByYear(orgId, year - 1);
   let n1Source: 'budget' | 'gl' | 'none' = 'none';
   if (allBudgetsN1.length > 0) {
-    const versionsN1 = Array.from(new Set(allBudgetsN1.map((b) => b.version))).sort();
+    const versionsN1 = Array.from(new Set(allBudgetsN1.map((b) => b.version)))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
     const lastVersionN1 = versionsN1[versionsN1.length - 1];
     const linesN1 = allBudgetsN1.filter((b) => b.version === lastVersionN1);
     for (const l of linesN1) {
@@ -290,13 +293,16 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
   }
 
   const interValues = (key: string): number[] => {
-    const pe = totalMatrix.produits_expl;
-    const ce = totalMatrix.charges_expl;
-    const pf = totalMatrix.produits_fin;
-    const cf = totalMatrix.charges_fin;
-    const ph = totalMatrix.produits_hao;
-    const ch = totalMatrix.charges_hao;
-    const imp = totalMatrix.impots;
+    // Robustesse : totalMatrix ne contient que les sections du modèle actif ;
+    // les intermédiaires standard retombent sur 0 si une section est absente.
+    const Z = Array(12).fill(0) as number[];
+    const pe = totalMatrix.produits_expl ?? Z;
+    const ce = totalMatrix.charges_expl ?? Z;
+    const pf = totalMatrix.produits_fin ?? Z;
+    const cf = totalMatrix.charges_fin ?? Z;
+    const ph = totalMatrix.produits_hao ?? Z;
+    const ch = totalMatrix.charges_hao ?? Z;
+    const imp = totalMatrix.impots ?? Z;
     switch (key) {
       case 'res_expl':    return pe.map((v, i) => v - ce[i]);
       case 'res_fin':     return pf.map((v, i) => v - cf[i]);
@@ -311,7 +317,10 @@ export async function computeMonthlyCR(orgId: string, year: number): Promise<Mon
     if (item.kind === 'section') {
       const sec = item.key;
       const def = sectionDefs[sec];
-      const label = labels[sec];
+      // Robustesse : CR_FLOW référence les sections standard ; si le modèle CR
+      // actif en a supprimé une, on saute (au lieu de crasher sur def.isCharge).
+      if (!def) continue;
+      const label = labels[sec] ?? def.label;
       const accounts = Array.from(accountsBySection.get(sec) ?? []).sort();
 
       // Lignes de détail (un compte par ligne)

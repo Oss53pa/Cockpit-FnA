@@ -332,7 +332,10 @@ export async function computeBudgetActual(
 // Agrégation par section (avec labels et ordre personnalisés si orgId fourni)
 export function bySection(rows: BudgetActualRow[], orgId?: string): Array<{ section: CRSection; label: string; rows: BudgetActualRow[]; totalRealise: number; totalBudget: number; totalEcart: number; ecartPct: number; isCharge: boolean }> {
   const defs = getSectionDefs(orgId);
-  const order = orgId ? loadOrder(orgId) : (Object.keys(defs) as string[]);
+  // Ordre issu du MODÈLE CR ACTIF (getSectionOrder) et non de l'ancien
+  // localStorage (loadOrder) : sinon les sections d'un modèle personnalisé,
+  // absentes de l'ordre legacy, étaient omises du CR Budget vs Réalisé.
+  const order = orgId ? getSectionOrder(orgId) : (Object.keys(defs) as string[]);
   const out: ReturnType<typeof bySection> = [];
   for (const sec of order) {
     const def = defs[sec];
@@ -444,7 +447,11 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
   let resolvedVersion = version;
   if (!resolvedVersion) {
     const allBudgets = await dataProvider.getBudgetsByYear(orgId, year);
-    const versions = Array.from(new Set(allBudgets.map((b) => b.version))).sort();
+    // Tri sémantique (numeric) — cohérent avec computeBudgetActual : sinon
+    // 'V10' < 'V2' en alphabétique → mauvaise « dernière version » résolue,
+    // et divergence entre la vue annuelle et la vue mensuelle.
+    const versions = Array.from(new Set(allBudgets.map((b) => b.version)))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
     resolvedVersion = versions[versions.length - 1];
   }
   if (resolvedVersion) {
@@ -528,7 +535,8 @@ export async function computeBudgetActualMonthly(orgId: string, year: number, ve
 // Agréger le mensuel par section
 export function monthlySummaryBySection(data: { months: string[]; rows: MonthlyBudgetRow[] }, orgId?: string) {
   const defs = getSectionDefs(orgId);
-  const order = orgId ? loadOrder(orgId) : Object.keys(defs);
+  // Idem bySection : ordre du modèle CR actif (cohérence avec getSectionDefs).
+  const order = orgId ? getSectionOrder(orgId) : Object.keys(defs);
   const sections: Array<{
     section: string; label: string; isCharge: boolean;
     months: Array<{ realise: number; budget: number; n1: number }>;

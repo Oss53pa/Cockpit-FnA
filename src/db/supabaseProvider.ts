@@ -84,6 +84,20 @@ function normalizeTsFields<T extends Record<string, unknown>>(row: T): T {
 }
 
 /**
+ * Mapping spécifique des lignes fna_chat_messages → ChatMessage.
+ * `toCamel` mappe `user_name` → `user` (collision historique avec
+ * ImportLog.user). Pour le chat, le type attend `userName` : on force donc le
+ * champ explicitement (cohérent avec engine/chatSync.ts). Sans cela, le nom de
+ * l'expéditeur (message.userName) est undefined dans l'UI de discussion.
+ */
+function chatRowToCamel(r: Record<string, unknown>): ChatMessage {
+  const c = toCamel(r) as Record<string, unknown>;
+  c.userName = (r.user_name as string) ?? '';
+  delete c.user;
+  return c as unknown as ChatMessage;
+}
+
+/**
  * Pagination universelle pour les SELECT Supabase.
  *
  * Supabase/PostgREST plafonne tout SELECT à 1000 lignes par défaut
@@ -880,7 +894,7 @@ export class SupabaseProvider implements DataProvider {
 
   async getChatMessage(id: number) {
     const { data } = await supabase.from('fna_chat_messages').select('*').eq('id', id).maybeSingle();
-    return data ? toCamel(data) as ChatMessage : undefined;
+    return data ? chatRowToCamel(data as Record<string, unknown>) : undefined;
   }
   async getChatMessagesByChannel(channelId: string) {
     // Pagination : un canal actif dépasse 1000 messages
@@ -888,14 +902,14 @@ export class SupabaseProvider implements DataProvider {
       () => supabase.from('fna_chat_messages').select('*').eq('channel_id', channelId).order('created_at'),
       'getChatMessagesByChannel',
     );
-    return rows.map((r) => toCamel(r as Record<string, unknown>)) as ChatMessage[];
+    return rows.map((r) => chatRowToCamel(r as Record<string, unknown>));
   }
   async getChatMessagesByOrg(orgId: string) {
     const rows = await paginatedSelect<any>(
       () => supabase.from('fna_chat_messages').select('*').eq('org_id', orgId),
       'getChatMessagesByOrg',
     );
-    return rows.map((r) => toCamel(r as Record<string, unknown>)) as ChatMessage[];
+    return rows.map((r) => chatRowToCamel(r as Record<string, unknown>));
   }
   async addChatMessage(msg: Omit<ChatMessage, 'id'>) {
     const row = toSnake(msg); delete row.id;
