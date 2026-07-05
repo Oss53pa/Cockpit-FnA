@@ -397,12 +397,44 @@ export async function auditGL(
   // ─── 18. RUPTURES DE SÉQUENCE DE N° DE PIÈCE (pièces manquantes) ───
   // Dans un journal à numérotation continue, un « trou » (101,102,104 → 103
   // manquante) peut signaler une écriture supprimée ou non importée.
+  // ON EXCLUT les journaux d'à-nouveaux / reports : leurs pièces sont numérotées
+  // PAR COMPTE (pas en séquence continue) et sont MONO-FACE (un seul sens), ce qui
+  // générerait des faux positifs (cas réel : journal RAN d'un import de balance
+  // d'ouverture). Détection double, agnostique à l'ERP :
+  //   1) code journal usuel d'à-nouveaux (AN, RAN, REPORT, REPRISE, OUV…) ;
+  //   2) heuristique : > 50 % des pièces du journal sont mono-face.
   {
+    const OPENING_JRN = /^(a[-\s]?n|ran|ano|report|repri|ouv|bilan)/i;
+    // Faces observées par pièce (journal|piece) pour le ratio mono-face.
+    const pieceSides = new Map<string, { d: boolean; c: boolean }>();
+    for (const e of filtered) {
+      const jrn = (e.journal || '').trim();
+      if (!jrn) continue;
+      const k = `${jrn}|${(e.piece || '').trim()}`;
+      const s = pieceSides.get(k) ?? { d: false, c: false };
+      if ((e.debit || 0) > 0) s.d = true;
+      if ((e.credit || 0) > 0) s.c = true;
+      pieceSides.set(k, s);
+    }
+    const monoStat = new Map<string, { mono: number; total: number }>();
+    for (const [k, s] of pieceSides) {
+      const jrn = k.slice(0, k.indexOf('|'));
+      const st = monoStat.get(jrn) ?? { mono: 0, total: 0 };
+      st.total++;
+      if (s.d !== s.c) st.mono++; // exactement une seule face
+      monoStat.set(jrn, st);
+    }
+    const isOpeningJournal = (jrn: string) => {
+      if (OPENING_JRN.test(jrn)) return true;
+      const st = monoStat.get(jrn);
+      return !!st && st.total >= 20 && st.mono / st.total > 0.5;
+    };
+
     const byJournal = new Map<string, Set<number>>();
     for (const e of filtered) {
       const jrn = (e.journal || '').trim();
       const m = (e.piece || '').match(/(\d{1,10})/);
-      if (!jrn || !m) continue;
+      if (!jrn || !m || isOpeningJournal(jrn)) continue;
       const num = parseInt(m[1], 10);
       if (!Number.isFinite(num)) continue;
       let s = byJournal.get(jrn); if (!s) { s = new Set(); byJournal.set(jrn, s); }

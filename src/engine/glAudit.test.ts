@@ -28,6 +28,12 @@ const ENTRIES = [
     E('p24_1', 'ACHAT', 'X', '601000', 1000, 0), E('p24_1', 'ACHAT', 'X', '401000', 0, 1000),
   ]).flat(),
   E('p24_1', 'ACHAT', 'BIG', '601000', 50_000_000, 0), E('p24_1', 'ACHAT', 'BIG', '401000', 0, 50_000_000),
+  // Journal MONO-FACE (débit seul) avec trous (7 et 14 manquants), code 'ZZ' qui
+  // NE matche PAS la regex d'à-nouveaux → doit être exclu par la seule heuristique
+  // mono-face (> 50 % des pièces à un seul sens). Sinon : faux positif de séquence.
+  ...Array.from({ length: 25 }, (_, i) => i + 1).filter((n) => n !== 7 && n !== 14).map((n) =>
+    E('p24_1', 'ZZ', String(n), '627000', 1000, 0),
+  ),
 ];
 
 vi.mock('../db/provider', () => ({
@@ -59,7 +65,12 @@ describe('auditGL — contrôles avancés', () => {
     const report = await auditGL('o', 2024);
     const pg = report.findings.find((f) => f.id === 'piece_gaps');
     expect(pg).toBeDefined();
-    expect(pg!.count).toBe(1); // une seule pièce manquante (13)
+    // Seul VT (biface, séquentiel) est retenu : la pièce 13 manque. Le journal ZZ
+    // mono-face (trous 7 et 14) est EXCLU → count reste 1.
+    expect(pg!.count).toBe(1);
+    const journaux = (pg!.examples ?? []).map((e: any) => e.account);
+    expect(journaux).toContain('VT');
+    expect(journaux).not.toContain('ZZ');
   });
 
   it('détecte un montant atypique pour son compte (zéro en trop)', async () => {
