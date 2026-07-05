@@ -392,11 +392,15 @@ export async function computeTAFIRE(orgId: string, year: number): Promise<TAFIRE
   const subvO = get(bilanO.passif, 'CL');
   const subvC = get(bilanC.passif, 'CL');
   const augSubv = subvC - subvO;
-  const empruntsO = get(bilanO.passif, 'DA');
-  const empruntsC = get(bilanC.passif, 'DA');
-  // Nouveaux emprunts = augmentation. Remboursements = diminution. On les sépare si possible.
-  const newEmprunts = Math.max(empruntsC - empruntsO, 0);
-  const remboursements = Math.max(empruntsO - empruntsC, 0);
+  // Emprunts : MOUVEMENTS BRUTS de la période (crédit = nouveaux emprunts,
+  // débit = remboursements) et NON la variation nette du solde bilan (DA) avec
+  // Math.max. SYSCOHADA TAFIRE présente « Emprunts nouveaux » (ressource) et
+  // « Remboursements » (emploi) en deux lignes DISTINCTES : le net masque les
+  // remboursements quand de nouveaux emprunts sont contractés le même exercice.
+  // Cohérent avec computeTFT annuel (mêmes préfixes 16/17/18).
+  const movEmprunts = await getMovementsByPrefix(orgId, year, ['16', '17', '18']);
+  const newEmprunts = movEmprunts.credit;
+  const remboursements = movEmprunts.debit;
 
   const totalRessourcesStables = cafg + augCapital + augSubv + pxCess + newEmprunts;
 
