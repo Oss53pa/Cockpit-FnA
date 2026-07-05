@@ -798,6 +798,14 @@ export type ImportReport = {
   dominantYear?: number;
   /** Nombre d'écritures d'à-nouveaux (RAN) détectées et routées vers la période d'ouverture */
   openingEntries: number;
+  /** Contrôle d'équilibre des à-nouveaux (RAN) : Σ débit vs Σ crédit du bilan d'ouverture.
+   *  delta ≠ 0 ⇒ le bilan d'ouverture ne boucle pas → tout l'exercice est faussé. */
+  openingImbalance?: { debit: number; credit: number; delta: number; count: number };
+  /** Rapport d'anomalie : ventilation net (débit − crédit) par classe SYSCOHADA,
+   *  pour localiser le côté (actif/passif) où manque la contrepartie. */
+  imbalanceByClass?: Array<{ classe: string; debit: number; credit: number; net: number }>;
+  /** Messages d'anomalie lisibles (équilibre global / à-nouveaux / pièces). */
+  anomalies?: string[];
 };
 
 export async function importGL(
@@ -925,12 +933,21 @@ export async function importGL(
   // Les écritures d'à-nouveaux (RAN) sont routées vers une période spéciale
   // « mois 0 » de leur exercice, utilisée par computeBalance.includeOpening.
   let anCount = 0;
+  let anDebit = 0, anCredit = 0;                                  // contrôle équilibre à-nouveaux
+  const byClass = new Map<string, { debit: number; credit: number }>(); // rapport d'anomalie
   const newFYs: typeof existingFYs = [];
   const newPeriods: typeof existingPeriodsAll = [];
   for (const e of entries) {
     const y = parseInt(e.date.substring(0, 4));
     const an = isAN(e);
-    if (an) anCount++;
+    if (an) {
+      anCount++; anDebit += e.debit; anCredit += e.credit;
+      // Ventilation net (débit − crédit) par CLASSE SYSCOHADA des À-NOUVEAUX,
+      // pour localiser le côté (actif/passif) où manque la contrepartie.
+      const cls = e.account[0] || '?';
+      const bc = byClass.get(cls) ?? { debit: 0, credit: 0 };
+      bc.debit += e.debit; bc.credit += e.credit; byClass.set(cls, bc);
+    }
     const m = an ? 0 : parseInt(e.date.substring(5, 7));
     const key = `${y}-${m}`;
     let pId = periodIndex.get(key);
@@ -963,6 +980,31 @@ export async function importGL(
   // Calculer le hash du fichier pour détecter d'éventuels doublons à l'avenir
   const fileHash = await computeFileHash(file);
 
+  // ── CONTRÔLE D'ÉQUILIBRE À L'IMPORT + RAPPORT D'ANOMALIE ─────────────────────
+  //  1) Équilibre GLOBAL : Σ débit = Σ crédit sur tout l'import.
+  //  2) Équilibre des À-NOUVEAUX (RAN) : un bilan d'ouverture déséquilibré se
+  //     propage à tout l'exercice (c'est la cause n°1 des écarts de balance).
+  //  3) Ventilation net (débit − crédit) par CLASSE SYSCOHADA → localise le côté
+  //     (actif/passif) où manque la contrepartie.
+  const r0 = (n: number) => Math.round(n);
+  const fmtX = (n: number) => r0(n).toLocaleString('fr-FR');
+  const openingImbalance = { debit: r0(anDebit), credit: r0(anCredit), delta: r0(anDebit - anCredit), count: anCount };
+  const imbalanceByClass = Array.from(byClass.entries())
+    .map(([classe, v]) => ({ classe, debit: r0(v.debit), credit: r0(v.credit), net: r0(v.debit - v.credit) }))
+    .sort((a, b) => a.classe.localeCompare(b.classe));
+  const anomalies: string[] = [];
+  if (!balanced) {
+    anomalies.push(`Grand Livre globalement déséquilibré : écart ${fmtX(totalDebit - totalCredit)} XOF (Σ débit ${fmtX(totalDebit)} ≠ Σ crédit ${fmtX(totalCredit)}).`);
+  }
+  if (Math.abs(openingImbalance.delta) > 1) {
+    anomalies.push(`À-nouveaux (RAN) déséquilibrés : écart ${fmtX(openingImbalance.delta)} XOF sur ${anCount} écriture(s). Le bilan d'ouverture ne boucle pas — vérifiez la balance de clôture N-1 et l'import des soldes d'ouverture.`);
+    const off = imbalanceByClass.filter((c) => Math.abs(c.net) > 1).map((c) => `classe ${c.classe} net ${fmtX(c.net)}`).join(' · ');
+    if (off) anomalies.push(`Ventilation du déséquilibre par classe : ${off}.`);
+  }
+  if (unbalancedPieces.length > 0) {
+    anomalies.push(`${unbalancedPieces.length} pièce(s) déséquilibrée(s) (Σ débit ≠ Σ crédit sur une même pièce).`);
+  }
+
   const importId = await dataProvider.addImport({
     orgId: opts.orgId,
     date: Date.now(),
@@ -973,8 +1015,10 @@ export async function importGL(
     kind: 'GL',
     count: entries.length,
     rejected: errors.length,
-    status: errors.length === 0 ? 'success' : (entries.length > 0 ? 'partial' : 'error'),
-    report: JSON.stringify({ unknown: [...unknownAccounts], errors: errors.slice(0, 100) }),
+    // Un import équilibré mais avec anomalie (RAN/pièces) reste « partial » pour
+    // que l'utilisateur soit alerté visuellement dans l'historique des imports.
+    status: errors.length > 0 ? (entries.length > 0 ? 'partial' : 'error') : (anomalies.length > 0 ? 'partial' : 'success'),
+    report: JSON.stringify({ unknown: [...unknownAccounts], errors: errors.slice(0, 100), anomalies, openingImbalance, imbalanceByClass, balanced }),
   });
 
   if (entries.length > 0) {
@@ -1059,6 +1103,9 @@ export async function importGL(
     yearsDetected,
     dominantYear: yearsDetected[0]?.year,
     openingEntries: anCount,
+    openingImbalance,
+    imbalanceByClass,
+    anomalies,
   };
 }
 

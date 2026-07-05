@@ -353,6 +353,52 @@ export default function Imports() {
               </p>
             </div>
           </div>
+          {report.openingImbalance && Math.abs(report.openingImbalance.delta) > 1 && (
+            <div className="mb-4 card p-4 border-error">
+              <h4 className="text-xs uppercase tracking-wider font-semibold mb-1 text-error">
+                ⚠ À-nouveaux (bilan d'ouverture) déséquilibrés
+              </h4>
+              <p className="text-sm mb-3 text-primary-700 dark:text-primary-300">
+                Σ débit <span className="num font-semibold">{fmtFull(report.openingImbalance.debit)}</span> ≠ Σ crédit{' '}
+                <span className="num font-semibold">{fmtFull(report.openingImbalance.credit)}</span> — écart{' '}
+                <span className="num font-semibold text-error">{fmtFull(report.openingImbalance.delta)}</span> XOF sur{' '}
+                {report.openingImbalance.count.toLocaleString('fr-FR')} écriture(s). Le bilan d'ouverture ne boucle pas :
+                vérifiez la balance de clôture N-1 et l'import des soldes d'ouverture.
+              </p>
+              {report.imbalanceByClass && report.imbalanceByClass.length > 0 && (
+                <div className="overflow-x-auto">
+                  <p className="text-[10px] uppercase tracking-wider text-primary-500 font-semibold mb-1">Ventilation par classe (localisation du déséquilibre)</p>
+                  <table className="w-full text-xs">
+                    <thead className="text-xs uppercase tracking-wider text-primary-500 border-b border-primary-200 dark:border-primary-800">
+                      <tr>
+                        <th className="text-left py-1.5 px-2">Classe</th>
+                        <th className="text-right py-1.5 px-2">Débit</th>
+                        <th className="text-right py-1.5 px-2">Crédit</th>
+                        <th className="text-right py-1.5 px-2">Net (D − C)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                      {report.imbalanceByClass.map((c) => (
+                        <tr key={c.classe}>
+                          <td className="py-1.5 px-2 font-mono">{c.classe}</td>
+                          <td className="py-1.5 px-2 text-right num">{fmtFull(c.debit)}</td>
+                          <td className="py-1.5 px-2 text-right num">{fmtFull(c.credit)}</td>
+                          <td className="py-1.5 px-2 text-right num font-semibold">{fmtFull(c.net)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-error/40">
+                      <tr>
+                        <td className="py-1.5 px-2 font-semibold">Écart total</td>
+                        <td colSpan={2}></td>
+                        <td className="py-1.5 px-2 text-right num font-bold text-error">{fmtFull(report.openingImbalance.delta)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
           {report.unbalancedPieces.length > 0 && (
             <div className="mb-4">
               <h4 className="text-xs uppercase tracking-wider font-semibold mb-2 text-error">
