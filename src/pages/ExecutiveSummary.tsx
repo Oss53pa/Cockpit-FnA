@@ -69,6 +69,9 @@ export default function ExecutiveSummary() {
   const re = sig?.re ?? 0;
   const margePct = ca ? (resultat / ca) * 100 : 0;
   const ebePct = ca ? (ebe / ca) * 100 : 0;
+  // Neutralise NaN/Infinity avant de nourrir les charts nivo (évite les transforms
+  // SVG invalides « translate(, ) » et les chemins « d="null" » sur données réelles).
+  const sy = (v: number) => (Number.isFinite(v) ? v : 0);
 
   // BUG FIX (audit) : utiliser le _BT et DV du bilan (déjà calculés dans
   // computeBilan) plutôt que recalculer depuis la balance brute. L'ancien code :
@@ -86,13 +89,17 @@ export default function ExecutiveSummary() {
   // ─── Radar pyramide DuPont — 6 axes de performance ─────
   const radarData = useMemo(() => {
     const get = (code: string) => ratios.find((r) => r.code === code);
+    // clamp100 neutralise AUSSI les NaN/Infinity : Math.max(0, Math.min(100, NaN))
+    // renvoie NaN (Math.max/min ne filtrent pas NaN), et un NaN dans un chart
+    // radial nivo produit des transforms SVG invalides « rotate(…)translate(, ) ».
+    const clamp100 = (v: number) => (Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 0);
     return [
-      { axe: 'Rentabilité nette', valeur: Math.max(0, Math.min(100, (get('TRN')?.value ?? 0) * 5)), cible: 40 },
-      { axe: 'ROE', valeur: Math.max(0, Math.min(100, (get('ROE')?.value ?? 0) * 5)), cible: 50 },
-      { axe: 'Liquidité', valeur: Math.max(0, Math.min(100, (get('LG')?.value ?? 0) * 50)), cible: 75 },
-      { axe: 'Autonomie', valeur: Math.max(0, Math.min(100, autonomie * 2)), cible: 60 },
-      { axe: 'EBE / CA', valeur: Math.max(0, Math.min(100, ebePct * 5)), cible: 50 },
-      { axe: 'Marge brute', valeur: Math.max(0, Math.min(100, (get('MB')?.value ?? 0) * 3)), cible: 60 },
+      { axe: 'Rentabilité nette', valeur: clamp100((get('TRN')?.value ?? 0) * 5), cible: 40 },
+      { axe: 'ROE', valeur: clamp100((get('ROE')?.value ?? 0) * 5), cible: 50 },
+      { axe: 'Liquidité', valeur: clamp100((get('LG')?.value ?? 0) * 50), cible: 75 },
+      { axe: 'Autonomie', valeur: clamp100(autonomie * 2), cible: 60 },
+      { axe: 'EBE / CA', valeur: clamp100(ebePct * 5), cible: 50 },
+      { axe: 'Marge brute', valeur: clamp100((get('MB')?.value ?? 0) * 3), cible: 60 },
     ];
   }, [ratios, autonomie, ebePct]);
 
@@ -112,7 +119,7 @@ export default function ExecutiveSummary() {
     ];
     return lines.map((l) => ({
       etape: l.key,
-      valeur: Math.round(l.value),
+      valeur: Math.round(Number.isFinite(l.value) ? l.value : 0),
       color:
         l.type === 'final' ? (l.value >= 0 ? ct.at(0) : SEMANTIC.danger) :
         l.type === 'subtotal' ? ct.at(3) :
@@ -442,13 +449,15 @@ export default function ExecutiveSummary() {
             data={[
               {
                 id: 'Profil de la société',
+                // sy neutralise les NaN : un y non-fini dans nivo/line génère un
+                // chemin SVG invalide (<path d="null">).
                 data: [
-                  { x: 'Rentab.', y: margePct },
-                  { x: 'EBE/CA', y: ebePct },
-                  { x: 'Autonomie', y: autonomie },
-                  { x: 'Marge B.', y: ratios.find((r) => r.code === 'MB')?.value ?? 0 },
-                  { x: 'ROE', y: ratios.find((r) => r.code === 'ROE')?.value ?? 0 },
-                  { x: 'Liquidité x', y: (ratios.find((r) => r.code === 'LG')?.value ?? 0) * 10 },
+                  { x: 'Rentab.', y: sy(margePct) },
+                  { x: 'EBE/CA', y: sy(ebePct) },
+                  { x: 'Autonomie', y: sy(autonomie) },
+                  { x: 'Marge B.', y: sy(ratios.find((r) => r.code === 'MB')?.value ?? 0) },
+                  { x: 'ROE', y: sy(ratios.find((r) => r.code === 'ROE')?.value ?? 0) },
+                  { x: 'Liquidité x', y: sy((ratios.find((r) => r.code === 'LG')?.value ?? 0) * 10) },
                 ],
               },
             ]}
