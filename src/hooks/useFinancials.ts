@@ -418,10 +418,22 @@ export function useMonthlyCA() {
         .filter((p) => p.year === currentYear && p.month >= fromMonth && p.month <= toMonth)
         .sort((a, b) => a.month - b.month);
 
-      // Budget CA classes 70-73 par mois (toutes versions confondues)
+      // Résout la DERNIÈRE version de budget par exercice (tri sémantique).
+      // BUG FIX (audit) : sommer « toutes versions confondues » DOUBLAIT le
+      // budget CA quand une version révisée (V2) coexiste avec l'initiale (V1).
+      // Cohérent désormais avec computeBudgetActual (dernière version).
+      const latestVersion = (yr: number): string | undefined => {
+        const vs = Array.from(new Set(allBudgets.filter((b) => b.year === yr).map((b) => b.version)))
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        return vs[vs.length - 1];
+      };
+      const vN = latestVersion(currentYear);
+      const vN1 = latestVersion(currentYear - 1);
+
+      // Budget CA classes 70-73 par mois (dernière version de l'exercice)
       const budgetByMonth = new Map<number, number>();
       for (const b of allBudgets) {
-        if (b.year !== currentYear) continue;
+        if (b.year !== currentYear || b.version !== vN) continue;
         if (!/^7[0-3]/.test(b.account)) continue;
         const m = b.month ?? 0;
         budgetByMonth.set(m, (budgetByMonth.get(m) ?? 0) + Number(b.amount));
@@ -432,7 +444,7 @@ export function useMonthlyCA() {
       // le N-1 est donc le budget de l'exercice précédent, pas le réalisé GL N-1.
       const n1ByMonth = new Map<number, number>();
       for (const b of allBudgets) {
-        if (b.year !== currentYear - 1) continue;
+        if (b.year !== currentYear - 1 || b.version !== vN1) continue;
         if (!/^7[0-3]/.test(b.account)) continue;
         const m = b.month ?? 0;
         n1ByMonth.set(m, (n1ByMonth.get(m) ?? 0) + Number(b.amount));
