@@ -39,6 +39,7 @@ const dashboards = [
   { id: 'immo', route: '/dashboard/immo', name: 'Immobilisations', desc: 'Valeur brute, amortissements, VNC, taux de vétusté', icon: 'Building2', cat: 'Standard' },
   { id: 'tre', route: '/dashboard/tre', name: 'Trésorerie', desc: 'Position, flux mensuels, volatilité, amplitude', icon: 'Wallet', cat: 'Standard' },
   { id: 'bfr', route: '/dashboard/bfr', name: 'BFR', desc: 'Équation FR/BFR/TN, décomposition, cycle d\'exploitation', icon: 'Activity', cat: 'Standard' },
+  { id: 'tre_waterfall', route: '/dashboard/tre-waterfall', name: 'Waterfall Trésorerie ★', desc: 'Pont de trésorerie : ouverture → flux exploitation / investissement / financement → clôture (TFT), ou mois par mois', icon: 'Waves', cat: 'Standard' },
   { id: 'sal', route: '/dashboard/sal', name: 'Masse salariale', desc: 'Salaires directs, charges, ratio masse/CA, évolution', icon: 'UserCog', cat: 'Standard' },
   { id: 'fis', route: '/dashboard/fis', name: 'Fiscalité', desc: 'TVA collectée/déductible/nette, IS, pression fiscale', icon: 'Receipt', cat: 'Standard' },
   { id: 'ind', route: '/dashboard/ind', name: 'Industrie', desc: 'Production, coût MP, marge industrielle, taux de marge', icon: 'Factory', cat: 'Sectoriel' },

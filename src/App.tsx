@@ -58,6 +58,7 @@ const BreakEven = lazyWithRetry(() => import('./pages/BreakEven'));
 const ParetoAccounts = lazyWithRetry(() => import('./pages/ParetoAccounts'));
 const CashflowForecast = lazyWithRetry(() => import('./pages/CashflowForecast'));
 const Waterfall = lazyWithRetry(() => import('./pages/Waterfall'));
+const TresorerieWaterfall = lazyWithRetry(() => import('./pages/TresorerieWaterfall'));
 const ChartGallery = lazyWithRetry(() => import('./pages/ChartGallery'));
 const TFTMonthly = lazyWithRetry(() => import('./pages/TFTMonthly'));
 const CapitalVariationPage = lazyWithRetry(() => import('./pages/CapitalVariationPage'));
@@ -253,6 +254,7 @@ function App() {
         <Route path="/dashboard/pareto" element={<ProtectedRoute><AppLayout><ParetoAccounts /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/cashforecast" element={<ProtectedRoute><AppLayout><CashflowForecast /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/waterfall" element={<ProtectedRoute><AppLayout><Waterfall /></AppLayout></ProtectedRoute>} />
+        <Route path="/dashboard/tre-waterfall" element={<ProtectedRoute><AppLayout><TresorerieWaterfall /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/chart-gallery" element={<ProtectedRoute><AppLayout><ChartGallery /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/tft-monthly" element={<ProtectedRoute><AppLayout><TFTMonthly /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/capital-variation" element={<ProtectedRoute><AppLayout><CapitalVariationPage /></AppLayout></ProtectedRoute>} />
