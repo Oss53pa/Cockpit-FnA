@@ -1,8 +1,8 @@
 // Module Reporting IFRS — conversion SYSCOHADA révisé → IFRS
 // Sous-onglets : Mapping · Retraitements · États IFRS · Réconciliation · Notes.
 // Bilingue FR/EN. S'appuie sur src/engine/ifrs.ts (retraitements auto-détectés).
-import { Fragment, useMemo, useState } from 'react';
-import { Globe, ArrowRightLeft, FileText, Scale, GitCompareArrows, Info } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Globe, ArrowRightLeft, FileText, Scale, GitCompareArrows, Info, Download, SlidersHorizontal } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -11,11 +11,20 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useApp } from '../store/app';
 import { useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
+import { safeLocalStorage } from '../lib/safeStorage';
 import { fmtFull, fmtK } from '../lib/format';
-import { computeIfrsConversion, type IfrsLine } from '../engine/ifrs';
+import { computeIfrsConversion, DEFAULT_MANUAL, IFRS_TAX_RATE, type IfrsLine, type IfrsManualInputs } from '../engine/ifrs';
 
-type Tab = 'mapping' | 'retraitements' | 'etats' | 'reconciliation' | 'notes';
+type Tab = 'mapping' | 'retraitements' | 'etats' | 'reconciliation' | 'notes' | 'parametres';
 type Lang = 'fr' | 'en';
+
+function readParams(key: string): { taxRate: number; manual: IfrsManualInputs } {
+  try {
+    const v = safeLocalStorage.getItem(key);
+    if (v) { const p = JSON.parse(v); return { taxRate: p.taxRate ?? IFRS_TAX_RATE, manual: { ...DEFAULT_MANUAL, ...p.manual } }; }
+  } catch { /* ignore */ }
+  return { taxRate: IFRS_TAX_RATE, manual: DEFAULT_MANUAL };
+}
 
 const MAPPING: { sysco: string; ifrs: string; ifrsEn: string; norme: string }[] = [
   { sysco: 'Actif immobilisé (classes 20-27)', ifrs: 'Actifs non courants', ifrsEn: 'Non-current assets', norme: 'IAS 1' },
@@ -30,15 +39,41 @@ const MAPPING: { sysco: string; ifrs: string; ifrsEn: string; norme: string }[] 
 ];
 
 export default function IfrsReporting() {
-  const { currentYear } = useApp();
+  const { currentYear, currentOrgId } = useApp();
   const org = useCurrentOrg();
   const ct = useChartTheme();
   const { balance } = useStatements();
   const [tab, setTab] = useState<Tab>('etats');
   const [lang, setLang] = useState<Lang>('fr');
+  const storeKey = `ifrs-params-${currentOrgId ?? 'none'}`;
+  const [taxRate, setTaxRate] = useState<number>(() => readParams(storeKey).taxRate);
+  const [manual, setManual] = useState<IfrsManualInputs>(() => readParams(storeKey).manual);
 
-  const conv = useMemo(() => (balance && balance.length ? computeIfrsConversion(balance) : null), [balance]);
+  useEffect(() => {
+    if (currentOrgId) safeLocalStorage.setItem(storeKey, JSON.stringify({ taxRate, manual }));
+  }, [storeKey, currentOrgId, taxRate, manual]);
+
+  const conv = useMemo(
+    () => (balance && balance.length ? computeIfrsConversion(balance, { taxRate, manual }) : null),
+    [balance, taxRate, manual],
+  );
   const L = (l: IfrsLine) => (lang === 'fr' ? l.fr : l.en);
+
+  const exportPdf = async () => {
+    if (!conv) return;
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pick = (l: IfrsLine) => (lang === 'fr' ? l.fr : l.en);
+    doc.setFontSize(16); doc.text(lang === 'fr' ? 'Reporting IFRS' : 'IFRS Reporting', 40, 48);
+    doc.setFontSize(10); doc.setTextColor(120); doc.text(`${org?.name ?? ''} · ${lang === 'fr' ? 'Exercice' : 'FY'} ${currentYear} · ${lang === 'fr' ? 'converti depuis SYSCOHADA révisé' : 'converted from revised SYSCOHADA'}`, 40, 66);
+    const money = (v: number) => fmtFull(v);
+    const sofp = [...conv.sofp.nonCurrentAssets, ...conv.sofp.currentAssets, ...conv.sofp.equity, ...conv.sofp.nonCurrentLiabilities, ...conv.sofp.currentLiabilities];
+    autoTable(doc, { startY: 84, head: [[lang === 'fr' ? 'État de la situation financière (IAS 1)' : 'Statement of Financial Position (IAS 1)', 'XOF']], body: sofp.map((l) => [pick(l), money(l.value)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
+    autoTable(doc, { head: [[lang === 'fr' ? 'Compte de résultat' : 'Statement of Profit or Loss', 'XOF']], body: conv.pnl.map((l) => [pick(l), money(l.value)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
+    autoTable(doc, { head: [[lang === 'fr' ? 'Réconciliation des capitaux propres (IFRS 1)' : 'Equity reconciliation (IFRS 1)', 'XOF']], body: conv.reconEquity.map((l) => [pick(l), money(l.value)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
+    autoTable(doc, { head: [[lang === 'fr' ? 'Retraitements' : 'Adjustments', lang === 'fr' ? 'Impact CP' : 'Equity impact']], body: conv.adjustments.map((a) => [`${a.norme} — ${lang === 'fr' ? a.fr : a.en}`, money(a.impactEquity)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
+    doc.save(`IFRS_${(org?.name ?? 'entreprise').replace(/\s+/g, '_')}_${currentYear}.pdf`);
+  };
 
   if (!balance || balance.length === 0 || !conv) {
     return (
@@ -62,9 +97,14 @@ export default function IfrsReporting() {
           `SYSCOHADA-to-IFRS conversion — ${org?.name ?? '—'} · FY ${currentYear}`,
         )}
         action={
-          <button className="btn-outline" onClick={() => setLang((p) => (p === 'fr' ? 'en' : 'fr'))}>
-            <Globe className="w-4 h-4" /> {lang === 'fr' ? 'English' : 'Français'}
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-outline" onClick={() => setLang((p) => (p === 'fr' ? 'en' : 'fr'))}>
+              <Globe className="w-4 h-4" /> {lang === 'fr' ? 'English' : 'Français'}
+            </button>
+            <button className="btn-clay" onClick={exportPdf}>
+              <Download className="w-4 h-4" /> {t('Export PDF', 'Export PDF')}
+            </button>
+          </div>
         }
       />
 
@@ -81,6 +121,7 @@ export default function IfrsReporting() {
             { key: 'etats', label: t('États IFRS', 'IFRS statements') },
             { key: 'reconciliation', label: t('Réconciliation', 'Reconciliation') },
             { key: 'retraitements', label: t('Retraitements', 'Adjustments') },
+            { key: 'parametres', label: t('Paramètres', 'Settings') },
             { key: 'mapping', label: 'Mapping' },
             { key: 'notes', label: 'Notes' },
           ]}
@@ -194,6 +235,35 @@ export default function IfrsReporting() {
         </ChartCard>
       )}
 
+      {tab === 'parametres' && (
+        <ChartCard title={t('Retraitements manuels & paramètres', 'Manual adjustments & settings')} subtitle={t('Alimentez les retraitements nécessitant des données externes — persistés localement par entité', 'Feed the adjustments requiring external data — stored locally per entity')} accent={ct.at(0)}>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <FieldGroup title={t("Taux d'imposition", 'Tax rate')} norme="IAS 12">
+              <NumberField label={t("Taux d'IS (%)", 'Income tax rate (%)')} value={taxRate * 100} onChange={(v) => setTaxRate(v / 100)} step={1} />
+            </FieldGroup>
+            <FieldGroup title={t('Contrats de location', 'Leases')} norme="IFRS 16">
+              <NumberField label={t('Loyer annuel', 'Annual payment')} value={manual.ifrs16.annualPayment} onChange={(v) => setManual((m) => ({ ...m, ifrs16: { ...m.ifrs16, annualPayment: v } }))} />
+              <NumberField label={t('Durée résiduelle (ans)', 'Remaining term (yrs)')} value={manual.ifrs16.termYears} onChange={(v) => setManual((m) => ({ ...m, ifrs16: { ...m.ifrs16, termYears: v } }))} />
+              <NumberField label={t("Taux d'actualisation (%)", 'Discount rate (%)')} value={manual.ifrs16.rate * 100} onChange={(v) => setManual((m) => ({ ...m, ifrs16: { ...m.ifrs16, rate: v / 100 } }))} step={0.5} />
+            </FieldGroup>
+            <FieldGroup title={t('Engagements de retraite', 'Employee benefits')} norme="IAS 19">
+              <NumberField label={t('Obligation (DBO)', 'Obligation (DBO)')} value={manual.ias19.obligation} onChange={(v) => setManual((m) => ({ ...m, ias19: { ...m.ias19, obligation: v } }))} />
+              <NumberField label={t('Déjà provisionné', 'Already provided')} value={manual.ias19.alreadyProvided} onChange={(v) => setManual((m) => ({ ...m, ias19: { ...m.ias19, alreadyProvided: v } }))} />
+            </FieldGroup>
+            <FieldGroup title={t('Impôts différés', 'Deferred tax')} norme="IAS 12">
+              <NumberField label={t('Différences temporelles nettes', 'Net temporary differences')} value={manual.ias12.temporaryDifferences} onChange={(v) => setManual((m) => ({ ...m, ias12: { ...m.ias12, temporaryDifferences: v } }))} />
+            </FieldGroup>
+            <FieldGroup title={t('Dépréciation créances', 'Receivables impairment')} norme="IFRS 9">
+              <NumberField label={t('Taux de perte attendue (%)', 'Expected credit loss (%)')} value={manual.ifrs9.eclRate * 100} onChange={(v) => setManual((m) => ({ ...m, ifrs9: { ...m.ifrs9, eclRate: v / 100 } }))} step={0.5} />
+            </FieldGroup>
+          </div>
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-[10px] text-primary-400 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> {t('Les états et ponts se recalculent en temps réel.', 'Statements and bridges recompute in real time.')}</p>
+            <button className="btn-outline text-xs" onClick={() => { setManual(DEFAULT_MANUAL); setTaxRate(IFRS_TAX_RATE); }}>{t('Réinitialiser', 'Reset')}</button>
+          </div>
+        </ChartCard>
+      )}
+
       {tab === 'notes' && (
         <ChartCard title={t('Notes méthodologiques', 'Methodology notes')} subtitle={t('Portée et limites de la conversion', 'Scope & limitations')} accent={ct.at(0)}>
           <div className="space-y-3 text-[12px] text-primary-600 dark:text-primary-300 leading-relaxed">
@@ -205,7 +275,7 @@ export default function IfrsReporting() {
               )}</p>
             </div>
             <p><strong>{t('Retraitements appliqués', 'Applied adjustments')} :</strong> IAS 38 ({t("frais d'établissement", 'establishment costs')}), IAS 21 ({t('change latent', 'unrealised FX')}), IAS 20 ({t('subventions', 'grants')}), IAS 12 ({t('impôt différé sur provisions réglementées', 'deferred tax on regulated provisions')}), IAS 1 (HAO).</p>
-            <p><strong>{t('Retraitements NON appliqués', 'NOT applied')} ({t('nécessitent des inputs externes', 'require external inputs')}) :</strong> IFRS 16 ({t('contrats de location', 'leases')}), IAS 19 ({t('engagements de retraite', 'employee benefits')}), IFRS 9 ({t('dépréciation ECL', 'ECL impairment')}), IAS 12 {t('complet', 'full scope')}.</p>
+            <p><strong>{t('Retraitements sur saisie', 'Input-driven adjustments')} ({t("onglet Paramètres", 'Settings tab')}) :</strong> IFRS 16 ({t('contrats de location', 'leases')}), IAS 19 ({t('engagements de retraite', 'employee benefits')}), IFRS 9 ({t('dépréciation ECL', 'ECL impairment')}), IAS 12 {t('différences temporelles', 'temporary differences')}. {t('Appliqués dès que renseignés, avec impact équilibré sur le SoFP et les ponts.', 'Applied as soon as entered, with a balanced impact on the SoFP and bridges.')}</p>
             <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border-l-2 border-warning">
               <GitCompareArrows className="w-4 h-4 text-warning shrink-0 mt-0.5" />
               <p>{t(
@@ -259,5 +329,32 @@ function ReconTable({ lines, pick }: { lines: IfrsLine[]; pick: (l: IfrsLine) =>
         })}
       </tbody>
     </table>
+  );
+}
+
+function FieldGroup({ title, norme, children }: { title: string; norme: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-primary-200 dark:border-primary-800 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent font-semibold">{norme}</span>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function NumberField({ label, value, onChange, step = 1 }: { label: string; value: number; onChange: (v: number) => void; step?: number }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] text-primary-500">{label}</span>
+      <input
+        type="number"
+        step={step}
+        value={Number.isFinite(value) ? value : 0}
+        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        className="w-full mt-1 px-3 py-1.5 rounded-lg border border-primary-200 dark:border-primary-700 bg-transparent text-sm num focus:outline-none focus:border-accent"
+      />
+    </label>
   );
 }
