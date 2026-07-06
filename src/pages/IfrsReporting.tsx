@@ -1,8 +1,9 @@
-// Module Reporting IFRS — conversion SYSCOHADA révisé → IFRS
-// Sous-onglets : Mapping · Retraitements · États IFRS · Réconciliation · Notes.
-// Bilingue FR/EN. S'appuie sur src/engine/ifrs.ts (retraitements auto-détectés).
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Globe, ArrowRightLeft, FileText, Scale, GitCompareArrows, Info, Download, SlidersHorizontal } from 'lucide-react';
+// Module Reporting IFRS — liasse complète niveau « GT Example Financial Statements »
+// Jeu complet 5 états (P&L · OCI · SoFP · Variation des CP · Flux) en comparatif
+// N/N-1, références IAS/IFRS par ligne, notes, retraitements auto + manuels,
+// réconciliation IFRS 1, bilingue FR/EN, export PDF « liasse » multi-pages.
+import { useEffect, useMemo, useState } from 'react';
+import { Globe, ArrowRightLeft, Scale, GitCompareArrows, Info, Download, SlidersHorizontal } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TabSwitch } from '../components/ui/TabSwitch';
 import { ChartCard } from '../components/ui/ChartCard';
@@ -13,18 +14,12 @@ import { useCurrentOrg, useStatements } from '../hooks/useFinancials';
 import { useChartTheme } from '../lib/chartTheme';
 import { safeLocalStorage } from '../lib/safeStorage';
 import { fmtFull, fmtK } from '../lib/format';
-import { computeIfrsConversion, DEFAULT_MANUAL, IFRS_TAX_RATE, type IfrsLine, type IfrsManualInputs } from '../engine/ifrs';
+import { dataProvider } from '../db/provider';
+import { computeBalance, type BalanceRow } from '../engine/balance';
+import { computeIfrsReport, DEFAULT_MANUAL, IFRS_TAX_RATE, type IfrsLineC, type IfrsManualInputs, type IfrsReport } from '../engine/ifrs';
 
-type Tab = 'mapping' | 'retraitements' | 'etats' | 'reconciliation' | 'notes' | 'parametres';
+type Tab = 'etats' | 'reconciliation' | 'retraitements' | 'parametres' | 'mapping' | 'notes';
 type Lang = 'fr' | 'en';
-
-function readParams(key: string): { taxRate: number; manual: IfrsManualInputs } {
-  try {
-    const v = safeLocalStorage.getItem(key);
-    if (v) { const p = JSON.parse(v); return { taxRate: p.taxRate ?? IFRS_TAX_RATE, manual: { ...DEFAULT_MANUAL, ...p.manual } }; }
-  } catch { /* ignore */ }
-  return { taxRate: IFRS_TAX_RATE, manual: DEFAULT_MANUAL };
-}
 
 const MAPPING: { sysco: string; ifrs: string; ifrsEn: string; norme: string }[] = [
   { sysco: 'Actif immobilisé (classes 20-27)', ifrs: 'Actifs non courants', ifrsEn: 'Non-current assets', norme: 'IAS 1' },
@@ -34,9 +29,17 @@ const MAPPING: { sysco: string; ifrs: string; ifrsEn: string; norme: string }[] 
   { sysco: "Subventions d'investissement (14)", ifrs: 'Produits différés', ifrsEn: 'Deferred income', norme: 'IAS 20' },
   { sysco: 'Dettes financières (16-18)', ifrs: 'Passifs non courants', ifrsEn: 'Non-current liabilities', norme: 'IAS 1' },
   { sysco: 'Passif circulant + trésorerie passive', ifrs: 'Passifs courants', ifrsEn: 'Current liabilities', norme: 'IAS 1' },
-  { sysco: 'Résultat HAO (classes 81-88)', ifrs: '↔ Fusionné dans l\'ordinaire', ifrsEn: '↔ Merged into ordinary result', norme: 'IAS 1' },
+  { sysco: 'Résultat HAO (classes 81-88)', ifrs: "↔ Fusionné dans l'ordinaire", ifrsEn: '↔ Merged into ordinary result', norme: 'IAS 1' },
   { sysco: 'SIG (marge brute, VA, EBE)', ifrs: 'Non repris (spécifique OHADA)', ifrsEn: 'Not carried over (OHADA-specific)', norme: '—' },
 ];
+
+function readParams(key: string): { taxRate: number; manual: IfrsManualInputs } {
+  try {
+    const v = safeLocalStorage.getItem(key);
+    if (v) { const p = JSON.parse(v); return { taxRate: p.taxRate ?? IFRS_TAX_RATE, manual: { ...DEFAULT_MANUAL, ...p.manual } }; }
+  } catch { /* ignore */ }
+  return { taxRate: IFRS_TAX_RATE, manual: DEFAULT_MANUAL };
+}
 
 export default function IfrsReporting() {
   const { currentYear, currentOrgId } = useApp();
@@ -45,6 +48,7 @@ export default function IfrsReporting() {
   const { balance } = useStatements();
   const [tab, setTab] = useState<Tab>('etats');
   const [lang, setLang] = useState<Lang>('fr');
+  const [priorBalance, setPriorBalance] = useState<BalanceRow[] | null>(null);
   const storeKey = `ifrs-params-${currentOrgId ?? 'none'}`;
   const [taxRate, setTaxRate] = useState<number>(() => readParams(storeKey).taxRate);
   const [manual, setManual] = useState<IfrsManualInputs>(() => readParams(storeKey).manual);
@@ -53,48 +57,70 @@ export default function IfrsReporting() {
     if (currentOrgId) safeLocalStorage.setItem(storeKey, JSON.stringify({ taxRate, manual }));
   }, [storeKey, currentOrgId, taxRate, manual]);
 
-  const conv = useMemo(
-    () => (balance && balance.length ? computeIfrsConversion(balance, { taxRate, manual }) : null),
-    [balance, taxRate, manual],
+  // Charge la balance N-1 pour le comparatif (dernier import GL de l'entité).
+  useEffect(() => {
+    if (!currentOrgId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const imports = await dataProvider.getImports(currentOrgId);
+        const gl = imports.filter((i) => i.kind === 'GL');
+        const importId = gl.length ? String(gl[0].id) : undefined;
+        let bal = await computeBalance({ orgId: currentOrgId, year: currentYear - 1, includeOpening: true, importId });
+        if (bal.length === 0 && importId) bal = await computeBalance({ orgId: currentOrgId, year: currentYear - 1, includeOpening: true });
+        if (alive) setPriorBalance(bal);
+      } catch { if (alive) setPriorBalance(null); }
+    })();
+    return () => { alive = false; };
+  }, [currentOrgId, currentYear]);
+
+  const report = useMemo<IfrsReport | null>(
+    () => (balance && balance.length ? computeIfrsReport(balance, priorBalance, currentYear, { taxRate, manual }) : null),
+    [balance, priorBalance, currentYear, taxRate, manual],
   );
-  const L = (l: IfrsLine) => (lang === 'fr' ? l.fr : l.en);
+
+  const t = (fr: string, en: string) => (lang === 'fr' ? fr : en);
+  const pick = (l: { fr: string; en: string }) => (lang === 'fr' ? l.fr : l.en);
 
   const exportPdf = async () => {
-    if (!conv) return;
+    if (!report) return;
     const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const pick = (l: IfrsLine) => (lang === 'fr' ? l.fr : l.en);
-    doc.setFontSize(16); doc.text(lang === 'fr' ? 'Reporting IFRS' : 'IFRS Reporting', 40, 48);
-    doc.setFontSize(10); doc.setTextColor(120); doc.text(`${org?.name ?? ''} · ${lang === 'fr' ? 'Exercice' : 'FY'} ${currentYear} · ${lang === 'fr' ? 'converti depuis SYSCOHADA révisé' : 'converted from revised SYSCOHADA'}`, 40, 66);
-    const money = (v: number) => fmtFull(v);
-    const sofp = [...conv.sofp.nonCurrentAssets, ...conv.sofp.currentAssets, ...conv.sofp.equity, ...conv.sofp.nonCurrentLiabilities, ...conv.sofp.currentLiabilities];
-    autoTable(doc, { startY: 84, head: [[lang === 'fr' ? 'État de la situation financière (IAS 1)' : 'Statement of Financial Position (IAS 1)', 'XOF']], body: sofp.map((l) => [pick(l), money(l.value)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
-    autoTable(doc, { head: [[lang === 'fr' ? 'Compte de résultat' : 'Statement of Profit or Loss', 'XOF']], body: conv.pnl.map((l) => [pick(l), money(l.value)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
-    autoTable(doc, { head: [[lang === 'fr' ? 'Réconciliation des capitaux propres (IFRS 1)' : 'Equity reconciliation (IFRS 1)', 'XOF']], body: conv.reconEquity.map((l) => [pick(l), money(l.value)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
-    autoTable(doc, { head: [[lang === 'fr' ? 'Retraitements' : 'Adjustments', lang === 'fr' ? 'Impact CP' : 'Equity impact']], body: conv.adjustments.map((a) => [`${a.norme} — ${lang === 'fr' ? a.fr : a.en}`, money(a.impactEquity)]), styles: { fontSize: 8 }, headStyles: { fillColor: [31, 30, 27] } });
-    doc.save(`IFRS_${(org?.name ?? 'entreprise').replace(/\s+/g, '_')}_${currentYear}.pdf`);
+    const head = [[t('Poste', 'Item'), String(report.yearN), report.hasPrior ? String(report.yearN1) : '', 'Réf.']];
+    const rows = (lines: IfrsLineC[]) => lines.map((l) => [`${l.indent ? '   ' : ''}${pick(l)}`, fmtFull(l.value), report.hasPrior ? fmtFull(l.prior) : '', l.ref ?? '']);
+    const section = (title: string, lines: IfrsLineC[]) => autoTable(doc, { head: [[title, '', '', '']], body: rows(lines), styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 30, 27] }, columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right', textColor: [150, 150, 150], fontSize: 6 } } });
+    doc.setFontSize(17); doc.text(t('Liasse IFRS', 'IFRS Financial Statements'), 40, 50);
+    doc.setFontSize(10); doc.setTextColor(120);
+    doc.text(`${org?.name ?? ''} · ${t('Exercice', 'FY')} ${report.yearN}${report.hasPrior ? ` / ${report.yearN1}` : ''} · ${t('converti depuis SYSCOHADA révisé', 'converted from revised SYSCOHADA')}`, 40, 68);
+    autoTable(doc, { startY: 84, head, body: rows(report.pnl), styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 30, 27] }, columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right', textColor: [150, 150, 150], fontSize: 6 } } });
+    section(t('Résultat global (OCI)', 'Comprehensive income (OCI)'), report.oci);
+    section(t('Situation financière — Actifs', 'Financial position — Assets'), [...report.sofpNCA, ...report.sofpCA]);
+    section(t('Situation financière — CP & Passifs', 'Financial position — Equity & Liabilities'), [...report.sofpEquity, ...report.sofpNCL, ...report.sofpCL]);
+    section(t('Flux de trésorerie', 'Cash flows'), report.cashflow);
+    section(t('Réconciliation des capitaux propres (IFRS 1)', 'Equity reconciliation (IFRS 1)'), report.reconEquity);
+    doc.save(`IFRS_${(org?.name ?? 'entreprise').replace(/\s+/g, '_')}_${report.yearN}.pdf`);
   };
 
-  if (!balance || balance.length === 0 || !conv) {
+  if (!balance || balance.length === 0 || !report) {
     return (
       <div>
         <PageHeader title="Reporting IFRS" subtitle={`Conversion SYSCOHADA révisé → IFRS — ${org?.name ?? '—'} · Exercice ${currentYear}`} />
-        <EmptyState icon={Globe} title="Aucune donnée à convertir" description="Importez votre Grand Livre pour générer automatiquement les états IFRS et les ponts de réconciliation." />
+        <EmptyState icon={Globe} title="Aucune donnée à convertir" description="Importez votre Grand Livre pour générer la liasse IFRS et les ponts de réconciliation." />
       </div>
     );
   }
 
-  const c = conv;
-  const t = (fr: string, en: string) => (lang === 'fr' ? fr : en);
+  const r = report;
+  const curr = org?.currency ?? 'XOF';
 
   return (
     <div>
       <PageHeader
         eyebrow={t('Normes internationales', 'International standards')}
-        title={t('Reporting IFRS', 'IFRS Reporting')}
+        title={t('Reporting IFRS — Liasse complète', 'IFRS Reporting — Full statements')}
         subtitle={t(
-          `Conversion SYSCOHADA révisé → IFRS — ${org?.name ?? '—'} · Exercice ${currentYear}`,
-          `SYSCOHADA-to-IFRS conversion — ${org?.name ?? '—'} · FY ${currentYear}`,
+          `Jeu complet d'états convertis depuis SYSCOHADA révisé — ${org?.name ?? '—'} · Exercice ${r.yearN}${r.hasPrior ? ` / ${r.yearN1}` : ''}`,
+          `Complete set of statements converted from revised SYSCOHADA — ${org?.name ?? '—'} · FY ${r.yearN}${r.hasPrior ? ` / ${r.yearN1}` : ''}`,
         )}
         action={
           <div className="flex gap-2">
@@ -102,23 +128,23 @@ export default function IfrsReporting() {
               <Globe className="w-4 h-4" /> {lang === 'fr' ? 'English' : 'Français'}
             </button>
             <button className="btn-clay" onClick={exportPdf}>
-              <Download className="w-4 h-4" /> {t('Export PDF', 'Export PDF')}
+              <Download className="w-4 h-4" /> {t('Export liasse PDF', 'Export PDF pack')}
             </button>
           </div>
         }
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KPICard title={t('Capitaux propres SYSCOHADA', 'Equity — SYSCOHADA')} value={fmtK(c.equitySysco)} unit="XOF" icon={<Scale className="w-4 h-4" />} color={ct.at(3)} />
-        <KPICard title={t('Capitaux propres IFRS', 'Equity — IFRS')} value={fmtK(c.equityIfrs)} unit="XOF" subValue={`${c.equityIfrs - c.equitySysco >= 0 ? '+' : ''}${fmtK(c.equityIfrs - c.equitySysco)}`} icon={<Globe className="w-4 h-4" />} color={ct.at(0)} />
-        <KPICard title={t('Résultat SYSCOHADA', 'Profit — SYSCOHADA')} value={fmtK(c.resultSysco)} unit="XOF" icon={<FileText className="w-4 h-4" />} color={ct.at(4)} />
-        <KPICard title={t('Résultat net IFRS', 'Profit — IFRS')} value={fmtK(c.resultIfrs)} unit="XOF" subValue={`${c.resultIfrs - c.resultSysco >= 0 ? '+' : ''}${fmtK(c.resultIfrs - c.resultSysco)}`} icon={<Globe className="w-4 h-4" />} color={c.resultIfrs >= 0 ? ct.at(0) : ct.at(1)} />
+        <KPICard title={t('Capitaux propres IFRS', 'Equity — IFRS')} value={fmtK(r.equityIfrsN)} unit={curr} icon={<Scale className="w-4 h-4" />} color={ct.at(0)} />
+        <KPICard title={t('Résultat net IFRS', 'Profit — IFRS')} value={fmtK(r.resultIfrsN)} unit={curr} subValue={t('vs SYSCOHADA', 'vs SYSCOHADA')} icon={<Globe className="w-4 h-4" />} color={r.resultIfrsN >= 0 ? ct.at(0) : ct.at(1)} />
+        <KPICard title={t('Total bilan IFRS', 'Total assets — IFRS')} value={fmtK(r.totalAssetsN)} unit={curr} icon={<Scale className="w-4 h-4" />} color={ct.at(3)} />
+        <KPICard title={t('Comparatif', 'Comparative')} value={r.hasPrior ? `${r.yearN} / ${r.yearN1}` : String(r.yearN)} subValue={r.hasPrior ? t('2 exercices', '2 years') : t('N-1 indisponible', 'no prior year')} icon={<GitCompareArrows className="w-4 h-4" />} color={ct.at(2)} />
       </div>
 
       <div className="mb-4">
         <TabSwitch
           tabs={[
-            { key: 'etats', label: t('États IFRS', 'IFRS statements') },
+            { key: 'etats', label: t('États financiers', 'Statements') },
             { key: 'reconciliation', label: t('Réconciliation', 'Reconciliation') },
             { key: 'retraitements', label: t('Retraitements', 'Adjustments') },
             { key: 'parametres', label: t('Paramètres', 'Settings') },
@@ -131,53 +157,46 @@ export default function IfrsReporting() {
       </div>
 
       {tab === 'etats' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title={t('État de la situation financière', 'Statement of Financial Position')} subtitle="IAS 1 — current / non-current" accent={ct.at(0)}>
-            <IfrsTable lang={lang} groups={[
-              { title: t('Actifs non courants', 'Non-current assets'), lines: c.sofp.nonCurrentAssets },
-              { title: t('Actifs courants', 'Current assets'), lines: c.sofp.currentAssets },
-              { title: t('Capitaux propres', 'Equity'), lines: c.sofp.equity },
-              { title: t('Passifs non courants', 'Non-current liabilities'), lines: c.sofp.nonCurrentLiabilities },
-              { title: t('Passifs courants', 'Current liabilities'), lines: c.sofp.currentLiabilities },
-            ]} pick={L} />
-            <div className="flex justify-between mt-2 pt-2 border-t border-primary-200 dark:border-primary-700 text-[12px] font-bold">
-              <span>{t('Total actif', 'Total assets')}</span>
-              <span className="num">{fmtFull(c.sofp.totalAssets)}</span>
-            </div>
-            <div className="flex justify-between text-[12px] font-bold text-primary-500">
-              <span>{t('Total CP + passif', 'Total equity & liabilities')}</span>
-              <span className="num">{fmtFull(c.sofp.totalEquityAndLiabilities)}</span>
-            </div>
+        <div className="space-y-4">
+          <p className="text-[11px] text-primary-400 italic">{t(`Montants en ${curr}. Références normatives entre parenthèses.`, `Amounts in ${curr}. Standard references in brackets.`)}</p>
+          <ChartCard title={t('Compte de résultat', 'Statement of Profit or Loss')} subtitle="IAS 1 · par nature" accent={ct.at(0)}>
+            <StatementTable lines={r.pnl} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} />
           </ChartCard>
-
-          <ChartCard title={t('Compte de résultat', 'Statement of Profit or Loss')} subtitle={t('Par nature — HAO fusionné', 'By nature — extraordinary items merged')} accent={ct.at(3)}>
-            <table className="w-full text-sm">
-              <tbody>
-                {c.pnl.map((l) => (
-                  <tr key={l.code} className={l.total ? 'border-t border-primary-200 dark:border-primary-700 font-bold' : ''}>
-                    <td className={`py-1.5 ${l.indent ? 'pl-4 text-primary-600 dark:text-primary-300' : ''}`}>{L(l)}</td>
-                    <td className={`py-1.5 text-right num ${l.value < 0 ? 'text-error' : ''}`}>{fmtFull(l.value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <ChartCard title={t('Résultat global', 'Statement of Comprehensive Income')} subtitle="IAS 1.82A" accent={ct.at(3)}>
+            <StatementTable lines={r.oci} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} />
+          </ChartCard>
+          <ChartCard title={t('État de la situation financière', 'Statement of Financial Position')} subtitle="IAS 1 · current / non-current" accent={ct.at(0)}>
+            <StatementTable lines={r.sofpNCA} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} header={t('ACTIFS NON COURANTS', 'NON-CURRENT ASSETS')} />
+            <StatementTable lines={r.sofpCA} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} header={t('ACTIFS COURANTS', 'CURRENT ASSETS')} noHead />
+            <GrandTotal label={t('TOTAL ACTIF', 'TOTAL ASSETS')} n={r.totalAssetsN} n1={r.totalAssetsN1} hasPrior={r.hasPrior} />
+            <StatementTable lines={r.sofpEquity} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} header={t('CAPITAUX PROPRES', 'EQUITY')} noHead />
+            <StatementTable lines={r.sofpNCL} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} header={t('PASSIFS NON COURANTS', 'NON-CURRENT LIABILITIES')} noHead />
+            <StatementTable lines={r.sofpCL} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={r.hasPrior} t={t} header={t('PASSIFS COURANTS', 'CURRENT LIABILITIES')} noHead />
+            <GrandTotal label={t('TOTAL CAPITAUX PROPRES & PASSIFS', 'TOTAL EQUITY & LIABILITIES')} n={r.totalELN} n1={r.totalELN1} hasPrior={r.hasPrior} />
+          </ChartCard>
+          <ChartCard title={t('Variation des capitaux propres', 'Statement of Changes in Equity')} subtitle="IAS 1.106" accent={ct.at(4)}>
+            <SceTable sce={r.sce} />
+          </ChartCard>
+          <ChartCard title={t('Tableau des flux de trésorerie', 'Statement of Cash Flows')} subtitle={t('IAS 7 · méthode indirecte', 'IAS 7 · indirect method')} accent={ct.at(2)}>
+            <StatementTable lines={r.cashflow} pick={pick} yearN={r.yearN} yearN1={r.yearN1} hasPrior={false} t={t} />
+            {r.hasPrior && <p className="text-[10px] text-primary-400 mt-2">{t('Le comparatif N-1 des flux nécessite l\'exercice N-2 (non calculé).', 'Prior-year cash flows require year N-2 (not computed).')}</p>}
           </ChartCard>
         </div>
       )}
 
       {tab === 'reconciliation' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title={t('Pont des capitaux propres', 'Equity reconciliation')} subtitle={t('SYSCOHADA → IFRS (type IFRS 1)', 'SYSCOHADA → IFRS (IFRS 1 style)')} accent={ct.at(0)}>
-            <ReconTable lines={c.reconEquity} pick={L} />
+          <ChartCard title={t('Pont des capitaux propres', 'Equity reconciliation')} subtitle="SYSCOHADA → IFRS (IFRS 1)" accent={ct.at(0)}>
+            <ReconTable lines={r.reconEquity} pick={pick} />
           </ChartCard>
           <ChartCard title={t('Pont du résultat', 'Profit reconciliation')} subtitle="SYSCOHADA → IFRS" accent={ct.at(3)}>
-            <ReconTable lines={c.reconResult} pick={L} />
+            <ReconTable lines={r.reconResult} pick={pick} />
           </ChartCard>
         </div>
       )}
 
       {tab === 'retraitements' && (
-        <ChartCard title={t('Retraitements de conversion', 'Conversion adjustments')} subtitle={t(`Auto-détectés depuis la balance · impôt ${(c.taxRate * 100).toFixed(0)} %`, `Auto-detected from the trial balance · tax ${(c.taxRate * 100).toFixed(0)}%`)} accent={ct.at(0)}>
+        <ChartCard title={t('Retraitements de conversion', 'Conversion adjustments')} subtitle={t(`Auto + manuels · impôt ${(r.taxRate * 100).toFixed(0)} %`, `Auto + manual · tax ${(r.taxRate * 100).toFixed(0)}%`)} accent={ct.at(0)}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -190,13 +209,10 @@ export default function IfrsReporting() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
-                {c.adjustments.map((a) => (
+                {r.adjustments.map((a) => (
                   <tr key={a.id} className="hover:bg-primary-50/60 dark:hover:bg-primary-900/40">
-                    <td className="py-2 px-2"><span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent font-semibold">{a.norme}</span></td>
-                    <td className="py-2 px-2">
-                      <p className="font-medium">{lang === 'fr' ? a.fr : a.en}</p>
-                      <p className="text-[11px] text-primary-400">{a.detail}</p>
-                    </td>
+                    <td className="py-2 px-2"><span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${a.type === 'manuel' ? 'bg-accent/15 text-accent' : 'bg-primary-100 dark:bg-primary-800 text-primary-500'}`}>{a.norme}</span></td>
+                    <td className="py-2 px-2"><p className="font-medium">{lang === 'fr' ? a.fr : a.en}</p><p className="text-[11px] text-primary-400">{a.detail}</p></td>
                     <td className="py-2 px-2 text-right num">{fmtK(a.montant)}</td>
                     <td className={`py-2 px-2 text-right num ${a.impactResult !== 0 ? (a.impactResult > 0 ? 'text-success' : 'text-error') : 'text-primary-300'}`}>{a.impactResult !== 0 ? fmtK(a.impactResult) : '—'}</td>
                     <td className={`py-2 px-2 text-right num ${a.impactEquity !== 0 ? (a.impactEquity > 0 ? 'text-success' : 'text-error') : 'text-primary-300'}`}>{a.impactEquity !== 0 ? fmtK(a.impactEquity) : '—'}</td>
@@ -208,35 +224,8 @@ export default function IfrsReporting() {
         </ChartCard>
       )}
 
-      {tab === 'mapping' && (
-        <ChartCard title={t('Correspondance SYSCOHADA ↔ IFRS', 'SYSCOHADA ↔ IFRS mapping')} subtitle={t('Reclassement de présentation (IAS 1)', 'Presentation reclassification (IAS 1)')} accent={ct.at(0)}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-primary-200 dark:border-primary-700 text-xs uppercase text-primary-500">
-                  <th className="text-left py-2 px-2">SYSCOHADA</th>
-                  <th className="text-left py-2 px-2 w-8"></th>
-                  <th className="text-left py-2 px-2">IFRS</th>
-                  <th className="text-right py-2 px-2">{t('Norme', 'Standard')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
-                {MAPPING.map((m, i) => (
-                  <tr key={i} className="hover:bg-primary-50/60 dark:hover:bg-primary-900/40">
-                    <td className="py-2 px-2">{m.sysco}</td>
-                    <td className="py-2 px-2 text-primary-400"><ArrowRightLeft className="w-3.5 h-3.5" /></td>
-                    <td className="py-2 px-2 font-medium">{lang === 'fr' ? m.ifrs : m.ifrsEn}</td>
-                    <td className="py-2 px-2 text-right"><span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-800 text-primary-500 font-semibold">{m.norme}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
-      )}
-
       {tab === 'parametres' && (
-        <ChartCard title={t('Retraitements manuels & paramètres', 'Manual adjustments & settings')} subtitle={t('Alimentez les retraitements nécessitant des données externes — persistés localement par entité', 'Feed the adjustments requiring external data — stored locally per entity')} accent={ct.at(0)}>
+        <ChartCard title={t('Retraitements manuels & paramètres', 'Manual adjustments & settings')} subtitle={t('Alimentez les retraitements nécessitant des données externes — persistés par entité', 'Feed the adjustments requiring external data — stored per entity')} accent={ct.at(0)}>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FieldGroup title={t("Taux d'imposition", 'Tax rate')} norme="IAS 12">
               <NumberField label={t("Taux d'IS (%)", 'Income tax rate (%)')} value={taxRate * 100} onChange={(v) => setTaxRate(v / 100)} step={1} />
@@ -258,72 +247,144 @@ export default function IfrsReporting() {
             </FieldGroup>
           </div>
           <div className="flex items-center justify-between mt-4">
-            <p className="text-[10px] text-primary-400 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> {t('Les états et ponts se recalculent en temps réel.', 'Statements and bridges recompute in real time.')}</p>
+            <p className="text-[10px] text-primary-400 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> {t('La liasse se recalcule en temps réel.', 'The statements recompute in real time.')}</p>
             <button className="btn-outline text-xs" onClick={() => { setManual(DEFAULT_MANUAL); setTaxRate(IFRS_TAX_RATE); }}>{t('Réinitialiser', 'Reset')}</button>
           </div>
         </ChartCard>
       )}
 
-      {tab === 'notes' && (
-        <ChartCard title={t('Notes méthodologiques', 'Methodology notes')} subtitle={t('Portée et limites de la conversion', 'Scope & limitations')} accent={ct.at(0)}>
-          <div className="space-y-3 text-[12px] text-primary-600 dark:text-primary-300 leading-relaxed">
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-accent/10 border-l-2 border-accent">
-              <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-              <p>{t(
-                "La révision 2017 de l'AUDCIF (SYSCOHADA révisé) est déjà largement convergée avec les IFRS. Cette conversion applique un reclassement de présentation (IAS 1) et 4 retraitements de fond auto-détectables depuis la balance.",
-                'The 2017 AUDCIF revision (revised SYSCOHADA) is already largely converged with IFRS. This conversion applies IAS 1 presentation reclassification and 4 substantive adjustments auto-detected from the trial balance.',
-              )}</p>
-            </div>
-            <p><strong>{t('Retraitements appliqués', 'Applied adjustments')} :</strong> IAS 38 ({t("frais d'établissement", 'establishment costs')}), IAS 21 ({t('change latent', 'unrealised FX')}), IAS 20 ({t('subventions', 'grants')}), IAS 12 ({t('impôt différé sur provisions réglementées', 'deferred tax on regulated provisions')}), IAS 1 (HAO).</p>
-            <p><strong>{t('Retraitements sur saisie', 'Input-driven adjustments')} ({t("onglet Paramètres", 'Settings tab')}) :</strong> IFRS 16 ({t('contrats de location', 'leases')}), IAS 19 ({t('engagements de retraite', 'employee benefits')}), IFRS 9 ({t('dépréciation ECL', 'ECL impairment')}), IAS 12 {t('différences temporelles', 'temporary differences')}. {t('Appliqués dès que renseignés, avec impact équilibré sur le SoFP et les ponts.', 'Applied as soon as entered, with a balanced impact on the SoFP and bridges.')}</p>
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border-l-2 border-warning">
-              <GitCompareArrows className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-              <p>{t(
-                `Impôt différé estimé au taux de ${(c.taxRate * 100).toFixed(0)} %. Ces états sont une conversion indicative de gestion — pour un reporting IFRS audité, faites valider les retraitements et compléter les postes manquants par un cabinet.`,
-                `Deferred tax estimated at ${(c.taxRate * 100).toFixed(0)}%. These statements are an indicative management conversion — for audited IFRS reporting, have the adjustments validated and the missing items completed by an audit firm.`,
-              )}</p>
-            </div>
+      {tab === 'mapping' && (
+        <ChartCard title={t('Correspondance SYSCOHADA ↔ IFRS', 'SYSCOHADA ↔ IFRS mapping')} subtitle={t('Reclassement de présentation (IAS 1)', 'Presentation reclassification (IAS 1)')} accent={ct.at(0)}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-primary-200 dark:border-primary-700 text-xs uppercase text-primary-500">
+                  <th className="text-left py-2 px-2">SYSCOHADA</th><th className="w-8"></th><th className="text-left py-2 px-2">IFRS</th><th className="text-right py-2 px-2">{t('Norme', 'Standard')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
+                {MAPPING.map((m, i) => (
+                  <tr key={i} className="hover:bg-primary-50/60 dark:hover:bg-primary-900/40">
+                    <td className="py-2 px-2">{m.sysco}</td>
+                    <td className="py-2 px-2 text-primary-400"><ArrowRightLeft className="w-3.5 h-3.5" /></td>
+                    <td className="py-2 px-2 font-medium">{lang === 'fr' ? m.ifrs : m.ifrsEn}</td>
+                    <td className="py-2 px-2 text-right"><span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-800 text-primary-500 font-semibold">{m.norme}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </ChartCard>
+      )}
+
+      {tab === 'notes' && (
+        <div className="space-y-3">
+          {r.notes.map((note) => (
+            <ChartCard key={note.id} title={`${note.id}. ${lang === 'fr' ? note.titleFr : note.titleEn}`} subtitle={note.ref} accent={ct.at(0)}>
+              <p className="text-[12px] text-primary-600 dark:text-primary-300 leading-relaxed">{lang === 'fr' ? note.bodyFr : note.bodyEn}</p>
+            </ChartCard>
+          ))}
+          <ChartCard title={t('Portée & limites', 'Scope & limitations')} subtitle="" accent={ct.at(1)}>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border-l-2 border-warning">
+              <Info className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-[12px] text-primary-600 dark:text-primary-300 leading-relaxed">{t(
+                'Conversion indicative de gestion inspirée du standard « GT Example Financial Statements ». Les états OCI, variation des CP et flux sont estimés depuis les données disponibles. Pour un reporting IFRS audité, faites valider les retraitements et compléter les postes hors périmètre (segments, instruments financiers détaillés, notes complètes) par un cabinet.',
+                'Indicative management conversion inspired by the "GT Example Financial Statements" standard. The OCI, changes-in-equity and cash-flow statements are estimated from available data. For audited IFRS reporting, have the adjustments validated and out-of-scope items (segments, detailed financial instruments, full notes) completed by an audit firm.',
+              )}</p>
+            </div>
+          </ChartCard>
+        </div>
       )}
     </div>
   );
 }
 
-function IfrsTable({ groups, pick }: { lang: Lang; groups: { title: string; lines: IfrsLine[] }[]; pick: (l: IfrsLine) => string }) {
+// ── Sous-composants ───────────────────────────────────────────────────────
+function StatementTable({ lines, pick, hasPrior, t, header, noHead }: {
+  lines: IfrsLineC[]; pick: (l: { fr: string; en: string }) => string; yearN: number; yearN1: number;
+  hasPrior: boolean; t: (fr: string, en: string) => string; header?: string; noHead?: boolean;
+}) {
   return (
     <table className="w-full text-sm">
+      {!noHead && (
+        <thead>
+          <tr className="border-b border-primary-200 dark:border-primary-700 text-[10px] uppercase text-primary-400">
+            <th className="text-left py-1.5">{header ?? t('Poste', 'Item')}</th>
+            <th className="text-right py-1.5 w-28">{t('Exercice', 'Year')} N</th>
+            {hasPrior && <th className="text-right py-1.5 w-28">N-1</th>}
+            <th className="text-right py-1.5 w-16 hidden sm:table-cell">Réf.</th>
+          </tr>
+        </thead>
+      )}
       <tbody>
-        {groups.map((grp) => (
-          <Fragment key={grp.title}>
-            <tr><td colSpan={2} className="pt-3 pb-1 text-[10px] uppercase tracking-wider text-primary-400 font-semibold">{grp.title}</td></tr>
-            {grp.lines.map((l) => (
-              <tr key={l.code} className={l.total ? 'font-semibold border-t border-primary-100 dark:border-primary-800' : ''}>
-                <td className={`py-1 ${l.indent ? 'pl-4 text-primary-600 dark:text-primary-300' : ''}`}>{pick(l)}</td>
-                <td className="py-1 text-right num">{fmtFull(l.value)}</td>
-              </tr>
-            ))}
-          </Fragment>
-        ))}
+        {header && noHead && (
+          <tr><td colSpan={hasPrior ? 4 : 3} className="pt-3 pb-1 text-[10px] uppercase tracking-wider text-primary-400 font-semibold">{header}</td></tr>
+        )}
+        {lines.map((l) => {
+          const isHeader = l.value === 0 && l.prior === 0 && !l.indent && !l.total && /^(OCIh|CF_(OP|INV|FIN)h)/.test(l.code);
+          return (
+            <tr key={l.code} className={l.total ? 'font-semibold border-t border-primary-100 dark:border-primary-800' : ''}>
+              <td className={`py-1 ${l.indent ? 'pl-4 text-primary-600 dark:text-primary-300' : ''} ${isHeader ? 'text-[10px] uppercase tracking-wider text-primary-400 pt-2' : ''}`}>{pick(l)}</td>
+              <td className={`py-1 text-right num ${l.value < 0 ? 'text-error' : ''}`}>{isHeader ? '' : fmtFull(l.value)}</td>
+              {hasPrior && <td className={`py-1 text-right num text-primary-500 ${l.prior < 0 ? 'text-error' : ''}`}>{isHeader ? '' : fmtFull(l.prior)}</td>}
+              <td className="py-1 text-right text-[9px] text-primary-300 hidden sm:table-cell">{l.ref ?? ''}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
-function ReconTable({ lines, pick }: { lines: IfrsLine[]; pick: (l: IfrsLine) => string }) {
+function GrandTotal({ label, n, n1, hasPrior }: { label: string; n: number; n1: number; hasPrior: boolean }) {
+  return (
+    <div className="flex justify-between items-center mt-1 pt-2 border-t-2 border-primary-300 dark:border-primary-600 text-[13px] font-bold">
+      <span>{label}</span>
+      <span className="flex gap-6">
+        <span className="num w-28 text-right">{fmtFull(n)}</span>
+        {hasPrior && <span className="num w-28 text-right text-primary-500">{fmtFull(n1)}</span>}
+        <span className="w-16 hidden sm:block" />
+      </span>
+    </div>
+  );
+}
+
+function SceTable({ sce }: { sce: { components: string[]; rows: { label: string; values: number[] }[] } }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-primary-200 dark:border-primary-700 text-[10px] uppercase text-primary-400">
+            <th className="text-left py-1.5"></th>
+            {sce.components.map((c) => <th key={c} className="text-right py-1.5">{c}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {sce.rows.map((row, i) => {
+            const isTotal = i === 0 || i === sce.rows.length - 1;
+            return (
+              <tr key={i} className={isTotal ? 'font-semibold border-t border-primary-100 dark:border-primary-800' : ''}>
+                <td className="py-1.5">{row.label}</td>
+                {row.values.map((v, j) => <td key={j} className={`py-1.5 text-right num ${v < 0 ? 'text-error' : ''}`}>{v !== 0 ? fmtFull(v) : '—'}</td>)}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReconTable({ lines, pick }: { lines: IfrsLineC[]; pick: (l: { fr: string; en: string }) => string }) {
   return (
     <table className="w-full text-sm">
       <tbody>
         {lines.map((l, i) => {
-          const isTotal = l.total;
-          const isFirst = i === 0;
-          const isLast = i === lines.length - 1;
+          const isTotal = l.total; const isFirst = i === 0; const isLast = i === lines.length - 1;
           return (
             <tr key={l.code} className={isTotal ? `font-bold ${isLast ? 'border-t-2 border-primary-300 dark:border-primary-600' : ''} ${isFirst ? 'text-primary-500' : ''}` : ''}>
               <td className={`py-1.5 ${l.indent ? 'pl-4' : ''}`}>{pick(l)}</td>
-              <td className={`py-1.5 text-right num ${!isTotal && l.value < 0 ? 'text-error' : !isTotal && l.value > 0 ? 'text-success' : ''}`}>
-                {!isTotal && l.value > 0 ? '+' : ''}{fmtFull(l.value)}
-              </td>
+              <td className={`py-1.5 text-right num ${!isTotal && l.value < 0 ? 'text-error' : !isTotal && l.value > 0 ? 'text-success' : ''}`}>{!isTotal && l.value > 0 ? '+' : ''}{fmtFull(l.value)}</td>
             </tr>
           );
         })}
@@ -348,13 +409,9 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
   return (
     <label className="block">
       <span className="text-[11px] text-primary-500">{label}</span>
-      <input
-        type="number"
-        step={step}
-        value={Number.isFinite(value) ? value : 0}
+      <input type="number" step={step} value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full mt-1 px-3 py-1.5 rounded-lg border border-primary-200 dark:border-primary-700 bg-transparent text-sm num focus:outline-none focus:border-accent"
-      />
+        className="w-full mt-1 px-3 py-1.5 rounded-lg border border-primary-200 dark:border-primary-700 bg-transparent text-sm num focus:outline-none focus:border-accent" />
     </label>
   );
 }

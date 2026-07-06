@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeIfrsConversion } from './ifrs';
+import { computeIfrsConversion, computeIfrsReport } from './ifrs';
 import type { BalanceRow } from './balance';
 
 // Balance SYSCOHADA équilibrée (Σ débit = Σ crédit) contenant les 4 postes
@@ -49,6 +49,29 @@ describe('computeIfrsConversion — SYSCOHADA → IFRS', () => {
   it('détecte les 5 retraitements/reclassements attendus', () => {
     const c = computeIfrsConversion(BALANCE);
     expect(c.adjustments.map((a) => a.id).sort()).toEqual(['R1', 'R2', 'R3', 'R4', 'R5']);
+  });
+
+  it('produit une liasse comparative N/N-1 complète et cohérente', () => {
+    // N-1 = même structure, banque un peu plus faible (croissance).
+    const N1 = BALANCE.map((r) => (r.account === '521000' ? { ...r, soldeD: r.soldeD - 60 } : r))
+      .concat([{ account: '701000b', label: 'x', debit: 0, credit: 60, solde: -60, soldeD: 0, soldeC: 60 }]);
+    const rep = computeIfrsReport(BALANCE, N1, 2025);
+    expect(rep.hasPrior).toBe(true);
+    expect(rep.yearN).toBe(2025);
+    expect(rep.yearN1).toBe(2024);
+    // Le SoFP (N) reste équilibré.
+    expect(Math.abs(rep.totalAssetsN - rep.totalELN)).toBeLessThan(1);
+    // Le comparatif N-1 est renseigné sur le P&L.
+    expect(rep.pnl.some((l) => l.prior !== 0)).toBe(true);
+    // Les 5 états + notes sont présents.
+    expect(rep.cashflow.some((l) => l.code === 'CF_OP')).toBe(true);
+    expect(rep.oci.some((l) => l.code === 'OCI_TC')).toBe(true);
+    expect(rep.notes.length).toBeGreaterThanOrEqual(5);
+    // La variation des CP boucle sur l'equity IFRS (dernière ligne = Total colonne).
+    const closing = rep.sce.rows[rep.sce.rows.length - 1].values;
+    expect(closing[closing.length - 1]).toBeCloseTo(rep.equityIfrsN, 2);
+    // Les références IAS sont posées.
+    expect(rep.pnl.find((l) => l.code === 'PL1')?.ref).toBe('IAS 1.82(a)');
   });
 
   it('reste présenté équilibré même si la balance source est déséquilibrée', () => {

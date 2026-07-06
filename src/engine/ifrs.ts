@@ -40,7 +40,9 @@ export type IfrsAdjustment = {
   detail: string;
 };
 
-export type IfrsLine = { code: string; fr: string; en: string; value: number; total?: boolean; indent?: number };
+export type IfrsLine = { code: string; fr: string; en: string; value: number; total?: boolean; indent?: number; ref?: string };
+export type IfrsLineC = IfrsLine & { prior: number };
+export type IfrsNote = { id: string; ref: string; titleFr: string; titleEn: string; bodyFr: string; bodyEn: string };
 
 export type IfrsConversion = {
   taxRate: number;
@@ -225,4 +227,197 @@ export function computeIfrsConversion(
     pnl, reconEquity, reconResult,
     equitySysco, equityIfrs, resultSysco, resultIfrs,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIASSE IFRS COMPARATIVE (niveau « GT Example Financial Statements »)
+// Jeu complet : P&L · OCI · SoFP · Variation des CP · Flux (indirect), en
+// comparatif N / N-1, avec références IAS/IFRS et notes.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Références normatives par code de ligne (extraites du référentiel IAS 1 / IFRS).
+const REFS: Record<string, string> = {
+  PL1: 'IAS 1.82(a)', PL4: 'IAS 1.85', PL6: 'IAS 1.85', PL7: 'IAS 1.82(d)', PL8: 'IAS 1.81A(a)',
+  NCA1: 'IAS 1.54(c)', NCA2: 'IAS 1.54(a)', NCA3: 'IAS 1.54(e)', NCA4: 'IFRS 16.47', NCA5: 'IAS 1.54(o)',
+  CA1: 'IAS 1.54(g)', CA2: 'IAS 1.54(h)', CA4: 'IAS 1.54(i)',
+  EQ1: 'IAS 1.78(e)', EQ2: 'IAS 1.78(e)', EQ4: 'IAS 1.54(r)',
+  NCL1: 'IAS 1.54(m)', NCL3: 'IAS 20.24', NCL4: 'IAS 1.54(o)', NCL5: 'IFRS 16.47(b)', NCL6: 'IAS 1.55', NCL7: 'IAS 1.54(o)',
+  CL1: 'IAS 1.54(k)', CL2: 'IAS 1.54(l)', CL4: 'IAS 1.54(m)',
+};
+
+export type IfrsReport = {
+  yearN: number; yearN1: number; taxRate: number;
+  hasPrior: boolean;
+  adjustments: IfrsAdjustment[];
+  pnl: IfrsLineC[];
+  oci: IfrsLineC[];
+  sofpNCA: IfrsLineC[]; sofpCA: IfrsLineC[]; sofpEquity: IfrsLineC[]; sofpNCL: IfrsLineC[]; sofpCL: IfrsLineC[];
+  totalAssetsN: number; totalAssetsN1: number; totalELN: number; totalELN1: number;
+  cashflow: IfrsLineC[];
+  sce: { components: string[]; rows: { label: string; values: number[] }[] };
+  reconEquity: IfrsLineC[]; reconResult: IfrsLineC[];
+  notes: IfrsNote[];
+  equityIfrsN: number; resultIfrsN: number;
+};
+
+function zip(nLines: IfrsLine[], pLines: IfrsLine[]): IfrsLineC[] {
+  const p = new Map(pLines.map((l) => [l.code, l.value]));
+  return nLines.map((l) => ({ ...l, prior: n(p.get(l.code) ?? 0), ref: l.ref ?? REFS[l.code] }));
+}
+
+// Agrégats nécessaires au tableau de flux (méthode indirecte).
+function snap(balance: BalanceRow[]) {
+  const { sig } = computeSIG(balance);
+  const bilan = computeBilan(balance);
+  const g = (lines: { code: string; value: number }[], code: string) => n(lines.find((l) => l.code === code)?.value ?? 0);
+  const netD = (re: RegExp) => balance.filter((r) => re.test(r.account)).reduce((s, r) => s + (r.soldeD - r.soldeC), 0);
+  const netC = (re: RegExp) => balance.filter((r) => re.test(r.account)).reduce((s, r) => s + (r.soldeC - r.soldeD), 0);
+  return {
+    stocks: g(bilan.actif, 'BB'),
+    creances: g(bilan.actif, 'BH') + g(bilan.actif, 'BI'),
+    dettesExpl: g(bilan.passif, 'DJ') + g(bilan.passif, 'DK') + g(bilan.passif, 'DM'),
+    immoNet: g(bilan.actif, 'AE') + g(bilan.actif, 'AF') + g(bilan.actif, 'AG'),
+    borrowings: g(bilan.passif, 'DA'),
+    capital: g(bilan.passif, 'CA') + n(netC(/^105/)),
+    cash: g(bilan.actif, 'BQ'),
+    amort: Math.max(0, netD(/^68/)),
+    dividendes: Math.max(0, netD(/^465/)),
+    pbt: n(sig.resultat) + n(sig.impot),
+    impot: n(sig.impot),
+    resultat: n(sig.resultat),
+  };
+}
+
+export function computeIfrsReport(
+  balanceN: BalanceRow[],
+  balanceN1: BalanceRow[] | null,
+  yearN: number,
+  opts?: { taxRate?: number; manual?: IfrsManualInputs },
+): IfrsReport {
+  const cN = computeIfrsConversion(balanceN, opts);
+  const hasPrior = !!(balanceN1 && balanceN1.length);
+  const cP = hasPrior ? computeIfrsConversion(balanceN1!, opts) : cN;
+
+  const pnl = zip(cN.pnl, hasPrior ? cP.pnl : cN.pnl.map((l) => ({ ...l, value: 0 })));
+  const sofpNCA = zip(cN.sofp.nonCurrentAssets, hasPrior ? cP.sofp.nonCurrentAssets : cN.sofp.nonCurrentAssets.map((l) => ({ ...l, value: 0 })));
+  const sofpCA = zip(cN.sofp.currentAssets, hasPrior ? cP.sofp.currentAssets : cN.sofp.currentAssets.map((l) => ({ ...l, value: 0 })));
+  const sofpEquity = zip(cN.sofp.equity, hasPrior ? cP.sofp.equity : cN.sofp.equity.map((l) => ({ ...l, value: 0 })));
+  const sofpNCL = zip(cN.sofp.nonCurrentLiabilities, hasPrior ? cP.sofp.nonCurrentLiabilities : cN.sofp.nonCurrentLiabilities.map((l) => ({ ...l, value: 0 })));
+  const sofpCL = zip(cN.sofp.currentLiabilities, hasPrior ? cP.sofp.currentLiabilities : cN.sofp.currentLiabilities.map((l) => ({ ...l, value: 0 })));
+
+  // ── OCI (autres éléments du résultat global) ──────────────────────────
+  const ociItem = (code: string, fr: string, en: string, v: number, vp: number, indent = 1, total = false): IfrsLineC => ({ code, fr, en, value: v, prior: vp, indent, total });
+  const oci: IfrsLineC[] = [
+    ociItem('OCI0', "Résultat net de l'exercice", 'Profit for the year', cN.resultIfrs, hasPrior ? cP.resultIfrs : 0, 0, true),
+    ociItem('OCIh1', 'Éléments non reclassés en résultat', 'Items not reclassified to P&L', 0, 0, 0),
+    ociItem('OCI1', 'Réévaluation des immobilisations (IAS 16)', 'Revaluation of PP&E (IAS 16)', 0, 0),
+    ociItem('OCI2', 'Réévaluation du passif net (IAS 19)', 'Remeasurement of net defined benefit (IAS 19)', 0, 0),
+    ociItem('OCIh2', 'Éléments reclassables en résultat', 'Items that may be reclassified to P&L', 0, 0, 0),
+    ociItem('OCI3', 'Écarts de conversion des activités étrangères (IAS 21)', 'FX on foreign operations (IAS 21)', 0, 0),
+    ociItem('OCI_T', "Autres éléments du résultat global, nets d'impôt", 'Other comprehensive income, net of tax', 0, 0, 0, true),
+    ociItem('OCI_TC', 'Résultat global total', 'Total comprehensive income', cN.resultIfrs, hasPrior ? cP.resultIfrs : 0, 0, true),
+  ];
+
+  // ── Tableau de flux de trésorerie (méthode indirecte) ─────────────────
+  const sN = snap(balanceN);
+  const sP = hasPrior ? snap(balanceN1!) : null;
+  const dWC = sP ? {
+    stocks: -(sN.stocks - sP.stocks), creances: -(sN.creances - sP.creances), dettes: (sN.dettesExpl - sP.dettesExpl),
+    immo: -((sN.immoNet - sP.immoNet) + sN.amort), borrow: (sN.borrowings - sP.borrowings), cap: (sN.capital - sP.capital),
+  } : { stocks: 0, creances: 0, dettes: 0, immo: -sN.amort, borrow: 0, cap: 0 };
+  const netOp = sN.pbt + sN.amort + dWC.stocks + dWC.creances + dWC.dettes - sN.impot;
+  const netInv = dWC.immo;
+  const netFin = dWC.borrow + dWC.cap - sN.dividendes;
+  const netChange = netOp + netInv + netFin;
+  const cf = (code: string, fr: string, en: string, v: number, indent = 1, total = false, ref?: string): IfrsLineC => ({ code, fr, en, value: v, prior: 0, indent, total, ref });
+  const cashflow: IfrsLineC[] = [
+    cf('CF_OPh', 'FLUX DE TRÉSORERIE OPÉRATIONNELS', 'OPERATING ACTIVITIES', 0, 0, false, 'IAS 7.10'),
+    cf('CF1', 'Résultat avant impôt', 'Profit before tax', sN.pbt),
+    cf('CF2', 'Dotations aux amortissements & provisions', 'Non-cash adjustments (D&A)', sN.amort, 1, false, 'IAS 7.20'),
+    cf('CF3', 'Variation des stocks', 'Change in inventories', dWC.stocks),
+    cf('CF4', 'Variation des créances', 'Change in receivables', dWC.creances),
+    cf('CF5', "Variation des dettes d'exploitation", 'Change in payables', dWC.dettes),
+    cf('CF6', 'Impôt payé', 'Taxes paid', -sN.impot, 1, false, 'IAS 7.35'),
+    cf('CF_OP', "Flux net des activités opérationnelles", 'Net cash from operating activities', netOp, 0, true),
+    cf('CF_INVh', "FLUX DE TRÉSORERIE D'INVESTISSEMENT", 'INVESTING ACTIVITIES', 0, 0, false, 'IAS 7.10'),
+    cf('CF7', "Acquisitions d'immobilisations (net)", 'Purchase of non-current assets (net)', dWC.immo, 1, false, 'IAS 7.16'),
+    cf('CF_INV', "Flux net des activités d'investissement", 'Net cash used in investing activities', netInv, 0, true),
+    cf('CF_FINh', 'FLUX DE TRÉSORERIE DE FINANCEMENT', 'FINANCING ACTIVITIES', 0, 0, false, 'IAS 7.10'),
+    cf('CF8', 'Variation des emprunts', 'Change in borrowings', dWC.borrow, 1, false, 'IAS 7.17'),
+    cf('CF9', 'Variation du capital', 'Change in share capital', dWC.cap),
+    cf('CF10', 'Dividendes versés', 'Dividends paid', -sN.dividendes),
+    cf('CF_FIN', 'Flux net des activités de financement', 'Net cash from financing activities', netFin, 0, true),
+    cf('CF_NET', 'Variation nette de trésorerie', 'Net change in cash', netChange, 0, true, 'IAS 7.45'),
+    cf('CF_OPEN', "Trésorerie à l'ouverture", 'Cash at beginning of year', sP ? sP.cash : 0),
+    cf('CF_CLOSE', 'Trésorerie à la clôture', 'Cash at end of year', (sP ? sP.cash : 0) + netChange, 0, true),
+  ];
+
+  // ── Variation des capitaux propres (SCE) ──────────────────────────────
+  const eqN = cN.equityIfrs, eqP = hasPrior ? cP.equityIfrs : 0;
+  const other = eqN - eqP - cN.resultIfrs; // mouvements avec les actionnaires (solde)
+  const sce = {
+    components: ['Capital', 'Réserves', 'Résultat', 'Total'],
+    rows: [
+      { label: hasPrior ? `Solde au 1er janvier ${yearN}` : 'Solde à l\'ouverture', values: [zipVal(sofpEquity, 'EQ1', 'prior'), zipVal(sofpEquity, 'EQ2', 'prior') + zipVal(sofpEquity, 'EQ3', 'prior'), 0, eqP] },
+      { label: "Résultat de l'exercice", values: [0, 0, cN.resultIfrs, cN.resultIfrs] },
+      { label: 'Opérations avec les actionnaires', values: [0, other, 0, other] },
+      { label: `Solde au 31 décembre ${yearN}`, values: [zipVal(sofpEquity, 'EQ1', 'value'), zipVal(sofpEquity, 'EQ2', 'value') + zipVal(sofpEquity, 'EQ3', 'value'), cN.resultIfrs, eqN] },
+    ],
+  };
+
+  const reconEquity = zip(cN.reconEquity, hasPrior ? cP.reconEquity : cN.reconEquity.map((l) => ({ ...l, value: 0 })));
+  const reconResult = zip(cN.reconResult, hasPrior ? cP.reconResult : cN.reconResult.map((l) => ({ ...l, value: 0 })));
+
+  const notes = buildNotes(cN, yearN);
+
+  return {
+    yearN, yearN1: yearN - 1, taxRate: cN.taxRate, hasPrior,
+    adjustments: cN.adjustments,
+    pnl, oci, sofpNCA, sofpCA, sofpEquity, sofpNCL, sofpCL,
+    totalAssetsN: cN.sofp.totalAssets, totalAssetsN1: hasPrior ? cP.sofp.totalAssets : 0,
+    totalELN: cN.sofp.totalEquityAndLiabilities, totalELN1: hasPrior ? cP.sofp.totalEquityAndLiabilities : 0,
+    cashflow, sce, reconEquity, reconResult, notes,
+    equityIfrsN: cN.equityIfrs, resultIfrsN: cN.resultIfrs,
+  };
+}
+
+function zipVal(lines: IfrsLineC[], code: string, field: 'value' | 'prior'): number {
+  const l = lines.find((x) => x.code === code);
+  return l ? n(l[field]) : 0;
+}
+
+function buildNotes(c: IfrsConversion, year: number): IfrsNote[] {
+  const notes: IfrsNote[] = [
+    {
+      id: '1', ref: 'IAS 1.16 · IAS 1.117',
+      titleFr: 'Base de préparation', titleEn: 'Basis of preparation',
+      bodyFr: `Ces états financiers convertissent la comptabilité SYSCOHADA révisé (AUDCIF) de l'exercice ${year} vers un référentiel IFRS. La conversion applique un reclassement de présentation (IAS 1 : distinction courant/non courant, suppression du HAO) et des retraitements de fond. Les montants sont exprimés dans la devise de tenue de comptabilité.`,
+      bodyEn: `These financial statements convert the ${year} revised SYSCOHADA (AUDCIF) accounts to an IFRS basis. The conversion applies IAS 1 presentation reclassification (current/non-current split, removal of extraordinary items) and substantive adjustments. Amounts are expressed in the reporting currency.`,
+    },
+    {
+      id: '2', ref: 'IAS 8',
+      titleFr: 'Principales méthodes comptables', titleEn: 'Material accounting policies',
+      bodyFr: `Immobilisations au coût amorti (IAS 16 / IAS 38) ; contrats de location capitalisés en droit d'usage et dette (IFRS 16) ; instruments financiers évalués selon IFRS 9 (dépréciation en pertes attendues) ; impôts différés sur différences temporelles (IAS 12) ; avantages du personnel selon IAS 19.`,
+      bodyEn: `Non-current assets at amortised cost (IAS 16 / IAS 38); leases capitalised as right-of-use assets and liabilities (IFRS 16); financial instruments measured under IFRS 9 (expected credit loss); deferred tax on temporary differences (IAS 12); employee benefits under IAS 19.`,
+    },
+    {
+      id: '3', ref: 'IFRS 1',
+      titleFr: 'Retraitements de conversion', titleEn: 'Conversion adjustments',
+      bodyFr: `Les retraitements appliqués (impact sur les capitaux propres) sont : ${c.adjustments.filter((a) => a.impactEquity !== 0).map((a) => `${a.norme} (${Math.round(a.impactEquity).toLocaleString('fr-FR')})`).join(' ; ') || 'aucun'}. Le détail figure dans le pont de réconciliation.`,
+      bodyEn: `The applied adjustments (equity impact) are: ${c.adjustments.filter((a) => a.impactEquity !== 0).map((a) => `${a.norme} (${Math.round(a.impactEquity).toLocaleString('en-US')})`).join('; ') || 'none'}. Details are in the reconciliation bridge.`,
+    },
+    {
+      id: '4', ref: 'IAS 12',
+      titleFr: 'Impôts différés', titleEn: 'Deferred tax',
+      bodyFr: `Les impôts différés sont calculés au taux de ${(c.taxRate * 100).toFixed(0)} % sur les différences temporelles et les provisions réglementées non reconnues en IFRS.`,
+      bodyEn: `Deferred tax is measured at ${(c.taxRate * 100).toFixed(0)}% on temporary differences and on regulated provisions not recognised under IFRS.`,
+    },
+    {
+      id: '5', ref: 'IAS 10 · IAS 1.138',
+      titleFr: "Événements postérieurs & autorisation", titleEn: 'Events after reporting date & authorisation',
+      bodyFr: `Aucun événement postérieur significatif retenu. Conversion indicative de gestion — un reporting IFRS audité requiert la validation des retraitements et le complément des postes hors périmètre par un cabinet.`,
+      bodyEn: `No material subsequent events noted. Indicative management conversion — audited IFRS reporting requires validation of adjustments and completion of out-of-scope items by an audit firm.`,
+    },
+  ];
+  return notes;
 }
