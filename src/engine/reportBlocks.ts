@@ -5,6 +5,7 @@ import PptxGenJS from 'pptxgenjs';
 import { Line } from './statements';
 import { BalanceRow } from './balance';
 import { Ratio } from './ratios';
+import type { IfrsLineC, IfrsReport } from './ifrs';
 
 // ─── PALETTES ──────────────────────────────────────────────────────
 export type PaletteKey = string;
@@ -106,6 +107,8 @@ export type ReportData = {
   tft?: Line[];
   capital?: any[];
   budgetActual?: Array<{ code: string; label: string; realise: number; budget: number; ecart: number; ecartPct?: number; status: string }>;
+  /** Liasse IFRS comparative (niveau GT) — alimente les sources ifrs_* */
+  ifrs?: IfrsReport | null;
 };
 
 // ─── PDF BUILDER ───────────────────────────────────────────────────
@@ -289,9 +292,101 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
       let head: string[] = [];
       let title = (t?.title || d?.title || '');
       const limit = t?.limit ?? 30;
+      // Style « GT » pour les états financiers pro (sources ifrs_*) :
+      // sous-totaux en gras sur fond léger, colonne Réf. normative grisée,
+      // montants alignés à droite.
+      const boldRows = new Set<number>();
+      let refCol: number | null = null;
+
+      // Helpers liasse IFRS (comparatif N/N-1 + réf. IAS/IFRS)
+      const rep = data.ifrs ?? null;
+      const ifrsHead = (r: IfrsReport) => (r.hasPrior ? ['Poste', String(r.yearN), String(r.yearN1), 'Réf.'] : ['Poste', String(r.yearN), 'Réf.']);
+      const ifrsRow = (r: IfrsReport, l: IfrsLineC) => {
+        const label = `${l.indent ? '    ' : ''}${l.fr}`;
+        return r.hasPrior ? [label, fmt(l.value), fmt(l.prior), l.ref ?? ''] : [label, fmt(l.value), l.ref ?? ''];
+      };
+      const ifrsFill = (r: IfrsReport, lines: IfrsLineC[], startIdx = 0): number => {
+        let i = startIdx;
+        for (const l of lines) { if (l.total) boldRows.add(i); body.push(ifrsRow(r, l)); i++; }
+        return i;
+      };
+      const ifrsSection = (r: IfrsReport, label: string, lines: IfrsLineC[], i: number): number => {
+        boldRows.add(i);
+        body.push(r.hasPrior ? [label, '', '', ''] : [label, '', '']);
+        return ifrsFill(r, lines, i + 1);
+      };
+      const ifrsMissing = (fallbackTitle: string) => {
+        head = ['Information'];
+        body = [["Liasse IFRS indisponible — vérifier l'import du Grand Livre (module Reporting IFRS)."]];
+        title ||= fallbackTitle;
+      };
 
       if (t) {
         switch (t.source) {
+          case 'ifrs_pnl': {
+            if (!rep) { ifrsMissing('Compte de résultat IFRS'); break; }
+            head = ifrsHead(rep); refCol = head.length - 1;
+            ifrsFill(rep, rep.pnl);
+            title ||= 'Compte de résultat IFRS (IAS 1 — par nature)';
+            break;
+          }
+          case 'ifrs_oci': {
+            if (!rep) { ifrsMissing('Résultat global (OCI)'); break; }
+            head = ifrsHead(rep); refCol = head.length - 1;
+            ifrsFill(rep, rep.oci);
+            title ||= 'État du résultat global (IAS 1.82A)';
+            break;
+          }
+          case 'ifrs_sofp': {
+            if (!rep) { ifrsMissing('Situation financière IFRS'); break; }
+            head = ifrsHead(rep); refCol = head.length - 1;
+            let i = 0;
+            i = ifrsSection(rep, 'ACTIFS NON COURANTS', rep.sofpNCA, i);
+            i = ifrsSection(rep, 'ACTIFS COURANTS', rep.sofpCA, i);
+            boldRows.add(i);
+            body.push(rep.hasPrior ? ['TOTAL ACTIF', fmt(rep.totalAssetsN), fmt(rep.totalAssetsN1), ''] : ['TOTAL ACTIF', fmt(rep.totalAssetsN), '']);
+            i++;
+            i = ifrsSection(rep, 'CAPITAUX PROPRES', rep.sofpEquity, i);
+            i = ifrsSection(rep, 'PASSIFS NON COURANTS', rep.sofpNCL, i);
+            i = ifrsSection(rep, 'PASSIFS COURANTS', rep.sofpCL, i);
+            boldRows.add(i);
+            body.push(rep.hasPrior ? ['TOTAL CAPITAUX PROPRES & PASSIFS', fmt(rep.totalELN), fmt(rep.totalELN1), ''] : ['TOTAL CAPITAUX PROPRES & PASSIFS', fmt(rep.totalELN), '']);
+            title ||= 'État de la situation financière (IAS 1 — current / non-current)';
+            break;
+          }
+          case 'ifrs_sce': {
+            if (!rep) { ifrsMissing('Variation des capitaux propres IFRS'); break; }
+            head = ['', ...rep.sce.components];
+            rep.sce.rows.forEach((row, i) => {
+              if (i === 0 || i === rep.sce.rows.length - 1) boldRows.add(i);
+              body.push([row.label, ...row.values.map((v) => (v !== 0 ? fmt(v) : '—'))]);
+            });
+            title ||= 'Variation des capitaux propres (IAS 1.106)';
+            break;
+          }
+          case 'ifrs_cashflow': {
+            if (!rep) { ifrsMissing('Flux de trésorerie IFRS'); break; }
+            head = ['Poste', String(rep.yearN), 'Réf.']; refCol = 2;
+            rep.cashflow.forEach((l, i) => {
+              if (l.total || /h$/.test(l.code)) boldRows.add(i);
+              body.push([`${l.indent ? '    ' : ''}${l.fr}`, l.value !== 0 || l.total ? fmt(l.value) : '', l.ref ?? '']);
+            });
+            title ||= 'Tableau des flux de trésorerie (IAS 7 — méthode indirecte)';
+            break;
+          }
+          case 'ifrs_recon': {
+            if (!rep) { ifrsMissing('Réconciliation SYSCOHADA → IFRS'); break; }
+            head = ['Pont des capitaux propres (IFRS 1)', 'Montant'];
+            rep.reconEquity.forEach((l, i) => { if (l.total) boldRows.add(i); body.push([`${l.indent ? '    ' : ''}${l.fr}`, fmt(l.value)]); });
+            const offset = rep.reconEquity.length;
+            boldRows.add(offset);
+            body.push(['', '']);
+            body.push(['PONT DU RÉSULTAT', '']);
+            boldRows.add(offset + 1);
+            rep.reconResult.forEach((l, i) => { if (l.total) boldRows.add(offset + 2 + i); body.push([`${l.indent ? '    ' : ''}${l.fr}`, fmt(l.value)]); });
+            title ||= 'Réconciliation SYSCOHADA → IFRS (capitaux propres & résultat)';
+            break;
+          }
           case 'bilan_actif': head = ['Code', 'Poste', 'Montant']; body = data.bilanActif.map((l) => [l.code.startsWith('_') ? '' : l.code, l.label, fmt(l.value)]); title ||= 'Bilan — Actif'; break;
           case 'bilan_passif': head = ['Code', 'Poste', 'Montant']; body = data.bilanPassif.map((l) => [l.code.startsWith('_') ? '' : l.code, l.label, fmt(l.value)]); title ||= 'Bilan — Passif'; break;
           case 'cr': head = ['Code', 'Poste', 'Montant']; body = data.cr.map((l) => [l.code.startsWith('_') ? '' : l.code, l.label, fmt(l.value)]); title ||= 'Compte de résultat'; break;
@@ -367,6 +462,24 @@ export function buildPDFFromBlocks(config: ReportConfig, data: ReportData, orgNa
         styles: { fontSize: 9, cellPadding: 4 },
         margin: { left: margin, right: margin },
         didDrawPage: (data) => { cursorY = data.cursor?.y ?? cursorY; drawPageHeader(); },
+        // Style « GT » (états financiers pro) : sous-totaux gras sur fond léger,
+        // montants alignés à droite, colonne Réf. normative discrète.
+        didParseCell: (h) => {
+          if (h.section !== 'body') return;
+          if (boldRows.has(h.row.index)) {
+            h.cell.styles.fontStyle = 'bold';
+            h.cell.styles.fillColor = [246, 245, 243];
+          }
+          if (refCol !== null) {
+            if (h.column.index === refCol) {
+              h.cell.styles.textColor = [160, 160, 160];
+              h.cell.styles.fontSize = 6.5;
+              h.cell.styles.halign = 'right';
+            } else if (h.column.index > 0) {
+              h.cell.styles.halign = 'right';
+            }
+          }
+        },
       });
       cursorY = (doc as any).lastAutoTable.finalY + 12;
       continue;
@@ -515,6 +628,21 @@ export async function buildPPTXFromBlocks(config: ReportConfig, data: ReportData
               hasB ? fmt(r.budget) : '—',
               hasB ? fmt(r.ecart) : '—',
             ]);
+            break;
+          }
+          case 'ifrs_pnl': case 'ifrs_oci': case 'ifrs_sofp': case 'ifrs_cashflow': case 'ifrs_recon': {
+            const r = data.ifrs;
+            if (!r) { head = ['Info']; body = [['Liasse IFRS indisponible']]; break; }
+            head = r.hasPrior && t.source !== 'ifrs_cashflow' && t.source !== 'ifrs_recon' ? ['Poste', String(r.yearN), String(r.yearN1)] : ['Poste', String(r.yearN)];
+            const src: IfrsLineC[] = t.source === 'ifrs_pnl' ? r.pnl : t.source === 'ifrs_oci' ? r.oci : t.source === 'ifrs_cashflow' ? r.cashflow : t.source === 'ifrs_recon' ? r.reconEquity : [...r.sofpNCA, ...r.sofpCA, ...r.sofpEquity];
+            body = src.slice(0, limit).map((l) => (head.length === 3 ? [l.fr, fmt(l.value), fmt(l.prior)] : [l.fr, fmt(l.value)]));
+            break;
+          }
+          case 'ifrs_sce': {
+            const r = data.ifrs;
+            if (!r) { head = ['Info']; body = [['Liasse IFRS indisponible']]; break; }
+            head = ['', ...r.sce.components];
+            body = r.sce.rows.map((row) => [row.label, ...row.values.map((v) => (v !== 0 ? fmt(v) : '—'))]);
             break;
           }
           default: head = ['Indicateur','Valeur']; body = [['CA', fmt(data.sig.ca)], ['Résultat', fmt(data.sig.resultat)]];

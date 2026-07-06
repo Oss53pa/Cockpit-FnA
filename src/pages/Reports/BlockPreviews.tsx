@@ -12,7 +12,74 @@ export { DashboardSnippet } from './DashboardSnippet';
 export function TablePreview({ source, data, palette, title }: any) {
   const head: string[] = [];
   let body: any[][] = [];
+  // Style « GT » (sources ifrs_*) : sous-totaux en gras, montants à droite.
+  const boldRows = new Set<number>();
+  let rightFrom: number | null = null; // colonnes numériques alignées à droite à partir de cet index
   switch (source) {
+    case 'ifrs_pnl': case 'ifrs_oci': case 'ifrs_cashflow': {
+      const rep = data.ifrs;
+      if (!rep) { head.push('Information'); body = [["Liasse IFRS indisponible — importer le Grand Livre."]]; break; }
+      const lines = source === 'ifrs_pnl' ? rep.pnl : source === 'ifrs_oci' ? rep.oci : rep.cashflow;
+      const withPrior = rep.hasPrior && source !== 'ifrs_cashflow';
+      head.push('Poste', String(rep.yearN));
+      if (withPrior) head.push(String(rep.yearN1));
+      head.push('Réf.');
+      rightFrom = 1;
+      body = lines.slice(0, 22).map((l: any, i: number) => {
+        if (l.total) boldRows.add(i);
+        const label = `${l.indent ? '   ' : ''}${l.fr}`;
+        return withPrior ? [label, fmtFull(l.value), fmtFull(l.prior), l.ref ?? ''] : [label, fmtFull(l.value), l.ref ?? ''];
+      });
+      break;
+    }
+    case 'ifrs_sofp': {
+      const rep = data.ifrs;
+      if (!rep) { head.push('Information'); body = [["Liasse IFRS indisponible — importer le Grand Livre."]]; break; }
+      head.push('Poste', String(rep.yearN));
+      if (rep.hasPrior) head.push(String(rep.yearN1));
+      head.push('Réf.');
+      rightFrom = 1;
+      const sections: Array<[string, any[]]> = [
+        ['ACTIFS NON COURANTS', rep.sofpNCA], ['ACTIFS COURANTS', rep.sofpCA],
+        ['CAPITAUX PROPRES', rep.sofpEquity], ['PASSIFS NON COURANTS', rep.sofpNCL], ['PASSIFS COURANTS', rep.sofpCL],
+      ];
+      let i = 0;
+      for (const [sec, lines] of sections) {
+        boldRows.add(i); body.push(rep.hasPrior ? [sec, '', '', ''] : [sec, '', '']); i++;
+        for (const l of lines) {
+          if (l.total) boldRows.add(i);
+          body.push(rep.hasPrior
+            ? [`${l.indent ? '   ' : ''}${l.fr}`, fmtFull(l.value), fmtFull(l.prior), l.ref ?? '']
+            : [`${l.indent ? '   ' : ''}${l.fr}`, fmtFull(l.value), l.ref ?? '']);
+          i++;
+        }
+      }
+      boldRows.add(i);
+      body.push(rep.hasPrior ? ['TOTAL ACTIF', fmtFull(rep.totalAssetsN), fmtFull(rep.totalAssetsN1), ''] : ['TOTAL ACTIF', fmtFull(rep.totalAssetsN), '']);
+      break;
+    }
+    case 'ifrs_sce': {
+      const rep = data.ifrs;
+      if (!rep) { head.push('Information'); body = [["Liasse IFRS indisponible — importer le Grand Livre."]]; break; }
+      head.push('', ...rep.sce.components);
+      rightFrom = 1;
+      body = rep.sce.rows.map((row: any, i: number) => {
+        if (i === 0 || i === rep.sce.rows.length - 1) boldRows.add(i);
+        return [row.label, ...row.values.map((v: number) => (v !== 0 ? fmtFull(v) : '—'))];
+      });
+      break;
+    }
+    case 'ifrs_recon': {
+      const rep = data.ifrs;
+      if (!rep) { head.push('Information'); body = [["Liasse IFRS indisponible — importer le Grand Livre."]]; break; }
+      head.push('Pont SYSCOHADA → IFRS', 'Montant');
+      rightFrom = 1;
+      let i = 0;
+      for (const l of rep.reconEquity) { if (l.total) boldRows.add(i); body.push([`${l.indent ? '   ' : ''}${l.fr}`, fmtFull(l.value)]); i++; }
+      boldRows.add(i); body.push(['PONT DU RÉSULTAT', '']); i++;
+      for (const l of rep.reconResult) { if (l.total) boldRows.add(i); body.push([`${l.indent ? '   ' : ''}${l.fr}`, fmtFull(l.value)]); i++; }
+      break;
+    }
     case 'bilan_actif': head.push('Code', 'Poste', 'Montant'); body = data.bilanActif.slice(0, 12).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
     case 'bilan_passif': head.push('Code', 'Poste', 'Montant'); body = data.bilanPassif.slice(0, 12).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
     case 'cr': head.push('Code', 'Poste', 'Montant'); body = data.cr.slice(0, 14).map((l: any) => [l.code.startsWith('_') ? '' : l.code, l.label, fmtFull(l.value)]); break;
@@ -195,7 +262,13 @@ export function TablePreview({ source, data, palette, title }: any) {
         </tr></thead>
         <tbody className="divide-y divide-primary-200 dark:divide-primary-800">
           {body.map((row, i) => (
-            <tr key={i}>{row.map((c, j) => <td key={j} className={clsx('py-1 px-2', j === row.length - 1 && 'text-right num')}>{c}</td>)}</tr>
+            <tr key={i} className={clsx(boldRows.has(i) && 'font-semibold bg-primary-100/60 dark:bg-primary-900/40')}>
+              {row.map((c, j) => (
+                <td key={j} className={clsx('py-1 px-2',
+                  rightFrom !== null ? (j >= rightFrom && 'text-right num') : (j === row.length - 1 && 'text-right num'),
+                  rightFrom !== null && j === row.length - 1 && head[j] === 'Réf.' && 'text-[9px] text-primary-400')}>{c}</td>
+              ))}
+            </tr>
           ))}
         </tbody>
       </table>

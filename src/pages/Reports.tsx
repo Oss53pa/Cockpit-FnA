@@ -18,6 +18,7 @@ import { computeRatios } from '../engine/ratios';
 import type { ReportDoc } from '../db/schema';
 import { Block, buildPPTXFromBlocks, DEFAULT_CONFIG, PALETTES, PaletteKey, ReportConfig } from '../engine/reportBlocks';
 import { computeBilan, computeSIG } from '../engine/statements';
+import { computeIfrsReport } from '../engine/ifrs';
 import { fmtMoney } from '../lib/format';
 import { safeLocalStorage } from '../lib/safeStorage';
 // ─── sous-modules ─────────────────────────────────────────────────
@@ -313,6 +314,20 @@ export default function Reports() {
     return d || 360;
   }, [hasPeriodFilter, periodFromMonth, periodToMonth, currentYear]);
 
+  // ─── Liasse IFRS (blocs ifrs_* : états niveau GT, comparatif N/N-1) ───
+  const { data: balanceN1Raw = null } = useCloudData<any>(async () => {
+    if (!currentOrgId) return null;
+    const { computeBalance: cb } = await import('../engine/balance');
+    const bal = await cb({ orgId: currentOrgId, year: currentYear - 1, includeOpening: true });
+    return bal.length ? bal : null;
+  }, [currentOrgId, currentYear], { initial: null, tag: 'gl' });
+
+  const ifrs = useMemo(() => {
+    if (!effectiveBalance || effectiveBalance.length === 0) return null;
+    try { return computeIfrsReport(effectiveBalance, balanceN1Raw, currentYear); }
+    catch { return null; }
+  }, [effectiveBalance, balanceN1Raw, currentYear]);
+
   const data = useMemo(() => ({
     bilanActif: effectiveBilan?.actif ?? [],
     bilanPassif: effectiveBilan?.passif ?? [],
@@ -336,7 +351,8 @@ export default function Reports() {
     hasAnalytical,
     hasStocks,
     periodDays,
-  }), [effectiveBilan, bilanN1, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays]);
+    ifrs,
+  }), [effectiveBilan, bilanN1, effectiveCR, effectiveSig, effectiveBalance, effectiveRatios, tft, capital, budgetActual, monthlyCR, monthlyBilan, auxClient, auxFournisseur, agedClient, agedFournisseur, cashflowMonthly, hasAnalytical, hasStocks, periodDays, ifrs]);
 
   useEffect(() => {
     if (initialized.current || !sig) return;
@@ -549,6 +565,7 @@ export default function Reports() {
                   cfo: 'Rapport CFO', bank: 'Pack Banque', audit: "Comité d'Audit",
                   shareholders: 'Reporting Actionnaires', board: "Conseil d'Administration",
                   fiscal: 'Pack Fiscal', closing: 'Closing Mensuel', cash: 'Cash Management',
+                  ifrs: 'Liasse IFRS (GT) ★',
                 } as Record<string, string>)[k] ?? k;
                 const blocks = QUICK_TEMPLATES[k](data);
                 return (

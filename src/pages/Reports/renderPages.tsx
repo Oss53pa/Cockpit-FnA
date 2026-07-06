@@ -48,6 +48,7 @@ export function renderPages(config: ReportConfig, data: any, palette: any, ops: 
         .filter((r: any) => Math.abs(r.realise) > 0.01 || Math.abs(r.budget) > 0.01)
         .length;
     }
+    if (source.startsWith('ifrs_')) return source === 'ifrs_sofp' ? 30 : source === 'ifrs_cashflow' ? 20 : source === 'ifrs_recon' ? 12 : 10;
     if (source === 'balance') return (data?.balance ?? []).filter((r: any) => Math.abs(r.soldeD) > 0.01 || Math.abs(r.soldeC) > 0.01).length;
     if (source === 'bilan_actif') return (data?.bilanActif ?? []).length;
     if (source === 'bilan_passif') return (data?.bilanPassif ?? []).length;

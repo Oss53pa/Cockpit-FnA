@@ -12,6 +12,13 @@ export const TABLE_CATALOG: Array<{ v: string; label: string; cat: string; desc:
   { v: 'balance', label: 'Balance générale', cat: 'États', desc: 'Tous les comptes mouvementés' },
   { v: 'tft', label: 'Tableau des flux de trésorerie', cat: 'États', desc: 'CAFG, BFR, flux op./inv./fin.' },
   { v: 'capital', label: 'Variation des capitaux propres', cat: 'États', desc: 'Mouvements par rubrique' },
+  // ─── États financiers pro IFRS (niveau GT : comparatif N/N-1 + réf. normatives) ───
+  { v: 'ifrs_pnl', label: 'IFRS — Compte de résultat', cat: 'IFRS', desc: 'P&L IAS 1 par nature · N/N-1 · réf. normatives' },
+  { v: 'ifrs_oci', label: 'IFRS — Résultat global (OCI)', cat: 'IFRS', desc: 'Other comprehensive income IAS 1.82A' },
+  { v: 'ifrs_sofp', label: 'IFRS — Situation financière', cat: 'IFRS', desc: 'SoFP current/non-current · N/N-1 · réf. IAS' },
+  { v: 'ifrs_sce', label: 'IFRS — Variation des capitaux propres', cat: 'IFRS', desc: 'Statement of changes in equity IAS 1.106' },
+  { v: 'ifrs_cashflow', label: 'IFRS — Flux de trésorerie', cat: 'IFRS', desc: 'IAS 7 méthode indirecte · réf. normatives' },
+  { v: 'ifrs_recon', label: 'IFRS — Réconciliation SYSCOHADA→IFRS', cat: 'IFRS', desc: 'Ponts capitaux propres & résultat (IFRS 1)' },
   { v: 'ratios', label: 'Ratios financiers', cat: 'Analyse', desc: 'Rentabilité, liquidité, structure, activité' },
   { v: 'budget_actual', label: 'Budget vs Réalisé (annuel)', cat: 'Analyse', desc: 'Écarts annuels par compte sur tout le CR' },
   { v: 'cr_monthly', label: 'CR mensuel (Jan→Déc)', cat: 'Mensuel', desc: 'Compte de résultat mois par mois' },
@@ -169,6 +176,7 @@ export const TEMPLATE_DEFAULTS: Record<string, { title: string; subtitle?: strin
   fiscal:       { title: 'Pack Fiscal',                subtitle: 'TVA, IS, charges fiscales et risques' },
   closing:      { title: 'Closing Mensuel',            subtitle: 'Pack de clôture et justifications' },
   cash:         { title: 'Cash Management',            subtitle: 'Trésorerie, prévisions et optimisation' },
+  ifrs:         { title: 'États financiers IFRS',      subtitle: 'Converted from revised SYSCOHADA — IAS/IFRS presentation' },
 };
 
 export function uid() { return Math.random().toString(36).substring(2, 11); }
@@ -864,4 +872,39 @@ export const QUICK_TEMPLATES: Record<string, (data?: any) => Block[]> = {
       { id: uid(), type: 'paragraph', text: "À compléter : actions sur DSO (relances), DIO (rotation stocks), DPO (négociation délais), gestion des excédents." },
     ];
   },
+
+  // ─── Liasse IFRS — structure inspirée des « GT Example Financial Statements » :
+  // intro/base de préparation → 5 états primaires → réconciliation IFRS 1 → notes.
+  ifrs: () => [
+    { id: uid(), type: 'h1', text: '1. Introduction et base de préparation', inToc: true },
+    { id: uid(), type: 'paragraph', text: "Les présents états financiers sont convertis de la comptabilité SYSCOHADA révisé (AUDCIF 2017) vers un référentiel IFRS : reclassement de présentation (IAS 1 — distinction courant / non courant, suppression des éléments HAO) et retraitements de fond (IAS 38, IAS 21, IAS 20, IAS 12, et le cas échéant IFRS 16, IAS 19, IFRS 9). Les montants sont exprimés dans la devise de tenue de comptabilité. Les références normatives figurent en marge de chaque état." },
+    { id: uid(), type: 'pageBreak' },
+    { id: uid(), type: 'h1', text: '2. Compte de résultat (Statement of Profit or Loss)', inToc: true },
+    { id: uid(), type: 'table', source: 'ifrs_pnl', title: 'Compte de résultat IFRS — par nature (IAS 1)' },
+    { id: uid(), type: 'h2', text: '2.1 Résultat global (Other Comprehensive Income)', inToc: true },
+    { id: uid(), type: 'table', source: 'ifrs_oci', title: 'État du résultat global (IAS 1.82A)' },
+    { id: uid(), type: 'pageBreak' },
+    { id: uid(), type: 'h1', text: '3. État de la situation financière (Statement of Financial Position)', inToc: true },
+    { id: uid(), type: 'table', source: 'ifrs_sofp', title: 'Situation financière — current / non-current (IAS 1)' },
+    { id: uid(), type: 'pageBreak' },
+    { id: uid(), type: 'h1', text: '4. Variation des capitaux propres (Statement of Changes in Equity)', inToc: true },
+    { id: uid(), type: 'table', source: 'ifrs_sce', title: 'Variation des capitaux propres (IAS 1.106)' },
+    { id: uid(), type: 'pageBreak' },
+    { id: uid(), type: 'h1', text: '5. Tableau des flux de trésorerie (Statement of Cash Flows)', inToc: true },
+    { id: uid(), type: 'table', source: 'ifrs_cashflow', title: 'Flux de trésorerie — méthode indirecte (IAS 7)' },
+    { id: uid(), type: 'pageBreak' },
+    { id: uid(), type: 'h1', text: '6. Réconciliation SYSCOHADA → IFRS', inToc: true },
+    { id: uid(), type: 'paragraph', text: "Ponts de réconciliation type IFRS 1 : passage des capitaux propres et du résultat SYSCOHADA aux montants IFRS, retraitement par retraitement." },
+    { id: uid(), type: 'table', source: 'ifrs_recon', title: 'Ponts de réconciliation (IFRS 1)' },
+    { id: uid(), type: 'pageBreak' },
+    { id: uid(), type: 'h1', text: '7. Notes aux états financiers', inToc: true },
+    { id: uid(), type: 'h2', text: '7.1 Principales méthodes comptables', inToc: true },
+    { id: uid(), type: 'paragraph', text: "Immobilisations au coût amorti (IAS 16 / IAS 38) ; contrats de location capitalisés en droit d'usage et dette (IFRS 16) ; instruments financiers évalués selon IFRS 9 (dépréciation en pertes attendues) ; impôts différés sur différences temporelles (IAS 12) ; avantages du personnel selon IAS 19." },
+    { id: uid(), type: 'h2', text: '7.2 Jugements et estimations', inToc: true },
+    { id: uid(), type: 'paragraph', text: "À compléter : principales sources d'incertitude d'estimation (IAS 1.125) — durées d'utilité, taux d'actualisation, pertes attendues sur créances, hypothèses actuarielles." },
+    { id: uid(), type: 'h2', text: '7.3 Événements postérieurs à la clôture', inToc: true },
+    { id: uid(), type: 'paragraph', text: "À compléter : événements significatifs postérieurs à la date de clôture (IAS 10) et date d'autorisation de publication des états financiers (IAS 1.138)." },
+    { id: uid(), type: 'h2', text: '7.4 Portée de la conversion', inToc: true },
+    { id: uid(), type: 'paragraph', text: "Conversion indicative de gestion. Pour un reporting IFRS audité, faire valider les retraitements et compléter les postes hors périmètre (information sectorielle IFRS 8, instruments financiers IFRS 7/9 détaillés, notes complètes) par un cabinet." },
+  ],
 };
