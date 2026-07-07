@@ -20,7 +20,9 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
   GLTiersEntry, TiersCategory,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
 } from './schema';
+import { db } from './schema';
 import {
   isDemoActive, DEMO_ORG, DEMO_BALANCE, DEMO_PERIODS, DEMO_IMPORTS,
   DEMO_ACCOUNTS, DEMO_ATTENTION_POINTS, DEMO_ACTION_PLANS, DEMO_GL_TIERS,
@@ -498,6 +500,76 @@ export class DemoProvider implements DataProvider {
   }
   updateChatMessage(id: number, c: Partial<ChatMessage>) { return this.inner.updateChatMessage(id, c); }
   deleteChatMessage(id: number) { return this.inner.deleteChatMessage(id); }
+
+  // ── Espace Collaboratif ──
+  // En démo, les espaces vivent dans Dexie (IndexedDB local) : la démo est
+  // pleinement fonctionnelle sans jamais écrire dans Supabase.
+  getSpaces(orgId: string) {
+    if (isDemo(orgId)) return db.spaces.where('orgId').equals(orgId).reverse().sortBy('createdAt');
+    return this.inner.getSpaces(orgId);
+  }
+  async getSpace(id: string) {
+    const local = await db.spaces.get(id);
+    if (local && isDemo(local.orgId)) return local;
+    if (local) return local; // fallback local-first
+    return this.inner.getSpace(id);
+  }
+  upsertSpace(s: Space) {
+    if (isDemo(s.orgId)) return db.spaces.put(s).then(() => undefined);
+    return this.inner.upsertSpace(s);
+  }
+  async getSpaceCriteria(spaceId: string) {
+    const local = await db.spaceCriteria.where('spaceId').equals(spaceId).toArray();
+    if (local.length && isDemo(local[0].orgId)) return local;
+    const space = await db.spaces.get(spaceId);
+    if (space && isDemo(space.orgId)) return local;
+    return this.inner.getSpaceCriteria(spaceId);
+  }
+  upsertSpaceCriterion(c: SpaceCriterion) {
+    if (isDemo(c.orgId)) return db.spaceCriteria.put(c).then(() => undefined);
+    return this.inner.upsertSpaceCriterion(c);
+  }
+  async getSpaceSolutions(spaceId: string) {
+    const space = await db.spaces.get(spaceId);
+    if (space && isDemo(space.orgId)) return db.spaceSolutions.where('spaceId').equals(spaceId).toArray();
+    return this.inner.getSpaceSolutions(spaceId);
+  }
+  upsertSpaceSolution(s: SpaceSolution) {
+    if (isDemo(s.orgId)) return db.spaceSolutions.put(s).then(() => undefined);
+    return this.inner.upsertSpaceSolution(s);
+  }
+  async getSpaceActions(spaceId: string) {
+    const space = await db.spaces.get(spaceId);
+    if (space && isDemo(space.orgId)) return db.spaceActions.where('spaceId').equals(spaceId).toArray();
+    return this.inner.getSpaceActions(spaceId);
+  }
+  upsertSpaceAction(a: SpaceAction) {
+    if (isDemo(a.orgId)) return db.spaceActions.put(a).then(() => undefined);
+    return this.inner.upsertSpaceAction(a);
+  }
+  async getSpaceEvents(spaceId: string) {
+    const space = await db.spaces.get(spaceId);
+    if (space && isDemo(space.orgId)) return db.spaceEvents.where('spaceId').equals(spaceId).sortBy('createdAt');
+    return this.inner.getSpaceEvents(spaceId);
+  }
+  addSpaceEvent(e: Omit<SpaceEvent, 'id'>) {
+    // Append-only, même en démo : add() uniquement, jamais put/update/delete.
+    if (isDemo(e.orgId)) return db.spaceEvents.add(e as SpaceEvent).then(() => undefined);
+    return this.inner.addSpaceEvent(e);
+  }
+  async getSpaceDecisions(spaceId: string) {
+    const space = await db.spaces.get(spaceId);
+    if (space && isDemo(space.orgId)) return db.spaceDecisions.where('spaceId').equals(spaceId).toArray();
+    return this.inner.getSpaceDecisions(spaceId);
+  }
+  getSpaceDecisionsByOrg(orgId: string) {
+    if (isDemo(orgId)) return db.spaceDecisions.where('orgId').equals(orgId).toArray();
+    return this.inner.getSpaceDecisionsByOrg(orgId);
+  }
+  upsertSpaceDecision(d: SpaceDecision) {
+    if (isDemo(d.orgId)) return db.spaceDecisions.put(d).then(() => undefined);
+    return this.inner.upsertSpaceDecision(d);
+  }
 
   // ── Files ──
   uploadFile(orgId: string, fileName: string, file: File | Blob) {

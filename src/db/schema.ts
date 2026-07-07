@@ -458,6 +458,126 @@ export type ChatMessage = {
   readBy?: string[];
 };
 
+// ── Espace Collaboratif : résolution de problèmes ancrée au grand livre ─────
+// « Slack fait parler les gens ; l'Espace Collaboratif fait converger un
+// problème vers zéro. » Un espace naît d'un problème ancré à un objet métier,
+// vit selon la méthode (problème → solutions → actions → clôture) et meurt
+// résolu — avec traçabilité append-only et convergence CALCULÉE (jamais saisie).
+export type SpaceStatus = 'ouvert' | 'analyse' | 'action' | 'resolu' | 'archive' | 'abandonne';
+export type SpaceAnchorType = 'account_period' | 'reconciliation' | 'partner' | 'journal_entry' | 'closing_period' | 'budget_line';
+
+export type Space = {
+  id: string;
+  orgId: string;
+  title: string;
+  status: SpaceStatus;
+  /** Énoncé structuré du problème (constat chiffré, date, origine). */
+  problemStatement: string;
+  problemImpact?: string;
+  /** Ancrage obligatoire à un objet métier (structurel, pas décoratif). */
+  anchorType: SpaceAnchorType;
+  /** Référence de l'objet ancré : '521100·2026-03', code tiers, n° de pièce… */
+  anchorRef: string;
+  anchorLabel?: string;
+  /** Écart initial figé à l'ouverture (XOF entier) — dénominateur de la convergence. */
+  initialGapXof?: number;
+  ownerId: string;
+  ownerName?: string;
+  members?: string[];
+  dueDate?: string;          // YYYY-MM-DD
+  /** Convergence en points de base (0-10000), CALCULÉE par computeConvergenceBp — jamais saisie. */
+  convergenceBp: number;
+  abandonReason?: string;
+  resolvedAt?: number;
+  archivedAt?: number;
+  createdAt: number;
+};
+
+export type SpaceCriterionKind = 'computed' | 'manual_check';
+export type SpaceCriterion = {
+  id?: number;
+  orgId: string;
+  spaceId: string;
+  label: string;
+  kind: SpaceCriterionKind;
+  /** Pour kind='computed' : référence de calcul (ex. 'gl.gap' → écart GL restant). */
+  computeRef?: string;
+  satisfied: boolean;
+  satisfiedBy?: string;
+  satisfiedAt?: number;
+  createdAt: number;
+};
+
+export type SpaceSolutionStatus = 'proposed' | 'kept' | 'discarded';
+export type SpaceSolution = {
+  id?: number;
+  orgId: string;
+  spaceId: string;
+  title: string;
+  body?: string;
+  proposedBy: string;
+  status: SpaceSolutionStatus;
+  /** Motif obligatoire quand la solution est écartée (tracé). */
+  statusReason?: string;
+  decidedBy?: string;
+  createdAt: number;
+};
+
+export type SpaceAction = {
+  id?: number;
+  orgId: string;
+  spaceId: string;
+  label: string;
+  assignee?: string;
+  dueDate?: string;          // YYYY-MM-DD
+  isCriticalPath?: boolean;
+  status: 'todo' | 'done';
+  completedAt?: number;
+  completedBy?: string;
+  createdAt: number;
+};
+
+export type SpaceEventType =
+  | 'message' | 'problem_stated' | 'solution_proposed' | 'solution_kept' | 'solution_discarded'
+  | 'decision_proposed' | 'decision_approved' | 'decision_rejected'
+  | 'action_created' | 'action_completed' | 'deadline_changed'
+  | 'entry_referenced' | 'criterion_satisfied' | 'criterion_reopened'
+  | 'space_opened' | 'status_changed' | 'member_added'
+  | 'space_resolved' | 'space_archived' | 'proph3t_summary' | 'proph3t_alert';
+
+export type SpaceEvent = {
+  id?: number;
+  orgId: string;
+  spaceId: string;
+  eventType: SpaceEventType;
+  actor: string;
+  actorKind: 'user' | 'system' | 'proph3t';
+  /** Surface d'origine — preuve visible de la bidirectionnalité (badge « via … »). */
+  originSurface: 'space' | 'fna_workspace';
+  payload?: Record<string, unknown>;
+  createdAt: number;
+};
+
+export type SpaceDecisionStatus = 'proposed' | 'approved' | 'rejected';
+export type SpaceDecision = {
+  id?: number;
+  orgId: string;
+  spaceId: string;
+  /** Référence lisible DEC-AAAA-NNN. */
+  ref: string;
+  decisionType: string;
+  title: string;
+  body?: string;
+  amountXof?: number;
+  status: SpaceDecisionStatus;
+  /** Rôles requis, résolus par la matrice de seuils au moment de la proposition. */
+  requiredRoles: string[];
+  approvedBy?: string[];
+  rejectedBy?: string;
+  rejectReason?: string;
+  createdAt: number;
+};
+
 class CockpitDB extends Dexie {
   organizations!: Table<Organization, string>;
   fiscalYears!: Table<FiscalYear, string>;
@@ -482,6 +602,12 @@ class CockpitDB extends Dexie {
   tiersUnmatched!: Table<TiersUnmatched, number>;
   tiersRules!: Table<TiersRule, number>;
   glTiers!: Table<GLTiersEntry, number>;
+  spaces!: Table<Space, string>;
+  spaceCriteria!: Table<SpaceCriterion, number>;
+  spaceSolutions!: Table<SpaceSolution, number>;
+  spaceActions!: Table<SpaceAction, number>;
+  spaceEvents!: Table<SpaceEvent, number>;
+  spaceDecisions!: Table<SpaceDecision, number>;
 
   constructor() {
     super('CockpitFA');
@@ -535,6 +661,15 @@ class CockpitDB extends Dexie {
     // v10 : grand livre tiers (livre auxiliaire stocké, source des balances aux.)
     this.version(10).stores({
       glTiers: '++id, orgId, importId, account, codeTiers, category, date, [orgId+category], [orgId+importId]',
+    });
+    // v11 : Espace Collaboratif — résolution de problèmes ancrée au GL
+    this.version(11).stores({
+      spaces: 'id, orgId, status, [orgId+status], createdAt',
+      spaceCriteria: '++id, spaceId, orgId, [spaceId+kind]',
+      spaceSolutions: '++id, spaceId, orgId, status',
+      spaceActions: '++id, spaceId, orgId, status, assignee, dueDate',
+      spaceEvents: '++id, spaceId, orgId, createdAt, [spaceId+createdAt], eventType',
+      spaceDecisions: '++id, spaceId, orgId, status',
     });
   }
 }

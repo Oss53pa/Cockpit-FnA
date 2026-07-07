@@ -9,6 +9,7 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
   GLTiersEntry, TiersCategory,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
 } from './schema';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
@@ -921,6 +922,67 @@ export class SupabaseProvider implements DataProvider {
   }
   async deleteChatMessage(id: number) {
     check(await supabase.from('fna_chat_messages').delete().eq('id', id));
+  }
+
+  // ── Espace Collaboratif ──────────────────────────────────────────
+  async getSpaces(orgId: string) {
+    const { data } = await supabase.from('fna_spaces').select('*').eq('org_id', orgId).order('created_at', { ascending: false });
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as Space[];
+  }
+  async getSpace(id: string) {
+    const { data } = await supabase.from('fna_spaces').select('*').eq('id', id).maybeSingle();
+    return data ? toCamel(data) as Space : undefined;
+  }
+  async upsertSpace(s: Space) {
+    check(await fromAny('fna_spaces').upsert(toSnake(s)));
+  }
+  async getSpaceCriteria(spaceId: string) {
+    const { data } = await supabase.from('fna_space_criteria').select('*').eq('space_id', spaceId).order('id');
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceCriterion[];
+  }
+  async upsertSpaceCriterion(c: SpaceCriterion) {
+    const row = toSnake(c); if (c.id === undefined) delete row.id;
+    check(await fromAny('fna_space_criteria').upsert(row));
+  }
+  async getSpaceSolutions(spaceId: string) {
+    const { data } = await supabase.from('fna_space_solutions').select('*').eq('space_id', spaceId).order('id');
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceSolution[];
+  }
+  async upsertSpaceSolution(s: SpaceSolution) {
+    const row = toSnake(s); if (s.id === undefined) delete row.id;
+    check(await fromAny('fna_space_solutions').upsert(row));
+  }
+  async getSpaceActions(spaceId: string) {
+    const { data } = await supabase.from('fna_space_actions').select('*').eq('space_id', spaceId).order('due_date', { ascending: true, nullsFirst: false });
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceAction[];
+  }
+  async upsertSpaceAction(a: SpaceAction) {
+    const row = toSnake(a); if (a.id === undefined) delete row.id;
+    check(await fromAny('fna_space_actions').upsert(row));
+  }
+  async getSpaceEvents(spaceId: string) {
+    const rows = await paginatedSelect<any>(
+      () => supabase.from('fna_space_events').select('*').eq('space_id', spaceId).order('created_at'),
+      'getSpaceEvents',
+    );
+    return rows.map((r) => toCamel(r as Record<string, unknown>)) as SpaceEvent[];
+  }
+  async addSpaceEvent(e: Omit<SpaceEvent, 'id'>) {
+    // Append-only : INSERT uniquement — la table refuse UPDATE/DELETE (trigger).
+    const row = toSnake(e); delete row.id;
+    check(await fromAny('fna_space_events').insert(row));
+  }
+  async getSpaceDecisions(spaceId: string) {
+    const { data } = await supabase.from('fna_space_decisions').select('*').eq('space_id', spaceId).order('id');
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceDecision[];
+  }
+  async getSpaceDecisionsByOrg(orgId: string) {
+    const { data } = await supabase.from('fna_space_decisions').select('*').eq('org_id', orgId);
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceDecision[];
+  }
+  async upsertSpaceDecision(d: SpaceDecision) {
+    const row = toSnake(d); if (d.id === undefined) delete row.id;
+    check(await fromAny('fna_space_decisions').upsert(row));
   }
 
   // File storage

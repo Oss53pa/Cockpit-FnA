@@ -48,6 +48,7 @@ const sections = [
   {
     label: 'Collaboration',
     items: [
+      { to: '/spaces', icon: Target, label: 'Espaces de résolution' },
       { to: '/chat', icon: MessageCircle, label: 'Discussion' },
     ],
   },

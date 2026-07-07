@@ -48,6 +48,7 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
   GLTiersEntry, TiersCategory,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
 } from './schema';
 import { withCache } from './cachedProvider';
 
@@ -257,6 +258,23 @@ export interface DataProvider {
   addChatMessage(msg: Omit<ChatMessage, 'id'>): Promise<number>;
   updateChatMessage(id: number, changes: Partial<ChatMessage>): Promise<void>;
   deleteChatMessage(id: number): Promise<void>;
+
+  // ── Espace Collaboratif : résolution de problèmes ancrée au GL ──
+  getSpaces(orgId: string): Promise<Space[]>;
+  getSpace(id: string): Promise<Space | undefined>;
+  upsertSpace(s: Space): Promise<void>;
+  getSpaceCriteria(spaceId: string): Promise<SpaceCriterion[]>;
+  upsertSpaceCriterion(c: SpaceCriterion): Promise<void>;
+  getSpaceSolutions(spaceId: string): Promise<SpaceSolution[]>;
+  upsertSpaceSolution(s: SpaceSolution): Promise<void>;
+  getSpaceActions(spaceId: string): Promise<SpaceAction[]>;
+  upsertSpaceAction(a: SpaceAction): Promise<void>;
+  /** Fil unifié APPEND-ONLY : lecture + ajout uniquement (aucune modification). */
+  getSpaceEvents(spaceId: string): Promise<SpaceEvent[]>;
+  addSpaceEvent(e: Omit<SpaceEvent, 'id'>): Promise<void>;
+  getSpaceDecisions(spaceId: string): Promise<SpaceDecision[]>;
+  getSpaceDecisionsByOrg(orgId: string): Promise<SpaceDecision[]>;
+  upsertSpaceDecision(d: SpaceDecision): Promise<void>;
 
   // File storage
   uploadFile(orgId: string, fileName: string, file: File | Blob): Promise<string>;

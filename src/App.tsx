@@ -52,6 +52,8 @@ const Settings       = lazyWithRetry(() => import('./pages/Settings'));
 const TeamSettings   = lazyWithRetry(() => import('./pages/settings/TeamSettingsPage'));
 const Guide          = lazyWithRetry(() => import('./pages/Guide'));
 const Chat           = lazyWithRetry(() => import('./pages/Chat'));
+const Spaces         = lazyWithRetry(() => import('./pages/collaboration/Spaces'));
+const SpaceDetail    = lazyWithRetry(() => import('./pages/collaboration/SpaceDetail'));
 const ExecutiveSummary = lazyWithRetry(() => import('./pages/ExecutiveSummary'));
 const ComplianceSyscohada = lazyWithRetry(() => import('./pages/ComplianceSyscohada'));
 const BreakEven = lazyWithRetry(() => import('./pages/BreakEven'));
@@ -255,6 +257,8 @@ function App() {
         <Route path="/settings/team" element={<ProtectedRoute><AppLayout><TeamSettings /></AppLayout></ProtectedRoute>} />
         <Route path="/guide" element={<ProtectedRoute><AppLayout><Guide /></AppLayout></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><AppLayout><Chat /></AppLayout></ProtectedRoute>} />
+        <Route path="/spaces" element={<ProtectedRoute><AppLayout><Spaces /></AppLayout></ProtectedRoute>} />
+        <Route path="/spaces/:id" element={<ProtectedRoute><AppLayout><SpaceDetail /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/exec" element={<ProtectedRoute><AppLayout><ExecutiveSummary /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/compliance" element={<ProtectedRoute><AppLayout><ComplianceSyscohada /></AppLayout></ProtectedRoute>} />
         <Route path="/dashboard/breakeven" element={<ProtectedRoute><AppLayout><BreakEven /></AppLayout></ProtectedRoute>} />

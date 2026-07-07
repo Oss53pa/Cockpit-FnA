@@ -8,7 +8,9 @@ import type {
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
 } from './schema';
+import { db } from './schema';
 
 const api = () => (window as any).electronAPI;
 
@@ -373,6 +375,22 @@ export class ElectronProvider implements DataProvider {
   async addChatMessage(_msg: Omit<ChatMessage, 'id'>): Promise<number> { return this.notImpl(); }
   async updateChatMessage(_id: number, _changes: Partial<ChatMessage>) { this.notImpl(); }
   async deleteChatMessage(_id: number) { this.notImpl(); }
+
+  // ── Espace Collaboratif — Dexie locale (le renderer Electron a IndexedDB) ──
+  getSpaces(orgId: string) { return db.spaces.where('orgId').equals(orgId).reverse().sortBy('createdAt'); }
+  getSpace(id: string) { return db.spaces.get(id); }
+  upsertSpace(s: Space) { return db.spaces.put(s).then(() => undefined); }
+  getSpaceCriteria(spaceId: string) { return db.spaceCriteria.where('spaceId').equals(spaceId).toArray(); }
+  upsertSpaceCriterion(c: SpaceCriterion) { return db.spaceCriteria.put(c).then(() => undefined); }
+  getSpaceSolutions(spaceId: string) { return db.spaceSolutions.where('spaceId').equals(spaceId).toArray(); }
+  upsertSpaceSolution(s: SpaceSolution) { return db.spaceSolutions.put(s).then(() => undefined); }
+  getSpaceActions(spaceId: string) { return db.spaceActions.where('spaceId').equals(spaceId).toArray(); }
+  upsertSpaceAction(a: SpaceAction) { return db.spaceActions.put(a).then(() => undefined); }
+  getSpaceEvents(spaceId: string) { return db.spaceEvents.where('spaceId').equals(spaceId).sortBy('createdAt'); }
+  addSpaceEvent(e: Omit<SpaceEvent, 'id'>) { return db.spaceEvents.add(e as SpaceEvent).then(() => undefined); }
+  getSpaceDecisions(spaceId: string) { return db.spaceDecisions.where('spaceId').equals(spaceId).toArray(); }
+  getSpaceDecisionsByOrg(orgId: string) { return db.spaceDecisions.where('orgId').equals(orgId).toArray(); }
+  upsertSpaceDecision(d: SpaceDecision) { return db.spaceDecisions.put(d).then(() => undefined); }
 
   // File storage (local disk in Electron)
   async uploadFile(_orgId: string, _fileName: string, _file: File | Blob): Promise<string> {
