@@ -956,6 +956,10 @@ export class SupabaseProvider implements DataProvider {
     const { data } = await supabase.from('fna_space_actions').select('*').eq('space_id', spaceId).order('due_date', { ascending: true, nullsFirst: false });
     return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceAction[];
   }
+  async getSpaceActionsByOrg(orgId: string) {
+    const { data } = await supabase.from('fna_space_actions').select('*').eq('org_id', orgId);
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceAction[];
+  }
   async upsertSpaceAction(a: SpaceAction) {
     const row = toSnake(a); if (a.id === undefined) delete row.id;
     check(await fromAny('fna_space_actions').upsert(row));

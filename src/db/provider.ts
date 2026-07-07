@@ -268,6 +268,8 @@ export interface DataProvider {
   getSpaceSolutions(spaceId: string): Promise<SpaceSolution[]>;
   upsertSpaceSolution(s: SpaceSolution): Promise<void>;
   getSpaceActions(spaceId: string): Promise<SpaceAction[]>;
+  /** Toutes les actions de l'org (pour le dock « Mes espaces » inter-espaces). */
+  getSpaceActionsByOrg(orgId: string): Promise<SpaceAction[]>;
   upsertSpaceAction(a: SpaceAction): Promise<void>;
   /** Fil unifié APPEND-ONLY : lecture + ajout uniquement (aucune modification). */
   getSpaceEvents(spaceId: string): Promise<SpaceEvent[]>;

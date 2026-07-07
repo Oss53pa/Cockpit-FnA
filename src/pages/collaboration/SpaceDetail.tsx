@@ -436,7 +436,7 @@ function DecisionsPanel({ space, decisions, frozen, me }: {
           </div>
           <p className="text-[11px] font-medium mt-1">{d.title}</p>
           <p className="text-[9px] text-primary-400 mt-0.5">
-            {d.amountXof ? <span className="num" style={{ color: '#C97E12' }}>{fmtXof(d.amountXof)} · </span> : null}
+            {d.amountXof ? <span className="num" style={{ color: 'rgb(var(--accent))' }}>{fmtXof(d.amountXof)} · </span> : null}
             <Scale className="w-2.5 h-2.5 inline -mt-0.5" /> {d.requiredRoles.map((r) => `${r}${(d.approvedBy ?? []).includes(r) ? ' ✓' : ''}`).join(' puis ')}
           </p>
           {d.rejectReason && <p className="text-[9px] text-error mt-0.5">Motif : {d.rejectReason}</p>}

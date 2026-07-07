@@ -60,7 +60,7 @@ export function ConvergenceBar({ bp, showBadge, formula }: { bp: number; showBad
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="num text-[12px] font-bold" style={{ color: '#C97E12' }}>{pct} %</span>
+        <span className="num text-[12px] font-bold" style={{ color: 'rgb(var(--accent))' }}>{pct} %</span>
         {showBadge && (
           <span className="text-[9px] uppercase tracking-wider text-primary-400" title={formula}>
             calculé · jamais saisie
@@ -68,7 +68,7 @@ export function ConvergenceBar({ bp, showBadge, formula }: { bp: number; showBad
         )}
       </div>
       <div className="h-1.5 rounded-full bg-primary-200 dark:bg-primary-800 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#C97E12' }} />
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: 'rgb(var(--accent))' }} />
       </div>
     </div>
   );

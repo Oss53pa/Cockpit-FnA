@@ -120,7 +120,7 @@ function SpaceCard({ space, onOpen }: { space: Space; onOpen: () => void }) {
         <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-800 text-primary-500 font-semibold inline-flex items-center gap-1">
           <Anchor className="w-2.5 h-2.5" /> {ANCHOR_META[space.anchorType]?.label ?? space.anchorType} · {space.anchorRef}
         </span>
-        {space.initialGapXof ? <span className="num text-[9px]" style={{ color: '#C97E12' }}>{fmtXof(space.initialGapXof)}</span> : null}
+        {space.initialGapXof ? <span className="num text-[9px]" style={{ color: 'rgb(var(--accent))' }}>{fmtXof(space.initialGapXof)}</span> : null}
       </div>
       <ConvergenceBar bp={space.convergenceBp} />
       <div className="flex items-center justify-between mt-2 text-[10px] text-primary-400">

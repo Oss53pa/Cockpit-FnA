@@ -543,6 +543,10 @@ export class DemoProvider implements DataProvider {
     if (space && isDemo(space.orgId)) return db.spaceActions.where('spaceId').equals(spaceId).toArray();
     return this.inner.getSpaceActions(spaceId);
   }
+  getSpaceActionsByOrg(orgId: string) {
+    if (isDemo(orgId)) return db.spaceActions.where('orgId').equals(orgId).toArray();
+    return this.inner.getSpaceActionsByOrg(orgId);
+  }
   upsertSpaceAction(a: SpaceAction) {
     if (isDemo(a.orgId)) return db.spaceActions.put(a).then(() => undefined);
     return this.inner.upsertSpaceAction(a);

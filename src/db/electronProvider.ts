@@ -385,6 +385,7 @@ export class ElectronProvider implements DataProvider {
   getSpaceSolutions(spaceId: string) { return db.spaceSolutions.where('spaceId').equals(spaceId).toArray(); }
   upsertSpaceSolution(s: SpaceSolution) { return db.spaceSolutions.put(s).then(() => undefined); }
   getSpaceActions(spaceId: string) { return db.spaceActions.where('spaceId').equals(spaceId).toArray(); }
+  getSpaceActionsByOrg(orgId: string) { return db.spaceActions.where('orgId').equals(orgId).toArray(); }
   upsertSpaceAction(a: SpaceAction) { return db.spaceActions.put(a).then(() => undefined); }
   getSpaceEvents(spaceId: string) { return db.spaceEvents.where('spaceId').equals(spaceId).sortBy('createdAt'); }
   addSpaceEvent(e: Omit<SpaceEvent, 'id'>) { return db.spaceEvents.add(e as SpaceEvent).then(() => undefined); }
