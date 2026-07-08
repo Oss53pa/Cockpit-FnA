@@ -20,7 +20,7 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
   GLTiersEntry, TiersCategory,
-  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision, SpaceSnapshot,
 } from './schema';
 import { db } from './schema';
 import {
@@ -573,6 +573,15 @@ export class DemoProvider implements DataProvider {
   upsertSpaceDecision(d: SpaceDecision) {
     if (isDemo(d.orgId)) return db.spaceDecisions.put(d).then(() => undefined);
     return this.inner.upsertSpaceDecision(d);
+  }
+  async getSpaceSnapshots(spaceId: string) {
+    const space = await db.spaces.get(spaceId);
+    if (space && isDemo(space.orgId)) return db.spaceSnapshots.where('spaceId').equals(spaceId).reverse().sortBy('takenAt');
+    return this.inner.getSpaceSnapshots(spaceId);
+  }
+  addSpaceSnapshot(s: Omit<SpaceSnapshot, 'id'>) {
+    if (isDemo(s.orgId)) return db.spaceSnapshots.add(s as SpaceSnapshot).then(() => undefined);
+    return this.inner.addSpaceSnapshot(s);
   }
 
   // ── Files ──

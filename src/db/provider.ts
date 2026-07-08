@@ -48,7 +48,7 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
   GLTiersEntry, TiersCategory,
-  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision, SpaceSnapshot,
 } from './schema';
 import { withCache } from './cachedProvider';
 
@@ -277,6 +277,8 @@ export interface DataProvider {
   getSpaceDecisions(spaceId: string): Promise<SpaceDecision[]>;
   getSpaceDecisionsByOrg(orgId: string): Promise<SpaceDecision[]>;
   upsertSpaceDecision(d: SpaceDecision): Promise<void>;
+  getSpaceSnapshots(spaceId: string): Promise<SpaceSnapshot[]>;
+  addSpaceSnapshot(s: Omit<SpaceSnapshot, 'id'>): Promise<void>;
 
   // File storage
   uploadFile(orgId: string, fileName: string, file: File | Blob): Promise<string>;

@@ -3,8 +3,8 @@ import { dataProvider } from '../../db/provider';
 import { invalidateCloudData } from '../../hooks/useCloudData';
 import { safeLocalStorage } from '../../lib/safeStorage';
 import { GUEST_USER } from '../../lib/appConfig';
-import type { Space, SpaceEvent, SpaceEventType } from '../../db/schema';
-import { STATUS_META } from '../../engine/spaces';
+import type { Space, SpaceAction, SpaceEvent, SpaceEventType } from '../../db/schema';
+import { STATUS_META, hashSnapshot, runVigie } from '../../engine/spaces';
 
 // ── Utilisateur courant (même convention que Chat.tsx) ─────────────────────
 export type AppUser = { id: string; name: string; email: string; role: string };
@@ -45,6 +45,49 @@ export async function logSpaceEvent(
     createdAt: Date.now(),
   });
   invalidateCloudData(SPACES_TAG);
+}
+
+/**
+ * Fige un snapshot (§9) : données structurées + hash SHA-256, immuable, tracé
+ * dans le fil (`snapshot_created`). Deux captures identiques -> même hash.
+ */
+export async function createSpaceSnapshot(
+  space: Pick<Space, 'id' | 'orgId'>,
+  sourceView: string,
+  label: string,
+  data: Record<string, unknown>,
+  takenBy: string,
+  filters?: Record<string, unknown>,
+): Promise<string> {
+  const hashSha256 = await hashSnapshot(data);
+  await dataProvider.addSpaceSnapshot({
+    orgId: space.orgId, spaceId: space.id, sourceApp: 'fna', sourceView, label,
+    filters: filters ?? {}, data, hashSha256, takenBy, takenAt: Date.now(),
+  });
+  await logSpaceEvent(space, 'snapshot_created', takenBy, { label, sourceView, hash: hashSha256.slice(0, 12) });
+  return hashSha256;
+}
+
+/**
+ * Vigie : matérialise les relances DUES (retard, escalade, chemin critique) en
+ * événements `proph3t_alert`, en évitant les doublons (clés déjà émises). Pure
+ * idempotence : si tout est déjà relancé, aucun événement n'est écrit.
+ */
+export async function materializeVigie(
+  space: Pick<Space, 'id' | 'orgId' | 'status' | 'ownerId'>,
+  actions: SpaceAction[],
+  events: SpaceEvent[],
+): Promise<number> {
+  const existingKeys = new Set(
+    events.filter((e) => e.eventType === 'proph3t_alert' && e.payload?.key).map((e) => String(e.payload!.key)),
+  );
+  const alerts = runVigie(space, actions, existingKeys);
+  for (const a of alerts) {
+    await logSpaceEvent(space, 'proph3t_alert', 'Proph3t',
+      { key: a.key, kind: a.kind, target: a.target, message: a.message, actionId: a.actionId },
+      { actorKind: 'proph3t' });
+  }
+  return alerts.length;
 }
 
 // ── Formatage ───────────────────────────────────────────────────────────────

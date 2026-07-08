@@ -2,17 +2,17 @@
 // La méthode fait converger : ① Problème ② Solutions ③ Échéances ④ Clôture.
 // Fil append-only typé ; convergence recalculée depuis le GL (jamais saisie) ;
 // décisions gouvernées par la matrice de seuils ; clôture verrouillée par les critères.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Anchor, Send, RefreshCcw, Lock, Unlock, CalendarDays, Plus, Scale,
+  ArrowLeft, Anchor, Send, RefreshCcw, Lock, Unlock, CalendarDays, Plus, Scale, Camera, ShieldCheck,
 } from 'lucide-react';
 import { dataProvider } from '../../db/provider';
 import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
 import { toast } from '../../components/ui/Toast';
 import { TabSwitch } from '../../components/ui/TabSwitch';
-import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceSolution, SpaceStatus } from '../../db/schema';
+import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceSnapshot, SpaceSolution, SpaceStatus } from '../../db/schema';
 import {
   ANCHOR_META, DECISION_TYPES, EVENT_META, STATUS_META,
   approvalRuleLabel, canResolve, canTransition, computeConvergenceBp, convergenceFormula,
@@ -20,6 +20,7 @@ import {
 } from '../../engine/spaces';
 import {
   ConvergenceBar, StatusPill, SPACES_TAG, ViaBadge, fmtDay, fmtTs, fmtXof, getCurrentUser, logSpaceEvent,
+  createSpaceSnapshot, materializeVigie,
 } from './spacesShared';
 
 export default function SpaceDetail() {
@@ -27,7 +28,7 @@ export default function SpaceDetail() {
   const navigate = useNavigate();
   const { currentOrgId, currentYear } = useApp();
   const me = useMemo(() => getCurrentUser(), []);
-  const [tab, setTab] = useState<'criteres' | 'actions' | 'decisions'>('criteres');
+  const [tab, setTab] = useState<'criteres' | 'actions' | 'decisions' | 'pieces'>('criteres');
   const [composer, setComposer] = useState('');
 
   const { data: space = null } = useCloudData<Space | null>(
@@ -49,6 +50,19 @@ export default function SpaceDetail() {
   const { data: decisions = [] } = useCloudData<SpaceDecision[]>(
     async () => (id ? dataProvider.getSpaceDecisions(id) : []), [id], { initial: [], tag: SPACES_TAG },
   );
+  const { data: snapshots = [] } = useCloudData<SpaceSnapshot[]>(
+    async () => (id ? dataProvider.getSpaceSnapshots(id) : []), [id], { initial: [], tag: SPACES_TAG },
+  );
+
+  // Vigie : matérialise les relances dues UNE seule fois par montage (garde ref)
+  // pour éviter les doublons dus à la course effet ↔ refetch des events pendant
+  // les écritures async. L'idempotence par clés couvre les montages suivants.
+  const vigieRan = useRef<string | null>(null);
+  useEffect(() => {
+    if (!space || actions.length === 0 || vigieRan.current === space.id) return;
+    vigieRan.current = space.id;
+    materializeVigie(space, actions, events);
+  }, [space?.id, actions.length, events.length]);
 
   if (!space) {
     return (
@@ -98,6 +112,24 @@ export default function SpaceDetail() {
     if (!content) return;
     setComposer('');
     await logSpaceEvent(space, 'message', me.name, { content });
+  };
+
+  // ── Snapshot (§9) : fige l'état de résolution, hashé SHA-256, immuable ──────
+  const takeSnapshot = async () => {
+    // Données STRUCTURÉES et déterministes (clés triées par le canonicalJson du
+    // moteur) → deux captures d'un même état produisent le MÊME hash.
+    const data = {
+      source: 'fna.space_resolution',
+      anchor: { type: space.anchorType, ref: space.anchorRef },
+      convergenceBp: space.convergenceBp,
+      initialGapXof: space.initialGapXof ?? 0,
+      criteria: criteria.map((c) => ({ label: c.label, kind: c.kind, satisfied: c.satisfied })),
+      openActions: actions.filter((a) => a.status !== 'done').length,
+      decisions: decisions.map((d) => ({ ref: d.ref, status: d.status, amountXof: d.amountXof ?? 0 })),
+    };
+    const hash = await createSpaceSnapshot(space, 'space_resolution', `État de résolution · ${new Date().toLocaleDateString('fr-FR')}`, data, me.name);
+    toast.success(`Snapshot figé · hash ${hash.slice(0, 10)}…`);
+    invalidateCloudData(SPACES_TAG);
   };
 
   const changeStatus = async (to: SpaceStatus) => {
@@ -285,7 +317,7 @@ export default function SpaceDetail() {
         {/* ── Colonne RÉSOLUTION ── */}
         <div className="card p-3">
           <TabSwitch
-            tabs={[{ key: 'criteres', label: `Critères ${okCount}/${criteria.length}` }, { key: 'actions', label: `Actions (${actions.length})` }, { key: 'decisions', label: `Décisions (${decisions.length})` }]}
+            tabs={[{ key: 'criteres', label: `Critères ${okCount}/${criteria.length}` }, { key: 'actions', label: `Actions (${actions.length})` }, { key: 'decisions', label: `Décisions (${decisions.length})` }, { key: 'pieces', label: `Pièces (${snapshots.length})` }]}
             value={tab} onChange={(k) => setTab(k as typeof tab)}
           />
           <div className="mt-3">
@@ -324,6 +356,34 @@ export default function SpaceDetail() {
             )}
             {tab === 'decisions' && (
               <DecisionsPanel space={space} decisions={decisions} frozen={frozen} me={me} />
+            )}
+            {tab === 'pieces' && (
+              <div className="space-y-2">
+                {!frozen && (
+                  <button className="btn-outline !py-1.5 text-xs w-full justify-center" onClick={takeSnapshot}>
+                    <Camera className="w-3.5 h-3.5" /> Figer un snapshot (état de résolution)
+                  </button>
+                )}
+                <p className="text-[10px] text-primary-400 leading-relaxed">
+                  Un snapshot gèle des données structurées + un hash SHA-256. Immuable et comparable : deux captures d'un même état donnent le même hash.
+                </p>
+                {snapshots.length === 0 ? (
+                  <p className="text-[11px] text-primary-400 italic py-2">Aucun snapshot. Figez l'état initial comme référence.</p>
+                ) : snapshots.map((s) => (
+                  <div key={s.id} className="rounded-lg border border-primary-200 dark:border-primary-800 p-2">
+                    <div className="flex items-center gap-1.5">
+                      <Camera className="w-3 h-3 text-accent" />
+                      <p className="text-[11px] font-medium flex-1 truncate">{s.label}</p>
+                      <span className="text-[8px] uppercase tracking-wider text-primary-400">{s.sourceView}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <ShieldCheck className="w-2.5 h-2.5 text-success shrink-0" />
+                      <code className="num text-[9px] text-primary-500 truncate" title={s.hashSha256}>{s.hashSha256.slice(0, 24)}…</code>
+                    </div>
+                    <p className="text-[9px] text-primary-400 mt-0.5">{fmtTs(s.takenAt)} · {s.takenBy}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

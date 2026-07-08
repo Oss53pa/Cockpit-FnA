@@ -182,7 +182,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <FloatingAI />
-      <SpacesDock />
       <DemoTour />
       <ActivitySidebarToggle />
       <ActivitySidebar />
@@ -304,6 +303,11 @@ function App() {
         <Route path="/builder" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
         <Route path="/builder/:id" element={<ProtectedRoute><AppLayout><DashboardBuilder /></AppLayout></ProtectedRoute>} />
       </Routes>
+      {/* Dock « Mes espaces » : instance UNIQUE hissee au-dessus des routes ->
+          persiste sans remontage a chaque navigation, present sur TOUS les
+          workspaces (y compris /home qui n'utilise pas AppLayout). Se masque
+          seul hors contexte org (retourne null si pas d'org / pas d'espace). */}
+      <SpacesDock />
     </BrowserRouter>
     </ErrorBoundary>
   );

@@ -540,10 +540,11 @@ export type SpaceAction = {
 export type SpaceEventType =
   | 'message' | 'problem_stated' | 'solution_proposed' | 'solution_kept' | 'solution_discarded'
   | 'decision_proposed' | 'decision_approved' | 'decision_rejected'
-  | 'action_created' | 'action_completed' | 'deadline_changed'
+  | 'action_created' | 'action_completed' | 'action_overdue' | 'deadline_changed'
   | 'entry_referenced' | 'criterion_satisfied' | 'criterion_reopened'
+  | 'snapshot_created'
   | 'space_opened' | 'status_changed' | 'member_added'
-  | 'space_resolved' | 'space_archived' | 'proph3t_summary' | 'proph3t_alert';
+  | 'space_resolved' | 'space_archived' | 'proph3t_summary' | 'proph3t_alert' | 'proph3t_report';
 
 export type SpaceEvent = {
   id?: number;
@@ -578,6 +579,22 @@ export type SpaceDecision = {
   createdAt: number;
 };
 
+/** Snapshot figé, horodaté et hashé (SHA-256) d'une donnée FNA/Atlas — §9 du CDC. */
+export type SpaceSnapshot = {
+  id?: number;
+  orgId: string;
+  spaceId: string;
+  sourceApp: string;          // 'fna' | 'cashpilot' | ...
+  sourceView: string;         // 'bilan' | 'balance' | 'ratios' | 'convergence_ref' | ...
+  label: string;
+  filters?: Record<string, unknown>;
+  /** Données structurées gelées : { columns, rows, aggregates, context }. */
+  data: Record<string, unknown>;
+  hashSha256: string;
+  takenBy: string;
+  takenAt: number;
+};
+
 class CockpitDB extends Dexie {
   organizations!: Table<Organization, string>;
   fiscalYears!: Table<FiscalYear, string>;
@@ -608,6 +625,7 @@ class CockpitDB extends Dexie {
   spaceActions!: Table<SpaceAction, number>;
   spaceEvents!: Table<SpaceEvent, number>;
   spaceDecisions!: Table<SpaceDecision, number>;
+  spaceSnapshots!: Table<SpaceSnapshot, number>;
 
   constructor() {
     super('CockpitFA');
@@ -670,6 +688,10 @@ class CockpitDB extends Dexie {
       spaceActions: '++id, spaceId, orgId, status, assignee, dueDate',
       spaceEvents: '++id, spaceId, orgId, createdAt, [spaceId+createdAt], eventType',
       spaceDecisions: '++id, spaceId, orgId, status',
+    });
+    // v12 : snapshots figés & hashés (SHA-256) — pièces de type « état gelé »
+    this.version(12).stores({
+      spaceSnapshots: '++id, spaceId, orgId, takenAt, [spaceId+takenAt], sourceView',
     });
   }
 }

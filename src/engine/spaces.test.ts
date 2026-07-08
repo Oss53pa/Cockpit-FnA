@@ -1,8 +1,48 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeConvergenceBp, canResolve, canTransition, nextStatuses, isFrozen,
-  requiredRolesFor, nextDecisionRef, isOverdue,
+  requiredRolesFor, nextDecisionRef, isOverdue, runVigie, hashSnapshot,
 } from './spaces';
+
+const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+describe('Vigie (relances automatiques, idempotentes)', () => {
+  const space = { status: 'action' as const, ownerId: 'DAF Awa' };
+  const late = { id: 1, label: 'Relancer SGCI', status: 'todo' as const, dueDate: daysAgo(3), assignee: 'Comptable Koffi', isCriticalPath: true };
+  const onTime = { id: 2, label: 'Vérifier avis', status: 'todo' as const, dueDate: daysAgo(-2), assignee: 'Koffi', isCriticalPath: false };
+
+  it('émet retard + escalade + chemin critique pour une action en retard ≥ 2 j', () => {
+    const alerts = runVigie(space, [late, onTime], new Set());
+    const kinds = alerts.map((a) => a.kind).sort();
+    expect(kinds).toEqual(['critical_block', 'escalation', 'overdue']);
+    expect(alerts.find((a) => a.kind === 'overdue')!.target).toBe('Comptable Koffi');
+    expect(alerts.find((a) => a.kind === 'escalation')!.target).toBe('DAF Awa');
+  });
+
+  it('est idempotente : ne réémet pas une relance déjà présente', () => {
+    const already = new Set(['overdue:1', 'escalation:1', 'critical:1']);
+    expect(runVigie(space, [late, onTime], already)).toHaveLength(0);
+  });
+
+  it('ne relance rien sur un espace résolu ou gelé', () => {
+    expect(runVigie({ status: 'resolu', ownerId: 'x' }, [late], new Set())).toHaveLength(0);
+    expect(runVigie({ status: 'archive', ownerId: 'x' }, [late], new Set())).toHaveLength(0);
+  });
+});
+
+describe('Snapshot — hash SHA-256 déterministe', () => {
+  it('deux données identiques (ordre de clés différent) → même hash', async () => {
+    const h1 = await hashSnapshot({ a: 1, b: [2, 3], c: { x: 'v' } });
+    const h2 = await hashSnapshot({ c: { x: 'v' }, b: [2, 3], a: 1 });
+    expect(h1).toBe(h2);
+    expect(h1).toMatch(/^[0-9a-f]{64}$/);
+  });
+  it('une différence de données change le hash', async () => {
+    const h1 = await hashSnapshot({ gap: 14_120_000 });
+    const h2 = await hashSnapshot({ gap: 2_400_400 });
+    expect(h1).not.toBe(h2);
+  });
+});
 
 describe('Espace Collaboratif — moteur', () => {
   describe('convergence (points de base, jamais saisie)', () => {

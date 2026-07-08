@@ -8,7 +8,7 @@ import type {
   ReportDoc, AttentionPoint, ActionPlan, AccountMapping, ReportTemplate,
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage,
-  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision, SpaceSnapshot,
 } from './schema';
 import { db } from './schema';
 
@@ -392,6 +392,8 @@ export class ElectronProvider implements DataProvider {
   getSpaceDecisions(spaceId: string) { return db.spaceDecisions.where('spaceId').equals(spaceId).toArray(); }
   getSpaceDecisionsByOrg(orgId: string) { return db.spaceDecisions.where('orgId').equals(orgId).toArray(); }
   upsertSpaceDecision(d: SpaceDecision) { return db.spaceDecisions.put(d).then(() => undefined); }
+  getSpaceSnapshots(spaceId: string) { return db.spaceSnapshots.where('spaceId').equals(spaceId).reverse().sortBy('takenAt'); }
+  addSpaceSnapshot(s: Omit<SpaceSnapshot, 'id'>) { return db.spaceSnapshots.add(s as SpaceSnapshot).then(() => undefined); }
 
   // File storage (local disk in Electron)
   async uploadFile(_orgId: string, _fileName: string, _file: File | Blob): Promise<string> {

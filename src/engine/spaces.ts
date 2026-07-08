@@ -147,8 +147,10 @@ export const EVENT_META: Record<SpaceEventType, { label: string; icon: string; t
   decision_rejected: { label: 'Décision rejetée', icon: '❌', tone: 'gov' },
   action_created: { label: 'Action créée', icon: '📋', tone: 'work' },
   action_completed: { label: 'Action complétée', icon: '☑️', tone: 'work' },
+  action_overdue: { label: 'Action en retard', icon: '⏰', tone: 'work' },
   deadline_changed: { label: 'Échéance modifiée', icon: '📅', tone: 'work' },
   entry_referenced: { label: 'Pièce référencée', icon: '🧾', tone: 'gl' },
+  snapshot_created: { label: 'Snapshot figé', icon: '📸', tone: 'gl' },
   criterion_satisfied: { label: 'Critère satisfait', icon: '🟢', tone: 'life' },
   criterion_reopened: { label: 'Critère rouvert', icon: '🔴', tone: 'life' },
   space_opened: { label: 'Espace ouvert', icon: '🚀', tone: 'life' },
@@ -157,7 +159,8 @@ export const EVENT_META: Record<SpaceEventType, { label: string; icon: string; t
   space_resolved: { label: 'Espace résolu', icon: '🏁', tone: 'life' },
   space_archived: { label: 'Espace archivé', icon: '📦', tone: 'life' },
   proph3t_summary: { label: 'Synthèse Proph3t', icon: '✨', tone: 'ai' },
-  proph3t_alert: { label: 'Alerte Proph3t', icon: '⚠️', tone: 'ai' },
+  proph3t_alert: { label: 'Alerte Vigie Proph3t', icon: '⚠️', tone: 'ai' },
+  proph3t_report: { label: 'Rapport de clôture Proph3t', icon: '📄', tone: 'ai' },
 };
 
 export const STATUS_META: Record<SpaceStatus, { label: string; color: string }> = {
@@ -168,6 +171,87 @@ export const STATUS_META: Record<SpaceStatus, { label: string; color: string }> 
   archive: { label: 'Archivé', color: '#737373' },
   abandonne: { label: 'Abandonné', color: '#ef4444' },
 };
+
+// ── Vigie (relances automatiques Proph3t) — §8.5 du CDC ────────────────────
+// Règles par défaut, cadence en jours :
+//  · action en retard          → relance à l'assigné (J+1 = dès dépassement)
+//  · +48 h (retard ≥ 2 j)       → escalade au responsable de l'espace
+//  · chemin critique bloqué     → alerte espace (l'espace ne peut converger)
+// Chaque alerte est idempotente : une clé unique évite les doublons de relance.
+export type VigieAlert = {
+  key: string;                                  // idempotence (ex. 'overdue:42')
+  kind: 'overdue' | 'escalation' | 'critical_block';
+  actionId?: number;
+  target: string;                               // destinataire (assigné / responsable)
+  message: string;
+  daysLate: number;
+};
+
+function daysBetween(dueDate: string, today: Date): number {
+  const [y, m, d] = dueDate.split('-').map((n) => parseInt(n, 10));
+  const due = Date.UTC(y, (m || 1) - 1, d || 1);
+  const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.floor((now - due) / 86400000);
+}
+
+/**
+ * Calcule les relances Vigie À ÉMETTRE pour un espace, en excluant celles déjà
+ * présentes (via `existingKeys`). Fonction pure — la matérialisation en
+ * événements `proph3t_alert` est faite par l'appelant.
+ */
+export function runVigie(
+  space: Pick<Space, 'status' | 'ownerId'>,
+  actions: Array<Pick<SpaceAction, 'id' | 'label' | 'status' | 'dueDate' | 'assignee' | 'isCriticalPath'>>,
+  existingKeys: Set<string>,
+  today = new Date(),
+): VigieAlert[] {
+  if (isFrozen(space.status) || space.status === 'resolu') return [];
+  const owner = space.ownerId || 'Responsable';
+  const out: VigieAlert[] = [];
+  for (const a of actions) {
+    if (a.status === 'done' || !a.dueDate || a.id === undefined) continue;
+    const late = daysBetween(a.dueDate, today);
+    if (late < 1) continue;                       // pas encore en retard (J+1)
+    const assignee = a.assignee || owner;
+    const overdueKey = `overdue:${a.id}`;
+    if (!existingKeys.has(overdueKey)) {
+      out.push({ key: overdueKey, kind: 'overdue', actionId: a.id, target: assignee, daysLate: late,
+        message: `Action « ${a.label} » en retard (${late} j) — relance à ${assignee}.` });
+    }
+    if (late >= 2) {
+      const escKey = `escalation:${a.id}`;
+      if (!existingKeys.has(escKey)) {
+        out.push({ key: escKey, kind: 'escalation', actionId: a.id, target: owner, daysLate: late,
+          message: `Retard ≥ 48 h sur « ${a.label} » — escalade au responsable ${owner}.` });
+      }
+    }
+    if (a.isCriticalPath) {
+      const critKey = `critical:${a.id}`;
+      if (!existingKeys.has(critKey)) {
+        out.push({ key: critKey, kind: 'critical_block', actionId: a.id, target: owner, daysLate: late,
+          message: `Chemin critique bloqué : « ${a.label} » en retard — l'espace ne peut converger.` });
+      }
+    }
+  }
+  return out;
+}
+
+// ── Snapshots : hash SHA-256 du contenu figé (§9.2) ────────────────────────
+/** Sérialisation canonique déterministe (clés triées) pour un hash stable. */
+function canonicalJson(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  const keys = Object.keys(v as Record<string, unknown>).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson((v as Record<string, unknown>)[k])}`).join(',')}}`;
+}
+
+/** SHA-256 hex du payload d'un snapshot (Web Crypto). Deux snapshots identiques
+ *  produisent le même hash ; toute différence de données change le hash. */
+export async function hashSnapshot(data: unknown): Promise<string> {
+  const buf = new TextEncoder().encode(canonicalJson(data));
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export const ANCHOR_META: Record<string, { label: string; hint: string }> = {
   account_period: { label: 'Compte × période', hint: 'Ex. écart de rapprochement 521100 / 2026-03' },

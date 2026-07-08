@@ -9,7 +9,7 @@ import type {
   AnalyticAxis, AnalyticCode, AnalyticRule, AnalyticAssignment, AnalyticBudget,
   Activity, Channel, ChatMessage, TiersUnmatched, TiersRule, GLAuditLogEntry,
   GLTiersEntry, TiersCategory,
-  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision,
+  Space, SpaceCriterion, SpaceSolution, SpaceAction, SpaceEvent, SpaceDecision, SpaceSnapshot,
 } from './schema';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
@@ -987,6 +987,13 @@ export class SupabaseProvider implements DataProvider {
   async upsertSpaceDecision(d: SpaceDecision) {
     const row = toSnake(d); if (d.id === undefined) delete row.id;
     check(await fromAny('fna_space_decisions').upsert(row));
+  }
+  async getSpaceSnapshots(spaceId: string) {
+    const { data } = await supabase.from('fna_space_snapshots').select('*').eq('space_id', spaceId).order('taken_at', { ascending: false });
+    return (data ?? []).map((r) => toCamel(r as Record<string, unknown>)) as SpaceSnapshot[];
+  }
+  async addSpaceSnapshot(s: Omit<SpaceSnapshot, 'id'>) {
+    check(await fromAny('fna_space_snapshots').insert(toSnake(s as Record<string, unknown>)));
   }
 
   // File storage
