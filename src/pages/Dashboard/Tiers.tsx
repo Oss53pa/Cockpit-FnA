@@ -14,6 +14,7 @@ import { dataProvider } from '../../db/provider';
 import { useCloudData } from '../../hooks/useCloudData';
 import { fmtFull, fmtK } from '../../lib/format';
 import { agedBalance, monthlyByPrefix, AgedTier } from '../../engine/analytics';
+import { SpaceLinkBadge } from '../collaboration/spacesShared';
 
 // ── CycleClient ───────────────────────────────────────────────────────
 export function CycleClient() {
@@ -160,7 +161,7 @@ export function CycleClient() {
                   return (
                     <tr key={i} className="border-b border-primary-100 dark:border-primary-800">
                       <td className="py-1.5 px-1 text-primary-400 font-bold">{i + 1}</td>
-                      <td className="py-1.5 px-1 font-mono">{r.tier}</td>
+                      <td className="py-1.5 px-1 font-mono">{r.tier}<SpaceLinkBadge refIncludes={r.tier} anchorType="partner" /></td>
                       <td className="py-1.5 px-1 text-right num font-semibold">{fmtFull(r.total)}</td>
                       <td className="py-1.5 px-1 text-right num" style={{ color: r.buckets[4] > 0 ? ct.at(1) : undefined }}>
                         {r.buckets[4] > 0 ? fmtFull(r.buckets[4]) : '—'}
@@ -391,7 +392,7 @@ export function CycleFournisseur() {
                   return (
                     <tr key={i} className="border-b border-primary-100 dark:border-primary-800">
                       <td className="py-1.5 px-1 text-primary-400 font-bold">{i + 1}</td>
-                      <td className="py-1.5 px-1 font-mono">{r.tier}</td>
+                      <td className="py-1.5 px-1 font-mono">{r.tier}<SpaceLinkBadge refIncludes={r.tier} anchorType="partner" /></td>
                       <td className="py-1.5 px-1 text-right num font-semibold">{fmtFull(r.total)}</td>
                       <td className="py-1.5 px-1 text-right num" style={{ color: retard ? ct.at(1) : undefined }}>
                         {retard ? fmtFull(r.buckets[4]) : '—'}
