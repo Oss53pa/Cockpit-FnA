@@ -12,6 +12,7 @@ import { ChartGradients, barGradId } from '../../components/charts/ChartGradient
 import { bySection, loadLabels, computeBudgetActual } from '../../engine/budgetActual';
 import { useApp } from '../../store/app';
 import { fmtFull, fmtK } from '../../lib/format';
+import { SpaceLinkBadge } from '../collaboration/spacesShared';
 import { tresorerieMonthly, monthlyByPrefix } from '../../engine/analytics';
 
 // ── ISBudgetVsActual ──────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export function ISBudgetVsActual() {
                 <tbody className="divide-y divide-primary-100 dark:divide-primary-800">
                   {enriched.map((r) => (
                     <tr key={r.code} className="hover:bg-primary-50 dark:hover:bg-primary-950">
-                      <td className="py-1.5 px-3 text-primary-800 dark:text-primary-200">{r.label}</td>
+                      <td className="py-1.5 px-3 text-primary-800 dark:text-primary-200">{r.label}<SpaceLinkBadge refIncludes={r.code} anchorType="budget_line" /></td>
                       <td className="text-right num py-1.5 px-2">{fmtFull(r.budget)}</td>
                       <td className="text-right num py-1.5 px-2 font-medium">{fmtFull(r.realise)}</td>
                       <td className={clsx('text-right num py-1.5 px-2', r.diff < 0 ? 'text-error' : '')}>

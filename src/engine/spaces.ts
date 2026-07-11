@@ -466,6 +466,10 @@ export function diffusionSurfaces(space: { anchorType: SpaceAnchorType; anchorRe
       ];
     case 'reconciliation':
       return [{ label: 'Réconciliation bancaire', route: '/dashboard/bank-reconciliation', where: 'Compte bancaire ancré' }];
+    case 'budget_line':
+      return [{ label: 'Budget vs Réalisé', route: '/dashboard/is_bvsa', where: 'Ligne budgétaire ancrée' }];
+    case 'journal_entry':
+      return [{ label: 'Grand Livre', route: '/grand-livre', where: 'Pièces déséquilibrées — n° de pièce' }];
     default:
       return [];
   }

@@ -683,7 +683,7 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
                     <tr key={i} className="border-b border-primary-200/40 dark:border-primary-800/40 hover:bg-error/10">
                       <td className="py-1 px-2 num text-primary-500">{i + 1}</td>
                       <td className="py-1 px-2"><span className="inline-block bg-primary-200 dark:bg-primary-800 rounded px-1.5 py-0.5 font-mono text-[10px]">{p.journal}</span></td>
-                      <td className="py-1 px-2 num font-mono font-semibold">{p.piece}</td>
+                      <td className="py-1 px-2 num font-mono font-semibold">{p.piece}{p.piece && p.piece !== '(sans n°)' && <SpaceLinkBadge refIncludes={p.piece} anchorType="journal_entry" />}</td>
                       <td className="py-1 px-2 text-[10px] text-primary-500 num">{Array.from(p.dates).slice(0, 1).join('')}{p.dates.size > 1 ? ` (+${p.dates.size - 1})` : ''}</td>
                       <td className="py-1 px-2 text-right num">{fmtFull(p.debit)}</td>
                       <td className="py-1 px-2 text-right num">{fmtFull(p.credit)}</td>
