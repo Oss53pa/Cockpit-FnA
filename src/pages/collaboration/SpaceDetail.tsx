@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Anchor, Send, RefreshCcw, Lock, Unlock, CalendarDays, Plus, Scale, Camera, ShieldCheck, FileDown,
+  Radio, Link2, ExternalLink, Copy, Trash2,
 } from 'lucide-react';
 import { dataProvider } from '../../db/provider';
 import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
@@ -13,11 +14,11 @@ import { useApp } from '../../store/app';
 import { useCurrentOrg } from '../../hooks/useFinancials';
 import { toast } from '../../components/ui/Toast';
 import { TabSwitch } from '../../components/ui/TabSwitch';
-import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceSnapshot, SpaceSolution, SpaceStatus } from '../../db/schema';
+import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceExternalRef, SpaceSnapshot, SpaceSolution, SpaceStatus } from '../../db/schema';
 import {
   ANCHOR_META, DECISION_TYPES, EVENT_META, STATUS_META,
   approvalRuleLabel, canResolve, canTransition, computeConvergenceBp, convergenceFormula,
-  isFrozen, isOverdue, nextDecisionRef, nextStatuses, requiredRolesFor,
+  diffusionSurfaces, isFrozen, isOverdue, nextDecisionRef, nextStatuses, requiredRolesFor,
 } from '../../engine/spaces';
 import {
   ConvergenceBar, StatusPill, SPACES_TAG, ViaBadge, fmtDay, fmtTs, fmtXof, getCurrentUser, logSpaceEvent,
@@ -32,7 +33,7 @@ export default function SpaceDetail() {
   const org = useCurrentOrg();
   const orgName = org?.name ?? 'Entreprise';
   const me = useMemo(() => getCurrentUser(), []);
-  const [tab, setTab] = useState<'criteres' | 'actions' | 'decisions' | 'pieces'>('criteres');
+  const [tab, setTab] = useState<'criteres' | 'actions' | 'decisions' | 'pieces' | 'diffusion'>('criteres');
   const [composer, setComposer] = useState('');
 
   const { data: space = null } = useCloudData<Space | null>(
@@ -333,7 +334,7 @@ export default function SpaceDetail() {
         {/* ── Colonne RÉSOLUTION ── */}
         <div className="card p-3">
           <TabSwitch
-            tabs={[{ key: 'criteres', label: `Critères ${okCount}/${criteria.length}` }, { key: 'actions', label: `Actions (${actions.length})` }, { key: 'decisions', label: `Décisions (${decisions.length})` }, { key: 'pieces', label: `Pièces (${snapshots.length})` }]}
+            tabs={[{ key: 'criteres', label: `Critères ${okCount}/${criteria.length}` }, { key: 'actions', label: `Actions (${actions.length})` }, { key: 'decisions', label: `Décisions (${decisions.length})` }, { key: 'pieces', label: `Pièces (${snapshots.length})` }, { key: 'diffusion', label: `Diffusion (${space.externalRefs?.length ?? 0})` }]}
             value={tab} onChange={(k) => setTab(k as typeof tab)}
           />
           <div className="mt-3">
@@ -372,6 +373,9 @@ export default function SpaceDetail() {
             )}
             {tab === 'decisions' && (
               <DecisionsPanel space={space} decisions={decisions} frozen={frozen} me={me} />
+            )}
+            {tab === 'diffusion' && (
+              <DiffusionPanel space={space} frozen={frozen} me={me} navigate={navigate} />
             )}
             {tab === 'pieces' && (
               <div className="space-y-2">
@@ -434,6 +438,7 @@ function EventRow({ event }: { event: SpaceEvent }) {
     event.eventType === 'proph3t_summary' ? String(p.content ?? '') :
     event.eventType === 'proph3t_report' ? `${String(p.title ?? 'Rapport de clôture')} — exportable en PDF (bouton ④ Clôture)` :
     event.eventType === 'snapshot_created' ? `${String(p.label ?? 'Snapshot')} · SHA-256 ${String(p.hash ?? '')}…` :
+    event.eventType === 'external_linked' || event.eventType === 'external_unlinked' ? `${String(p.title ?? 'Ressource')}${p.url ? ` · ${String(p.url)}` : ''}` :
     p.title ? String(p.title) + (p.reason ? ` — motif : ${p.reason}` : '') :
     p.label ? String(p.label) + (p.gapXof !== undefined ? ` · écart GL ${fmtXof(Number(p.gapXof))}` : '') :
     p.statement ? String(p.statement) :
@@ -451,6 +456,118 @@ function EventRow({ event }: { event: SpaceEvent }) {
           <span className="text-[9px] text-primary-400">{fmtTs(event.createdAt)}</span>
         </div>
         {detail && <p className="text-[12px] leading-relaxed mt-0.5 break-words">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Diffusion : widgets vivants in-app (dérivés de l'ancrage) + ancrages externes ─
+// « L'Espace Collaboratif fait converger un problème vers zéro » ; la Diffusion
+// rend cette convergence VISIBLE là où l'objet vit (badge Espace lié) et relie
+// l'espace aux ressources hors FNA. Sortant uniquement : jamais du calcul entrant.
+function DiffusionPanel({ space, frozen, me, navigate }: {
+  space: Space; frozen: boolean; me: { name: string; role: string }; navigate: (to: string) => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [url, setUrl] = useState('');
+  const surfaces = diffusionSurfaces(space);
+  const refs = space.externalRefs ?? [];
+  const pct = Math.trunc(space.convergenceBp / 100);
+  const deepLink = `${window.location.origin}/spaces/${space.id}`;
+
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(deepLink); toast.success('Lien de l\'espace copié'); }
+    catch { toast.error('Copie impossible sur ce navigateur'); }
+  };
+
+  const addRef = async () => {
+    const l = label.trim();
+    let u = url.trim();
+    if (!l) { toast.error('Libellé requis'); return; }
+    // Parsing défensif (zod non intégré) : http/https uniquement, URL bien formée.
+    if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+    try { new URL(u); } catch { toast.error('URL invalide'); return; }
+    const ref: SpaceExternalRef = { id: `ext-${Date.now()}`, label: l, url: u, addedBy: me.name, addedAt: Date.now() };
+    await dataProvider.upsertSpace({ ...space, externalRefs: [...refs, ref] });
+    await logSpaceEvent(space, 'external_linked', me.name, { title: l, url: u });
+    setLabel(''); setUrl('');
+    invalidateCloudData(SPACES_TAG);
+  };
+
+  const removeRef = async (r: SpaceExternalRef) => {
+    await dataProvider.upsertSpace({ ...space, externalRefs: refs.filter((x) => x.id !== r.id) });
+    await logSpaceEvent(space, 'external_unlinked', me.name, { title: r.label, url: r.url });
+    invalidateCloudData(SPACES_TAG);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* A — Widgets vivants in-app */}
+      <div>
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-primary-500 flex items-center gap-1.5 mb-1.5">
+          <Radio className="w-3 h-3" /> Widgets vivants
+        </h4>
+        <p className="text-[10px] text-primary-400 leading-relaxed mb-2">
+          Là où l'objet ancré vit, un badge « Espace lié » diffuse la convergence en temps réel.
+        </p>
+        {surfaces.length === 0 ? (
+          <p className="text-[11px] text-primary-400 italic">Aucune surface in-app pour cet ancrage ({ANCHOR_META[space.anchorType]?.label}).</p>
+        ) : (
+          <div className="space-y-1.5">
+            {surfaces.map((s) => (
+              <div key={s.route} className="rounded-lg border border-primary-200 dark:border-primary-800 p-2 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-accent/15 text-accent shrink-0">
+                  ⬤ <span className="num">{pct} %</span>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-medium truncate">{s.label}</p>
+                  <p className="text-[9px] text-primary-400 truncate">{s.where}</p>
+                </div>
+                <button className="btn-outline !py-1 !px-2 text-[10px] shrink-0" onClick={() => navigate(s.route)} title={`Ouvrir ${s.label}`}>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <button className="btn-outline !py-1 text-[10px] w-full mt-2 justify-center" onClick={copyLink}>
+          <Copy className="w-3 h-3" /> Copier le lien de l'espace
+        </button>
+      </div>
+
+      {/* B — Ancrages externes */}
+      <div>
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-primary-500 flex items-center gap-1.5 mb-1.5">
+          <Link2 className="w-3 h-3" /> Ancrages externes ({refs.length})
+        </h4>
+        <p className="text-[10px] text-primary-400 leading-relaxed mb-2">
+          Reliez l'espace à des ressources hors FNA (ticket, GED, e-mail, relevé). Chaque lien est tracé au fil.
+        </p>
+        {refs.length === 0 && <p className="text-[11px] text-primary-400 italic mb-2">Aucun ancrage externe.</p>}
+        <div className="space-y-1.5">
+          {refs.map((r) => (
+            <div key={r.id} className="rounded-lg border border-primary-200 dark:border-primary-800 p-2 flex items-center gap-2">
+              <Link2 className="w-3 h-3 text-accent shrink-0" />
+              <div className="min-w-0 flex-1">
+                <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-[11px] font-medium text-accent hover:underline truncate block">{r.label}</a>
+                <p className="text-[9px] text-primary-400 truncate">{r.url} · {r.addedBy}</p>
+              </div>
+              {!frozen && (
+                <button className="text-primary-300 hover:text-error shrink-0" onClick={() => removeRef(r)} title="Retirer">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {!frozen && (
+          <div className="rounded-lg border border-accent/40 p-2 space-y-2 mt-2">
+            <input className="input w-full text-[11px]" placeholder="Libellé (ex. Ticket JIRA FIN-482)" value={label} onChange={(e) => setLabel(e.target.value)} />
+            <input className="input w-full text-[11px]" inputMode="url" placeholder="URL (https://…)" value={url}
+              onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addRef(); }} />
+            <button className="btn-primary !py-1 text-[10px] w-full" onClick={addRef}><Plus className="w-3 h-3" /> Ajouter l'ancrage</button>
+          </div>
+        )}
       </div>
     </div>
   );

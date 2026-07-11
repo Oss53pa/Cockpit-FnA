@@ -9,7 +9,7 @@
 //  4. Les décisions sont gouvernées par une matrice de seuils FCFA (montants
 //     entiers XOF) résolue au moment de la proposition.
 import type {
-  Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceEventType,
+  Space, SpaceAction, SpaceAnchorType, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceEventType,
   SpaceSnapshot, SpaceSolution, SpaceStatus,
 } from '../db/schema';
 
@@ -152,6 +152,8 @@ export const EVENT_META: Record<SpaceEventType, { label: string; icon: string; t
   deadline_changed: { label: 'Échéance modifiée', icon: '📅', tone: 'work' },
   entry_referenced: { label: 'Pièce référencée', icon: '🧾', tone: 'gl' },
   snapshot_created: { label: 'Snapshot figé', icon: '📸', tone: 'gl' },
+  external_linked: { label: 'Ancrage externe ajouté', icon: '🔗', tone: 'neutral' },
+  external_unlinked: { label: 'Ancrage externe retiré', icon: '🔓', tone: 'neutral' },
   criterion_satisfied: { label: 'Critère satisfait', icon: '🟢', tone: 'life' },
   criterion_reopened: { label: 'Critère rouvert', icon: '🔴', tone: 'life' },
   space_opened: { label: 'Espace ouvert', icon: '🚀', tone: 'life' },
@@ -447,3 +449,24 @@ export const ANCHOR_META: Record<string, { label: string; hint: string }> = {
   closing_period: { label: 'Clôture de période', hint: 'Ex. espace « Clôture Mars 2026 »' },
   budget_line: { label: 'Ligne budgétaire', hint: 'Dépassement à instruire' },
 };
+
+// ── Diffusion (§ widgets vivants) ──────────────────────────────────────────
+// Surfaces FNA où le « widget vivant » (badge Espace lié + convergence) diffuse
+// déjà cet espace, DÉRIVÉES de l'ancrage — c'est la bidirectionnalité objet⇄espace
+// que portent GrandLivre / Tiers / Rapprochement. Purement descriptif, pas de calcul.
+export type DiffusionSurface = { label: string; route: string; where: string };
+export function diffusionSurfaces(space: { anchorType: SpaceAnchorType; anchorRef: string }): DiffusionSurface[] {
+  switch (space.anchorType) {
+    case 'account_period':
+      return [{ label: 'Grand Livre', route: '/grand-livre', where: 'Balance générale — ligne du compte' }];
+    case 'partner':
+      return [
+        { label: 'Cycle Client', route: '/dashboard/client', where: 'Top débiteurs — ligne du tiers' },
+        { label: 'Cycle Fournisseur', route: '/dashboard/fr', where: 'Balance âgée — ligne du tiers' },
+      ];
+    case 'reconciliation':
+      return [{ label: 'Réconciliation bancaire', route: '/dashboard/bank-reconciliation', where: 'Compte bancaire ancré' }];
+    default:
+      return [];
+  }
+}

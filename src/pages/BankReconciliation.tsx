@@ -15,6 +15,7 @@ import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 import { useCurrentOrg } from '../hooks/useFinancials';
 import { SEMANTIC } from '../lib/semantic';
+import { SpaceLinkBadge } from './collaboration/spacesShared';
 
 export default function BankReconciliationPage() {
   const { currentOrgId, currentYear } = useApp();
@@ -70,7 +71,10 @@ export default function BankReconciliationPage() {
             {bankAccounts.length === 0 && <option>Aucun compte 52x trouvé</option>}
             {bankAccounts.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <p className="text-xs text-primary-500 mt-2">{entriesAccount.length} écritures sur ce compte</p>
+          <p className="text-xs text-primary-500 mt-2 flex items-center flex-wrap">
+            {entriesAccount.length} écritures sur ce compte
+            {selectedAccount && <SpaceLinkBadge refIncludes={selectedAccount} anchorType="reconciliation" />}
+          </p>
         </ChartCard>
 
         <ChartCard title="Solde du relevé bancaire" accent={ct.at(2)}>

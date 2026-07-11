@@ -488,9 +488,21 @@ export type Space = {
   /** Convergence en points de base (0-10000), CALCULÉE par computeConvergenceBp — jamais saisie. */
   convergenceBp: number;
   abandonReason?: string;
+  /** Ancrages EXTERNES (§ Diffusion) : références vers des ressources hors FNA
+   *  (ticket, GED, e-mail, relevé PDF…). Diffusion sortante, jamais du calcul. */
+  externalRefs?: SpaceExternalRef[];
   resolvedAt?: number;
   archivedAt?: number;
   createdAt: number;
+};
+
+/** Ancrage externe : label + URL saisis par l'utilisateur, tracés au fil. */
+export type SpaceExternalRef = {
+  id: string;
+  label: string;
+  url: string;
+  addedBy: string;
+  addedAt: number;
 };
 
 export type SpaceCriterionKind = 'computed' | 'manual_check';
@@ -542,7 +554,7 @@ export type SpaceEventType =
   | 'decision_proposed' | 'decision_approved' | 'decision_rejected'
   | 'action_created' | 'action_completed' | 'action_overdue' | 'deadline_changed'
   | 'entry_referenced' | 'criterion_satisfied' | 'criterion_reopened'
-  | 'snapshot_created'
+  | 'snapshot_created' | 'external_linked' | 'external_unlinked'
   | 'space_opened' | 'status_changed' | 'member_added'
   | 'space_resolved' | 'space_archived' | 'proph3t_summary' | 'proph3t_alert' | 'proph3t_report';
 
