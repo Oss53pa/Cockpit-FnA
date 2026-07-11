@@ -15,6 +15,7 @@ import { dataProvider } from '../db/provider';
 import { fmtFull, fmtK } from '../lib/format';
 import { useChartTheme } from '../lib/chartTheme';
 import { useCurrentOrg } from '../hooks/useFinancials';
+import { SpaceLinkBadge } from './collaboration/spacesShared';
 
 type Cat = 'provisions' | 'cca_pca' | 'fae_fap' | 'amorts';
 
@@ -89,6 +90,7 @@ export default function ClosingJustificationPage() {
       <PageHeader
         title="Justification des écritures de clôture"
         subtitle={`${org?.name ?? '—'} · Exercice ${currentYear} · Provisions, CCA/PCA, FAE/FAP, dotations`}
+        action={<SpaceLinkBadge refIncludes={String(currentYear)} anchorType="closing_period" />}
       />
 
       <TabSwitch

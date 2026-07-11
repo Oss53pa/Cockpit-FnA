@@ -470,6 +470,8 @@ export function diffusionSurfaces(space: { anchorType: SpaceAnchorType; anchorRe
       return [{ label: 'Budget vs Réalisé', route: '/dashboard/is_bvsa', where: 'Ligne budgétaire ancrée' }];
     case 'journal_entry':
       return [{ label: 'Grand Livre', route: '/grand-livre', where: 'Pièces déséquilibrées — n° de pièce' }];
+    case 'closing_period':
+      return [{ label: 'Justification de clôture', route: '/dashboard/closing-justification', where: 'En-tête de l\'exercice clôturé' }];
     default:
       return [];
   }
