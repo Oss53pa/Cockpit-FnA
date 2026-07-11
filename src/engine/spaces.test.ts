@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeConvergenceBp, canResolve, canTransition, nextStatuses, isFrozen,
   requiredRolesFor, nextDecisionRef, isOverdue, runVigie, hashSnapshot, buildClosureReport,
+  SPACE_TEMPLATES, relativeDueDate,
 } from './spaces';
 import type { Space, SpaceSolution, SpaceDecision, SpaceSnapshot } from '../db/schema';
 
@@ -59,6 +60,27 @@ describe('Rapport de clôture (assemblage déterministe)', () => {
     expect(sols).toMatch(/Écartée.*Non justifié/);           // motif d'écartement tracé
     const pieces = r.sections.find((s) => s.heading.startsWith('5. Pièces'))!.rows.join(' | ');
     expect(pieces).toMatch(/SHA-256/);                        // hash du snapshot
+  });
+});
+
+describe('Templates d\'espaces', () => {
+  it('chaque template a un ancrage, des critères et des actions cohérents', () => {
+    for (const t of SPACE_TEMPLATES) {
+      expect(t.criteria.length).toBeGreaterThan(0);
+      expect(t.actions.length).toBeGreaterThan(0);
+      expect(t.anchorType).toBeTruthy();
+      // Un template « avec écart » DOIT porter au moins un critère calculé (règle CDC).
+      if (t.withGap) expect(t.criteria.some((c) => c.kind === 'computed' && c.computeRef)).toBe(true);
+      // Les actions ont un échéancier relatif positif.
+      expect(t.actions.every((a) => a.dueInDays >= 0)).toBe(true);
+    }
+  });
+
+  it('relativeDueDate calcule une échéance J+n au format YYYY-MM-DD', () => {
+    const base = new Date('2026-03-10T00:00:00');
+    expect(relativeDueDate(5, base)).toBe('2026-03-15');
+    expect(relativeDueDate(25, base)).toBe('2026-04-04');   // franchit le mois
+    expect(relativeDueDate(0, base)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 

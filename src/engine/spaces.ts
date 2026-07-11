@@ -340,6 +340,105 @@ export function buildClosureReport(
   };
 }
 
+// ── Templates d'espaces (§3.1.11) — pré-chargement critères + actions ──────
+// Un template pré-remplit l'ancrage, les critères de sortie (dont ≥ 1 calculé
+// quand un écart est en jeu) et une checklist d'actions à échéancier RELATIF
+// (J+n depuis l'ouverture). Accélère la création sans figer : tout reste éditable.
+export type SpaceTemplateCriterion = { label: string; kind: 'computed' | 'manual_check'; computeRef?: string };
+export type SpaceTemplateAction = { label: string; dueInDays: number; assigneeRole?: string; critical?: boolean };
+export type SpaceTemplate = {
+  id: string; label: string; icon: string; anchorType: string;
+  titleHint: string; problemHint: string; withGap: boolean;
+  criteria: SpaceTemplateCriterion[];
+  actions: SpaceTemplateAction[];
+};
+
+export const SPACE_TEMPLATES: SpaceTemplate[] = [
+  {
+    id: 'rapprochement', label: 'Rapprochement bancaire', icon: '🏦', anchorType: 'reconciliation',
+    titleHint: 'Écart de rapprochement {banque} {compte} — {mois}',
+    problemHint: "Suspens / écart non justifié entre le relevé bancaire et le GL",
+    withGap: true,
+    criteria: [
+      { label: 'Écart GL restant = 0', kind: 'computed', computeRef: 'gl.gap' },
+      { label: 'Avis de crédit / débit obtenus pour chaque suspens', kind: 'manual_check' },
+    ],
+    actions: [
+      { label: 'Analyse ligne à ligne des suspens', dueInDays: 2, assigneeRole: 'Comptable', critical: true },
+      { label: 'Demander les avis de crédit à la banque', dueInDays: 3, assigneeRole: 'Comptable' },
+      { label: 'Justifier ou décider les suspens > 90 j', dueInDays: 5, assigneeRole: 'DAF' },
+    ],
+  },
+  {
+    id: 'recouvrement', label: 'Recouvrement créance', icon: '📞', anchorType: 'partner',
+    titleHint: 'Recouvrement créance {tiers} {compte}',
+    problemHint: "Créance échue à recouvrer (encours > seuil, retard > 90 j)",
+    withGap: true,
+    criteria: [
+      { label: 'Encours restant = 0', kind: 'computed', computeRef: 'gl.gap' },
+      { label: 'Relances tracées (téléphone + écrit)', kind: 'manual_check' },
+    ],
+    actions: [
+      { label: 'Relance téléphonique du tiers', dueInDays: 1, assigneeRole: 'Comptable' },
+      { label: 'Lettre de mise en demeure', dueInDays: 7, assigneeRole: 'DAF', critical: true },
+      { label: 'Décision : provision ou passage en perte', dueInDays: 15, assigneeRole: 'DAF' },
+    ],
+  },
+  {
+    id: 'cloture', label: 'Clôture de période', icon: '📅', anchorType: 'closing_period',
+    titleHint: 'Clôture {mois}',
+    problemHint: "Travaux de clôture de la période à sécuriser et valider",
+    withGap: false,
+    criteria: [
+      { label: 'Balance équilibrée (Σ débit = Σ crédit)', kind: 'manual_check' },
+      { label: 'TVA rapprochée (443/445)', kind: 'manual_check' },
+      { label: 'Provisions & régularisations passées', kind: 'manual_check' },
+      { label: 'Liasse validée par la DAF', kind: 'manual_check' },
+    ],
+    actions: [
+      { label: 'Contrôles de cohérence (audit GL)', dueInDays: 2, assigneeRole: 'Comptable', critical: true },
+      { label: 'Régularisations de fin de période', dueInDays: 3, assigneeRole: 'Comptable' },
+      { label: 'Revue & validation DAF', dueInDays: 5, assigneeRole: 'DAF', critical: true },
+    ],
+  },
+  {
+    id: 'litige_fournisseur', label: 'Litige fournisseur', icon: '⚖️', anchorType: 'partner',
+    titleHint: 'Litige fournisseur {tiers} {compte}',
+    problemHint: "Contestation d'une facture / avoir attendu d'un fournisseur",
+    withGap: false,
+    criteria: [
+      { label: 'Litige tranché (accord ou décision)', kind: 'manual_check' },
+      { label: 'Avoir reçu ou écriture de régularisation passée', kind: 'manual_check' },
+    ],
+    actions: [
+      { label: 'Rassembler les pièces (BC, BL, factures)', dueInDays: 2, assigneeRole: 'Comptable' },
+      { label: 'Contacter le fournisseur', dueInDays: 3, assigneeRole: 'Comptable' },
+      { label: 'Décision : avoir, abattement ou perte', dueInDays: 7, assigneeRole: 'DAF', critical: true },
+    ],
+  },
+  {
+    id: 'depassement_budget', label: 'Dépassement budgétaire', icon: '📈', anchorType: 'budget_line',
+    titleHint: 'Dépassement {ligne budgétaire}',
+    problemHint: "Écart défavorable significatif sur une ligne budgétaire à instruire",
+    withGap: true,
+    criteria: [
+      { label: 'Écart budgétaire résorbé ou expliqué', kind: 'computed', computeRef: 'gl.gap' },
+      { label: 'Cause identifiée et arbitrage rendu', kind: 'manual_check' },
+    ],
+    actions: [
+      { label: 'Analyser la cause du dépassement', dueInDays: 2, assigneeRole: 'Contrôleur' },
+      { label: 'Instruire l\'arbitrage (report / réallocation)', dueInDays: 5, assigneeRole: 'DAF', critical: true },
+    ],
+  },
+];
+
+/** Calcule une date d'échéance (YYYY-MM-DD) à J+n depuis une base. */
+export function relativeDueDate(dueInDays: number, from = new Date()): string {
+  const d = new Date(from);
+  d.setDate(d.getDate() + dueInDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export const ANCHOR_META: Record<string, { label: string; hint: string }> = {
   account_period: { label: 'Compte × période', hint: 'Ex. écart de rapprochement 521100 / 2026-03' },
   reconciliation: { label: 'Rapprochement', hint: 'Justification des suspens d\'une session' },

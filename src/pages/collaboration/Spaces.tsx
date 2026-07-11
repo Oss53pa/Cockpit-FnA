@@ -12,7 +12,7 @@ import { dataProvider } from '../../db/provider';
 import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
 import type { Space, SpaceAnchorType, SpaceStatus } from '../../db/schema';
-import { ANCHOR_META, STATUS_META, computeConvergenceBp, isOverdue } from '../../engine/spaces';
+import { ANCHOR_META, STATUS_META, computeConvergenceBp, isOverdue, SPACE_TEMPLATES, relativeDueDate, type SpaceTemplate } from '../../engine/spaces';
 import {
   ConvergenceBar, StatusPill, SPACES_TAG, fmtDay, fmtXof, getCurrentUser, logSpaceEvent, spaceUid,
 } from './spacesShared';
@@ -146,7 +146,15 @@ function CreateSpaceModal({ orgId, me, onClose, onCreated }: {
   const [initialGap, setInitialGap] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [criteriaText, setCriteriaText] = useState('');
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const applyTemplate = (t: SpaceTemplate | null) => {
+    setTemplateId(t?.id ?? null);
+    if (!t) return;
+    setAnchorType(t.anchorType as SpaceAnchorType);
+    if (!problem.trim()) setProblem(t.problemHint);
+  };
 
   const create = async () => {
     if (!title.trim() || !problem.trim()) { toast.error('Titre et énoncé du problème obligatoires'); return; }
@@ -168,22 +176,32 @@ function CreateSpaceModal({ orgId, me, onClose, onCreated }: {
         createdAt: now,
       };
       await dataProvider.upsertSpace(space);
-      // Critères de sortie : le critère CALCULÉ est créé d'office si un écart
-      // initial est figé (au moins un critère calculé — règle du CDC).
-      if (gap > 0) {
-        await dataProvider.upsertSpaceCriterion({
-          orgId, spaceId: id, label: 'Écart GL restant = 0', kind: 'computed',
-          computeRef: 'gl.gap', satisfied: false, createdAt: now,
-        });
+      const tmpl = templateId ? SPACE_TEMPLATES.find((t) => t.id === templateId) ?? null : null;
+      // Critères de sortie : issus du template si choisi, sinon le critère CALCULÉ
+      // « Écart GL = 0 » d'office quand un écart initial est figé (règle du CDC :
+      // au moins un critère calculé).
+      if (tmpl) {
+        for (const c of tmpl.criteria) {
+          await dataProvider.upsertSpaceCriterion({ orgId, spaceId: id, label: c.label, kind: c.kind, computeRef: c.computeRef, satisfied: false, createdAt: now });
+        }
+      } else if (gap > 0) {
+        await dataProvider.upsertSpaceCriterion({ orgId, spaceId: id, label: 'Écart GL restant = 0', kind: 'computed', computeRef: 'gl.gap', satisfied: false, createdAt: now });
       }
       for (const label of manualCriteria) {
         await dataProvider.upsertSpaceCriterion({ orgId, spaceId: id, label, kind: 'manual_check', satisfied: false, createdAt: now });
       }
-      if (gap === 0 && manualCriteria.length === 0) {
+      if (!tmpl && gap === 0 && manualCriteria.length === 0) {
         await dataProvider.upsertSpaceCriterion({ orgId, spaceId: id, label: 'Problème traité et validé par le responsable', kind: 'manual_check', satisfied: false, createdAt: now });
       }
-      await logSpaceEvent(space, 'space_opened', me.name, { anchorType, anchorRef, initialGapXof: gap || undefined });
+      await logSpaceEvent(space, 'space_opened', me.name, { anchorType, anchorRef, initialGapXof: gap || undefined, template: tmpl?.label });
       await logSpaceEvent(space, 'problem_stated', me.name, { statement: problem.trim(), impact: impact.trim() || undefined });
+      // Actions pré-chargées du template (échéancier relatif J+n depuis l'ouverture).
+      if (tmpl) {
+        for (const a of tmpl.actions) {
+          await dataProvider.upsertSpaceAction({ orgId, spaceId: id, label: a.label, assignee: a.assigneeRole, dueDate: relativeDueDate(a.dueInDays), isCriticalPath: !!a.critical, status: 'todo', createdAt: now });
+          await logSpaceEvent(space, 'action_created', me.name, { label: a.label });
+        }
+      }
       invalidateCloudData(SPACES_TAG);
       toast.success('Espace ouvert');
       onCreated(id);
@@ -202,6 +220,24 @@ function CreateSpaceModal({ orgId, me, onClose, onCreated }: {
           <button onClick={onClose} className="text-primary-400 hover:text-primary-900 dark:hover:text-primary-100"><X className="w-4 h-4" /></button>
         </div>
         <div className="space-y-3 text-sm">
+          <Field label="Modèle (pré-charge critères, actions et échéancier)">
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => applyTemplate(null)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border ${!templateId ? 'bg-accent/15 text-accent border-accent/40' : 'border-primary-200 dark:border-primary-700 text-primary-500'}`}>
+                ✏️ Vierge
+              </button>
+              {SPACE_TEMPLATES.map((t) => (
+                <button key={t.id} type="button" onClick={() => applyTemplate(t)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border ${templateId === t.id ? 'bg-accent/15 text-accent border-accent/40' : 'border-primary-200 dark:border-primary-700 text-primary-500'}`}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+            {templateId && (() => {
+              const t = SPACE_TEMPLATES.find((x) => x.id === templateId)!;
+              return <p className="text-[10px] text-primary-400 mt-1.5 leading-relaxed">Pré-charge <strong>{t.criteria.length}</strong> critère(s) (dont {t.criteria.filter((c) => c.kind === 'computed').length} calculé) et <strong>{t.actions.length}</strong> action(s) à échéancier J+{Math.min(...t.actions.map((a) => a.dueInDays))}→J+{Math.max(...t.actions.map((a) => a.dueInDays))}. Ancrage : {ANCHOR_META[t.anchorType]?.label}.</p>;
+            })()}
+          </Field>
           <Field label="Titre de l'espace *">
             <input className="input w-full" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Écart rapprochement BICICI 521100 — Mars" />
           </Field>
