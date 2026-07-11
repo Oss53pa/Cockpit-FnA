@@ -1,6 +1,10 @@
 // Espace Collaboratif — helpers UI et opérations partagées (Portefeuille + Espace)
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Target } from 'lucide-react';
 import { dataProvider } from '../../db/provider';
-import { invalidateCloudData } from '../../hooks/useCloudData';
+import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
+import { useApp } from '../../store/app';
 import { safeLocalStorage } from '../../lib/safeStorage';
 import { GUEST_USER } from '../../lib/appConfig';
 import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceEventType, SpaceSnapshot, SpaceSolution } from '../../db/schema';
@@ -165,6 +169,41 @@ export function StatusPill({ status }: { status: Space['status'] }) {
       style={{ background: `${meta.color}20`, color: meta.color }}>
       {meta.label}
     </span>
+  );
+}
+
+/**
+ * Badge « Espace lié » (§4.1 — bidirectionnalité objet → espace). Affiché sur
+ * les écrans FNA ancrables : montre le nombre d'espaces actifs liés à l'objet +
+ * la convergence du premier, cliquable vers l'espace. Se masque seul si aucun
+ * espace (retourne null) → zéro pollution visuelle.
+ */
+export function SpaceLinkBadge({ refIncludes, anchorType }: { refIncludes: string; anchorType?: string }) {
+  const { currentOrgId } = useApp();
+  const navigate = useNavigate();
+  const { data: spaces = [] } = useCloudData<Space[]>(
+    async () => (currentOrgId ? dataProvider.getSpaces(currentOrgId) : []),
+    [currentOrgId], { initial: [], tag: SPACES_TAG },
+  );
+  const linked = useMemo(
+    () => spaces.filter((s) =>
+      !['archive', 'abandonne'].includes(s.status) &&
+      (!anchorType || s.anchorType === anchorType) &&
+      String(s.anchorRef ?? '').includes(refIncludes)),
+    [spaces, refIncludes, anchorType],
+  );
+  if (linked.length === 0 || !refIncludes) return null;
+  const primary = linked[0];
+  const pct = Math.trunc(primary.convergenceBp / 100);
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); navigate(`/spaces/${primary.id}`); }}
+      title={`${linked.length} espace(s) de résolution lié(s) — ${primary.title} · convergence ${pct} %`}
+      className="inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-accent/15 text-accent hover:bg-accent/25 align-middle"
+    >
+      <Target className="w-2.5 h-2.5" />
+      {linked.length > 1 ? `${linked.length} espaces` : 'Espace'} · <span className="num">{pct} %</span>
+    </button>
   );
 }
 

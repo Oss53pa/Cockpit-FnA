@@ -10,6 +10,7 @@ import { VirtualTable, type Column } from '../components/ui/VirtualTable';
 import { useApp } from '../store/app';
 import type { GLEntry, ImportLog, TiersRule } from '../db/schema';
 import { dataProvider } from '../db/provider';
+import { SpaceLinkBadge } from './collaboration/spacesShared';
 import { useCloudData, invalidateCloudData } from '../hooks/useCloudData';
 import { computeBalance, computeAuxBalance, computeTiersReconciliation, matchesDrill, type BalanceRow, type AuxBalanceRow, type GLDrillFilter, type TiersReconRow } from '../engine/balance';
 import { computeBalanceAuxiliaire as auxFromLedger } from '../engine/balanceAuxiliaire';
@@ -795,7 +796,7 @@ function BGView({ orgId, year, importId }: { orgId: string; year: number; import
                           {isSuspect && <span className="text-error text-xs font-bold" aria-label="Compte suspect">⚠</span>}
                         </td>
                         <td className={clsx('py-1.5 px-3 num font-mono text-xs', isSuspect && 'font-bold text-error')}>{r.account}</td>
-                        <td className="py-1.5 px-3 text-xs">{r.label}</td>
+                        <td className="py-1.5 px-3 text-xs">{r.label}<SpaceLinkBadge refIncludes={r.account} anchorType="account_period" /></td>
                         <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.debit)}</td>
                         <td className="py-1.5 px-3 text-right num text-xs">{fmtFull(r.credit)}</td>
                         <td className="py-1.5 px-3 text-right num text-xs">{r.soldeD ? fmtFull(r.soldeD) : ''}</td>
