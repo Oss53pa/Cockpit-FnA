@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeConvergenceBp, canResolve, canTransition, nextStatuses, isFrozen,
-  requiredRolesFor, nextDecisionRef, isOverdue, runVigie, hashSnapshot,
+  requiredRolesFor, nextDecisionRef, isOverdue, runVigie, hashSnapshot, buildClosureReport,
 } from './spaces';
+import type { Space, SpaceSolution, SpaceDecision, SpaceSnapshot } from '../db/schema';
 
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -27,6 +28,37 @@ describe('Vigie (relances automatiques, idempotentes)', () => {
   it('ne relance rien sur un espace résolu ou gelé', () => {
     expect(runVigie({ status: 'resolu', ownerId: 'x' }, [late], new Set())).toHaveLength(0);
     expect(runVigie({ status: 'archive', ownerId: 'x' }, [late], new Set())).toHaveLength(0);
+  });
+});
+
+describe('Rapport de clôture (assemblage déterministe)', () => {
+  const space = {
+    id: 'sp1', orgId: 'o', title: 'Écart BICICI', status: 'archive',
+    problemStatement: 'Écart de 14 120 000 sur 521100', problemImpact: 'Clôture bloquée',
+    anchorType: 'account_period', anchorRef: '521100 · 2026-03', ownerId: 'DAF Awa',
+    initialGapXof: 14_120_000, convergenceBp: 10000, createdAt: 1_000_000, archivedAt: 1_000_000 + 5 * 86400000,
+  } as unknown as Space;
+  const solutions = [
+    { status: 'kept', title: 'Analyse ligne à ligne', proposedBy: 'Awa' },
+    { status: 'discarded', title: 'Provisionner l\'écart', statusReason: 'Non justifié comptablement' },
+  ] as unknown as SpaceSolution[];
+  const decisions = [
+    { ref: 'DEC-2026-041', title: 'Abattement pénalités', amountXof: 2_450_000, status: 'approved', requiredRoles: ['DAF'], approvedBy: ['DAF'] },
+  ] as unknown as SpaceDecision[];
+  const snapshots = [{ label: 'Positions BICICI', hashSha256: 'abcdef0123456789'.repeat(4), takenAt: 1_000_000 }] as unknown as SpaceSnapshot[];
+
+  it('produit toutes les sections, solutions retenue+écartée, durée et convergence', () => {
+    const r = buildClosureReport(space, { solutions, actions: [], decisions, events: [], snapshots, criteria: [] });
+    const headings = r.sections.map((s) => s.heading);
+    expect(headings.some((h) => h.startsWith('1. Problème'))).toBe(true);
+    expect(headings.some((h) => h.startsWith('8. Bilan'))).toBe(true);
+    expect(r.meta.durationDays).toBe(5);
+    expect(r.meta.convergencePct).toBe(100);
+    const sols = r.sections.find((s) => s.heading.startsWith('2. Solutions'))!.rows.join(' | ');
+    expect(sols).toMatch(/Retenue/);
+    expect(sols).toMatch(/Écartée.*Non justifié/);           // motif d'écartement tracé
+    const pieces = r.sections.find((s) => s.heading.startsWith('5. Pièces'))!.rows.join(' | ');
+    expect(pieces).toMatch(/SHA-256/);                        // hash du snapshot
   });
 });
 

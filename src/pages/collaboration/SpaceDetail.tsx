@@ -5,11 +5,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Anchor, Send, RefreshCcw, Lock, Unlock, CalendarDays, Plus, Scale, Camera, ShieldCheck,
+  ArrowLeft, Anchor, Send, RefreshCcw, Lock, Unlock, CalendarDays, Plus, Scale, Camera, ShieldCheck, FileDown,
 } from 'lucide-react';
 import { dataProvider } from '../../db/provider';
 import { useCloudData, invalidateCloudData } from '../../hooks/useCloudData';
 import { useApp } from '../../store/app';
+import { useCurrentOrg } from '../../hooks/useFinancials';
 import { toast } from '../../components/ui/Toast';
 import { TabSwitch } from '../../components/ui/TabSwitch';
 import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceSnapshot, SpaceSolution, SpaceStatus } from '../../db/schema';
@@ -20,13 +21,16 @@ import {
 } from '../../engine/spaces';
 import {
   ConvergenceBar, StatusPill, SPACES_TAG, ViaBadge, fmtDay, fmtTs, fmtXof, getCurrentUser, logSpaceEvent,
-  createSpaceSnapshot, materializeVigie,
+  createSpaceSnapshot, materializeVigie, generateClosureReport, exportClosureReportPdf,
 } from './spacesShared';
+import { buildClosureReport } from '../../engine/spaces';
 
 export default function SpaceDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { currentOrgId, currentYear } = useApp();
+  const org = useCurrentOrg();
+  const orgName = org?.name ?? 'Entreprise';
   const me = useMemo(() => getCurrentUser(), []);
   const [tab, setTab] = useState<'criteres' | 'actions' | 'decisions' | 'pieces'>('criteres');
   const [composer, setComposer] = useState('');
@@ -148,13 +152,18 @@ export default function SpaceDetail() {
     await dataProvider.upsertSpace(patch);
     await logSpaceEvent(space, to === 'resolu' ? 'space_resolved' : to === 'archive' ? 'space_archived' : 'status_changed', me.name, { from: space.status, to, reason: abandonReason });
     if (to === 'archive') {
-      // Rapport de clôture (synthèse structurée — les chiffres viennent des données, pas d'un LLM).
-      const kept = solutions.find((s) => s.status === 'kept');
-      await logSpaceEvent(space, 'proph3t_summary', 'Proph3t', {
-        content: `Espace résolu et archivé. Problème : ${space.problemStatement}. Solution retenue : ${kept?.title ?? '—'}. ${solutions.filter((s) => s.status === 'discarded').length} solution(s) écartée(s) avec motif. ${actions.filter((a) => a.status === 'done').length}/${actions.length} actions complétées. ${decisions.filter((d) => d.status === 'approved').length} décision(s) approuvée(s). Convergence finale : ${Math.trunc(space.convergenceBp / 100)} %.`,
-      }, { actorKind: 'proph3t' });
+      // Rapport de clôture Proph3t (§10) : structuré, tracé (proph3t_report,
+      // append-only → rétention 10 ans OHADA). Chiffres issus des données.
+      await generateClosureReport(patch, { solutions, actions, decisions, events, snapshots, criteria });
+      toast.success('Rapport de clôture généré — exportable en PDF.');
     }
     invalidateCloudData(SPACES_TAG);
+  };
+
+  // Export PDF du rapport de clôture (régénéré depuis les données courantes).
+  const downloadClosureReport = async () => {
+    const report = buildClosureReport(space, { solutions, actions, decisions, events, snapshots, criteria });
+    await exportClosureReportPdf(report, orgName);
   };
 
   const proposeSolution = async () => {
@@ -289,7 +298,14 @@ export default function SpaceDetail() {
               className={`w-full btn text-[11px] ${space.status === 'resolu' ? 'btn-primary' : resolvable && space.status === 'action' ? '!bg-success !text-white' : 'btn-outline opacity-50'}`}>
               {space.status === 'resolu' ? '📦 Archiver (rapport de clôture)' : resolvable ? '🏁 Clôturer l\'espace' : `🔒 Clôture verrouillée (${okCount}/${criteria.length})`}
             </button>
-            {space.status === 'archive' && <p className="text-[9px] text-primary-400 mt-1.5">Archivé le {space.archivedAt ? fmtTs(space.archivedAt) : '—'} · rapport dans le fil · rétention 10 ans (OHADA)</p>}
+            {space.status === 'archive' && (
+              <div className="mt-2 rounded-lg bg-primary-100/60 dark:bg-primary-900/40 p-2">
+                <p className="text-[9px] text-primary-400">Archivé le {space.archivedAt ? fmtTs(space.archivedAt) : '—'} · rétention 10 ans (OHADA)</p>
+                <button className="btn-outline !py-1 text-[10px] w-full mt-1.5 justify-center" onClick={downloadClosureReport}>
+                  <FileDown className="w-3 h-3" /> Rapport de clôture (PDF)
+                </button>
+              </div>
+            )}
           </MethodCard>
         </div>
 
@@ -414,7 +430,10 @@ function EventRow({ event }: { event: SpaceEvent }) {
   const p = (event.payload ?? {}) as Record<string, unknown>;
   const detail =
     event.eventType === 'message' ? String(p.content ?? '') :
-    event.eventType === 'proph3t_summary' || event.eventType === 'proph3t_alert' ? String(p.content ?? '') :
+    event.eventType === 'proph3t_alert' ? String(p.message ?? p.content ?? '') :
+    event.eventType === 'proph3t_summary' ? String(p.content ?? '') :
+    event.eventType === 'proph3t_report' ? `${String(p.title ?? 'Rapport de clôture')} — exportable en PDF (bouton ④ Clôture)` :
+    event.eventType === 'snapshot_created' ? `${String(p.label ?? 'Snapshot')} · SHA-256 ${String(p.hash ?? '')}…` :
     p.title ? String(p.title) + (p.reason ? ` — motif : ${p.reason}` : '') :
     p.label ? String(p.label) + (p.gapXof !== undefined ? ` · écart GL ${fmtXof(Number(p.gapXof))}` : '') :
     p.statement ? String(p.statement) :

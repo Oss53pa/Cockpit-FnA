@@ -9,7 +9,8 @@
 //  4. Les décisions sont gouvernées par une matrice de seuils FCFA (montants
 //     entiers XOF) résolue au moment de la proposition.
 import type {
-  Space, SpaceAction, SpaceCriterion, SpaceEventType, SpaceStatus,
+  Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceEventType,
+  SpaceSnapshot, SpaceSolution, SpaceStatus,
 } from '../db/schema';
 
 // ── Convergence (points de base, jamais saisie) ───────────────────────────
@@ -251,6 +252,92 @@ export async function hashSnapshot(data: unknown): Promise<string> {
   const buf = new TextEncoder().encode(canonicalJson(data));
   const digest = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── Rapport de clôture Proph3t (§10) ───────────────────────────────────────
+// Assemblage DÉTERMINISTE : les chiffres viennent des données (mode strict
+// financier, aucun calcul par LLM). Proph3t ne fait que rédiger l'habillage.
+export type ClosureReport = {
+  title: string;
+  generatedAt: number;
+  meta: { anchor: string; owner: string; durationDays: number; convergencePct: number; status: string };
+  sections: Array<{ heading: string; rows: string[] }>;
+};
+
+const fmtXofI = (v: number) => `${Math.trunc(Math.abs(v)).toLocaleString('fr-FR')} XOF`;
+const fmtD = (t?: number) => (t ? new Date(t).toLocaleDateString('fr-FR') : '—');
+
+export function buildClosureReport(
+  space: Space,
+  parts: {
+    solutions: SpaceSolution[]; actions: SpaceAction[]; decisions: SpaceDecision[];
+    events: SpaceEvent[]; snapshots: SpaceSnapshot[]; criteria: SpaceCriterion[];
+  },
+  now = Date.now(),
+): ClosureReport {
+  const { solutions, actions, decisions, events, snapshots, criteria } = parts;
+  const durationDays = Math.max(0, Math.round((((space.archivedAt ?? now) - space.createdAt) / 86400000)));
+  const kept = solutions.filter((s) => s.status === 'kept');
+  const discarded = solutions.filter((s) => s.status === 'discarded');
+  const doneActions = actions.filter((a) => a.status === 'done');
+
+  // Chronologie : événements structurants, datés.
+  const KEY_EVENTS: SpaceEventType[] = [
+    'space_opened', 'problem_stated', 'solution_kept', 'decision_approved',
+    'entry_referenced', 'snapshot_created', 'criterion_satisfied', 'space_resolved', 'space_archived',
+  ];
+  const chrono = events
+    .filter((e) => KEY_EVENTS.includes(e.eventType))
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((e) => `${fmtD(e.createdAt)} — ${EVENT_META[e.eventType]?.label ?? e.eventType}${e.payload?.title ? ` : ${e.payload.title}` : e.payload?.label ? ` : ${e.payload.label}` : ''}`);
+
+  const gapInitial = Math.trunc(Math.abs(space.initialGapXof ?? 0));
+  const convergencePct = Math.trunc(space.convergenceBp / 100);
+  const gapFinal = gapInitial > 0 ? Math.trunc(gapInitial * (1 - space.convergenceBp / 10000)) : 0;
+
+  const sections: ClosureReport['sections'] = [
+    { heading: '1. Problème', rows: [
+      space.problemStatement,
+      space.problemImpact ? `Impact : ${space.problemImpact}` : '',
+      `Origine : ${ANCHOR_META[space.anchorType]?.label ?? space.anchorType} · ${space.anchorRef}`,
+    ].filter(Boolean) },
+    { heading: '2. Solutions', rows: [
+      ...kept.map((s) => `✅ Retenue : ${s.title}${s.proposedBy ? ` (proposée par ${s.proposedBy})` : ''}`),
+      ...discarded.map((s) => `🚫 Écartée : ${s.title}${s.statusReason ? ` — motif : ${s.statusReason}` : ' — (sans motif)'}`),
+      ...(kept.length + discarded.length === 0 ? ['Aucune solution formalisée.'] : []),
+    ] },
+    { heading: '3. Chronologie', rows: chrono.length ? chrono : ['(aucun événement structurant)'] },
+    { heading: '4. Décisions & validations', rows: decisions.length ? decisions.map((d) =>
+      `${d.ref} · ${d.title}${d.amountXof ? ` · ${fmtXofI(d.amountXof)}` : ''} · ${d.status === 'approved' ? 'Approuvée' : d.status === 'rejected' ? 'Rejetée' : 'En attente'} · validation ${d.requiredRoles.join(' puis ')}${(d.approvedBy ?? []).length ? ` (signé : ${(d.approvedBy ?? []).join(', ')})` : ''}`,
+    ) : ['Aucune décision de gouvernance.'] },
+    { heading: '5. Pièces & snapshots', rows: [
+      ...snapshots.map((s) => `📸 ${s.label} · SHA-256 ${s.hashSha256.slice(0, 16)}… · ${fmtD(s.takenAt)}`),
+      ...events.filter((e) => e.eventType === 'entry_referenced' && e.payload?.ref).map((e) => `🧾 Pièce référencée : ${e.payload!.ref}`),
+      ...(snapshots.length === 0 ? ['Aucun snapshot figé.'] : []),
+    ] },
+    { heading: '6. Écarts avant / après', rows: gapInitial > 0
+      ? [`Écart initial : ${fmtXofI(gapInitial)}`, `Écart résiduel estimé : ${fmtXofI(gapFinal)}`, `Convergence finale : ${convergencePct} %`]
+      : [`Convergence finale : ${convergencePct} % (basée sur les critères de sortie)`] },
+    { heading: '7. Critères de sortie', rows: criteria.length ? criteria.map((c) =>
+      `${c.satisfied ? '🟢' : '🔴'} ${c.label} (${c.kind === 'computed' ? 'calculé' : 'contrôle manuel'})`,
+    ) : ['Aucun critère défini.'] },
+    { heading: '8. Bilan', rows: [
+      `Durée de résolution : ${durationDays} jour(s).`,
+      `Actions : ${doneActions.length}/${actions.length} complétées.`,
+      `Décisions approuvées : ${decisions.filter((d) => d.status === 'approved').length}.`,
+      discarded.length ? `Leçon : ${discarded.length} piste(s) écartée(s) documentée(s) — capitalisable pour des cas similaires.` : 'Leçon : résolution directe sans alternative écartée.',
+    ] },
+  ];
+
+  return {
+    title: `Rapport de clôture — ${space.title}`,
+    generatedAt: now,
+    meta: {
+      anchor: `${ANCHOR_META[space.anchorType]?.label ?? space.anchorType} · ${space.anchorRef}`,
+      owner: space.ownerId, durationDays, convergencePct, status: space.status,
+    },
+    sections,
+  };
 }
 
 export const ANCHOR_META: Record<string, { label: string; hint: string }> = {

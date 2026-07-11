@@ -3,8 +3,8 @@ import { dataProvider } from '../../db/provider';
 import { invalidateCloudData } from '../../hooks/useCloudData';
 import { safeLocalStorage } from '../../lib/safeStorage';
 import { GUEST_USER } from '../../lib/appConfig';
-import type { Space, SpaceAction, SpaceEvent, SpaceEventType } from '../../db/schema';
-import { STATUS_META, hashSnapshot, runVigie } from '../../engine/spaces';
+import type { Space, SpaceAction, SpaceCriterion, SpaceDecision, SpaceEvent, SpaceEventType, SpaceSnapshot, SpaceSolution } from '../../db/schema';
+import { STATUS_META, hashSnapshot, runVigie, buildClosureReport, type ClosureReport } from '../../engine/spaces';
 
 // ── Utilisateur courant (même convention que Chat.tsx) ─────────────────────
 export type AppUser = { id: string; name: string; email: string; role: string };
@@ -88,6 +88,47 @@ export async function materializeVigie(
       { actorKind: 'proph3t' });
   }
   return alerts.length;
+}
+
+/**
+ * Génère le rapport de clôture (§10), le trace dans le fil (`proph3t_report`,
+ * append-only → rétention) et le retourne. Assemblage déterministe (moteur).
+ */
+export async function generateClosureReport(
+  space: Space,
+  parts: { solutions: SpaceSolution[]; actions: SpaceAction[]; decisions: SpaceDecision[]; events: SpaceEvent[]; snapshots: SpaceSnapshot[]; criteria: SpaceCriterion[] },
+): Promise<ClosureReport> {
+  const report = buildClosureReport(space, parts);
+  await logSpaceEvent(space, 'proph3t_report', 'Proph3t',
+    { title: report.title, report: report as unknown as Record<string, unknown> },
+    { actorKind: 'proph3t' });
+  return report;
+}
+
+/** Exporte le rapport de clôture en PDF (jsPDF + autoTable). */
+export async function exportClosureReportPdf(report: ClosureReport, orgName: string): Promise<void> {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  doc.setFontSize(16); doc.text('Rapport de clôture — Espace Collaboratif', 40, 48);
+  doc.setFontSize(11); doc.setTextColor(90); doc.text(report.title.replace('Rapport de clôture — ', ''), 40, 68);
+  doc.setFontSize(9); doc.setTextColor(120);
+  doc.text(`${orgName} · Ancrage : ${report.meta.anchor}`, 40, 84);
+  doc.text(`Responsable : ${report.meta.owner} · Durée : ${report.meta.durationDays} j · Convergence : ${report.meta.convergencePct} % · Généré le ${new Date(report.generatedAt).toLocaleString('fr-FR')}`, 40, 98);
+  let startY = 116;
+  for (const s of report.sections) {
+    autoTable(doc, {
+      startY,
+      head: [[s.heading]],
+      body: s.rows.map((r) => [r]),
+      styles: { fontSize: 8.5, cellPadding: 4 },
+      headStyles: { fillColor: [31, 30, 27], fontSize: 9.5 },
+      margin: { left: 40, right: 40 },
+    });
+    startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  }
+  doc.setFontSize(7); doc.setTextColor(150);
+  doc.text('Conservation OHADA ≥ 10 ans · Chiffres issus des données (aucun calcul par LLM) · Cockpit FnA', 40, doc.internal.pageSize.getHeight() - 24);
+  doc.save(`Cloture_${report.title.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40)}.pdf`);
 }
 
 // ── Formatage ───────────────────────────────────────────────────────────────
