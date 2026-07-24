@@ -22,10 +22,12 @@ CREATE TABLE IF NOT EXISTS fna_space_snapshots (
 CREATE INDEX IF NOT EXISTS idx_fna_space_snapshots_space ON fna_space_snapshots(space_id, taken_at);
 
 -- Append-only : un snapshot ne se modifie ni ne se supprime (immuable).
-CREATE OR REPLACE FUNCTION fna_space_snapshots_block_mutation() RETURNS trigger AS $$
+-- search_path figé (best practice advisor : function_search_path_mutable).
+CREATE OR REPLACE FUNCTION fna_space_snapshots_block_mutation() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   RAISE EXCEPTION 'fna_space_snapshots est append-only : un snapshot est immuable';
-END; $$ LANGUAGE plpgsql;
+END; $$;
 
 DROP TRIGGER IF EXISTS trg_fna_space_snapshots_no_update ON fna_space_snapshots;
 CREATE TRIGGER trg_fna_space_snapshots_no_update
